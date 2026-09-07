@@ -18,6 +18,7 @@ import {
   type PlayerHandle,
   type PosterState
 } from './player-context.js';
+import { DefaultPosterContext, type ResponsivePoster } from './poster.js';
 import {
   useActivation,
   type PlayerMediaMount,
@@ -157,6 +158,23 @@ export type RootProps = {
    * forever.
    */
   readonly playThreshold?: number;
+  /**
+   * The still shown before the media has one of its own: a URL, a
+   * `ResponsivePoster`, or the literal `'provider'`, which asks the attached
+   * source's own provider for its still instead of one this prop names.
+   * Unset by default, which is no behavioural change from before this prop
+   * existed -- nothing is resolved and `Player.Poster` renders only what a
+   * consumer gives it as children, exactly as it always has.
+   *
+   * A `Player.Poster` with no children renders this as its default image
+   * once it resolves; children on that instance replace it. `'provider'`
+   * carries its own cost per source -- `capabilities.providerPoster` reports
+   * it, in the `Availability` vocabulary every other capability uses: free
+   * and immediate for YouTube, a Vimeo or Wistia round trip opted into only
+   * by this prop, and `unavailable`/`source` for native and HLS, which have
+   * no still of their own (#556).
+   */
+  readonly poster?: string | ResponsivePoster | 'provider';
   readonly preload?: import('./use-activation.js').PlayerPreload;
   // Compared by value, not by reference, so an inline literal is safe to
   // pass: see `providerOptionsEqual` in `use-activation.ts`.
@@ -228,6 +246,7 @@ export const Root = ({
   // default may read a binding the same pattern has already introduced, and
   // that is the whole contract of this prop.
   playThreshold = loadThreshold,
+  poster,
   providerOptions,
   ref,
   source,
@@ -256,6 +275,14 @@ export const Root = ({
   // change in the same commit.
   const [posterPlayback, setPosterPlayback] = useState<PlaybackState>(
     () => controller.getState().playback
+  );
+  // The provider's own still, once one has resolved -- read fresh off the
+  // same subscription as `posterPlayback` above, and `null` exactly when
+  // `PlayerState.providerPosterUrl` is: before a source attaches, for a
+  // provider that never has one, or while a Vimeo or Wistia round trip is
+  // still in flight.
+  const [providerPosterUrl, setProviderPosterUrl] = useState<string | null>(
+    () => controller.getState().providerPosterUrl
   );
   const currentMedia = useRef<PlayerMediaMount | null>(null);
   const providerSourceTransition = useRef<SourceTransition | undefined>(
@@ -682,6 +709,11 @@ export const Root = ({
   // Wistia takes `loop` and the two boundaries: its `controls` fan-out is still
   // unbuilt, so the `wistia` bag keeps `controls` un-omitted and there is
   // nothing to fold.
+  //
+  // `resolvePoster` joins Vimeo's and Wistia's folds on the same terms as
+  // `customControls` before it (#556): it is `poster === 'provider'`, not a
+  // prop of its own, so a page that never touches `poster` folds `false` in
+  // and neither adapter's oEmbed probe ever fires.
   const resolvedProviderOptions = useMemo<ResolvedProviderOptions>(() => {
     const type =
       detectedSource.status === 'success'
@@ -702,17 +734,38 @@ export const Root = ({
     if (type === 'vimeo') {
       return {
         ...providerOptions,
-        vimeo: { ...providerOptions?.vimeo, controls, endTime, loop, startTime }
+        vimeo: {
+          ...providerOptions?.vimeo,
+          controls,
+          endTime,
+          loop,
+          resolvePoster: poster === 'provider',
+          startTime
+        }
       };
     }
     if (type === 'wistia') {
       return {
         ...providerOptions,
-        wistia: { ...providerOptions?.wistia, endTime, loop, startTime }
+        wistia: {
+          ...providerOptions?.wistia,
+          endTime,
+          loop,
+          resolvePoster: poster === 'provider',
+          startTime
+        }
       };
     }
     return providerOptions ?? {};
-  }, [controls, detectedSource, endTime, loop, providerOptions, startTime]);
+  }, [
+    controls,
+    detectedSource,
+    endTime,
+    loop,
+    poster,
+    providerOptions,
+    startTime
+  ]);
 
   const activation = useActivation({
     autoplay,
@@ -803,6 +856,7 @@ export const Root = ({
         setConfirmedPlayingTransition(providerSourceTransition.current);
       }
       setPosterPlayback(state.playback);
+      setProviderPosterUrl(state.providerPosterUrl);
     });
     return () => {
       unsubscribePoster();
@@ -972,10 +1026,28 @@ export const Root = ({
         ? 'paused'
         : 'hidden';
 
+  // `undefined` both when `poster` was never set and when `'provider'` has
+  // not resolved yet -- `Player.Poster` treats the two alike, rendering no
+  // default image in either case. A literal or a `ResponsivePoster` needs no
+  // source to resolve against and is normalized whether or not one is
+  // attached yet.
+  const defaultPoster: ResponsivePoster | undefined =
+    poster === undefined
+      ? undefined
+      : poster === 'provider'
+        ? providerPosterUrl === null
+          ? undefined
+          : { src: providerPosterUrl }
+        : typeof poster === 'string'
+          ? { src: poster }
+          : poster;
+
   return (
     <PlayerContext.Provider value={value}>
       <PosterContext.Provider value={posterState}>
-        {children}
+        <DefaultPosterContext.Provider value={defaultPoster}>
+          {children}
+        </DefaultPosterContext.Provider>
       </PosterContext.Provider>
     </PlayerContext.Provider>
   );

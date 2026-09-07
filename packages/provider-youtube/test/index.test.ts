@@ -612,6 +612,33 @@ test('reports policy-restricted custom controls before the player is ready', asy
   );
 });
 
+// Red: with `youTubePosterUrl` mutated to emit `maxresdefault.jpg` and
+// `fixedCapabilities.providerPoster` (adapter-values.ts) mutated to
+// `notReady`, this failed on `providerPosterUrl` ("...hqdefault.jpg" expected,
+// "...maxresdefault.jpg" received), and "maps player ready onto confirmed
+// state and honest capabilities" below failed on `providerPoster`
+// (`{ status: 'available' }` expected, `{ status: 'unknown', reason:
+// 'not-ready' }` received).
+test('resolves its own poster from the video id, before the player is ready', async () => {
+  const { patches, provider } = createAdapter('dQw4w9WgXcQ');
+
+  await provider.attach();
+
+  // `hqdefault.jpg`, not `maxresdefault.jpg`: the larger file 404s silently on
+  // videos that were never uploaded at a resolution high enough to have one,
+  // where `hqdefault.jpg` is generated for every upload. Free either way -- no
+  // request is made to learn this, so the capability is `available` from the
+  // first patch rather than passing through `unknown` first.
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      providerPosterUrl: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+      capabilities: expect.objectContaining({
+        providerPoster: { status: 'available' }
+      })
+    })
+  );
+});
+
 test('maps player ready onto confirmed state and honest capabilities', async () => {
   const { events, fake, patches, provider } = createAdapter();
   await provider.attach();
@@ -647,7 +674,8 @@ test('maps player ready onto confirmed state and honest capabilities', async () 
         fullscreen: { status: 'available' },
         pictureInPicture: { status: 'unavailable', reason: 'provider' },
         airPlay: { status: 'unavailable', reason: 'provider' },
-        customControls: { status: 'unavailable', reason: 'policy' }
+        customControls: { status: 'unavailable', reason: 'policy' },
+        providerPoster: { status: 'available' }
       })
     })
   );

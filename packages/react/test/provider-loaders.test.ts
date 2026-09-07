@@ -51,12 +51,21 @@ test('the per-provider option bags are the shape the CSP document describes', ()
     'hls' | 'vimeo' | 'wistia' | 'youtube'
   >();
 
+  // Red, for `resolvePoster` joining the two omission lists below: with both
+  // `Omit`s in `PlayerProviderOptions` (provider-loaders.ts) reverted to leave
+  // `resolvePoster` un-omitted, `pnpm typecheck` failed here with TS2344 (the
+  // actual union `'controls' | 'endTime' | 'loop' | 'resolvePoster' |
+  // 'startTime'` did not satisfy the expected literal-mismatch constraint)
+  // and on the `wistia` assertion further down, the same way.
+  //
   // Vimeo's omissions are load-bearing for the document twice over: what stays
   // is what a `Player.Root` consumer can set, and `customControls` staying is
   // why `vimeo.com` belongs in `connect-src`.
   expectTypeOf<
     KeysRootOwns<PlayerProviderOptions['vimeo'], VimeoProviderOptions>
-  >().toEqualTypeOf<'controls' | 'endTime' | 'loop' | 'startTime'>();
+  >().toEqualTypeOf<
+    'controls' | 'endTime' | 'loop' | 'resolvePoster' | 'startTime'
+  >();
 
   // `youtube` keeps `loadIframeApi` too, as of #628, for the same reason `hls`
   // keeps `loadHls` just below: a function cannot satisfy `PrimitiveOptionBag`,
@@ -73,7 +82,7 @@ test('the per-provider option bags are the shape the CSP document describes', ()
   // bag key is still the only way to reach it (ADR-0004's Consequences).
   expectTypeOf<
     KeysRootOwns<PlayerProviderOptions['wistia'], WistiaProviderOptions>
-  >().toEqualTypeOf<'endTime' | 'loop' | 'startTime'>();
+  >().toEqualTypeOf<'endTime' | 'loop' | 'resolvePoster' | 'startTime'>();
 
   // `hls` keeps `loadHls`: a function cannot satisfy `PrimitiveOptionBag`
   // (below), so `build` -- the primitive `loadHls` stands in for -- is the

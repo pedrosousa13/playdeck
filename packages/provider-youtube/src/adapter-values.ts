@@ -52,6 +52,15 @@ export const browserUnavailable: Availability = {
   reason: 'browser'
 };
 
+// `hqdefault.jpg`, not `maxresdefault.jpg`: the larger file is only generated
+// for uploads at a resolution high enough to have one and 404s silently on
+// every other video, where `hqdefault.jpg` is generated for every upload
+// (#556). Derivable from the id alone, so this costs no request and the
+// capability below is `available` from the first patch rather than passing
+// through `unknown` first.
+export const youTubePosterUrl = (videoId: string): string =>
+  `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+
 const fixedCapabilities = {
   // Enumerable but not selectable, so nothing is offered. Measured against the
   // live IFrame API (#82): `getAvailableQualityLevels()` reports a real ladder,
@@ -67,7 +76,8 @@ const fixedCapabilities = {
   chapters: providerUnavailable,
   pictureInPicture: providerUnavailable,
   airPlay: providerUnavailable,
-  customControls: policyUnavailable
+  customControls: policyUnavailable,
+  providerPoster: available
 } as const;
 
 export const preReadyCapabilities = (): PlayerCapabilities => ({

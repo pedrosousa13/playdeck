@@ -18,6 +18,7 @@ import {
 import { createWistiaAttachment } from './attachment.js';
 import { createWistiaBoundary } from './boundary.js';
 import { createWistiaPlayback } from './playback.js';
+import { createWistiaPosterAvailability } from './poster-availability.js';
 import { createWistiaPresentation } from './presentation.js';
 
 export type { WistiaMountElement } from './adapter-values.js';
@@ -86,6 +87,17 @@ export type WistiaProviderOptions = {
    */
   readonly startTime?: number;
   readonly transparentLetterbox?: boolean;
+  /**
+   * Resolve `PlayerCapabilities.providerPoster` and `PlayerState.providerPosterUrl`
+   * against Wistia's own oEmbed record. Opt-in: without it, this adapter never
+   * asks Wistia for a thumbnail, so no request discloses the viewer before a
+   * consumer has asked for the provider's own poster. Not to be confused with
+   * `poster` above, which hands Wistia's own chrome a still a *consumer*
+   * already has; this instead asks Wistia for one. `Root`'s `poster="provider"`
+   * folds this in the same way `controls` and `loop` are folded (ADR-0004), so
+   * `PlayerProviderOptions` omits the key.
+   */
+  readonly resolvePoster?: boolean;
 };
 
 type WistiaCommand =
@@ -195,6 +207,11 @@ export const createWistiaProvider = (
   // every time report, seek and restart.
   const boundary = createWistiaBoundary(options);
 
+  const posterAvailability = createWistiaPosterAvailability({
+    source,
+    options
+  });
+
   const playback = createWistiaPlayback(mount, {
     emit,
     isStale: (player) => attachment.isStale(player),
@@ -228,7 +245,8 @@ export const createWistiaProvider = (
       airPlay: outOfScope,
       // Chromeless is a plain set of embed attributes, declared in Wistia's own
       // `Attributes` and gated by no account tier.
-      customControls: available
+      customControls: available,
+      providerPoster: posterAvailability.availability()
     };
   }
 
@@ -236,6 +254,7 @@ export const createWistiaProvider = (
     emit,
     options,
     getCapabilities: playerCapabilities,
+    posterAvailability,
     playback,
     presentation,
     clearStateListeners: () => listeners.clear()

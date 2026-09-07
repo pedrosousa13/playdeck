@@ -39,6 +39,7 @@ import {
 } from '../src/index';
 import type { VimeoSdkChapter, VimeoSdkQuality } from '../src/loader';
 import { createVimeoPlayback } from '../src/playback';
+import { createVimeoPosterAvailability } from '../src/poster-availability';
 import { createVimeoPresentation } from '../src/presentation';
 import { createVimeoQualityLevels } from '../src/quality-levels';
 import { createVimeoTextTracks } from '../src/text-tracks';
@@ -300,6 +301,7 @@ const attachWithoutValidation = async (
   const noopEmit = (): void => undefined;
 
   const chromeless = createVimeoChromelessAvailability({ source, options });
+  const posterAvailability = createVimeoPosterAvailability({ source, options });
   const boundary = createVimeoBoundary(options);
 
   const playback = createVimeoPlayback(mount, {
@@ -346,7 +348,8 @@ const attachWithoutValidation = async (
       fullscreen: available,
       pictureInPicture: presentation.pictureInPictureAvailability(),
       airPlay: { status: 'unavailable', reason: 'provider' },
-      customControls: chromeless.customControlsAvailability()
+      customControls: chromeless.customControlsAvailability(),
+      providerPoster: posterAvailability.availability()
     };
   }
 
@@ -355,6 +358,7 @@ const attachWithoutValidation = async (
     options,
     getCapabilities: playerCapabilities,
     chromeless,
+    posterAvailability,
     playback,
     presentation,
     qualityLevels,
@@ -559,6 +563,82 @@ test('emits confirmed ready state from the embedded player', async () => {
     selectQuality: { status: 'available' },
     airPlay: { status: 'unavailable', reason: 'provider' }
   });
+});
+
+// --- provider-supplied poster (#556) ---
+//
+// Red: with the `options.resolvePoster !== true` guard removed from
+// `poster-availability.ts`'s `probe()`, this failed on `fetchMock` having
+// been called (and, because the shared oEmbed request now fired for poster
+// on every attach, "sends no oEmbed request when custom controls were not
+// requested" further down failed the same way). With `posterFromOutcome`
+// mutated to always answer unavailable/source, "resolves its own poster from
+// the oEmbed thumbnail once resolvePoster is requested" below failed on
+// `providerPoster` (`{ status: 'available' }` expected, `{ status:
+// 'unavailable', reason: 'source' }` received).
+
+test('sends no oEmbed request for a poster when resolvePoster was not requested', async () => {
+  fetchMock.mockImplementation(() => {
+    throw new Error('fetch should not have been called');
+  });
+  const { patches } = await setup();
+  expect(readyPatch(patches).capabilities).toMatchObject({
+    providerPoster: { status: 'unknown', reason: 'provider-check' }
+  });
+  expect(readyPatch(patches).providerPosterUrl).toBeNull();
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test('resolves its own poster from the oEmbed thumbnail once resolvePoster is requested', async () => {
+  fetchMock.mockResolvedValue(
+    Response.json({
+      account_type: 'pro',
+      thumbnail_url: 'https://i.vimeocdn.com/video/example.jpg'
+    })
+  );
+  const { patches } = await setup({ options: { resolvePoster: true } });
+  const ready = readyPatch(patches);
+  expect(ready.capabilities).toMatchObject({
+    providerPoster: { status: 'available' }
+  });
+  expect(ready.providerPosterUrl).toBe(
+    'https://i.vimeocdn.com/video/example.jpg'
+  );
+});
+
+test('reports providerPoster unavailable/source when the record carries no thumbnail', async () => {
+  fetchMock.mockResolvedValue(Response.json({ account_type: 'pro' }));
+  const { patches } = await setup({ options: { resolvePoster: true } });
+  const ready = readyPatch(patches);
+  expect(ready.capabilities).toMatchObject({
+    providerPoster: { status: 'unavailable', reason: 'source' }
+  });
+  expect(ready.providerPosterUrl).toBeNull();
+});
+
+// Red: with `createVimeoProvider`'s two probes reverted to each building its
+// own private `createVimeoOembedRequest` instance instead of sharing one,
+// this failed with "expected \"vi.fn()\" to be called 1 times, but got 2
+// times".
+test('resolves the poster and the chromeless plan from one shared oEmbed request (#556)', async () => {
+  fetchMock.mockResolvedValue(
+    Response.json({
+      account_type: 'pro',
+      thumbnail_url: 'https://i.vimeocdn.com/video/example.jpg'
+    })
+  );
+  const { patches } = await setup({
+    options: { customControls: true, resolvePoster: true }
+  });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  const ready = readyPatch(patches);
+  expect(ready.capabilities).toMatchObject({
+    customControls: { status: 'available' },
+    providerPoster: { status: 'available' }
+  });
+  expect(ready.providerPosterUrl).toBe(
+    'https://i.vimeocdn.com/video/example.jpg'
+  );
 });
 
 test('reports text-track selection unavailable when the video has no tracks', async () => {

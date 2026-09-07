@@ -35,6 +35,13 @@ type PlayerFixtureProps = {
   // Opts a Vimeo-sourced fixture into the SEO-metadata suppression (#215), so
   // e2e/vimeo-seo-metadata.spec.ts can drive both sides of the option.
   readonly vimeoSuppressSeoMetadata?: boolean;
+  // `Player.Root`'s own `poster` prop (#556), threaded straight through so a
+  // real-provider spec can opt a fixture into `'provider'` and read
+  // `capabilities.providerPoster`/`providerPosterUrl` off `playdeckHandle`.
+  // This fixture's own `Player.Poster` below always carries a `PosterImage`
+  // child, so a consumer poster still wins the render either way -- this arg
+  // only drives the resolution, not what is on screen.
+  readonly poster?: Player.RootProps['poster'];
   // Threads `Player.Poster`'s own `showWhilePaused` prop through to this
   // fixture, so `e2e/poster.spec.ts` can drive both sides of it: off (the
   // default every consumer gets) and on (what a YouTube-backed position of
@@ -265,6 +272,7 @@ const PlayerFixture = ({
   endTime,
   vimeoCustomControls,
   vimeoSuppressSeoMetadata,
+  poster,
   posterShowWhilePaused,
   scrollPage
 }: PlayerFixtureProps) => {
@@ -338,6 +346,7 @@ const PlayerFixture = ({
             }
           ]
         }}
+        poster={poster}
         preload={preload}
         providerOptions={
           vimeoCustomControls || vimeoSuppressSeoMetadata
@@ -603,6 +612,17 @@ export const InteractionYoutube: Story = {
   args: { loading: 'interaction', activationSource: 'youtube' }
 };
 
+// poster="provider": e2e/youtube-real.spec.ts fetches the real
+// `providerPosterUrl` this resolves to and proves it is a loadable image
+// rather than the 404 `maxresdefault.jpg` would risk (#556).
+export const InteractionYoutubeProviderPoster: Story = {
+  args: {
+    loading: 'interaction',
+    activationSource: 'youtube',
+    poster: 'provider'
+  }
+};
+
 export const VimeoInteraction: Story = {
   // customControls: e2e/vimeo.spec.ts asserts on the chromeless probe (the
   // embed src, and customControlsAvailability resolving), which since #162
@@ -640,6 +660,18 @@ export const VimeoUnlistedInteraction: Story = {
 
 export const VimeoInteractionMuted: Story = {
   args: { source: 'vimeo', loading: 'interaction', defaultMuted: true }
+};
+
+// poster="provider": e2e/vimeo-smoke.spec.ts drives the opt-in poster oEmbed
+// probe against the real endpoint and fetches the thumbnail it resolves to
+// (#556).
+export const VimeoInteractionResolvePoster: Story = {
+  args: {
+    source: 'vimeo',
+    loading: 'interaction',
+    defaultMuted: true,
+    poster: 'provider'
+  }
 };
 
 export const VimeoFreePlan: Story = {

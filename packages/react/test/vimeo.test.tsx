@@ -251,7 +251,7 @@ test('forwards the Root controls prop to createVimeoProvider', async () => {
     expect(mockedCreateVimeoProvider).toHaveBeenCalledTimes(1)
   );
   const [, , options] = mockedCreateVimeoProvider.mock.calls[0]!;
-  expect(options).toEqual({ controls: true });
+  expect(options).toEqual({ controls: true, resolvePoster: false });
 });
 
 test('reaches createVimeoProvider as chromeless when controls is unset', async () => {
@@ -270,7 +270,7 @@ test('reaches createVimeoProvider as chromeless when controls is unset', async (
     expect(mockedCreateVimeoProvider).toHaveBeenCalledTimes(1)
   );
   const [, , options] = mockedCreateVimeoProvider.mock.calls[0]!;
-  expect(options).toEqual({ controls: undefined });
+  expect(options).toEqual({ controls: undefined, resolvePoster: false });
 });
 
 test('forwards the vimeo provider option bag to createVimeoProvider', async () => {
@@ -293,7 +293,8 @@ test('forwards the vimeo provider option bag to createVimeoProvider', async () =
   expect(options).toEqual({
     controls: undefined,
     customControls: true,
-    dnt: false
+    dnt: false,
+    resolvePoster: false
   });
 });
 
@@ -317,7 +318,11 @@ test('forwards suppressSeoMetadata to createVimeoProvider', async () => {
     expect(mockedCreateVimeoProvider).toHaveBeenCalledTimes(1)
   );
   const [, , options] = mockedCreateVimeoProvider.mock.calls[0]!;
-  expect(options).toEqual({ controls: undefined, suppressSeoMetadata: true });
+  expect(options).toEqual({
+    controls: undefined,
+    resolvePoster: false,
+    suppressSeoMetadata: true
+  });
 });
 
 // SIDEPRO's regression, mirrored from `youtube.test.tsx`: `providerOptionsEqual`
@@ -359,7 +364,7 @@ test('re-attaches the Vimeo adapter when the controls prop changes', async () =>
     expect(mockedCreateVimeoProvider).toHaveBeenCalledTimes(2)
   );
   const [, , options] = mockedCreateVimeoProvider.mock.calls[1]!;
-  expect(options).toEqual({ controls: true });
+  expect(options).toEqual({ controls: true, resolvePoster: false });
   expect(harness.fakes[0]!.counts().destroyCount).toBe(1);
 });
 

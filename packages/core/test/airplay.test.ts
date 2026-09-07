@@ -112,7 +112,8 @@ test('publishes the frozen airPlay capability patch from the provider', () => {
     fullscreen: { status: 'available' },
     pictureInPicture: { status: 'available' },
     airPlay: { status: 'unavailable', reason: 'browser' },
-    customControls: { status: 'available' }
+    customControls: { status: 'available' },
+    providerPoster: { status: 'available' }
   };
 
   emit({ capabilities });

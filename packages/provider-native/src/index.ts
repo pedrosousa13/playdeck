@@ -6,7 +6,7 @@ import type {
 } from '@playdeck/core';
 import { notifySafely } from '@playdeck/core';
 import { createNativeAttachment } from './attachment.js';
-import { available } from './adapter-values.js';
+import { available, sourceHasNoPoster } from './adapter-values.js';
 import {
   createNativePlayback,
   type NativePlaybackOptions
@@ -82,7 +82,8 @@ export const createNativeProvider = (
       fullscreen: presentation.fullscreenAvailability(),
       pictureInPicture: presentation.pictureInPictureAvailability(),
       airPlay: presentation.airPlayAvailability(),
-      customControls: available
+      customControls: available,
+      providerPoster: sourceHasNoPoster
     };
   }
 

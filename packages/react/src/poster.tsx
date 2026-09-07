@@ -1,4 +1,5 @@
 import {
+  createContext,
   isValidElement,
   useContext,
   useEffect,
@@ -65,6 +66,18 @@ export const normalizePoster = (input: PosterInput): NormalizedPoster => {
   return { type: 'image', props: { ...input } };
 };
 
+// The still `Player.Root`'s `poster` prop resolved, when it resolved to one:
+// a consumer literal normalized to `ResponsivePoster`, or `'provider'` once
+// the attached source's own still has arrived. `undefined` both while `Root`
+// was given no `poster` at all and while a `poster="provider"` request has
+// not resolved yet -- `Poster` treats the two the same, showing nothing extra
+// in either case. Read by `useContext` rather than the throwing `usePlayer()`,
+// matching `PosterContext` beside it: a standalone `Poster` outside
+// `Player.Root` must keep working exactly as it always has.
+export const DefaultPosterContext = createContext<ResponsivePoster | undefined>(
+  undefined
+);
+
 const posterOverlayStyle: CSSProperties = {
   position: 'absolute',
   inset: 0,
@@ -82,6 +95,7 @@ export const Poster = ({
   ...safeRest
 }: PosterProps) => {
   const posterState = usePosterState();
+  const defaultPoster = useContext(DefaultPosterContext);
   // After `...style`, alone: derived from `posterState`, so a static
   // consumer value would pin the poster open for every source rather than
   // override a layout choice. `'hidden'` always hides. `'paused'`
@@ -106,7 +120,7 @@ export const Poster = ({
         visibility: hidden ? 'hidden' : 'visible'
       }}
     >
-      {children}
+      {children ?? (defaultPoster && <PosterImage {...defaultPoster} />)}
     </div>
   );
 };

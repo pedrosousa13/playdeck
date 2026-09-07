@@ -229,6 +229,23 @@ test('an explicit loadHls wins over a build name given alongside it', async () =
   expect(loader.calls()).toBe(1);
 });
 
+// Red: with provider-native's `sourceHasNoPoster` mutated to `{ status:
+// 'available' }`, this failed with `providerPoster: { status: 'available' }`
+// received where `{ status: 'unavailable', reason: 'source' }` was expected --
+// this adapter wraps the native provider, so the manifest inherits its
+// verdict. The equivalent provider-native test failed the same way from the
+// same mutation.
+test('reports providerPoster as unavailable -- a manifest has no still of its own', async () => {
+  const harness = createHarness(stubNativeHlsSupport);
+  await harness.provider.attach();
+
+  expect(harness.patches.at(-1)).toMatchObject({
+    capabilities: {
+      providerPoster: { status: 'unavailable', reason: 'source' }
+    }
+  });
+});
+
 test('reports quality selection honestly per engine', async () => {
   const nativeHarness = createHarness(stubNativeHlsSupport);
   await nativeHarness.provider.attach();

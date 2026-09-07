@@ -19,7 +19,9 @@ import { createVimeoAttachment } from './attachment.js';
 import { createVimeoBoundary } from './boundary.js';
 import { createVimeoChapters } from './chapters.js';
 import { createVimeoChromelessAvailability } from './chromeless-availability.js';
+import { createVimeoOembedRequest } from './oembed-availability.js';
 import { createVimeoPlayback } from './playback.js';
+import { createVimeoPosterAvailability } from './poster-availability.js';
 import { createVimeoPresentation } from './presentation.js';
 import { createVimeoQualityLevels } from './quality-levels.js';
 import { createVimeoTextTracks } from './text-tracks.js';
@@ -74,6 +76,15 @@ export type VimeoProviderOptions = {
    */
   readonly endTime?: number;
   readonly customControls?: boolean;
+  /**
+   * Resolve `PlayerCapabilities.providerPoster` and `PlayerState.providerPosterUrl`
+   * against Vimeo's own oEmbed record. Opt-in, like `customControls`: without
+   * it, this adapter never asks Vimeo for a thumbnail, so no request discloses
+   * the viewer before a consumer has asked for the provider's own poster.
+   * `Root`'s `poster="provider"` folds this in the same way `controls` and
+   * `loop` are folded (ADR-0004), so `PlayerProviderOptions` omits the key.
+   */
+  readonly resolvePoster?: boolean;
   /**
    * Stop the Vimeo SDK sending the embedding page's `window.location.href` —
    * path and query included — to the embed frame over `postMessage`. Off by
@@ -217,7 +228,19 @@ export const createVimeoProvider = (
   ): void =>
     listeners.forEach((listener) => notifySafely(listener, patch, event));
 
-  const chromeless = createVimeoChromelessAvailability({ source, options });
+  // Shared so a source opting into both `customControls` and `resolvePoster`
+  // pays for one oEmbed GET, not two (#556).
+  const oembedRequest = createVimeoOembedRequest(source);
+  const chromeless = createVimeoChromelessAvailability({
+    source,
+    options,
+    oembedRequest
+  });
+  const posterAvailability = createVimeoPosterAvailability({
+    source,
+    options,
+    oembedRequest
+  });
 
   const boundary = createVimeoBoundary(options);
 
@@ -271,7 +294,8 @@ export const createVimeoProvider = (
       // command surface for them yet, so they are unavailable through Playdeck
       // rather than forever "unknown".
       airPlay: { status: 'unavailable', reason: 'provider' },
-      customControls: chromeless.customControlsAvailability()
+      customControls: chromeless.customControlsAvailability(),
+      providerPoster: posterAvailability.availability()
     };
   }
 
@@ -280,6 +304,7 @@ export const createVimeoProvider = (
     options,
     getCapabilities: playerCapabilities,
     chromeless,
+    posterAvailability,
     playback,
     presentation,
     qualityLevels,
