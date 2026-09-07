@@ -2,12 +2,13 @@
 
 import { runInNewContext } from 'node:vm';
 import { expect, test, vi } from 'vitest';
-import type {
-  MediaDimensions,
-  PlayerError,
-  ProviderAdapter,
-  ProviderStateListener,
-  ProviderStatePatch
+import {
+  PlayerController,
+  type MediaDimensions,
+  type PlayerError,
+  type ProviderAdapter,
+  type ProviderStateListener,
+  type ProviderStatePatch
 } from '@playdeck/core';
 import { createSeekingVideo } from '@playdeck/test-support/seeking-video';
 import { createNativeProvider } from '../src/index';
@@ -506,6 +507,41 @@ test('reports the refusal once per load rather than on every metadata event', as
   media.dispatchEvent(new Event('loadedmetadata'));
 
   expect(errors).toHaveLength(2);
+});
+
+// #475: a `startTime` refused on one load must not go on describing a
+// `retry()` reload the offset actually reached. The refusal is decided fresh
+// per load -- see the test above -- and this is the other half of that: a
+// fresh decision that finds nothing to refuse has to withdraw the stale one,
+// or `PlayerState.error` keeps reporting a refusal that has already been
+// corrected.
+test('clears PlayerState.error once a retried reload satisfies a refused startTime', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 0 });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([])
+  });
+  vi.spyOn(media, 'load').mockImplementation(() => undefined);
+  const { rewind } = trackPosition(media, 0);
+  const provider = createNativeProvider(media, { startTime: 5 });
+  const controller = new PlayerController();
+  controller.setProvider(provider);
+
+  media.dispatchEvent(new Event('loadedmetadata'));
+  expect(controller.getState().error).toMatchObject({
+    category: 'configuration',
+    fatal: false
+  });
+
+  await controller.retry();
+  rewind();
+  // The reloaded source now covers the offset, so this load's write reaches
+  // it and refuses nothing.
+  Object.defineProperty(media, 'duration', { configurable: true, value: 20 });
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(controller.getState().error).toBeNull();
 });
 
 // #465. The three tests above decided the refusal by predicting where the

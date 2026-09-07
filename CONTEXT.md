@@ -371,12 +371,21 @@ fall-back behaviour it degraded to stands unchanged. A provider reports one
 through a state patch; a consumer-supplied URL prop the shared allowlist refuses
 — every one except `source`, which is a **Refused source** and reports its own
 value — is reported by `reportRefusedUrl`, which names the refused surface and
-never the value, and which returns a disposer the reporter holds for as long as it keeps
-refusing that surface — so the notice stands while any reporter's registration
-stands, and is withdrawn only by the reporter that made it. Held as controller
-state and surfaced on `PlayerState.error` like any other error, but never a
-failure: it never masks a standing error, and it never drives a transition into
-the error lifecycle. There is one slot and no event carries the loser, so two
+never the value. Both register into ONE internal registry `PlayerController`
+holds, keyed by a token private to each registration rather than by content, so
+two calls reporting an identical-looking notice register — and withdraw —
+independently: a notice stands while at least one registration for it stands,
+and is withdrawn only by the registration that made it. `reportRefusedUrl`
+hands its caller the registration's disposer directly; a provider gets its own
+back through its state-patch listener's return value, and holds it to withdraw
+a notice whose condition a later load no longer meets — `startTime` in
+`provider-native` is the first to (#475). A provider's own notices are dropped
+together with that provider on a swap or a detach; a refused-URL registration
+is not, because it describes a consumer prop no provider ever saw. Held as
+controller state and surfaced on `PlayerState.error` like any other error, but
+never a failure: it never masks a standing error, and it never drives a
+transition into the error lifecycle. There is one slot and no event carries the
+loser, so two
 notices standing at once are ranked rather than ordered: each declares a
 severity — `protective` where a control that protects the viewer fired, an
 untrusted URL blocked or a privacy opt-out that did not take, and

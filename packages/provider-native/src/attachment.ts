@@ -270,13 +270,14 @@ export const createNativeAttachment = (
   };
   // `seekable` on every one of these, withheld or not: only `buffered` carries
   // the ambiguity, and `progress` is the event that reports the window moving.
-  const onProgress = (): void =>
+  const onProgress = (): void => {
     emit(
       syncLive({
         ...syncBuffered(),
         seekable: toRanges(media.seekable)
       })
     );
+  };
   // The one point inside an attachment where an empty buffer is news rather
   // than silence. `emptied` fires from the media load algorithm, which empties
   // the element's buffer as it runs, so here the ranges are gone rather than
@@ -299,7 +300,7 @@ export const createNativeAttachment = (
     lastBuffered = [];
     emit(syncLive({ buffered: [] }));
   };
-  const onVolumeChange = (originalEvent: Event): void =>
+  const onVolumeChange = (originalEvent: Event): void => {
     emit(
       { muted: media.muted, volume: media.volume },
       providerEvent('volumechange', originalEvent, {
@@ -307,13 +308,15 @@ export const createNativeAttachment = (
         volume: media.volume
       })
     );
-  const onRateChange = (originalEvent: Event): void =>
+  };
+  const onRateChange = (originalEvent: Event): void => {
     emit(
       { playbackRate: media.playbackRate },
       providerEvent('ratechange', originalEvent, {
         playbackRate: media.playbackRate
       })
     );
+  };
 
   const addListeners = (): void => {
     media.addEventListener('play', onPlay);

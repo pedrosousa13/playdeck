@@ -88,7 +88,7 @@ export const autoplayConfigurationError = (): PlayerError =>
 // untrusted URL, which is a security control firing and not a presentation
 // option being ignored. So none of them can be pushed out of the slot by a
 // provider reporting a cosmetic rejection (#368).
-const REFUSED_URL_NOTICES: Record<RefusedUrlSurface, PlayerError> = {
+export const REFUSED_URL_NOTICES: Record<RefusedUrlSurface, PlayerError> = {
   'poster src': freezeError({
     category: 'configuration',
     fatal: false,
@@ -154,14 +154,14 @@ const REFUSED_URL_SURFACE_RANK = [
 ] as const satisfies RankOf<RefusedUrlSurface>;
 
 // The notice the standing refusal registrations publish, or `undefined` when
-// none stands. An empty tally returns `undefined` rather than a notice because
-// a notice says a refusal stands right now, not that one once happened: keyed
-// to the latter, a consumer who cleaned the poisoned field would keep the error
+// none stands. An empty set returns `undefined` rather than a notice because a
+// notice says a refusal stands right now, not that one once happened: keyed to
+// the latter, a consumer who cleaned the poisoned field would keep the error
 // for the controller's life. Only membership is read — how many reporters
 // stand behind a surface is `PlayerController`'s bookkeeping, not this
 // function's business (#330).
 export const standingRefusedUrlNotice = (
-  refused: ReadonlyMap<RefusedUrlSurface, unknown>
+  refused: ReadonlySet<RefusedUrlSurface>
 ): PlayerError | undefined => {
   const surface = REFUSED_URL_SURFACE_RANK.find((candidate) =>
     refused.has(candidate)

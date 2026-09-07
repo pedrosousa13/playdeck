@@ -1008,6 +1008,38 @@ test('publishes the chromeless notice when it is the only one', async () => {
   );
 });
 
+// #475: a notice a provider never withdraws has to survive a `retry()`
+// untouched -- withdrawal is the provider's own act, never a side effect of
+// retrying. `suppressSeoMetadata` is the case the brief names: the SDK reads
+// its guard once, while the module evaluates, so this attachment never calls
+// back to take the notice away, on a retry or otherwise.
+test('leaves a still-true suppression notice standing after a retry', async () => {
+  sdkState.seoMetadataSuppressed = false;
+  const controller = new PlayerController();
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdk = createFakeSdk();
+  sdkState.load = () => Promise.resolve(sdk.Sdk);
+  const provider = createVimeoProvider(mount, publicSource, {
+    suppressSeoMetadata: true
+  });
+  const settled = new Promise<void>((resolve) => {
+    const stop = controller.subscribe((state) => {
+      if (state.lifecycle !== 'ready' && state.lifecycle !== 'error') return;
+      stop();
+      resolve();
+    });
+  });
+  controller.setProvider(provider);
+  await settled;
+
+  expect(controller.getState().error?.message).toContain('did not take effect');
+
+  await controller.retry();
+
+  expect(controller.getState().error?.message).toContain('did not take effect');
+});
+
 test('honors an explicit Do-Not-Track opt-out', async () => {
   const result = await setup({ options: { dnt: false } });
   expect(embedUrl(result).searchParams.get('dnt')).toBe('0');

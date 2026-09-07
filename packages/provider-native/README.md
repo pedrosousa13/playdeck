@@ -128,7 +128,10 @@ export const play = (): Promise<unknown> => controller.play();
   The `configuration` notice above is the record of the refusal: once it has
   fired for a load, nothing re-applies the offset or retracts the notice for
   that same load. Only a fresh load — a new source, or an explicit `retry` —
-  gives the offset another attempt.
+  gives the offset another attempt, and that attempt's own decision replaces
+  the previous one: a retry whose reload reaches the requested offset
+  withdraws the notice, leaving `PlayerState.error` clear, exactly as a retry
+  that refuses again keeps it standing.
 
 - **`selectQuality`** is `unavailable` with reason `source`: the browser picks
   its own rendition for native HLS and there is nothing to enumerate. It is not
