@@ -293,6 +293,23 @@ test('viewport uses the default margin and does not load before intersection', a
   // observer now stays connected for the whole session, watching for the
   // exit that should pause a viewport-started playback and the re-entry that
   // should resume it.
+  //
+  // Demonstrated red: this assertion and the three other `disconnect`
+  // assertions #309 flipped from `toHaveBeenCalled(Once)` to
+  // `not.toHaveBeenCalled()` -- in "with neither threshold set, the first
+  // visible pixel both loads and plays", "with only loadThreshold set, the
+  // load crossing is still the play crossing" and "loads at the first pixel
+  // and plays once playThreshold is reached" -- were run with the observer
+  // callback's exit/re-entry block in `use-activation.ts` temporarily
+  // reverted to its pre-#309 shape (the old `if (!active.started ||
+  // !active.playGateOpen) return; disconnectObserver(registration);
+  // observerRef.current = undefined;`, restoring the self-disconnect). All
+  // four failed identically against that revert:
+  //
+  //   AssertionError: expected "vi.fn()" to not be called at all, but
+  //   actually been called 1 times
+  //
+  // All four pass again with the revert undone (this file's actual state).
   expect(observer.disconnect).not.toHaveBeenCalled();
 });
 
@@ -455,6 +472,9 @@ test('with neither threshold set, the first visible pixel both loads and plays',
   // observer stays connected for the whole session under `loading:
   // 'viewport'`, watching for the exit and re-entry crossings that come
   // after this one.
+  //
+  // Demonstrated red: see the note above "viewport uses the default margin
+  // and does not load before intersection"'s `disconnect` assertion.
   expect(observer.disconnect).not.toHaveBeenCalled();
 });
 
@@ -492,6 +512,9 @@ test('with only loadThreshold set, the load crossing is still the play crossing'
   await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
   // No longer self-disconnects once activated and played (#309): see the
   // same assertion above.
+  //
+  // Demonstrated red: see the note above "viewport uses the default margin
+  // and does not load before intersection"'s `disconnect` assertion.
   expect(observer.disconnect).not.toHaveBeenCalled();
 });
 
@@ -539,6 +562,9 @@ test('loads at the first pixel and plays once playThreshold is reached', async (
   // No longer self-disconnects once both gates are crossed (#309): the
   // observer that reported both crossings is the one that goes on watching
   // for the exit and re-entry that follow, so it stays connected.
+  //
+  // Demonstrated red: see the note above "viewport uses the default margin
+  // and does not load before intersection"'s `disconnect` assertion.
   expect(observer.disconnect).not.toHaveBeenCalled();
 });
 
@@ -577,7 +603,7 @@ test('an oversized target reaches an unreachable play threshold', async () => {
 // `playWithOrigin`/`pauseWithOrigin` call that patch is confirming
 // (`#consumePendingOrigin`), which is the origin these tests actually assert
 // on. `type` is what has to be right for the confirmation to land at all --
-// `confirmsPlayback` (`player-controller.ts:69`) pairs a `'play'` event only
+// `confirmsPlayback` in `player-controller.ts` pairs a `'play'` event only
 // with a `playback: 'playing'` patch and a `'pause'` event only with a
 // `playback: 'paused'` one.
 const playEvent = {
@@ -633,8 +659,8 @@ const setUpViewportPlayback = async () => {
 // Issues a play under `origin` and settles it the way the fake provider's own
 // `play()` -- which never patches state itself -- needs a caller to: this
 // hook's own listener only reacts to the resulting `play` event, and that
-// event only fires once a patch reports `playback: 'playing'`
-// (`player-controller.ts:73`).
+// event only fires once a patch reports `playback: 'playing'`, per
+// `confirmsPlayback` in `player-controller.ts`.
 const playAs = async (
   controller: PlayerController,
   fake: ReturnType<typeof createFakeProvider>,
@@ -647,8 +673,8 @@ const playAs = async (
 // This exercises `use-activation.ts`'s reaction to the `'autoplay'` origin,
 // not how a play comes to carry it. `playWithOrigin('autoplay')` is called
 // directly rather than through `Root`'s own `configureAutoplay` machinery,
-// which `packages/core/test/autoplay.test.ts:662` ("labels confirmed autoplay
-// as autoplay") already pins as producing exactly this origin for a
+// which `packages/core/test/autoplay.test.ts`'s "labels confirmed autoplay
+// as autoplay" already pins as producing exactly this origin for a
 // viewport-and-`autoplay` player.
 //
 // Demonstrated red (#309): every assertion below was run against

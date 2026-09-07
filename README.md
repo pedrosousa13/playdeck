@@ -122,7 +122,7 @@ change that moves a bundle cannot leave a stale number in them.
 
 Every Playdeck package in this table is measured by `pnpm test:budgets` on each
 CI run, against a reference figure it prints but never enforces: core weighs
-in at 7.8 KB, the primitives at 17.9 KB and `theme.css` at 2.3 KB — measured on
+in at 7.8 KB, the primitives at 18.1 KB and `theme.css` at 2.3 KB — measured on
 its CSS rules with the comments stripped, because it ships as authored and
 measuring the whole file would really be measuring its prose. None of the
 three can ever fail a build over it; staying lean here is a standing goal, not
