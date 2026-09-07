@@ -206,6 +206,13 @@ export const createNativePlayback = (
       : undefined;
   const loop = options.loop ?? false;
   let positioned = false;
+  // The disposer for whatever `startTime` notice `applyInitialPosition` most
+  // recently published, or `undefined` when nothing published by this seam
+  // currently stands. Held so a later load's decision -- the one `retry`
+  // resets `positioned` to get -- can withdraw a refusal that has since been
+  // corrected, which the notice would otherwise go on reporting for the rest
+  // of this provider's life (#475).
+  let withdrawStartTimeNotice: (() => void) | undefined;
   let boundaryEnded = false;
   let seekingFromEnded = false;
   // Where the last end-boundary correction actually left the playhead, which is
@@ -379,7 +386,9 @@ export const createNativePlayback = (
       providerEvent('play', originalEvent, undefined)
     );
   };
-  const onPlaying = (): void => emit({ playback: 'playing', buffering: false });
+  const onPlaying = (): void => {
+    emit({ playback: 'playing', buffering: false });
+  };
   const onPause = (originalEvent: Event): void => {
     if (boundaryEnded) return;
     emit(
@@ -398,7 +407,9 @@ export const createNativePlayback = (
       providerEvent('ended', originalEvent, undefined)
     );
   };
-  const onWaiting = (): void => emit({ buffering: true });
+  const onWaiting = (): void => {
+    emit({ buffering: true });
+  };
   const onSeeking = (originalEvent: Event): void => {
     if (boundaryEnded && beforeEffectiveEnd(media.currentTime)) {
       boundaryEnded = false;
@@ -626,6 +637,13 @@ export const createNativePlayback = (
       // `NativePlaybackOptions.startTime`).
       if (positioned) return;
       positioned = true;
+      // Withdraw whatever this seam published about the load `retry` just
+      // replaced, before deciding this one: a reload is a fresh decision (see
+      // the comment above), and a refusal about media that is no longer
+      // attached must not go on describing this load too. A no-op when
+      // nothing is held (#475).
+      withdrawStartTimeNotice?.();
+      withdrawStartTimeNotice = undefined;
       // Nothing to apply without a start offset. The media load algorithm has
       // already put the playhead at 0, and if metadata arrives after playback
       // has begun, writing 0 is not applying a start position — it is
@@ -676,7 +694,7 @@ export const createNativePlayback = (
         reached === undefined ||
         Math.abs(reached - target) > SETTLED_POSITION_TOLERANCE_SECONDS
       ) {
-        emit({ error: startTimeConfigurationNotice });
+        withdrawStartTimeNotice = emit({ error: startTimeConfigurationNotice });
         return;
       }
       // The synchronous read above reported success, which on WebKit is not
@@ -722,7 +740,9 @@ export const createNativePlayback = (
         // undecided rather than a refusal.
         if (media.seeking) return;
         if (target - media.currentTime > SETTLED_POSITION_TOLERANCE_SECONDS)
-          emit({ error: startTimeConfigurationNotice });
+          withdrawStartTimeNotice = emit({
+            error: startTimeConfigurationNotice
+          });
       };
       pendingPositionCheck = setTimeout(poll, SEEKING_POLL_INTERVAL_MS);
     },

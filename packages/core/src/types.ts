@@ -466,6 +466,24 @@ export type ProviderEvent = {
   [Type in PlayerEventType]: ProviderEventFor<Type>;
 }[PlayerEventType];
 
+// `void`, not `void | (() => void)`, and deliberately: this is the type every
+// `ProviderAdapter.subscribe` implementation is written against, in this
+// package's own tests among many others, and widening it to a proper union
+// would drop the "a void-returning callback's actual return value is ignored"
+// leniency TypeScript grants the bare type — turning every one of those
+// implementations that happens to end its listener in a non-`void` expression
+// into a compile error unrelated to what it is testing.
+//
+// A `PlayerController` subscription hands its OWN listener's caller a real
+// disposer at runtime regardless — the withdrawal path for a `configuration`
+// notice the patch it was given carried, the same shape
+// `PlayerController.reportRefusedUrl` already returns to a consumer reporting
+// a refused URL. See `PlayerController`'s `subscribe` wiring, and
+// `NativePlaybackOptions.startTime`, the first caller (#475): the one seam
+// that reads the value back out stores subscribers under a wider LOCAL type
+// instead of a cast, right where that seam calls the listener — see
+// `provider-native`'s `index.ts` for why a bare `void`-typed function is
+// assignable there without one.
 export type ProviderStateListener = (
   patch: ProviderStatePatch,
   event?: ProviderEvent

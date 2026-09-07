@@ -12,10 +12,19 @@ import type {
 
 // Publishes a provider-state patch to every subscriber, optionally paired
 // with the provider event that caused it. Every seam takes this as its sink.
+//
+// Returns a disposer when the patch carries a `configuration` notice: calling
+// it withdraws that notice from the controller's error slot, the way
+// `PlayerController.reportRefusedUrl`'s own disposer withdraws a refused URL
+// report (`@playdeck/core`'s `ProviderStateListener`). `undefined` for every
+// other patch — there is nothing to withdraw. A seam that decides a notice
+// per load, rather than once per attach, holds the disposer and calls it once
+// a later decision no longer needs the notice it published; `playback.ts`'s
+// `startTime` is the one seam in this package that does (#475).
 export type EmitProviderState = (
   patch: ProviderStatePatch,
   event?: ProviderEvent
-) => void;
+) => (() => void) | undefined;
 
 export const providerEvent = <Type extends PlayerEventType>(
   type: Type,

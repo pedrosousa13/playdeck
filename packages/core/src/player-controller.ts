@@ -33,6 +33,7 @@ import {
   mostImportantNotice,
   notifySafely,
   orderedRanges,
+  REFUSED_URL_NOTICES,
   standingRefusedUrlNotice,
   toProviderError,
   unsubscribeSafely
@@ -64,6 +65,18 @@ type PendingOrigin = {
 );
 
 type PendingOriginKind = PendingOrigin['kind'];
+
+// What a registered `configuration` notice is about, and therefore how long
+// it lives and how several of them are ranked against each other — the data
+// `#notices` keys its scope-specific handling on so that a provider's own
+// rejection and a refused consumer URL can share one register/withdraw
+// implementation instead of two (#475). `'provider'` describes one provider's
+// own configuration and is dropped with it; `'refused-url'` describes a
+// consumer prop no provider ever saw and survives an attach. See `#notices`'s
+// own comment on `PlayerController`.
+type NoticeScope =
+  | { readonly kind: 'provider' }
+  | { readonly kind: 'refused-url'; readonly surface: RefusedUrlSurface };
 
 // A patch is the provider confirming the playback command that asked for it.
 const confirmsPlayback = (
@@ -257,47 +270,134 @@ export class PlayerController {
   // while `load()` is only queued once `attach()` returns (#87).
   #loadedGeneration: number | undefined;
   #pendingOrigins = new Map<PendingOriginKind, PendingOrigin>();
-  // The provider's most important configuration rejection, held as controller
-  // state the way `#hasAutoplayConfigurationError` holds the autoplay conflict:
-  // the state has one error slot, so a notice left in the patch would be cleared
-  // by the next patch that omits an `error` key, and would overwrite an error
-  // that actually stopped playback. It is dropped with the provider that
-  // reported it (#235).
+  // Every `configuration` notice currently registered — a provider's own
+  // rejection AND a refused consumer URL alike — keyed by a token private to
+  // its own registration, never by the notice's content, so two calls
+  // reporting an identical-looking notice register, and can be withdrawn,
+  // independently. One map, one write below (`#registerNotice`), used by both
+  // `reportRefusedUrl` and `setProvider`'s subscribe callback: the two used to
+  // be tracked through separate maps with separate register/withdraw
+  // implementations that happened to share an idiom, which is the very
+  // duplication #475 asks not to reproduce (#330, #368, #475).
   //
-  // Which of an attach's rejections that is, is decided by severity and not by
-  // arrival — see the fill site in `setProvider`. A tie keeps the one already
-  // held, so two rejections in the same attach still cannot flap the slot
-  // (#368).
-  #configurationNotice: PlayerError | undefined;
-  // How many reporters currently stand behind each refused surface — the live
-  // answer, not a log of what was once refused. Keyed by surface because the
-  // notice is chosen by surface, counted because a surface is a PROP NAME and
-  // several independent component instances can hold that same prop at once.
-  // A boolean per surface cannot express that: two `PosterImage`s under one
-  // `Player.Root` are two reporters, and the permitted one's report would
-  // withdraw the poisoned one's notice, so half the render orders would refuse
-  // in total silence — the exact A09 failure #330 exists to fix (#345).
+  // What still tells the two apart is `scope`, and it is DATA, not a second
+  // code path:
+  // - `{ kind: 'provider' }` describes one provider's own configuration, and
+  //   is dropped with that provider — on a swap, a detach, or a subscribe
+  //   that throws — by `#clearProviderNotices` (#235).
+  // - `{ kind: 'refused-url'; surface }` describes a consumer prop no
+  //   provider ever saw, and survives an attach the way `#refusedUrlNotice`
+  //   survived one as its own field before this map replaced it (#330).
   //
-  // Scoped to the controller rather than to a provider, unlike
-  // `#configurationNotice`. That is not a difference in how long a rejection is
-  // interesting, it is a difference in what the rejection is about:
-  // `#configurationNotice` describes one provider's own configuration and is
-  // dropped with that provider, while a refused `poster src` describes a
-  // consumer prop the provider knows nothing about. In the ordinary React
-  // ordering the poster renders and reports BEFORE the provider module has
-  // finished loading, so a provider-scoped record would be wiped by the very
-  // next attach, before anything could observe it.
+  // Which of several registered entries the single error slot shows is a
+  // question the scope also answers, but differently per kind — see
+  // `#currentProviderNotice` and `#currentRefusedUrlNotice` — because what
+  // ties two provider notices (arrival order, #368) and what ties two refused
+  // surfaces (a fixed surface rank, #330) predate this unification and are
+  // unaffected by it: unifying the registry does not require unifying what
+  // notices from two different sources are ranked by.
+  #notices = new Map<
+    symbol,
+    { readonly notice: PlayerError; readonly scope: NoticeScope }
+  >();
+
+  // The one register/withdraw implementation `reportRefusedUrl` and
+  // `setProvider`'s subscribe callback both call into. Takes `notice` exactly
+  // as given, deliberately NOT freezing it again here: `reportRefusedUrl`
+  // passes one of the five shared, already-frozen `REFUSED_URL_NOTICES`
+  // singletons, and several registrations for the same surface must hold that
+  // very reference, not a copy of it, for the identity comparisons below to
+  // see them as interchangeable. `setProvider`'s subscribe callback freezes
+  // its own patch-supplied notice before calling in, for the reason its call
+  // site says.
   //
-  // A surface with no standing reporter is deleted rather than left at zero, so
-  // the map's size is bounded by the number of surfaces actually refused right
-  // now and does not grow as component instances churn.
-  #refusedUrlReports = new Map<RefusedUrlSurface, number>();
-  // The notice `#refusedUrlReports` currently publishes, cached rather than
-  // rebuilt at each read: the state carries it by reference, and a fresh object
-  // per `#applyPatch` would make every unrelated patch look like a change of
-  // error to a subscriber comparing identity. Resolved in `#applyPatch` and in
-  // `#withHeldConfiguration`, never left in a patch (#330).
-  #refusedUrlNotice: PlayerError | undefined;
+  // `notice` is compared by identity rather than the token being looked back
+  // up — which is what lets one gate answer two different questions depending
+  // on scope: for `{ kind: 'provider' }`, where every registration's notice is
+  // unique, `this.#state.error === notice` alone says whether THIS
+  // registration was published; for `{ kind: 'refused-url' }`, where several
+  // registrations for one surface hold the very same shared value, it can
+  // also be true of a sibling registration, which is why the second check
+  // below asks the scope's own fold whether that sibling still stands.
+  // Neither branch needed for the other scope changes the gate; it is the
+  // same read either way (#330, #475).
+  #registerNotice = (notice: PlayerError, scope: NoticeScope): (() => void) => {
+    const token = Symbol('notice');
+    this.#notices.set(token, { notice, scope });
+    return () => {
+      // A `Map` entry withdraws at most once. A later call — a duplicate
+      // release, or one reaching a token `#clearProviderNotices` already
+      // dropped with its provider — finds nothing left to remove and does
+      // nothing further; this is the one idempotency guard both callers rely
+      // on (#330, #475).
+      if (!this.#notices.delete(token)) return;
+      // Nothing published moves unless this was the entry showing.
+      if (this.#state.error !== notice) return;
+      // ...and even then, only if nothing left standing resolves to the exact
+      // same value — a sibling registration for the same refused surface,
+      // which withdrawing this one must not disturb.
+      if (this.#resolveScope(scope) === notice) return;
+      // `error: null` is what forces `#applyPatch` to refill the slot from
+      // whatever the registry — and any standing failure — still says, rather
+      // than keep the now-stale reference by identity.
+      this.#applyPatch({ error: null });
+    };
+  };
+
+  // The single candidate the `{ kind: 'provider' }` entries currently offer
+  // the error slot — the fold `#configurationNotice` used to hold
+  // pre-computed, read on demand here exactly as the refused-URL fold below
+  // always was, so a withdrawal never has to recompute and cache it itself. A
+  // `Map` iterates in insertion order, so folding its values in that order
+  // reproduces the same "a tie keeps the one already held" anti-flapping
+  // property #368 gave the field this replaced (#368, #475).
+  #currentProviderNotice = (): PlayerError | undefined =>
+    mostImportantNotice(
+      ...[...this.#notices.values()]
+        .filter((entry) => entry.scope.kind === 'provider')
+        .map((entry) => entry.notice)
+    );
+
+  // The single candidate the `{ kind: 'refused-url' }` entries currently offer
+  // the error slot, ranked by `REFUSED_URL_SURFACE_RANK` (`safety.ts`) and NOT
+  // by registration order: several independent component instances can refuse
+  // different surfaces in an order that depends on where a consumer placed
+  // them in the tree, and the published message has to be a function of what
+  // stands refused and of nothing else (#330).
+  //
+  // Reads which surfaces are registered, not how many times each one is —
+  // the old `#refusedUrlReports` per-surface count is exactly the number of
+  // `{ kind: 'refused-url' }` entries this map holds for that surface, so
+  // several reporters of one surface fold to precisely the answer one
+  // reporter would, with no count of its own to keep in step (#330, #475).
+  #currentRefusedUrlNotice = (): PlayerError | undefined => {
+    const surfaces = new Set<RefusedUrlSurface>();
+    for (const entry of this.#notices.values()) {
+      if (entry.scope.kind === 'refused-url') surfaces.add(entry.scope.surface);
+    }
+    return standingRefusedUrlNotice(surfaces);
+  };
+
+  // What `#registerNotice`'s disposer asks after removing an entry: what does
+  // this entry's OWN scope resolve to now. Kept as its own read rather than
+  // inlined so the disposer stays one implementation regardless of which fold
+  // answers it (#475).
+  #resolveScope = (scope: NoticeScope): PlayerError | undefined =>
+    scope.kind === 'provider'
+      ? this.#currentProviderNotice()
+      : this.#currentRefusedUrlNotice();
+
+  // Every `{ kind: 'provider' }` entry belongs to the provider being replaced
+  // or detached, so all of them go together — on a swap, a detach, and the
+  // subscribe-that-throws path below (#235). Leaves every `{ kind:
+  // 'refused-url' }` entry untouched: those describe a consumer prop no
+  // provider ever saw, and must survive the very attach that normally follows
+  // them (#330).
+  #clearProviderNotices = (): void => {
+    for (const [token, entry] of this.#notices) {
+      if (entry.scope.kind === 'provider') this.#notices.delete(token);
+    }
+  };
 
   // The detection half of the refusal at the five consumer-supplied URL props
   // #320 routed through `isPermittedSourceUrl` and left silent. The refusal
@@ -325,54 +425,45 @@ export class PlayerController {
   // the value turning permitted, and leaks nothing. See `useRefusedUrlReport`
   // (`packages/react/src/player-context.ts`).
   //
+  // Registers into the ONE registry above through `#registerNotice`, exactly
+  // as a provider's own notice does — see that method for the shared
+  // idempotency guard. What `reportRefusedUrl` still does on its own is decide
+  // WHEN to republish: a registration or a withdrawal here has no accompanying
+  // provider patch to ride along with, unlike a provider's own notice, which
+  // is always registered right before `setProvider`'s subscribe callback runs
+  // its own `#applyPatch`. So both directions here compare the refused-URL
+  // fold before and after, republishing only where that fold actually moved
+  // — the same inertness `#registerNotice`'s disposer keeps for a provider
+  // notice, reached by a different route because there is no patch to lean on
+  // (#330, #475).
+  //
   // Takes the surface, never the value — see `RefusedUrlSurface`.
   reportRefusedUrl = (surface: RefusedUrlSurface): (() => void) => {
-    this.#refusedUrlReports.set(
-      surface,
-      (this.#refusedUrlReports.get(surface) ?? 0) + 1
-    );
-    this.#resolveRefusedUrlNotice();
-    // Idempotent, because the disposer leaves the library: `reportRefusedUrl`
-    // is public on `PlayerController`, so anything holding the controller can
-    // register and then run the disposer twice. A second run must not decrement
-    // a count another live reporter owns, which would withdraw a refusal that
-    // still stands. Neither call site here gets there — React never repeats an
-    // effect cleanup, and `bindMediaSession` nulls its own handle inside
-    // `release()` — so the guard is defensive for those two, and it is what
-    // makes the disposer safe to hand any further out.
-    let disposed = false;
-    return () => {
-      if (disposed) return;
-      disposed = true;
-      const standing = (this.#refusedUrlReports.get(surface) ?? 0) - 1;
-      if (standing > 0) this.#refusedUrlReports.set(surface, standing);
-      else this.#refusedUrlReports.delete(surface);
-      this.#resolveRefusedUrlNotice();
-    };
-  };
-
-  #resolveRefusedUrlNotice = (): void => {
-    const next = standingRefusedUrlNotice(this.#refusedUrlReports);
+    const before = this.#currentRefusedUrlNotice();
+    const dispose = this.#registerNotice(REFUSED_URL_NOTICES[surface], {
+      kind: 'refused-url',
+      surface
+    });
+    const after = this.#currentRefusedUrlNotice();
     // The one gate, and it covers every inert registration: a second reporter
-    // joining a surface that already stands, and a surface joining or leaving
-    // BELOW the one already published. Neither changes what the single error
-    // slot can say, and the call sites are React effects and a media-session
-    // binding that run for reasons having nothing to do with the value — so an
-    // inert registration has to stay free of a rebuilt snapshot and a fan-out to
-    // every subscriber. Compared by identity, which holds because
-    // `standingRefusedUrlNotice` returns one shared value per surface rather
-    // than a fresh object.
-    if (next === this.#refusedUrlNotice) return;
-    const published = this.#refusedUrlNotice;
-    this.#refusedUrlNotice = next;
-    // `#applyPatch` reads an absent `error` key as "keep whatever the slot
-    // holds", and what it holds may be the notice being withdrawn — so a
-    // withdrawal has to be stated, or the stale notice is carried forward as
-    // though a patch had set it. Clearing to `null` loses nothing: `#applyPatch`
-    // refills the slot from `#configurationNotice` and the new
-    // `#refusedUrlNotice` in the same pass. Where the slot holds something else,
-    // that something outranks this notice and an empty patch leaves it alone.
-    this.#applyPatch(this.#state.error === published ? { error: null } : {});
+    // joining a surface that already stands, and a surface joining BELOW the
+    // one already published. Neither changes what the single error slot can
+    // say, and the call sites are React effects and a media-session binding
+    // that run for reasons having nothing to do with the value — so an inert
+    // registration has to stay free of a rebuilt snapshot and a fan-out to
+    // every subscriber.
+    if (after !== before) {
+      // `#applyPatch` reads an absent `error` key as "keep whatever the slot
+      // holds", and what it holds may be the notice being displaced — so a
+      // change has to be stated, or the stale notice is carried forward as
+      // though a patch had set it. Clearing to `null` loses nothing:
+      // `#applyPatch` refills the slot from `#currentProviderNotice()` and
+      // `#currentRefusedUrlNotice()` in the same pass. Where the slot holds
+      // something else, that something outranks this notice and an empty
+      // patch leaves it alone.
+      this.#applyPatch(this.#state.error === before ? { error: null } : {});
+    }
+    return dispose;
   };
 
   configureAutoplay = (
@@ -487,11 +578,15 @@ export class PlayerController {
     if (generation !== this.#generation) return;
     this.#provider = provider;
     // A notice describes one provider's configuration, so it goes with that
-    // provider — on a swap and on a detach alike (#235). `#refusedUrlNotice` is
-    // deliberately NOT cleared here: it describes a consumer prop no provider
-    // ever saw, and clearing it would drop the report on the very attach that
-    // normally follows it (#330).
-    this.#configurationNotice = undefined;
+    // provider — on a swap and on a detach alike (#235). A `{ kind:
+    // 'refused-url' }` entry is deliberately NOT cleared here: it describes a
+    // consumer prop no provider ever saw, and clearing it would drop the
+    // report on the very attach that normally follows it (#330). Dropping
+    // entries rather than disposing each one is deliberate too: the disposers
+    // below are about to become unreachable with the provider that holds them,
+    // and a `Map.delete` against an entry that is gone either way needs no
+    // help getting there.
+    this.#clearProviderNotices();
     if (!provider) {
       this.#setState(this.#withHeldConfiguration(createInitialPlayerState()));
       return;
@@ -544,24 +639,25 @@ export class PlayerController {
         // autoplay conflict is recorded by `configureAutoplay` and resolved
         // there (#235).
         //
-        // Compare-and-replace, not the `??=` this was until #368: an adapter
-        // that reports two rejections in one attach had the first of them keep
-        // the slot for good, so a cosmetic option rejected early silenced a
-        // security- or privacy-relevant refusal reported after it, and nothing
-        // carried the loser. The incumbent is offered first, so only a strictly
-        // higher severity takes the slot and a tie leaves it where it is —
-        // which is the anti-flapping property `??=` was really providing, kept
-        // without the ordering debt it charged every adapter for.
-        //
-        // Frozen before it is offered rather than after it has won: the value
-        // being ranked is the value that will be held, so nothing a provider
-        // can still rewrite is compared, held or published.
+        // Registered under a token of its own rather than folded in place the
+        // way `??=` did until #368 and a single held field did until #475: the
+        // fold now happens at read time, in `#currentProviderNotice`, over
+        // every entry still registered — which is what lets one of them be
+        // withdrawn later without disturbing whichever of the others is
+        // winning. A tie still favours whichever registered first, because a
+        // `Map` iterates in insertion order.
         const notice = noticeIn(patch);
-        if (notice)
-          this.#configurationNotice = mostImportantNotice(
-            this.#configurationNotice,
-            freezeError(notice)
-          );
+        // The disposer this listener hands back through its own return value
+        // — `void` on `ProviderStateListener`'s declared type, so a provider
+        // reads it out through a cast of its own, the way `provider-native`'s
+        // `emit` does — and so to the provider, which is the only thing that
+        // decides when to call it (#475). Frozen before it is handed to
+        // `#registerNotice`, which does not freeze what it is given: the value
+        // being ranked has to be the value that will be held, so nothing a
+        // provider can still rewrite is compared, held or published.
+        const withdrawNotice = notice
+          ? this.#registerNotice(freezeError(notice), { kind: 'provider' })
+          : undefined;
         // The confirmed origin joins the patch rather than being derived from
         // the pending record inside `#applyPatch`: the patch is consumed once,
         // and both the event above and the state below have to read the same
@@ -577,8 +673,9 @@ export class PlayerController {
         );
         if (originatingEvent) this.#emitEvent(originatingEvent);
         if (generation !== this.#generation || provider !== this.#provider)
-          return;
+          return withdrawNotice;
         this.#synchronizeAutoplay();
+        return withdrawNotice;
       });
     } catch (cause) {
       if (generation !== this.#generation || provider !== this.#provider) {
@@ -586,10 +683,10 @@ export class PlayerController {
       }
       this.#provider = undefined;
       destroyProviderSafely(provider);
-      // The third path a provider leaves by, and the notice goes with it here
-      // too: a provider may report one from inside `subscribe()` and then throw
-      // (#235).
-      this.#configurationNotice = undefined;
+      // The third path a provider leaves by, and every notice it registered
+      // goes with it here too: a provider may report one from inside
+      // `subscribe()` and then throw (#235).
+      this.#clearProviderNotices();
       // Cleared with the generation it belonged to, not left for the
       // generation check in `#consumePendingOrigin` to reject downstream: a
       // request outstanding against a generation that has moved on has nothing
@@ -1059,8 +1156,8 @@ export class PlayerController {
     // fill site stopped honouring would come straight back in through the
     // published slot: the presentational notice published first would be the
     // incumbent, and the protective one that displaced it in
-    // `#configurationNotice` would never reach a consumer. It is offered first,
-    // so a tie still leaves it standing (#368).
+    // `#currentProviderNotice`'s fold would never reach a consumer. It is
+    // offered first, so a tie still leaves it standing (#368).
     const standingFailure =
       errorBeforeNotice !== null && !isNotice(errorBeforeNotice, nextLifecycle)
         ? errorBeforeNotice
@@ -1158,8 +1255,8 @@ export class PlayerController {
             (standingFailure ??
             mostImportantNotice(
               standingNotice,
-              this.#configurationNotice,
-              this.#refusedUrlNotice
+              this.#currentProviderNotice(),
+              this.#currentRefusedUrlNotice()
             ) ??
             null)
     };
@@ -1168,24 +1265,25 @@ export class PlayerController {
 
   // The two configurations that outlive a provider — the autoplay conflict and
   // a refused consumer URL — re-applied over a state rebuilt from scratch. Not
-  // `#configurationNotice`, which is held in a field too but belongs to one
-  // provider and is cleared immediately above the call site. `setProvider`
-  // resets to `createInitialPlayerState()` without going through `#applyPatch`,
-  // so these two would otherwise be dropped on every attach — which for a
-  // refused consumer URL is the common case, not an edge one, because the
-  // poster reports before the provider loads (#330). The two are ranked as
+  // a `{ kind: 'provider' }` entry, which belongs to one provider and is
+  // cleared immediately above the call site. `setProvider` resets to
+  // `createInitialPlayerState()` without going through `#applyPatch`, so these
+  // two would otherwise be dropped on every attach — which for a refused
+  // consumer URL is the common case, not an edge one, because the poster
+  // reports before the provider loads (#330). The two are ranked as
   // `#applyPatch` ranks them.
-  #withHeldConfiguration = (state: PlayerState): PlayerState =>
-    this.#hasAutoplayConfigurationError
-      ? {
-          ...state,
-          autoplay: 'failed',
-          autoplayRecovered: false,
-          error: autoplayConfigurationError()
-        }
-      : this.#refusedUrlNotice
-        ? { ...state, error: this.#refusedUrlNotice }
-        : state;
+  #withHeldConfiguration = (state: PlayerState): PlayerState => {
+    if (this.#hasAutoplayConfigurationError) {
+      return {
+        ...state,
+        autoplay: 'failed',
+        autoplayRecovered: false,
+        error: autoplayConfigurationError()
+      };
+    }
+    const refusedUrlNotice = this.#currentRefusedUrlNotice();
+    return refusedUrlNotice ? { ...state, error: refusedUrlNotice } : state;
+  };
 
   #synchronizeAutoplay = (): void => {
     const provider = this.#provider;
@@ -1471,9 +1569,9 @@ export class PlayerController {
       // itself moved — playback is exactly where the refusal found it — so
       // there is no provider patch to carry this, and `refusedPlay` is filled
       // from `#refusedPlay` rather than from a key, so there is no key to
-      // state. `#resolveRefusedUrlNotice` reaches for the same empty patch, but
-      // only where the notice it is withdrawing does not hold the error slot;
-      // where it does, that withdrawal has a key to state and states it.
+      // state. `reportRefusedUrl` reaches for the same empty patch, but only
+      // where the notice it is changing does not hold the error slot; where
+      // it does, that change has a key to state and states it.
       this.#applyPatch({});
     }
     return result;

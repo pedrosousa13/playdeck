@@ -24,7 +24,16 @@ const createProvider = (provider: ProviderAdapter['provider'] = 'native') => {
 
   return {
     provider: adapter,
-    emit: (...args: Parameters<ProviderStateListener>) => emit?.(...args)
+    // `ProviderStateListener` declares `void`, exactly so a fake this simple
+    // never has to fix up an unrelated return value — see the type's own
+    // comment. What this fake stands in for, a real `PlayerController`
+    // subscription, hands back a disposer for a notice-carrying patch at
+    // runtime regardless of the declared type, so a test reads it out through
+    // the same cast a real provider's `emit` would (`provider-native`'s
+    // `index.ts`, #475).
+    emit: (
+      ...args: Parameters<ProviderStateListener>
+    ): (() => void) | undefined => emit?.(...args) as (() => void) | undefined
   };
 };
 
@@ -743,4 +752,114 @@ test('holds the notice behind a standing non-fatal error until it clears', () =>
   fake.emit({ error: null });
 
   expect(controller.getState().error).toMatchObject(hostNotice);
+});
+
+// #475: a provider that re-decides a notice per load needs a way to say the
+// refusal it reported no longer holds, following `reportRefusedUrl`'s own
+// disposer precedent above. `emit` hands one back for every notice-carrying
+// patch, and calling it is the provider's own act -- nothing here does it on
+// the provider's behalf.
+test('lets a provider withdraw a configuration notice it published', () => {
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.setProvider(fake.provider);
+
+  const withdraw = fake.emit({ error: hostNotice });
+  expect(controller.getState().error).toMatchObject(hostNotice);
+
+  withdraw?.();
+
+  expect(controller.getState().error).toBeNull();
+});
+
+// The regression #475 exists to fix, reproduced at the mechanism `retry()`
+// itself uses: a null-error patch alone does not survive `#applyPatch`
+// refilling the slot from whatever the provider still holds -- only an
+// explicit withdrawal does.
+test('a null-error patch alone does not withdraw a held notice', () => {
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.setProvider(fake.provider);
+
+  fake.emit({ error: hostNotice });
+  fake.emit({ error: null });
+
+  expect(controller.getState().error).toMatchObject(hostNotice);
+});
+
+// The guard against over-correcting: a notice nothing has withdrawn survives
+// exactly the shape `retry()` produces -- a `lifecycle: 'loading'` patch with
+// `error: null` -- because withdrawal is the provider's own act and never a
+// side effect of another patch passing through. Vimeo's `suppressSeoMetadata`
+// notice is this shape: decided once at attach and never re-emitted, let alone
+// withdrawn.
+test('keeps a notice nothing has withdrawn through a retry-shaped patch', () => {
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.setProvider(fake.provider);
+
+  fake.emit({ error: privacyNotice });
+  fake.emit({
+    lifecycle: 'loading',
+    activation: 'loading-provider',
+    commandsReady: false,
+    error: null
+  });
+
+  expect(controller.getState().error).toMatchObject(privacyNotice);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' });
+
+  expect(controller.getState().error).toMatchObject(privacyNotice);
+});
+
+// Withdrawing a notice that is not the one published is inert: something else
+// already outranks it, or a later notice already displaced it, and neither
+// case is changed by this one leaving.
+//
+// The `typeof` assertion below is load-bearing, not a formality: a
+// notice-carrying patch always hands its listener a REAL disposer back, so
+// `withdrawCosmetic` calling it and finding nothing disturbed has to mean the
+// disposal was inert, never that there was no disposer to call. Without this,
+// the test would still pass against code with no withdrawal mechanism at all
+// -- `withdrawCosmetic` would be `undefined`, `withdrawCosmetic?.()` would be
+// a no-op, and "does not disturb what stands" would hold for a reason that has
+// nothing to do with what the test names (#475).
+test('withdrawing a notice that lost the slot does not disturb what stands', () => {
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.setProvider(fake.provider);
+
+  const withdrawCosmetic = fake.emit({ error: cosmeticNotice });
+  fake.emit({ error: privacyNotice });
+  expect(controller.getState().error).toMatchObject(privacyNotice);
+  expect(typeof withdrawCosmetic).toBe('function');
+
+  withdrawCosmetic?.();
+
+  expect(controller.getState().error).toMatchObject(privacyNotice);
+});
+
+// A disposer run twice must not resurrect a notice a later attach already
+// dropped with its provider -- the same idempotence `reportRefusedUrl`'s
+// disposer is guarded for, at the other place a notice can be withdrawn from.
+//
+// The `typeof` assertion below is load-bearing for the same reason as the
+// test above: without it, an absent withdrawal mechanism would also leave
+// `posterNotice` undisturbed, for having nothing to call rather than for
+// being correctly idempotent (#475).
+test('a withdrawal disposer run after the provider was swapped does nothing', () => {
+  const first = createProvider();
+  const second = createProvider('vimeo');
+  const controller = new PlayerController();
+  controller.setProvider(first.provider);
+
+  const withdraw = first.emit({ error: hostNotice });
+  expect(typeof withdraw).toBe('function');
+  controller.setProvider(second.provider);
+  second.emit({ error: posterNotice });
+
+  withdraw?.();
+
+  expect(controller.getState().error).toMatchObject(posterNotice);
 });
