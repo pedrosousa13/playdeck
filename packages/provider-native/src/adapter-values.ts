@@ -42,6 +42,14 @@ export const notReady: Availability = {
   reason: 'not-ready'
 };
 
+// A file has no poster of its own -- there is nothing to ask for one and
+// nothing that could later resolve, so this is a verdict rather than an
+// `unknown` (#556).
+export const sourceHasNoPoster: Availability = {
+  status: 'unavailable',
+  reason: 'source'
+};
+
 // HTMLMediaElement.HAVE_METADATA, inlined because some DOM test environments
 // omit the static readyState constants.
 export const HAVE_METADATA = 1;

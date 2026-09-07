@@ -229,6 +229,17 @@ test('an explicit loadHls wins over a build name given alongside it', async () =
   expect(loader.calls()).toBe(1);
 });
 
+test('reports providerPoster as unavailable -- a manifest has no still of its own', async () => {
+  const harness = createHarness(stubNativeHlsSupport);
+  await harness.provider.attach();
+
+  expect(harness.patches.at(-1)).toMatchObject({
+    capabilities: {
+      providerPoster: { status: 'unavailable', reason: 'source' }
+    }
+  });
+});
+
 test('reports quality selection honestly per engine', async () => {
   const nativeHarness = createHarness(stubNativeHlsSupport);
   await nativeHarness.provider.attach();

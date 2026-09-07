@@ -7,7 +7,11 @@ import { available, providerCheck } from './adapter-values.js';
 // this.
 export const CHROMELESS_PROBE_TIMEOUT_MS = 4000;
 
-const vimeoWatchUrl = (source: Pick<VimeoSource, 'videoId' | 'hash'>): string =>
+// Shared with `poster-availability.ts`, the other seam that asks Vimeo's
+// oEmbed endpoint about this source.
+export const vimeoWatchUrl = (
+  source: Pick<VimeoSource, 'videoId' | 'hash'>
+): string =>
   `https://vimeo.com/${source.videoId}${source.hash ? `/${source.hash}` : ''}`;
 
 const planLimitedAccountTypes = new Set(['free', 'basic']);

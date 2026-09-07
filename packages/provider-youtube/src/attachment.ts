@@ -3,6 +3,7 @@ import {
   loadFailure,
   preReadyCapabilities,
   providerEvent,
+  youTubePosterUrl,
   type EmitProviderState
 } from './adapter-values.js';
 import type { YouTubeBoundary } from './boundary.js';
@@ -372,7 +373,8 @@ export const createYouTubeAttachment = (
       emit({
         lifecycle: 'loading',
         activation: 'loading-provider',
-        capabilities: preReadyCapabilities()
+        capabilities: preReadyCapabilities(),
+        providerPosterUrl: youTubePosterUrl(videoId)
       });
     },
     load: async () => {

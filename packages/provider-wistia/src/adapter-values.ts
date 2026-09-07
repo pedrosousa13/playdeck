@@ -42,6 +42,10 @@ export const providerEvent = <Type extends PlayerEventType>(
 });
 
 export const available: Availability = { status: 'available' };
+export const providerCheck: Availability = {
+  status: 'unknown',
+  reason: 'provider-check'
+};
 
 export const errorString = (cause: unknown, property: 'message' | 'name') => {
   if (

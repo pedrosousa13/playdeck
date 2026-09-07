@@ -1365,6 +1365,21 @@ test('reports quality selection as unavailable rather than pending forever', asy
   expect(provider.selectQuality).toBeUndefined();
 });
 
+test('reports providerPoster as unavailable immediately -- a media element has no still of its own', async () => {
+  const media = document.createElement('video');
+  const patches: Array<Record<string, unknown>> = [];
+  const provider = createNativeProvider(media);
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+
+  expect(patches.at(-1)).toMatchObject({
+    capabilities: {
+      providerPoster: { status: 'unavailable', reason: 'source' }
+    }
+  });
+});
+
 const createTimeRanges = (
   ranges: ReadonlyArray<readonly [number, number]>
 ): TimeRanges => ({

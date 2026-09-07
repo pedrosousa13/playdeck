@@ -44,6 +44,7 @@ vi.mock('../src/loader', async (importOriginal) => ({
 afterEach(() => {
   sdkState.load = undefined;
   document.body.replaceChildren();
+  vi.unstubAllGlobals();
 });
 
 const source: WistiaSource = { type: 'wistia', mediaId: 'oifkgmxnkb' };
@@ -682,8 +683,58 @@ test('reports the whole capability record it can justify', async () => {
     fullscreen: { status: 'available' },
     pictureInPicture: { status: 'unavailable', reason: 'provider' },
     airPlay: { status: 'unavailable', reason: 'provider' },
-    customControls: { status: 'available' }
+    customControls: { status: 'available' },
+    providerPoster: { status: 'unknown', reason: 'provider-check' }
   });
+});
+
+// --- provider-supplied poster (#556) ---
+
+test('sends no oEmbed request for a poster when resolvePoster was not requested', async () => {
+  const fetchMock = vi.fn(() => {
+    throw new Error('fetch should not have been called');
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  const { patches } = await setup();
+  expect(readyPatch(patches).capabilities).toMatchObject({
+    providerPoster: { status: 'unknown', reason: 'provider-check' }
+  });
+  expect(readyPatch(patches).providerPosterUrl).toBeNull();
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test('resolves its own poster from the oEmbed thumbnail once resolvePoster is requested', async () => {
+  const fetchMock = vi.fn(async () =>
+    Response.json({
+      thumbnail_url: 'https://embed.wistia.com/deliveries/example.jpg'
+    })
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  const { patches } = await setup({ options: { resolvePoster: true } });
+  const ready = readyPatch(patches);
+  expect(ready.capabilities).toMatchObject({
+    providerPoster: { status: 'available' }
+  });
+  expect(ready.providerPosterUrl).toBe(
+    'https://embed.wistia.com/deliveries/example.jpg'
+  );
+  expect(fetchMock).toHaveBeenCalledWith(
+    'https://fast.wistia.com/oembed?url=https%3A%2F%2Fhome.wistia.com%2Fmedias%2Foifkgmxnkb&format=json',
+    { signal: expect.any(AbortSignal) }
+  );
+});
+
+test('reports providerPoster unavailable/source when the record carries no thumbnail', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => Response.json({}))
+  );
+  const { patches } = await setup({ options: { resolvePoster: true } });
+  const ready = readyPatch(patches);
+  expect(ready.capabilities).toMatchObject({
+    providerPoster: { status: 'unavailable', reason: 'source' }
+  });
+  expect(ready.providerPosterUrl).toBeNull();
 });
 
 test('publishes the media shape the handle measures', async () => {
