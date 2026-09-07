@@ -12,8 +12,8 @@
 // Two sources are read, and they are not equally strong.
 //
 // The first-party figures come from `bundle-budgets.mjs`, which is what
-// `pnpm test:budgets` gates against, so the table cannot disagree with the
-// gate. The third-party figures cannot: hls.js and `@vimeo/player` are
+// `pnpm test:budgets` reports from, so the table cannot disagree with what
+// that script prints. The third-party figures cannot: hls.js and `@vimeo/player` are
 // external to those bundles, so the budget script never sees them. They are
 // measured here from the installed packages instead, and the version each was
 // measured at is checked against the manifest that pins it -- a stale install
@@ -31,7 +31,7 @@ import { gzipSync } from 'node:zlib';
 import { join } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 import { build } from 'vite';
-import { measureBundles, targets } from './bundle-budgets.mjs';
+import { measureBundles } from './bundle-budgets.mjs';
 
 const console = globalThis.console;
 const process = globalThis.process;
@@ -180,11 +180,10 @@ export const renderTable = (rows) => {
  * replacement is the whole match: a capture would have to be spliced back,
  * which is a second place for the sentence's wording to live.
  * @param {Record<string, number>} figures
- * @param {{ core: number; primitives: number; theme: number }} budgets
  * @param {Record<string, string>} versions
  * @returns {{ label: string; pattern: RegExp; value: string }[]}
  */
-export const proseAnchors = (figures, budgets, versions) => [
+export const proseAnchors = (figures, versions) => [
   {
     label: 'the stylesheet, excluded from every row',
     pattern: /(?<=`theme\.css`\s\()\d+\.\d(?=\sKB\))/,
@@ -206,19 +205,19 @@ export const proseAnchors = (figures, budgets, versions) => [
     value: kb(figures.hlsJs - figures.hlsJsLight)
   },
   {
-    label: "core's budget",
-    pattern: /(?<=core\sat\s)\d+(?:\.\d+)?(?=\sKB)/,
-    value: String(budgets.core)
+    label: "core's measured size",
+    pattern: /(?<=core\sweighs\sin\sat\s)\d+\.\d(?=\sKB)/,
+    value: kb(figures.core)
   },
   {
-    label: "the primitives' budget",
-    pattern: /(?<=the\sprimitives\sat\s)\d+(?:\.\d+)?(?=\sKB)/,
-    value: String(budgets.primitives)
+    label: "the primitives' measured size",
+    pattern: /(?<=the\sprimitives\sat\s)\d+\.\d(?=\sKB)/,
+    value: kb(figures.primitives)
   },
   {
-    label: "the stylesheet's budget",
-    pattern: /(?<=`theme\.css`\sat\s)\d+(?:\.\d+)?(?=\sKB)/,
-    value: String(budgets.theme)
+    label: "the stylesheet's measured rules size",
+    pattern: /(?<=`theme\.css`\sat\s)\d+\.\d(?=\sKB)/,
+    value: kb(figures.themeRules)
   },
   {
     label: 'the measured hls.js version',
@@ -570,7 +569,6 @@ export const bundledDependencies = async (root = repoRoot) => {
 /**
  * @returns {Promise<{
  *   figures: Record<string, number>;
- *   budgets: { core: number; primitives: number; theme: number };
  *   versions: Record<string, string>;
  * }>}
  */
@@ -587,14 +585,14 @@ const measure = async () => {
     return tenths(found.size);
   };
   /** @param {string} name */
-  const budgetOf = (name) => {
-    const found = targets.find((target) => target.name === name);
-    if (found?.budget == null) {
+  const rulesSizeOf = (name) => {
+    const found = measured.find((bundle) => bundle.name === name);
+    if (!found?.budgeted) {
       throw new Error(
-        `bundle-budgets.mjs no longer budgets ${name}. Give it a budget again, or take the sentence that quotes one out of ${README}.`
+        `bundle-budgets.mjs no longer measures ${name}'s CSS rules subset. Give it a budgetedSubset again, or take the sentence that quotes it out of ${README}.`
       );
     }
-    return found.budget;
+    return tenths(found.budgeted.size);
   };
 
   /** @type {Record<string, number>} */
@@ -602,6 +600,7 @@ const measure = async () => {
     core: sizeOf('@playdeck/core'),
     primitives: sizeOf('@playdeck/react (primitives, excl. React)'),
     theme: sizeOf('@playdeck/react/theme.css'),
+    themeRules: rulesSizeOf('@playdeck/react/theme.css'),
     native: sizeOf('@playdeck/provider-native'),
     hlsAdapter: sizeOf('@playdeck/provider-hls'),
     youtube: sizeOf('@playdeck/provider-youtube'),
@@ -632,22 +631,17 @@ const measure = async () => {
 
   return {
     figures,
-    budgets: {
-      core: budgetOf('@playdeck/core'),
-      primitives: budgetOf('@playdeck/react (primitives, excl. React)'),
-      theme: budgetOf('@playdeck/react/theme.css')
-    },
     versions
   };
 };
 
 const main = async () => {
   const check = process.argv.includes('--check');
-  const { figures, budgets, versions } = await measure();
+  const { figures, versions } = await measure();
   const path = join(repoRoot, README);
   const before = await readFile(path, 'utf8');
   const table = renderTable(composeRows(figures));
-  const anchors = proseAnchors(figures, budgets, versions);
+  const anchors = proseAnchors(figures, versions);
   const after = renderReadme(before, table, anchors);
 
   if (before === after) {

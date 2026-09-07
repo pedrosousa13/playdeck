@@ -43,7 +43,7 @@ import { bundledDependencies } from '../../../../scripts/readme-bytes.mjs';
  *   what reaches an Astro page is the file itself rather than a fence generated
  *   from it.
  * - Every adapter figure is `scripts/bundle-budgets.mjs`'s measurement of a
- *   built artifact, which is the module `pnpm test:budgets` fails a build with.
+ *   built artifact, which is the module `pnpm test:budgets` runs.
  *   A page telling a reader what a dependency costs cannot afford a remembered
  *   number, and `src/pages/index.astro` prints its figures from the same module
  *   for the same reason.
@@ -141,18 +141,17 @@ const fullSource = read(fullPath);
 
 /*
  * What the primitives weigh and what one adapter adds, both measured off built
- * artifacts by the module the budget gate runs. Neither figure is typed here:
- * a second copy would let this page and that gate disagree about a number while
- * both stayed green, which is the one failure a page quoting a cost cannot
- * survive.
+ * artifacts by the budget module. Neither figure is typed here: a second copy
+ * would let this page and that module disagree about a number while both
+ * stayed green, which is the one failure a page quoting a cost cannot survive.
  */
 const bundles = await measureBundles(repoRoot);
 const measured = new Map(bundles.map((bundle) => [bundle.name, bundle]));
 
 const primitives = measured.get('@playdeck/react (primitives, excl. React)');
-if (primitives === undefined || primitives.budget === null) {
+if (primitives === undefined) {
   throw new Error(
-    'start.astro: the primitives bundle is not a budgeted bundle-budgets.mjs target. Give it a budget there again, or take the sentence that quotes a ceiling out of this page.'
+    'start.astro: the primitives bundle is not a bundle-budgets.mjs target.'
   );
 }
 
@@ -385,7 +384,7 @@ const onward = [
         it, which for HLS is almost all of the cost. Both columns are gzipped:
         the adapter measured off the built artifact by the module
         {' '}
-        <code>pnpm test:budgets</code> enforces, and its dependency measured
+        <code>pnpm test:budgets</code> runs, and its dependency measured
         from the entry a bundler resolves.
       </p>
 
@@ -449,10 +448,9 @@ const onward = [
         player from their own origin at run time, which is a request rather than
         a package in your bundle. The primitives themselves are
         {' '}
-        {primitives.size.toFixed(1)} kB gzipped, excluding React, against a
-        ceiling of {primitives.budget} kB the same gate enforces. A provider name
-        above links to the source values it accepts; the adapter beside it links
-        to what that package reports about itself.
+        {primitives.size.toFixed(1)} kB gzipped, excluding React. A provider
+        name above links to the source values it accepts; the adapter beside
+        it links to what that package reports about itself.
       </p>
     </section>
 

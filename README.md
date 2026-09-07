@@ -121,13 +121,14 @@ measurements, and `pnpm docs:bytes:check` fails CI when the two disagree, so a
 change that moves a bundle cannot leave a stale number in them.
 
 Every Playdeck package in this table is measured by `pnpm test:budgets` on each
-CI run, and three of them fail the build if they grow past a budget: core at
-10 KB, the primitives at 18 KB and `theme.css` at 2.5 KB — measured on its CSS
-rules with the comments stripped, because it ships as authored and a ceiling on
-the whole file is a budget on its prose. The size it ships at is reported every
-run, and not gated. The provider adapters are
-measured and reported without a budget, because a lazy chunk does not compete
-for the initial graph.
+CI run, against a reference figure it prints but never enforces: core weighs
+in at 7.8 KB, the primitives at 17.9 KB and `theme.css` at 2.3 KB — measured on
+its CSS rules with the comments stripped, because it ships as authored and
+measuring the whole file would really be measuring its prose. None of the
+three can ever fail a build over it; staying lean here is a standing goal, not
+a ceiling this repo enforces. The provider adapters are measured and reported
+the same way, with no reference figure of their own, because a lazy chunk does
+not compete for the initial graph.
 
 The third-party bytes are the exception, and deliberately so: hls.js and
 `@vimeo/player` are external to those bundles, so that script never sees them.
@@ -135,8 +136,8 @@ They are measured from the installed packages instead: the ES module entry a
 bundler resolves — hls.js 1.6.16 and `@vimeo/player` 2.30.4 — put through the
 same Vite build and the same gzip that produced the first-party figures, so both
 halves of a row are the same unit. The check fails if what is installed is not
-the version each package's manifest pins. No budget gates them: they move when
-you upgrade, and that is your decision rather than ours.
+the version each package's manifest pins. They carry no reference figure at
+all: they move when you upgrade, and that is your decision rather than ours.
 
 ## Honesty about providers
 
@@ -194,8 +195,9 @@ pnpm build
 ```
 
 Packaging is verified against real tarballs (`pnpm test:packages`), bundle
-budgets are enforced (`pnpm test:budgets`), and a Next.js integration is built
-and driven in a browser (`pnpm test:integrations`). That integration serves two
+sizes are measured against reference budgets (`pnpm test:budgets`), and a
+Next.js integration is built and driven in a browser
+(`pnpm test:integrations`). That integration serves two
 routes: one imports `@playdeck/react` from a `'use client'` component, and one
 is a React Server Component that imports it directly and passes no directive of
 its own, so the build fails there unless the package carries `'use client'` on

@@ -5,14 +5,17 @@ import { measureBundles, overBudget } from './bundle-budgets.mjs';
 // node globals, but `console` still has to be reached through globalThis.
 const console = globalThis.console;
 
-// Enforces the initial-gzip bundle budgets from the MVP contract (issue #1).
-// Without this, the budgets were prose: nothing failed when a package grew.
+// Reports the initial-gzip bundle sizes from the MVP contract (issue #1)
+// against each one's reference figure. It used to fail the build on a package
+// that grew past its figure; the maintainer's ruling on issue #674 ended that
+// — "make sure the package is lean but don't enforce limits ever" — so this
+// file now only ever reports. What stays is the visibility: every run still
+// prints the full table, headroom and an explicit OVER note included.
 //
-// What is measured and why is `bundle-budgets.mjs`'s to say. This file is the
-// gate: it prints what that module measured and fails the build on a package
-// that has outgrown its ceiling. The split exists because the landing page
-// renders the same figures, and a page arguing that a number is enforced has to
-// be reading the enforced number rather than a second copy of it.
+// What is measured and why is `bundle-budgets.mjs`'s to say. This file only
+// prints what that module measured. The split exists because the landing page
+// renders the same figures, and a page arguing that a number is watched has to
+// be reading the watched number rather than a second copy of it.
 
 // Resolved from this file's own URL rather than from `process.cwd()`, which is
 // whatever directory the command was typed in. This script is never bundled, so
@@ -21,12 +24,12 @@ const repoRoot = fileURLToPath(new URL('../', import.meta.url));
 
 const measured = await measureBundles(repoRoot);
 
-// A target whose ceiling is on a subset prints two rows, and the enforced one
-// is the indented child rather than the headline. That order is the point: the
-// headline stays the number a consumer downloads, so nobody has to know which
-// of two figures is the real cost, and the row carrying `/ N KB` is the only
-// one that can ever say OVER. Naming the subset on its own row is also what
-// keeps `1.77 KB` from reading as a claim about the file.
+// A target whose reference figure is on a subset prints two rows, and the
+// compared one is the indented child rather than the headline. That order is
+// the point: the headline stays the number a consumer downloads, so nobody has
+// to know which of two figures is the real cost, and the row carrying
+// `/ N KB` is the only one that can ever say OVER. Naming the subset on its
+// own row is also what keeps `1.77 KB` from reading as a claim about the file.
 const column = Math.max(
   ...measured.map(({ name, budgeted }) =>
     budgeted === null
@@ -53,7 +56,9 @@ const row = (label, size, budget) => {
 
 for (const { name, size, budget, budgeted } of measured) {
   if (budgeted !== null) {
-    console.log(`${row(name, size, null)}  (shipped as authored, not gated)`);
+    console.log(
+      `${row(name, size, null)}  (shipped as authored; measured against the ${budgeted.label} row below)`
+    );
     console.log(row(`  └ ${budgeted.label}`, budgeted.size, budget));
     continue;
   }
@@ -65,18 +70,22 @@ for (const { name, size, budget, budgeted } of measured) {
 }
 
 // Which targets are over is `bundle-budgets.mjs`'s to decide, for the same
-// reason the measurement is: the landing page has to be able to say the figures
-// it prints are the ones this rule is applied to. This file only formats the
-// answer and throws on it.
+// reason the measurement is: the landing page has to be able to say the
+// figures it prints are the ones this note is about. This file only formats
+// the answer — and, per issue #674, never exits over it. The per-row OVER
+// marker printed above already carries this; the summary line below just
+// says whether one fired, so a reader does not have to scan the table for it.
 const over = overBudget(measured);
 if (over.length > 0) {
   const detail = over
     .map(
       ({ name, size, budget }) =>
-        `  ${name}: ${size.toFixed(2)} KB gzip exceeds its ${budget} KB budget by ${(size - budget).toFixed(2)} KB`
+        `  ${name}: ${size.toFixed(2)} KB gzip is ${(size - budget).toFixed(2)} KB over its ${budget} KB reference figure`
     )
     .join('\n');
-  throw new Error(`Bundle budget exceeded (issue #1):\n${detail}`);
+  console.log(
+    `\n${over.length} bundle${over.length === 1 ? '' : 's'} over its reference figure (reporting only — this never fails the build):\n${detail}`
+  );
+} else {
+  console.log('\nAll bundles are within their reference figures.');
 }
-
-console.log('\nAll budgeted bundles are within their gzip budgets.');

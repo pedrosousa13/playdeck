@@ -727,15 +727,15 @@ jobs:
       # would hand straight back the bypass this closes — the gate's source
       # would come from `main` and the choice of what to run would not.
       #
-      # `!cancelled()` here as well as on the three gate steps below it, so all
-      # four run whatever the step before them did. On this first one it decides
+      # `!cancelled()` here as well as on the three pinned steps below it, so
+      # all four run whatever the step before them did. On this first one it decides
       # what happens when the fetch above fails: the pinned run no longer skips,
       # it runs and dies on a missing `.gate/`. Nothing new is caught by that —
       # a failed fetch already reddens the job on its own — but the failure is
       # loud and lands in the step whose input is missing, rather than that step
       # vanishing from the log as a skip. It is one step further than the
       # `audit` job goes, whose first pinned run keeps the default `success()`,
-      # and the difference is deliberate: this job runs four gate steps in
+      # and the difference is deliberate: this job runs four such steps in
       # sequence rather than two, so a skip early in the chain hides more.
       #
       # `PLAYDECK_GATE_MODULES` names the directory the step above extracted
@@ -775,19 +775,30 @@ jobs:
       # `./bundle-budgets.mjs`, which the whole-directory copy above brings with
       # it — is a relative path rather than anything a runtime has to resolve.
       #
-      # The same `!cancelled()`, and here is the concrete instance of why every
-      # gate step in this job carries it: under the default `success()` a red
-      # packaging step above would skip the budget gate outright, and a gate
-      # that a neighbouring failure can silence is one more thing a pull request
-      # can aim at.
-      - name: Bundle budgets — main's copy of the gate
+      # The same `!cancelled()`, for a reason that changed with #674. These two
+      # steps no longer gate anything: `check-bundle-budgets.mjs` always exits
+      # 0, so neither can fail the job and neither can be "silenced" in the
+      # sense the packaging steps above are. What `!cancelled()` buys here now
+      # is the report itself — a red packaging step would otherwise skip them
+      # under the default `success()`, and the size table would vanish from the
+      # log of exactly the run someone is reading to find out what grew.
+      #
+      # Both copies still run because the fetched `.gate/` is already here and
+      # the two disagreeing would say something real about the measurement
+      # code. That is a weaker reason than the packaging pair's, which is a
+      # genuine anti-bypass gate. Collapsing these two into one reporting run
+      # is a reasonable thing to do and is deliberately not done here: #674
+      # scoped itself to the enforcement change and left the pinned-gate
+      # mechanism (#372, #376) alone.
+      - name: Bundle sizes — main's copy of the report
         if: ${{ !cancelled() }}
         run: node .gate/check-bundle-budgets.mjs
-      - name: Bundle budgets — this pull request's copy of the gate
+      - name: Bundle sizes — this pull request's copy of the report
         if: ${{ !cancelled() }}
         run: pnpm test:budgets
-      # These two keep the default `success()`, so any of the four gate steps
-      # above failing skips them. #376 widened when that happens rather than
+      # These two keep the default `success()`, so either packaging step above
+      # failing skips them. The two bundle-size steps cannot fail at all since
+      # #674, so they never reach this. #376 widened when that happens rather than
       # introducing it: the pinned copies can now fail where before only the
       # pull request's own two steps could, which includes the case the comments
       # above call the interesting one — `main`'s copy failing while the pull
@@ -798,7 +809,7 @@ jobs:
       - run: pnpm test:bundle
       - run: pnpm test:integrations
       # The README's byte table is generated from the same measurements
-      # `pnpm test:budgets` gates against, so a change that moves a bundle
+      # `pnpm test:budgets` reports, so a change that moves a bundle
       # cannot leave a stale figure in the prose (#511). It runs here and not
       # beside `docs:check` in `static` for one reason: `static` builds no
       # packages, and the first-party figures are the gzipped size of a built
