@@ -19,13 +19,13 @@ something from the shipped code, it says so rather than guessing.
 
 ## Per-provider origins
 
-| Provider                                   | `script-src`                                                                                                      | `frame-src`                                                                                     | `img-src`                                                                                                   | `connect-src`                                                                                                                                                                                                                                        | `media-src`                                                               |
-| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| **Native** (`@playdeck/provider-native`)   | —                                                                                                                 | —                                                                                               | —                                                                                                           | —                                                                                                                                                                                                                                                    | Your own media host — nothing Playdeck adds.                              |
-| **HLS** (`@playdeck/provider-hls`)         | —                                                                                                                 | —                                                                                               | —                                                                                                           | Your own manifest/segment host, when the hls.js engine fetches via MSE.                                                                                                                                                                              | Your own manifest/segment host, when the native engine plays it directly. |
-| **YouTube** (`@playdeck/provider-youtube`) | `www.youtube.com`                                                                                                 | `www.youtube-nocookie.com` (the default) or `www.youtube.com`, and nothing else; see note below | —                                                                                                           | —                                                                                                                                                                                                                                                    | —                                                                         |
-| **Vimeo** (`@playdeck/provider-vimeo`)     | —                                                                                                                 | `player.vimeo.com`                                                                              | —                                                                                                           | `vimeo.com` — two paths: Playdeck's `customControls` probe, opt-in through `Player.Root`; and the SDK's own document scan, which needs no option but only fires if your page carries `data-vimeo-id`/`data-vimeo-url` markup. See note below.        | —                                                                         |
-| **Wistia** (`@playdeck/provider-wistia`)   | `fast.wistia.net`, `fast.wistia.com`, `browser.sentry-cdn.com` (injected by Wistia's own element; see note below) | `fast.wistia.net` (legacy-embed fallback; see note below)                                       | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com` | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com`, `o4505518331658240.ingest.us.sentry.io`, `pipedream.wistia.com` — the last two are Wistia's error and metrics reporting; see note below | Same five hosts as `img-src`.                                             |
+| Provider                                   | `script-src`                                                                                                      | `frame-src`                                                                                     | `img-src`                                                                                                   | `connect-src`                                                                                                                                                                                                                                                                                                                    | `media-src`                                                               |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| **Native** (`@playdeck/provider-native`)   | —                                                                                                                 | —                                                                                               | —                                                                                                           | —                                                                                                                                                                                                                                                                                                                                | Your own media host — nothing Playdeck adds.                              |
+| **HLS** (`@playdeck/provider-hls`)         | —                                                                                                                 | —                                                                                               | —                                                                                                           | Your own manifest/segment host, when the hls.js engine fetches via MSE.                                                                                                                                                                                                                                                          | Your own manifest/segment host, when the native engine plays it directly. |
+| **YouTube** (`@playdeck/provider-youtube`) | `www.youtube.com`                                                                                                 | `www.youtube-nocookie.com` (the default) or `www.youtube.com`, and nothing else; see note below | `i.ytimg.com` — the resolved `poster="provider"` still, opt-in through `Player.Root`; see note below        | —                                                                                                                                                                                                                                                                                                                                | —                                                                         |
+| **Vimeo** (`@playdeck/provider-vimeo`)     | —                                                                                                                 | `player.vimeo.com`                                                                              | `i.vimeocdn.com` — the resolved `poster="provider"` still, opt-in through `Player.Root`; see note below     | `vimeo.com` — three paths: Playdeck's `customControls` probe and its `poster="provider"` probe, both opt-in through `Player.Root`; and the SDK's own document scan, which needs no option but only fires if your page carries `data-vimeo-id`/`data-vimeo-url` markup. See note below.                                           | —                                                                         |
+| **Wistia** (`@playdeck/provider-wistia`)   | `fast.wistia.net`, `fast.wistia.com`, `browser.sentry-cdn.com` (injected by Wistia's own element; see note below) | `fast.wistia.net` (legacy-embed fallback; see note below)                                       | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com` | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com`, `o4505518331658240.ingest.us.sentry.io`, `pipedream.wistia.com` — the last two are Wistia's error and metrics reporting; `fast.wistia.com` doubles as the opt-in `poster="provider"` oEmbed request; see note below | Same five hosts as `img-src`.                                             |
 
 Notes, per row:
 
@@ -69,6 +69,15 @@ Notes, per row:
   below for what that changes and what it does not. The player vars ride on
   that url rather than through the constructor, `enablejsapi=1` among them,
   because the API reads neither `videoId` nor `playerVars` on this path.
+
+- **YouTube**'s `poster="provider"` still is derived from the video id alone
+  (`youTubePosterUrl` in `provider-youtube/src/adapter-values.js`) — no request
+  discovers it, only the `<img>` a `Player.Poster` with no children renders
+  fetches `i.ytimg.com/vi/<id>/hqdefault.jpg`, and only once `Player.Root`'s
+  `poster` prop is set to `'provider'`. `hqdefault.jpg`, never
+  `maxresdefault.jpg`: the larger file 404s silently on videos never uploaded
+  at a high enough resolution to have one, where `hqdefault.jpg` is generated
+  for every upload (#556).
 
 - **Vimeo**'s embed iframe is built from `player.vimeo.com`
   (`packages/provider-vimeo/src/attachment.ts:159`). The SDK
@@ -335,6 +344,17 @@ Notes, per row:
   whether a Playdeck embed can reach that state at all has not been established
   here. So it is offered as a lever rather than pulled on a consumer's behalf.
 
+- **Vimeo**'s `poster="provider"` still is resolved through a second, separate
+  oEmbed request (`provider-vimeo/src/poster-availability.js`) rather than the
+  `customControls` probe's own response above: that probe only fires when
+  `VimeoProviderOptions.customControls === true`, so a page that opts into the
+  poster alone would see no thumbnail if this reused it. Both probes reach
+  `vimeo.com/api/oembed.json`, both are opt-in, and setting both options on the
+  same source costs two requests to the same endpoint rather than one — a
+  known trade for keeping the two options independent (#556). The `<img>` a
+  `Player.Poster` with no children renders is what actually fetches the still,
+  from `thumbnail_url` in the oEmbed record, typically an `i.vimeocdn.com` url.
+
 - **Wistia**'s player bundle is fetched from
   `https://fast.wistia.com/player.js` (`packages/provider-wistia/src/loader.ts:158`,
   appended to `document.head` at `:181-187`), with no `integrity` and no
@@ -454,6 +474,15 @@ Notes, per row:
   Playdeck creates. A page that carries one for its own reasons moves Playdeck's
   media-data, engine, legacy-iframe and asset fetches to whichever of the three
   that embed came from, so add the canary host if that describes your page.
+
+- **Wistia**'s `poster="provider"` still is resolved through its own oEmbed
+  request (`provider-wistia/src/poster-availability.js`), opt-in the same way
+  the options above are, to `fast.wistia.com/oembed` — the same host `player.js`
+  is fetched from, so this adds no new `connect-src` origin, only a second
+  reason to reach one already there. The `<img>` a `Player.Poster` with no
+  children renders is what actually fetches the still, from `thumbnail_url` in
+  the oEmbed record; recorded examples put that on `embed-ssl.wistia.com`,
+  already in the table's `img-src` cell for the reasons above.
 
 ## What referrer each embed sends
 
@@ -1209,13 +1238,18 @@ three reporting origins — the Sentry pair and `pipedream.wistia.com` — as
 optional: in the `0.7.12` bundle this document read, the visitor-tracking state
 that gates them defaults to enabled, and omitting them buys a silently failed
 error or metrics request rather than a video that visibly does not play.
-`vimeo.com` belongs in `connect-src` on two counts, and the second needs no
-caller to opt into anything: some caller in your app setting
-`customControls: true`, whether directly or through
-`providerOptions={{ vimeo: {...} }}`; and the Vimeo SDK's module-scope document
-scan, which fires for any element anywhere in your page carrying
-`data-vimeo-id` or `data-vimeo-url`. Leave it out only if neither describes
-your page. Vimeo's three white-label suffixes stay out of this union for the
-same reason the Wistia canary does — nothing in Playdeck reaches them; see the
-per-provider note. None of this needs `'unsafe-inline'` or `'unsafe-eval'` in
-`script-src` — every provider here is a script or iframe load, not inline code.
+`vimeo.com` belongs in `connect-src` on three counts, and only the last needs
+no caller to opt into anything: some caller in your app setting
+`customControls: true`; a source rendered with `Player.Root`'s
+`poster="provider"`; either directly or through
+`providerOptions={{ vimeo: {...} }}` for the first; and the Vimeo SDK's
+module-scope document scan, which fires for any element anywhere in your page
+carrying `data-vimeo-id` or `data-vimeo-url`. Leave it out only if none of the
+three describes your page. `poster="provider"` also needs `i.ytimg.com` and
+`i.vimeocdn.com` in `img-src` for a YouTube or Vimeo source respectively —
+Wistia's own still needs no new host there, since it resolves to one of the
+`embed*.wistia.com` hosts already in the union. Vimeo's three white-label
+suffixes stay out of this union for the same reason the Wistia canary does —
+nothing in Playdeck reaches them; see the per-provider note. None of this needs
+`'unsafe-inline'` or `'unsafe-eval'` in `script-src` — every provider here is a
+script or iframe load, not inline code.
