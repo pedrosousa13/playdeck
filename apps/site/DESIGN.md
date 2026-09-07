@@ -999,8 +999,8 @@ one meant writing a colour, and rule 1 fails that in review at the first hex.
 The amended rule has two tokens and a prohibition made of prose, and nothing in
 the repository fails when a third `box-shadow` appears or when an elevated
 element also takes a border. That was accepted rather than overlooked. The
-guards this site does carry — the background-image scan, the packaging and
-budget gates — each answer a question with one right answer that a scan can
+guards this site does carry — the background-image scan, the packaging
+gate — each answer a question with one right answer that a scan can
 read. "Is this element the one panel this page is built around" is not that
 question, and a scan that only counted `box-shadow` declarations would pass the
 pairing this rule exists to ban while failing nothing that matters. So the

@@ -93,8 +93,8 @@ jobs:
           key: sprite-fright-media-a69d68a5-a0e0-4a80-9d66-49f093c97aaf-804-${{ hashFiles('scripts/media-sprite-fright.mjs') }}
 
       # The packages, before the site, because the landing page measures them.
-      # It renders the gzipped size of every bundle `pnpm test:budgets` gates,
-      # read at build time from the module that gate measures with rather than
+      # It renders the gzipped size of every bundle `pnpm test:budgets` reports,
+      # read at build time from the module that script measures with rather than
       # from figures typed into the page, and that module reads build output. A
       # site built against an unbuilt tree fails here by name instead of
       # publishing a table of stale numbers.

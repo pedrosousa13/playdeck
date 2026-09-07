@@ -18,6 +18,7 @@ const figures = {
   core: 78,
   primitives: 172,
   theme: 58,
+  themeRules: 20,
   native: 58,
   hlsAdapter: 48,
   youtube: 61,
@@ -86,7 +87,6 @@ test('pads every cell in a column to the widest, the way Prettier does', () => {
 
 // ---- the document ----------------------------------------------------------
 
-const budgets = { core: 10, primitives: 18, theme: 2.5 };
 const versions = { 'hls.js': '1.6.16', '@vimeo/player': '2.30.4' };
 
 const readme = [
@@ -104,14 +104,14 @@ const readme = [
   '',
   '`hls.js/light` saves 0.0 KB and gives up subtitles.',
   '',
-  'core at',
-  '0 KB, the primitives at 0 KB and `theme.css` at 0 KB.',
+  'core weighs in at',
+  '0.0 KB, the primitives at 0.0 KB and `theme.css` at 0.0 KB.',
   '',
   'builds of hls.js 0.0.0 and `@vimeo/player` 0.0.0 —',
   ''
 ].join('\n');
 
-const anchors = () => proseAnchors(figures, budgets, versions);
+const anchors = () => proseAnchors(figures, versions);
 
 test('replaces the marked region with the table and leaves the rest alone', () => {
   const out = renderReadme(readme, 'the table', anchors());
@@ -125,8 +125,8 @@ test('rewrites every figure the prose repeats from the table', () => {
   assert.match(out, /smallest build is 106\.4 KB/);
   assert.match(out, /adapter over it is 4\.8\./);
   assert.match(out, /saves 53\.5 KB/);
-  assert.match(out, /core at\n10 KB, the primitives at 18 KB/);
-  assert.match(out, /`theme\.css` at 2\.5 KB/);
+  assert.match(out, /core weighs in at\n7\.8 KB, the primitives at 17\.2 KB/);
+  assert.match(out, /`theme\.css` at 2\.0 KB/);
   assert.match(out, /hls\.js 1\.6\.16 and `@vimeo\/player` 2\.30\.4/);
 });
 
@@ -168,9 +168,9 @@ test('names the row and the prose figure that drifted, not just "something"', ()
     "  The prose figure for hls.js's smallest build measures 106.4, and README.md prints 0.0.",
     '  The prose figure for the HLS adapter over it measures 4.8, and README.md prints 0.0.',
     '  The prose figure for what `hls.js/light` saves measures 53.5, and README.md prints 0.0.',
-    "  The prose figure for core's budget measures 10, and README.md prints 0.",
-    "  The prose figure for the primitives' budget measures 18, and README.md prints 0.",
-    "  The prose figure for the stylesheet's budget measures 2.5, and README.md prints 0.",
+    "  The prose figure for core's measured size measures 7.8, and README.md prints 0.0.",
+    "  The prose figure for the primitives' measured size measures 17.2, and README.md prints 0.0.",
+    "  The prose figure for the stylesheet's measured rules size measures 2.0, and README.md prints 0.0.",
     '  The prose figure for the measured hls.js version measures 1.6.16, and README.md prints 0.0.0.',
     '  The prose figure for the measured `@vimeo/player` version measures 2.30.4, and README.md prints 0.0.0.'
   ]);

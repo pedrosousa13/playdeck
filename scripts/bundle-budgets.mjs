@@ -1,13 +1,22 @@
-// What the initial-gzip bundle budgets from the MVP contract (issue #1) are
+// What the initial-gzip bundle sizes from the MVP contract (issue #1) are
 // measured against, and the measurement itself. Two readers share it:
-// `check-bundle-budgets.mjs`, which prints the figures and fails a build that
-// went over, and the landing page at `apps/site/src/pages/index.astro`, which
-// renders them.
+// `check-bundle-budgets.mjs`, which prints the figures on every CI run, and
+// the landing page at `apps/site/src/pages/index.astro`, which renders them.
 //
 // One module rather than a list in each, because the page's whole argument is
-// that the figures it prints are the ones a gate enforces. A second copy would
-// let the page and the gate disagree about a number while both stayed green,
-// which is the one failure a page like that cannot survive.
+// that the figures it prints are the ones this repo watches. A second copy
+// would let the page and the report disagree about a number while both stayed
+// green, which is the one failure a page like that cannot survive.
+//
+// `budget` on a target is a reference figure, not a ceiling: nothing in this
+// repo fails a build because a package crossed it. The maintainer's ruling on
+// issue #674 settled that — "make sure the package is lean but don't enforce
+// limits ever" — after `check-bundle-budgets.mjs` failed a build over 0.07 KB
+// of unavoidable growth with nothing to shrink. The numbers stay, because
+// leanness is still a real goal here, and this is what makes it a fact
+// `pnpm test:budgets` prints, headroom and all, rather than a claim nobody
+// checks. `overBudget` below still says which targets crossed their figure,
+// printed as an "OVER" note; it is simply never something a build fails on.
 //
 // What is measured, and why it is not exactly what the contract says:
 //
@@ -19,13 +28,13 @@
 //
 // Instead this measures the ENTIRE built package with React, JSX runtime, core
 // and every provider external. That is a strictly stronger guarantee than the
-// contract asks for: if the whole primitives surface fits the budget, any
-// selected subset does too. It is also stable — no bundler heuristics, no
-// fixture to keep in sync.
+// contract asks for: if the whole primitives surface fits its reference
+// figure, any selected subset does too. It is also stable — no bundler
+// heuristics, no fixture to keep in sync.
 //
-// Provider adapters are reported, never gated: the contract says provider
-// chunks are accounted for separately, and they are lazily loaded, so they do
-// not compete for the initial-graph budget.
+// Provider adapters are reported with no reference figure at all: the
+// contract says provider chunks are accounted for separately, and they are
+// lazily loaded, so they do not compete for the initial-graph figure.
 
 import { gzipSync } from 'node:zlib';
 import { readFile } from 'node:fs/promises';
@@ -39,7 +48,7 @@ const KB = 1024;
  * A scanner rather than a regular expression, because a comment opener is only
  * an opener outside strings and unquoted `url()` values, and a pattern that
  * cannot tell those apart fails in the direction that matters: it would delete
- * real declarations and quietly lower the number the budget is enforced
+ * real declarations and quietly lower the number the budget is measured
  * against. A `content` string holding comment delimiters, and an inline SVG
  * data URL holding them, are both legal and both appear in stylesheets that
  * draw their own icons.
@@ -131,14 +140,15 @@ export const stripCssComments = (source) => {
 /** @param {string | Buffer} source */
 const gzipKilobytes = (source) => gzipSync(source).length / KB;
 
-// `budget: null` means report-only. `budgetedSubset` moves the ceiling off the
-// whole file and onto a part of it, leaving the file's own size measured and
-// reported: the only target that needs it is the stylesheet, and it needs it
-// because the file is shipped as authored (see below). Paths are relative to
-// the repository root, which the caller supplies, rather than resolved against
-// this module's own URL: one of the two callers is an Astro page, and a bundler
-// rewrites `import.meta.url` to the chunk it emitted, which is not where this
-// file lives.
+// `budget: null` means no reference figure at all — a provider adapter, which
+// `overBudget` below can then never flag. `budgetedSubset` moves the figure
+// off the whole file and onto a part of it, leaving the file's own size
+// measured and reported: the only target that needs it is the stylesheet, and
+// it needs it because the file is shipped as authored (see below). Paths are
+// relative to the repository root, which the caller supplies, rather than
+// resolved against this module's own URL: one of the two callers is an Astro
+// page, and a bundler rewrites `import.meta.url` to the chunk it emitted,
+// which is not where this file lives.
 /**
  * @type {readonly {
  *   name: string;
@@ -161,9 +171,9 @@ export const targets = [
   {
     // Shipped as-is rather than built: it is plain CSS, and the primitives
     // never import it, which is what keeps the headless chain CSS-free. That
-    // decision is also why the ceiling below is on a subset. Because the file
+    // decision is also why the figure below is on a subset. Because the file
     // ships as authored, its comments are bytes a consumer downloads, and the
-    // great majority of its gzipped size is prose -- so a ceiling on the whole
+    // great majority of its gzipped size is prose -- so a figure on the whole
     // file is in practice a comment budget, and #453 records it failing a
     // change that added 0.07 KB of rules and roughly 2 KB of explanation. The
     // repo asks for that explanation elsewhere; it should not be priced here.
@@ -191,7 +201,7 @@ export const targets = [
     // measured and printed.
     //
     // 2.5 KB is measured, not copied from the theme above -- the two landed on
-    // the same ceiling independently. docked.css carries the same range-input
+    // the same figure independently. docked.css carries the same range-input
     // pseudo-element weight and forced-colors block against a smaller layout
     // section -- it never overlays or auto-hides -- and its rules gzipped to a
     // little over 2 KB when this was set, so 2.5 KB was simply the next 0.5 KB
@@ -204,7 +214,7 @@ export const targets = [
     // the mobile bottom-sheet rules for `settings-menu`/`captions-menu` --
     // `position: fixed`, the scrim, the rounded top corners, the 44px item
     // floor -- pushed the rules to 2.55 KB, 0.05 KB over the old 2.5 KB
-    // ceiling. Per this repo's standing rule (`docs/superpowers/specs/
+    // figure. Per this repo's standing rule (`docs/superpowers/specs/
     // 2026-09-03-stage-homepage-and-theme-identity-design.md`'s "Budget"
     // section), a sheet that exceeds its budget gets it raised to 3.0 KB in
     // the same commit, design not thinned to fit.
@@ -243,8 +253,8 @@ export const targets = [
 /**
  * One target, measured against a source rather than against a path.
  *
- * `size` is always the source as it ships. `budgeted` is the subset the ceiling
- * is really on, or `null` where the ceiling is on the whole file -- which is
+ * `size` is always the source as it ships. `budgeted` is the subset the figure
+ * is really on, or `null` where the figure is on the whole file -- which is
  * every target but the stylesheet. A reader that only wants the figure a
  * consumer downloads can keep reading `size` and ignore the rest.
  *
@@ -268,21 +278,21 @@ export const measureTarget = ({ name, budget, budgetedSubset }, source) => ({
 });
 
 /**
- * The measured bundles that have outgrown their ceiling, with the name, size
- * and budget an error message needs.
+ * The measured bundles that have crossed their reference figure, with the
+ * name, size and figure the "OVER" note needs.
  *
- * This is the gate's decision, and it lives here rather than in
+ * This is the report's decision, and it lives here rather than in
  * `check-bundle-budgets.mjs` so that it is executed by the same tests that
  * measure the figures. Measurement and policy may be shared with the landing
  * page, which imports this module; console rendering may not follow them in,
- * because the page has no console. Which entries are over budget is policy, and
- * the page's whole argument is that the numbers it prints are the ones this
- * rule is applied to.
+ * because the page has no console. Which entries are over their figure is
+ * policy, and the page's whole argument is that the numbers it prints are the
+ * ones this rule is applied to.
  *
- * `budgeted?.size ?? size` is where the gate stops counting comments: for the
- * stylesheet the ceiling is on the rules, and its shipped size is reported so
- * it cannot grow unobserved rather than to fail the build. See the theme target
- * above for why, and issue #453.
+ * `budgeted?.size ?? size` is where this stops counting comments: for the
+ * stylesheet the figure is on the rules, and its shipped size is reported so
+ * it cannot grow unobserved rather than counted against it. See the theme
+ * target above for why, and issue #453.
  *
  * flatMap rather than filter+map: the filter already guarantees a budget, but
  * only a narrowing form proves it to the reader and the typechecker alike.

@@ -320,8 +320,8 @@ if (shouldBuild) {
   //
   // The packages come first, and they are a prerequisite rather than something
   // served: the site's landing page renders the gzipped size of every bundle
-  // `pnpm test:budgets` gates, measured at build time from the module that gate
-  // measures with, and that module reads build output. Building them here is
+  // `pnpm test:budgets` reports, measured at build time from the module that
+  // script measures with, and that module reads build output. Building them here is
   // what makes `pnpm test:deploy` prove the tree under test rather than
   // whichever `dist/` happened to be lying around. `deploy-site.yml` runs the
   // same filter for the same reason, and `pnpm run` resolves it

@@ -58,9 +58,9 @@ const examplesUrl = `${import.meta.env.BASE_URL}examples/`;
 
 /*
  * The measured figure and the budget it is measured against, both read from the
- * module `pnpm test:budgets` gates with, so the page and the gate cannot state
+ * module `pnpm test:budgets` runs, so the page and the module cannot state
  * different numbers. Neither is typed here: a second copy would let the page
- * and the gate disagree while both stayed green, which is the one failure a
+ * and the module disagree while both stayed green, which is the one failure a
  * page making this argument cannot survive.
  */
 const bundles = await measureBundles(import.meta.env.PLAYDECK_REPO_ROOT);
