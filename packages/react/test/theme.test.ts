@@ -343,15 +343,17 @@ describe.each(fixtures)(
       // An explicit `inline-size`/`block-size` on the activation part beats a
       // consumer's own padding or `min-height` however they write it, because a
       // used value is not a fallback — imposing the badge look on any labelled
-      // affordance rather than offering it as a default. Measured on the
-      // fixed-size rule, a button carrying the `white-space: nowrap` label
-      // "Watch the trailer" at 16px system-ui: the box stayed 64px wide while
-      // its own content wanted 96.55px on chromium and 111.83px on firefox, so
-      // the label ran outside the circle drawn for an icon. Under the floor
-      // below the same button measures 120.55px and 135.83px and the icon-only
-      // one is still 64px square. A `min-*` floor keeps that default and
-      // lets anything wider grow, and `border-radius: 2rem` draws the circle at
-      // that size and a pill past it, where `50%` would draw an ellipse.
+      // affordance rather than offering it as a default. Recorded when this was
+      // written, 2026-09-03, under pinned Playwright (1.61.1), on the
+      // fixed-size rule: a button carrying the `white-space: nowrap` label
+      // "Watch the trailer" at 16px system-ui had a box that stayed 64px wide
+      // while its own content wanted 96.55px on chromium and 111.83px on
+      // firefox, so the label ran outside the circle drawn for an icon; under
+      // the floor below, the same button measured 120.55px and 135.83px and
+      // the icon-only one was still 64px square. Not re-measured since. A
+      // `min-*` floor keeps that default and lets anything wider grow, and
+      // `border-radius: 2rem` draws the circle at that size and a pill past
+      // it, where `50%` would draw an ellipse.
       const activationRule = withoutComments.match(
         /:where\(\[data-playdeck-part='activation'\]\)\s*\{[^}]*\}/
       )?.[0];
@@ -408,11 +410,12 @@ describe.each(fixtures)(
     // cannot honour it: an absent `CaptionsButton` would take the margin with
     // it, and the group would collapse back to the start.
     //
-    // Measured from a rendered bar composed in the contract order at 640px:
+    // Recorded when this was written, 2026-09-03, under pinned Playwright
+    // (1.61.1), from a rendered bar composed in the contract order at 640px:
     // without this the row packs left and the gap between the duration `Time`
-    // and `CaptionsButton` is the bar's own 4px `gap`; with it that gap is
-    // 152.2px on Chromium and 152.25px on Firefox, and the trailing group sits
-    // flush against the bar's inner end.
+    // and `CaptionsButton` is the bar's own 4px `gap`; with it that gap was
+    // 152.2px on Chromium and 152.25px on Firefox, and the trailing group sat
+    // flush against the bar's inner end. Not re-measured since.
     test('pushes the trailing controls to the end with the duration Time', () => {
       expect(withoutComments).toMatch(
         /\[data-playdeck-part='time'\]\[data-time-type='duration'\][^{]*\{[^}]*margin-inline-end:\s*auto/
@@ -420,18 +423,20 @@ describe.each(fixtures)(
     });
 
     // The slider keeps its box at rest and only its paint changes, so no
-    // neighbour moves when it appears. Measured by driving the Theme/Theme
+    // neighbour moves when it appears. Recorded when this was written,
+    // 2026-09-03, under pinned Playwright (1.61.1), by driving the Theme/Theme
     // story, whose bar is `position: absolute; inset: auto 0 0 0` inside a
     // relatively positioned 640px viewport: at rest and revealed alike the
-    // slider is 80x44 at x=120, and the gap from the mute button's inline end
-    // to the duration `Time` is 88px — identical in both states, on chromium
-    // and on firefox. What does change is `opacity` 0 -> 1 and
-    // `pointer-events` `none` -> `auto`, on hovering the mute button, on
-    // moving the pointer from it onto the slider, and on focusing the slider;
-    // all three return to rest when the pointer leaves and the input blurs.
-    // Under an emulated coarse pointer (`matchMedia('(pointer: coarse)')`
-    // true) the same slider computes `display: none` and measures 0x0, and
-    // that 88px gap collapses to the bar's own 4px.
+    // slider was 80x44 at x=120, and the gap from the mute button's inline
+    // end to the duration `Time` was 88px — identical in both states, on
+    // chromium and on firefox; not re-measured since. What does change is
+    // `opacity` 0 -> 1 and `pointer-events` `none` -> `auto`, on hovering the
+    // mute button, on moving the pointer from it onto the slider, and on
+    // focusing the slider; all three return to rest when the pointer leaves
+    // and the input blurs. Under an emulated coarse pointer
+    // (`matchMedia('(pointer: coarse)')` true) the same slider computes
+    // `display: none` and measures 0x0, and that 88px gap collapses to the
+    // bar's own 4px.
     test('hides the volume slider at rest on a fine pointer and reveals it on hover or focus', () => {
       expect(withoutComments).toMatch(
         /@media\s*\(\s*pointer:\s*fine\s*\)\s*\{[^]*?opacity:\s*0;[^]*?pointer-events:\s*none;[^]*?\}/
@@ -473,13 +478,14 @@ describe.each(fixtures)(
     // painting the control in the user's own palette. Unguarded, #190's Gecko
     // volume slider flattened to `Canvas` -- the progress fill and the unfilled
     // track alike at `rgb(255 255 255)`, 1.00:1, so the slider stated no value
-    // at all. #415's seek slider is held out of the mode for the same reason and
-    // at a measured price, which `theme.css` records where it draws that
-    // control: positioning the input there takes the loaded range from 21.00:1
-    // against the unfilled one to 1.00:1 on Chromium, and drawing the control
-    // there flattens Gecko's thumb to between 2.05:1 and 2.85:1 against the
-    // canvas. Any stylesheet that draws the same controls buys the same trade,
-    // which is why the guard is asserted per fixture against the needles that
+    // at all. #415's seek slider is held out of the mode for the same reason,
+    // at a measured price recorded when this comment was introduced,
+    // 2026-08-24, under pinned Playwright (1.61.1), not re-measured since:
+    // positioning the input there took the loaded range from 21.00:1 against
+    // the unfilled one to 1.00:1 on Chromium, and drawing the control there
+    // flattened Gecko's thumb to between 2.05:1 and 2.85:1 against the canvas.
+    // Any stylesheet that draws the same controls buys the same trade, which
+    // is why the guard is asserted per fixture against the needles that
     // fixture names.
     // `e2e/thumb-contrast.spec.ts` measures that from rendered pixels; this
     // asserts the structural reason for it, which costs no browser and fails in
@@ -799,9 +805,13 @@ describe('slider non-text contrast', () => {
   // are the ones composited here rather than an engine's. The two answers still
   // differ, and by design: these ratios composite onto `--playdeck-color-backdrop`
   // alone, while the story they are measured on has a ground of `rgb(11 14 19)`.
-  // Rendered against arithmetic: 3.55:1 against 3.13:1 for the ring on the
-  // track, 13.73:1 against 13.35:1 for the ring on the loaded range, 3.86:1
-  // against 4.26:1 for the loaded range on the track. Not all one direction, and
+  // Rendered against arithmetic (the rendered half is
+  // `e2e/thumb-contrast.spec.ts`'s own figure, recorded when this comment was
+  // introduced, 2026-08-24, under pinned Playwright (1.61.1) and not
+  // re-measured since; the arithmetic half is this file's own and reproduces
+  // on every run): 3.55:1 against 3.13:1 for the ring on the track, 13.73:1
+  // against 13.35:1 for the ring on the loaded range, 3.86:1 against 4.26:1
+  // for the loaded range on the track. Not all one direction, and
   // that is what a lighter ground does rather than a discrepancy: it lifts a
   // translucent white further where less of that white is opaque, so the track
   // gains more than the range above it and the boundary between the two closes
