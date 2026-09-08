@@ -605,10 +605,23 @@ export class PlayerController {
     try {
       nextUnsubscribe = provider.subscribe((patch, event) => {
         if (generation !== this.#generation) return;
-        const confirmedPlaybackOrigin =
-          patch.playback !== undefined
-            ? this.#consumePendingOrigin('playback', generation, patch.playback)
-            : undefined;
+        // Gated on the event, not on the patch carrying a `playback` key: a
+        // patch that reports playback without an event that can carry the
+        // origin would otherwise consume it and throw it away, leaving the
+        // real `play` to fall back to `event.origin`. The native adapter's
+        // `onPlaying` emits exactly such a patch -- `{ playback: 'playing' }`
+        // with no event of its own -- so an engine that reports `playing`
+        // ahead of `play` loses the origin of the play it was told to make,
+        // and a command's own origin comes back as `'provider'`. Found while
+        // diagnosing #695, which is a different defect: this gate does not
+        // fix it, and #695's WebKit reproduction stays red with this in
+        // place. Computed once and reused below, the way `isSeekEvent(event)`
+        // is, rather than calling `confirmsPlayback` twice.
+        const playbackConfirmed =
+          event !== undefined && confirmsPlayback(event, patch);
+        const confirmedPlaybackOrigin = playbackConfirmed
+          ? this.#consumePendingOrigin('playback', generation, patch.playback)
+          : undefined;
         // Gated on the event, not on the patch carrying a `seeking` key: the
         // error and reset patches of several adapters carry `seeking: false`
         // without reporting a seek, and consuming there eats an origin the
@@ -623,7 +636,7 @@ export class PlayerController {
         const originatingEvent = event
           ? {
               ...event,
-              origin: confirmsPlayback(event, patch)
+              origin: playbackConfirmed
                 ? (confirmedPlaybackOrigin ?? event.origin)
                 : isSeekEvent(event)
                   ? (confirmedSeekOrigin ?? seekOriginInFlight ?? event.origin)

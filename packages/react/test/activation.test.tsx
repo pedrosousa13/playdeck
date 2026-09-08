@@ -851,6 +851,45 @@ test('a second exit pauses again after a resume', async () => {
   );
 });
 
+// `provider-native`'s `onPlaying` reports `{ playback: 'playing' }` with no
+// event of its own, so an engine that fires `playing` before `play` delivers
+// that patch ahead of the real event -- the interleaving this test stages.
+// Before `player-controller.ts` gated playback-origin consumption on the
+// event, the eventless patch ate the pending `'autoplay'` origin
+// `playWithOrigin` registered on re-entry, the real `play` event resolved as
+// `'provider'`, and `playbackOwnership` here dropped to `'none'` -- so the
+// next exit never issued the matching `pauseWithOrigin('autoplay')` this
+// test waits for. Staged rather than observed: this is the ordering's
+// consequence for ownership, not a reproduction of #695, whose WebKit
+// failure survives this fix.
+test('ownership survives an eventless playing patch interleaved before the re-entry play event', async () => {
+  const { controller, fake, observer, playWithOrigin, pauseWithOrigin } =
+    await setUpViewportPlayback();
+  await playAs(controller, fake, 'autoplay');
+  act(() =>
+    observer.intersect({ isIntersecting: false, intersectionRatio: 0 })
+  );
+  await vi.waitFor(() =>
+    expect(pauseWithOrigin).toHaveBeenCalledExactlyOnceWith('autoplay')
+  );
+  act(() => fake.emit({ playback: 'paused' }, pauseEvent));
+
+  act(() => observer.intersect());
+  await vi.waitFor(() =>
+    expect(playWithOrigin).toHaveBeenNthCalledWith(2, 'autoplay')
+  );
+  act(() => fake.emit({ playback: 'playing' }));
+  act(() => fake.emit({ playback: 'playing' }, playEvent));
+
+  act(() =>
+    observer.intersect({ isIntersecting: false, intersectionRatio: 0 })
+  );
+
+  await vi.waitFor(() =>
+    expect(pauseWithOrigin).toHaveBeenNthCalledWith(2, 'autoplay')
+  );
+});
+
 // The mirror of the "viewer-pressed" case above, but reached mid-cycle rather
 // than from the start: a viewer who takes over playback the viewport itself
 // started has to be respected from that point on, not only when they were
