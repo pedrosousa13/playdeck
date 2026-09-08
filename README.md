@@ -80,7 +80,7 @@ initial graph.
 Lazy loading is worth stating in bytes rather than in adjectives, because the
 number a reader cares about is the one for the source they are playing, and for
 one of these sources it is large. Gzip, excluding React itself and the optional
-`theme.css` (12.0 KB):
+`theme.css` (12.0 KB) and `docked.css` (6.3 KB):
 
 <!-- bytes:table -->
 
@@ -121,14 +121,15 @@ measurements, and `pnpm docs:bytes:check` fails CI when the two disagree, so a
 change that moves a bundle cannot leave a stale number in them.
 
 Every Playdeck package in this table is measured by `pnpm test:budgets` on each
-CI run, against a reference figure it prints but never enforces: core weighs
-in at 7.9 KB, the primitives at 18.2 KB and `theme.css` at 2.3 KB — measured on
-its CSS rules with the comments stripped, because it ships as authored and
-measuring the whole file would really be measuring its prose. None of the
-three can ever fail a build over it; staying lean here is a standing goal, not
-a ceiling this repo enforces. The provider adapters are measured and reported
-the same way, with no reference figure of their own, because a lazy chunk does
-not compete for the initial graph.
+CI run, against a reference figure it prints but never enforces: core weighs in
+at 7.9 KB, the primitives at 18.2 KB, `theme.css` at 2.3 KB and `docked.css` at
+2.6 KB — the two stylesheets measured on their CSS rules with the comments
+stripped, because both ship as authored and measuring the whole file would
+really be measuring their prose. None of the four can ever fail a build over it;
+staying lean here is a standing goal, not a ceiling this repo enforces. The
+provider adapters are measured and reported the same way, with no reference
+figure of their own, because a lazy chunk does not compete for the initial
+graph.
 
 The third-party bytes are the exception, and deliberately so: hls.js and
 `@vimeo/player` are external to those bundles, so that script never sees them.

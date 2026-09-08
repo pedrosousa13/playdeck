@@ -19,6 +19,8 @@ const figures = {
   primitives: 172,
   theme: 58,
   themeRules: 20,
+  docked: 62,
+  dockedRules: 24,
   native: 58,
   hlsAdapter: 48,
   youtube: 61,
@@ -91,7 +93,7 @@ const versions = { 'hls.js': '1.6.16', '@vimeo/player': '2.30.4' };
 
 const readme = [
   'Gzip, excluding React itself and the optional',
-  '`theme.css` (0.0 KB):',
+  '`theme.css` (0.0 KB) and `docked.css` (0.0 KB):',
   '',
   '<!-- bytes:table -->',
   '',
@@ -105,7 +107,7 @@ const readme = [
   '`hls.js/light` saves 0.0 KB and gives up subtitles.',
   '',
   'core weighs in at',
-  '0.0 KB, the primitives at 0.0 KB and `theme.css` at 0.0 KB.',
+  '0.0 KB, the primitives at 0.0 KB, `theme.css` at 0.0 KB and `docked.css` at 0.0 KB.',
   '',
   'builds of hls.js 0.0.0 and `@vimeo/player` 0.0.0 —',
   ''
@@ -122,11 +124,13 @@ test('replaces the marked region with the table and leaves the rest alone', () =
 test('rewrites every figure the prose repeats from the table', () => {
   const out = renderReadme(readme, 'the table', anchors());
   assert.match(out, /`theme\.css` \(5\.8 KB\)/);
+  assert.match(out, /`docked\.css` \(6\.2 KB\)/);
   assert.match(out, /smallest build is 106\.4 KB/);
   assert.match(out, /adapter over it is 4\.8\./);
   assert.match(out, /saves 53\.5 KB/);
   assert.match(out, /core weighs in at\n7\.8 KB, the primitives at 17\.2 KB/);
   assert.match(out, /`theme\.css` at 2\.0 KB/);
+  assert.match(out, /`docked\.css` at 2\.4 KB/);
   assert.match(out, /hls\.js 1\.6\.16 and `@vimeo\/player` 2\.30\.4/);
 });
 
@@ -165,12 +169,14 @@ test('names the row and the prose figure that drifted, not just "something"', ()
   assert.deepEqual(reasons, [
     '  The row for HLS on Safari and iOS measures the above + HLS adapter 4.8 = **35.6 KB**, and README.md prints the above + HLS adapter 9.9 = **35.6 KB**.',
     '  The prose figure for the stylesheet, excluded from every row measures 5.8, and README.md prints 0.0.',
+    '  The prose figure for the docked stylesheet, excluded from every row measures 6.2, and README.md prints 0.0.',
     "  The prose figure for hls.js's smallest build measures 106.4, and README.md prints 0.0.",
     '  The prose figure for the HLS adapter over it measures 4.8, and README.md prints 0.0.',
     '  The prose figure for what `hls.js/light` saves measures 53.5, and README.md prints 0.0.',
     "  The prose figure for core's measured size measures 7.8, and README.md prints 0.0.",
     "  The prose figure for the primitives' measured size measures 17.2, and README.md prints 0.0.",
     "  The prose figure for the stylesheet's measured rules size measures 2.0, and README.md prints 0.0.",
+    "  The prose figure for the docked stylesheet's measured rules size measures 2.4, and README.md prints 0.0.",
     '  The prose figure for the measured hls.js version measures 1.6.16, and README.md prints 0.0.0.',
     '  The prose figure for the measured `@vimeo/player` version measures 2.30.4, and README.md prints 0.0.0.'
   ]);

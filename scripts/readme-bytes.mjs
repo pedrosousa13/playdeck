@@ -190,6 +190,11 @@ export const proseAnchors = (figures, versions) => [
     value: kb(figures.theme)
   },
   {
+    label: 'the docked stylesheet, excluded from every row',
+    pattern: /(?<=`docked\.css`\s\()\d+\.\d(?=\sKB\))/,
+    value: kb(figures.docked)
+  },
+  {
     label: "hls.js's smallest build",
     pattern: /(?<=hls\.js's\sown\ssmallest\sbuild\sis\s)\d+\.\d(?=\sKB)/,
     value: kb(figures.hlsJsLight)
@@ -218,6 +223,11 @@ export const proseAnchors = (figures, versions) => [
     label: "the stylesheet's measured rules size",
     pattern: /(?<=`theme\.css`\sat\s)\d+\.\d(?=\sKB)/,
     value: kb(figures.themeRules)
+  },
+  {
+    label: "the docked stylesheet's measured rules size",
+    pattern: /(?<=`docked\.css`\sat\s)\d+\.\d(?=\sKB)/,
+    value: kb(figures.dockedRules)
   },
   {
     label: 'the measured hls.js version',
@@ -601,6 +611,8 @@ const measure = async () => {
     primitives: sizeOf('@playdeck/react (primitives, excl. React)'),
     theme: sizeOf('@playdeck/react/theme.css'),
     themeRules: rulesSizeOf('@playdeck/react/theme.css'),
+    docked: sizeOf('@playdeck/react/docked.css'),
+    dockedRules: rulesSizeOf('@playdeck/react/docked.css'),
     native: sizeOf('@playdeck/provider-native'),
     hlsAdapter: sizeOf('@playdeck/provider-hls'),
     youtube: sizeOf('@playdeck/provider-youtube'),
