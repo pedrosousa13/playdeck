@@ -1132,6 +1132,47 @@ test('loops from the end boundary back to the configured start', async () => {
   expect(play).toHaveBeenCalledOnce();
 });
 
+// #673: unlike the `onEnded` path below, an `endTime`-boundary loop restart
+// never actually fires a `play` event on a real engine. Measured directly
+// against Playwright's chromium, a fixture looping every 0.4s of a 1s clip
+// against this exact boundary shape: `seeking -> seeked -> playing` on every
+// wrap, `video.paused` reading `false` throughout, across 5 wraps over 3
+// seconds -- no `play` and no `pause` event at all. So there is no `play`
+// event on this path for `restartingGeneration` to label, and no ownership
+// bug ever existed on it: `use-activation.ts`'s ownership tracker reacts
+// only to `play`, `pause` and `ended` controller events, none of which this
+// path's own restart ever raises, so whatever ownership already stood is
+// simply never touched by it.
+//
+// A mock cannot demonstrate the absence of a `play` event here: this suite
+// replaces `media.play` outright, so nothing could ever fire one through it
+// regardless of what the source does, and an assertion built on that would
+// be the exact shape `docs/agents/demonstrated-red.md` warns about -- true
+// whether or not the code is right. What a mock CAN check is the structural
+// fact the measurement above depends on: `restartFromBoundary` never calls
+// `media.pause()` before replaying in this branch (only the non-loop branch
+// does), which is why `media.paused` cannot be `true` when it calls
+// `media.play()` here, which is why HTML never has a `play` event to fire
+// for it. This is real, falsifiable coverage of that: it would fail the
+// moment a future change added a pause here.
+test('an endTime-boundary loop restart never pauses before replaying', async () => {
+  const media = document.createElement('video');
+  vi.spyOn(media, 'play').mockResolvedValue(undefined);
+  const pause = vi.spyOn(media, 'pause');
+  const provider = createNativeProvider(media, {
+    loop: true,
+    startTime: 2,
+    endTime: 5
+  });
+  await provider.attach();
+  media.currentTime = 5;
+
+  media.dispatchEvent(new Event('timeupdate'));
+  await Promise.resolve();
+
+  expect(pause).not.toHaveBeenCalled();
+});
+
 test('loops a native ended event back to the configured start', async () => {
   const media = document.createElement('video');
   const play = vi.spyOn(media, 'play').mockResolvedValue(undefined);
@@ -1149,6 +1190,146 @@ test('loops a native ended event back to the configured start', async () => {
   expect(play).toHaveBeenCalledOnce();
   expect(patches).not.toContainEqual(
     expect.objectContaining({ playback: 'ended' })
+  );
+});
+
+// #673's other loop path -- `onEnded`'s restart, the one that DOES fire a
+// real `play` event: unlike `endTime`'s boundary above, the media has
+// genuinely paused at its natural end by the time this runs (a real
+// browser's own end-of-media handling, not a call this package makes), so
+// `restartFromBoundary`'s `media.play()` here transitions `paused` true to
+// false and HTML fires `play` for it. The mock dispatches the event itself
+// to stand in for that transition, which this suite cannot drive on a real
+// engine -- `e2e/activation.spec.ts`'s loop test is where that is measured
+// directly.
+test('labels the play event from a native-ended loop restart as the library, not the provider', async () => {
+  const media = document.createElement('video');
+  vi.spyOn(media, 'play').mockImplementation(() => {
+    media.dispatchEvent(new Event('play'));
+    return Promise.resolve();
+  });
+  const events: Array<{ type: string; origin: string }> = [];
+  const provider = createNativeProvider(media, { loop: true, startTime: 2 });
+  provider.subscribe((_patch, event) => {
+    if (event) events.push({ type: event.type, origin: event.origin });
+  });
+  await provider.attach();
+  events.length = 0;
+  media.currentTime = 8;
+
+  media.dispatchEvent(new Event('ended'));
+  await Promise.resolve();
+
+  expect(events).toContainEqual({ type: 'play', origin: 'system' });
+});
+
+// `restartingGeneration`'s own correctness under overlap, constructed
+// directly rather than reproduced naturally: two `restartFromBoundary` calls
+// can overlap in principle (`onTimeUpdate`'s boundary branch re-triggers on
+// every `timeupdate` while a declined seek leaves `currentTime` at or past
+// `endTime`), but measuring that path directly against a real engine found it
+// never fires a `play` event at all -- `media.paused` stays `false`
+// throughout, because this path never pauses before replaying, and HTML only
+// fires `play` where `paused` was true. So the overlap could not be driven to
+// a real mislabelled event through either loop path as actually wired; this
+// constructs the exact interleaving an unconditional-`finally` design gets
+// wrong, directly, by controlling when each call's `media.play()` promise
+// settles and when its `play` event fires independently -- something only
+// this mock can do, not a real element.
+//
+// The interleaving: restart A's `play()` promise settles -- and its `finally`
+// runs -- BEFORE restart B's own `play` event fires. A `finally` that cleared
+// unconditionally would erase B's still-pending generation right out from
+// under it; what has to hold is that A's settling touches only ITS OWN
+// generation (`restartingGeneration === generation`, checked before
+// clearing), leaving B's later-set generation alone for `onPlay` to read when
+// B's event actually arrives.
+test("a later restart's play event is not mislabelled by an earlier restart's settling promise", async () => {
+  const media = document.createElement('video');
+  const settlers: Array<() => void> = [];
+  vi.spyOn(media, 'play').mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        settlers.push(resolve);
+      })
+  );
+  const events: Array<{ type: string; origin: string }> = [];
+  const provider = createNativeProvider(media, { loop: true });
+  provider.subscribe((_patch, event) => {
+    if (event) events.push({ type: event.type, origin: event.origin });
+  });
+  await provider.attach();
+  events.length = 0;
+
+  // Restart A: sets the flag, calls `media.play()` (call A, held open).
+  media.dispatchEvent(new Event('ended'));
+  await Promise.resolve();
+  expect(settlers).toHaveLength(1);
+
+  // Restart B overlaps A: a second `ended` before A's `play()` has settled,
+  // setting the flag again and calling `media.play()` a second time (call B,
+  // also held open).
+  media.dispatchEvent(new Event('ended'));
+  await Promise.resolve();
+  expect(settlers).toHaveLength(2);
+
+  // Call A settles first, with no `play` event of its own -- the shape a
+  // real engine would produce if `paused` had already gone false by the
+  // time A ran (see the comment above). Under the old design this is what
+  // clears the flag early.
+  settlers[0]!();
+  await Promise.resolve();
+
+  // Only now does B's own `play` event fire -- the moment that has to read
+  // the flag correctly regardless of what A's already-settled promise did.
+  media.dispatchEvent(new Event('play'));
+  settlers[1]!();
+  await Promise.resolve();
+
+  expect(events).toContainEqual({ type: 'play', origin: 'system' });
+});
+
+// #673's second half of the same defect, found only by running the fix
+// against a real engine: a `loop`-less native element pauses itself and fires
+// a real `pause` event the instant it reaches its natural end -- before
+// `ended` reaches `onEnded` above and restarts it -- and that pause used to
+// publish a `'provider'`-origin `paused` patch of its own, clobbering
+// ownership before the loop's relabelled `play` event ever arrived.
+// `media.ended` is what `onPause` reads to tell this pause apart from a real
+// one: true only for the natural-end pause a loop is about to restart from.
+test('suppresses the native pause a natural-end loop restart produces on its way through', async () => {
+  const media = document.createElement('video');
+  vi.spyOn(media, 'play').mockResolvedValue(undefined);
+  Object.defineProperty(media, 'ended', { configurable: true, value: true });
+  const patches: Array<Record<string, unknown>> = [];
+  const provider = createNativeProvider(media, { loop: true });
+  provider.subscribe((patch) => patches.push(patch));
+  await provider.attach();
+  patches.length = 0;
+
+  media.dispatchEvent(new Event('pause'));
+
+  expect(patches).not.toContainEqual(
+    expect.objectContaining({ playback: 'paused' })
+  );
+});
+
+// The guard above must not overreach: a viewer pressing the native controls
+// mid-clip never reaches `media.ended`, so a looping player still has to be
+// pausable by hand.
+test('still reports a viewer pause mid-clip on a looping player', async () => {
+  const media = document.createElement('video');
+  vi.spyOn(media, 'play').mockResolvedValue(undefined);
+  const patches: Array<Record<string, unknown>> = [];
+  const provider = createNativeProvider(media, { loop: true });
+  provider.subscribe((patch) => patches.push(patch));
+  await provider.attach();
+  patches.length = 0;
+
+  media.dispatchEvent(new Event('pause'));
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({ playback: 'paused' })
   );
 });
 
