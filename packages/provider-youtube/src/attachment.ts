@@ -231,7 +231,7 @@ export const createYouTubeAttachment = (
     const target = ownerDocument.createElement('iframe');
     target.src = youTubeEmbedUrl(host, videoId, {
       autoplay: 0,
-      // Deliberately Vimeo's polarity (`provider-vimeo/src/attachment.ts:72`):
+      // Deliberately Vimeo's polarity (`provider-vimeo/src/attachment.ts:163`):
       // unset and `false` both mean chromeless.
       controls: controls === true ? 1 : 0,
       // `loop` alone is a documented no-op on a single-video embed: YouTube
@@ -255,7 +255,7 @@ export const createYouTubeAttachment = (
     // The `Referer` leaves with this frame's first request, so the policy has
     // to be here before the element is, which is why the frame is built here
     // rather than left to the API. Vimeo's embed already declares the same one
-    // (`provider-vimeo/src/attachment.ts:272`).
+    // (`provider-vimeo/src/attachment.ts:418`).
     target.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
     // The rest is the attribute set the iframe API writes onto the frame it
     // builds on the `<div>` path, restated verbatim so this frame is granted
@@ -273,7 +273,7 @@ export const createYouTubeAttachment = (
     target.setAttribute('width', '100%');
     target.setAttribute('height', '100%');
     // The API's own frame carries `frameBorder="0"`; this is that, spelled the
-    // way the Vimeo embed spells it (`provider-vimeo/src/attachment.ts:277`).
+    // way the Vimeo embed spells it (`provider-vimeo/src/attachment.ts:423`).
     target.style.border = '0';
     // Chromeless mode (`controls` unset or `false`) hands the whole surface to
     // a consumer's own controls, and this is the one thing none of the player
