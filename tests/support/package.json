@@ -7,6 +7,10 @@
     "build": "tsc -b"
   },
   "exports": {
+    "./capture-rethrows": {
+      "types": "./dist/capture-rethrows.d.ts",
+      "default": "./src/capture-rethrows.ts"
+    },
     "./fake-text-tracks": {
       "types": "./dist/fake-text-tracks.d.ts",
       "default": "./src/fake-text-tracks.ts"
