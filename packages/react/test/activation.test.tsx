@@ -3033,9 +3033,9 @@ test('retries an installed provider error with one queued user play', async () =
 // SIDEPRO-201: an external controller drives activation through the
 // forwarded ref alone -- no click, no `Player.ActivationButton` in the tree
 // at all. The single `activateFromInteraction()` call below has to queue the
-// same play `useActivation` queues for a click (use-activation.ts:293-294,
-// `active.started = true; active.queuedPlay = queuePlay`),
-// and that queued play has to reach the provider exactly once.
+// same play `useActivation`'s `activate` queues for a click
+// (`active.started = true; active.queuedPlay = queuePlay`), and that queued
+// play has to reach the provider exactly once.
 test('a dormant interaction root activates and plays from a single ref call', async () => {
   const fake = createFakeProvider();
   mockedLoadProvider.mockResolvedValue(fake.adapter);
@@ -3055,19 +3055,19 @@ test('a dormant interaction root activates and plays from a single ref call', as
 // The test above calls `activateFromInteraction` alone and lets the
 // auto-queued play do the rest; SIDEPRO-201's external "play" command is
 // the pair, in this order — `activateFromInteraction()` then `play()`
-// (`use-activation.ts:324-356`, its
-// `const activateFromInteraction = useCallback`;
-// `player-controller.ts:381-386`) — the order an external control surface
-// issues it in. Against a still-`dormant` player, the explicit `play()` has
-// no provider to reach yet and resolves `{ ok: false, reason: 'not-ready' }`
-// (`player-controller.ts:383-384`) rather than queuing anything — dropped,
-// not doubled — so the pair must not cost a second, real play once the
-// provider this same `activateFromInteraction` call set loading actually
-// attaches. Asserted on `fake.counts().playCount` directly, not on a spy
-// over `handle.current.play`/`activateFromInteraction` themselves: those
-// are expected to be called once each here regardless of whether the drop
-// is working, so only a count on the provider itself can tell a correct
-// drop from a bug that lets the early call double up the queued one.
+// (`use-activation.ts`'s `activateFromInteraction`; `player-controller.ts`'s
+// `play`) — the order an external control surface issues it in. Against a
+// still-`dormant` player, the explicit `play()` has no provider to reach
+// yet and resolves `{ ok: false, reason: 'not-ready' }` (`playWithOrigin`'s
+// `#refuseCommand('play', origin)` call) rather than queuing anything —
+// dropped, not doubled — so the pair must not cost a second, real play
+// once the provider this same `activateFromInteraction` call set loading
+// actually attaches. Asserted on `fake.counts().playCount` directly, not
+// on a spy over `handle.current.play`/`activateFromInteraction`
+// themselves: those are expected to be called once each here regardless
+// of whether the drop is working, so only a count on the provider itself
+// can tell a correct drop from a bug that lets the early call double up
+// the queued one.
 test('interaction issues exactly one play when activateFromInteraction is immediately followed by play', async () => {
   const fake = createFakeProvider();
   mockedLoadProvider.mockResolvedValue(fake.adapter);
@@ -3163,7 +3163,7 @@ test('reaches setProvider through the internal symbol, never off the handle', ()
 // An external controller calls `activateFromInteraction()` unconditionally
 // before `play()`, so a player that has already activated has to tolerate
 // the call rather than restart itself or throw
-// (use-activation.ts:334-355, from `const activation = state.activation`, only
+// (`activateFromInteraction`, from `const activation = state.activation`, only
 // proceeds from `dormant` or `error`).
 test('activateFromInteraction on an already-ready player is a no-op', async () => {
   const fake = createFakeProvider();

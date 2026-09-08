@@ -16,7 +16,7 @@ Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/
 
 ### Comments
 
-Durable rationale belongs in source; investigation narrative belongs on the issue. A comment naming an open issue number is a claim with an expiry date. See `docs/agents/comments.md`.
+Durable rationale belongs in source; investigation narrative belongs on the issue. A comment naming an open issue number is a claim with an expiry date. A citation into code names a symbol, never a bare line number. See `docs/agents/comments.md`.
 
 ### Demonstrated red
 
