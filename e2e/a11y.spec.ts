@@ -140,23 +140,35 @@ const states: ReadonlyArray<{
   // option — inside the same primitives, and that tree had no scan coverage:
   // this spec only ever clicked the settings trigger (#419).
   //
-  // Two diagnosed entries, per this list's own rule that a `knownIncomplete`
-  // id means an examined finding and never an unexamined one:
+  // One diagnosed entry remains, per this list's own rule that a
+  // `knownIncomplete` id means an examined finding and never an unexamined
+  // one:
   //
   // - `aria-valid-attr-value`: the same axe-core limitation as the settings
   //   state above, and for the same reason — axe flags the
   //   aria-haspopup+aria-controls pattern itself, not anything specific here.
   //
-  // - `color-contrast`: #467. Both radio items come back needs-review because
-  //   axe cannot resolve a background for them. The composition paints one on
-  //   the settings menu through `.playdeck-example-menu`; `CaptionsMenu`'s
-  //   default content takes no className, so the captions menu has none. This
-  //   entry goes when #467 decides whether the example should supply it.
+  // `color-contrast` used to sit here too: both radio items came back
+  // needs-review because axe could not resolve a background for them, since
+  // the settings menu got `.playdeck-example-menu` and `CaptionsMenu`'s
+  // default content got no className at all. #467 ruled that a composition
+  // defect and gave the captions menu paint plus placement instead of that
+  // class — why paint alone was not enough is measured and recorded next to
+  // the fix itself, at `.playdeck-example-captions` in
+  // `reference-player.tsx`. Axe now resolves a background and the entry is
+  // gone.
+  //
+  // #467 also settled a second, separable question this same state raised:
+  // the two radio items measure side by side on one row, not stacked, when
+  // the primitive is unstyled. That is not a defect — the library is
+  // headless and layout is explicitly the consumer's business, and the
+  // themed stylesheet stacking the items is the theme making a choice, not
+  // something the primitive owes unstyled.
   {
     name: 'captions-menu-open',
     url: composition,
     open: 'captions',
-    knownIncomplete: ['aria-valid-attr-value', 'color-contrast']
+    knownIncomplete: ['aria-valid-attr-value']
   },
   { name: 'blocked-autoplay', url: story('blocked-autoplay') },
   // global-shortcuts: the same composition with `Player.Controls global`, so
@@ -292,12 +304,15 @@ const themes = [
   }
 ] as const;
 
-// One `incomplete` id the docked pass tolerates either way, keyed by state
-// name. Held to the same rule as `knownIncomplete` — a diagnosed finding with a
-// written reason — but expressed as *optional* rather than expected, because
-// this one is genuinely engine-dependent and a fixed expectation for it would
-// be wrong on some engine whichever way it was written. Everything outside this
-// list is still matched by equality, so a new, undiagnosed id fails as before.
+// Per-state `incomplete` ids the docked pass tolerates whether or not the
+// current engine actually produces them. Held to the same rule as
+// `knownIncomplete` — a diagnosed finding with a written reason — but
+// expressed as *optional* rather than expected, because a fixed expectation
+// for it would be wrong on some engine whichever way it was written. This is
+// not the bucket for "docked-only": a deterministic docked-only finding is
+// still pinned by equality, just against `dockedKnownIncomplete` below
+// rather than the shared `knownIncomplete`. Everything outside both lists is
+// still matched by equality, so a new, undiagnosed id fails as before.
 //
 // menu-open / color-contrast (messageKey `bgOverlap`, on the current-time
 // `<time>`): a layout consequence of the composition, not a colour one, and not
@@ -317,13 +332,64 @@ const themes = [
 // chromium (308.9) and clear of it on firefox (293.4). So chromium returns the
 // text needs-review and firefox returns it clean, and both are right about the
 // same geometry. Absorbing it as expected would fail on firefox; expecting it
-// absent would fail on chromium.
+// absent would fail on chromium — genuinely engine-dependent, which is what
+// this bucket exists for.
 //
 // Nothing is hidden from a user by it: `<time>` is not focusable, so SC 2.4.11
-// is untouched, and the text sits behind a popup the reader opened. The
-// captions menu is narrower and its states clear the time on both engines.
+// is untouched, and the text sits behind a popup the reader opened.
 const dockedOptionalIncomplete: Readonly<Record<string, readonly string[]>> = {
   'menu-open': ['color-contrast']
+};
+
+// Per-state `incomplete` ids the docked pass expects in addition to
+// `knownIncomplete`, matched by equality exactly like it — as firmly pinned as
+// anything in the shared list, so a finding here disappearing, or a
+// different node starting to produce the same rule id, still fails the run.
+// The reason an entry lives here rather than in `knownIncomplete` is that it
+// is docked-only, never that it is unpinnable: `knownIncomplete` is asserted
+// against both passes below, and the headless pass genuinely does not
+// produce this id, so putting it there would fail headless instead.
+//
+// captions-menu-open / color-contrast: the same `align-items: center` cause
+// documented above for `menu-open` produces a second sub-finding here.
+//
+// The current-time `<time>` (messageKey `bgOverlap`): the captions menu box
+// is anchored to the captions trigger, well to the left of the settings
+// trigger, so it lands even more squarely over the centred scrubber row.
+// Measured on chromium and firefox: the menu spans x272-442 on both engines
+// (its position comes from the trigger's own layout, not from text runs),
+// and the current time's own centre — 308.9 on chromium, 293.4 on firefox —
+// falls inside that range on both, where the settings case above only put
+// chromium's centre inside its (differently positioned) menu. Deterministic
+// on both measured engines is why this is pinned here rather than carried in
+// `dockedOptionalIncomplete`.
+//
+// Webkit is unmeasured, not measured-and-agreeing: it cannot launch on the
+// machine this was diagnosed on (missing system libs), so this entry has
+// only ever been checked against two of the three engine projects
+// `playwright.config.ts` runs, and CI is the first place it meets webkit. If
+// CI shows webkit disagreeing — the id optional rather than fixed, or absent
+// outright — that is *measured* engine dependence, on the same grounds
+// `dockedOptionalIncomplete` above already exists for, and the fix is to move
+// this entry there with that evidence. Not to add a webkit skip, and not to
+// weaken the pin pre-emptively on the strength of a machine that cannot run
+// it at all.
+//
+// A second sub-finding is bundled under this same `color-contrast` rule id
+// (axe groups by rule, not by node): `[data-playdeck-part="caption-line"]`,
+// messageKey `elmPartiallyObscured` — the captions trigger's own hitbox
+// sitting over part of the caption text. It predates this change and is
+// unrelated to the captions menu; its full measurement is on #682, filed
+// separately. What belongs here: the same overlap is present with the menu
+// closed too — docked `captions-on`, above, asserts both buckets empty and
+// scans clean, which is the control proving it — so the geometry alone does
+// not make axe report it. Axe's spatial grid only subdivides finely enough
+// to catch this overlap once the captions menu's own DOM is present in the
+// tree; the rects themselves are identical either way. Fixing #682 would not
+// remove this entry regardless: the time-row overlap above is an independent,
+// sufficient reason for `color-contrast` to keep firing in this state.
+const dockedKnownIncomplete: Readonly<Record<string, readonly string[]>> = {
+  'captions-menu-open': ['color-contrast']
 };
 
 for (const theme of themes) {
@@ -393,8 +459,12 @@ for (const theme of themes) {
         //
         // Settings only. `.playdeck-example-menu` is what bounds a menu at
         // `max-height: 12rem; overflow-y: auto`, and the composition applies it
-        // to the settings menu alone — the captions menu takes no className, so
-        // it computes `overflow-y: visible` and cannot scroll at any item count.
+        // to the settings menu alone. The captions menu takes a className too
+        // (#467) — including `position: absolute` so it now opens upward from
+        // its trigger like the settings menu does — but it deliberately
+        // carries none of `.playdeck-example-menu`'s `flex-direction`,
+        // `max-height` or `overflow-y`, so it still computes
+        // `overflow-y: visible` and still cannot scroll at any item count.
         // `reference-player.tsx` records the same asymmetry against its own
         // height bound.
         if (state.open === 'settings') {
@@ -426,7 +496,7 @@ for (const theme of themes) {
       expect(results.violations).toEqual([]);
 
       // `results.incomplete` is axe's needs-review bucket: rules it could not
-      // conclusively pass or fail. Matching it against `knownIncomplete` (an
+      // conclusively pass or fail. Matching it against the expected set (an
       // equality, not a subset check) is what makes the WCAG 1.4.3
       // (color-contrast) claim over this state's text real rather than
       // parked: a new, undiagnosed rule id fails here instead of being
@@ -436,15 +506,28 @@ for (const theme of themes) {
       // `packages/react/src/index.tsx`). The states with a `knownIncomplete`
       // above carry a distinct, diagnosed finding that is not this example's
       // to fix; every other state is expected fully clean.
+      //
+      // The expected set is `knownIncomplete` for headless, and
+      // `knownIncomplete` plus `dockedKnownIncomplete[state.name]` for docked
+      // — both pinned by equality, same as each other — with
+      // `dockedOptionalIncomplete[state.name]` filtered out of the actual
+      // results first, before either engine's expectation is compared.
       const optionalIncomplete =
         theme.name === 'docked'
           ? (dockedOptionalIncomplete[state.name] ?? [])
           : [];
+      const expectedIncomplete =
+        theme.name === 'docked'
+          ? [
+              ...(state.knownIncomplete ?? []),
+              ...(dockedKnownIncomplete[state.name] ?? [])
+            ]
+          : (state.knownIncomplete ?? []);
       expect(
         results.incomplete
           .map((incomplete) => incomplete.id)
           .filter((id) => !optionalIncomplete.includes(id))
-      ).toEqual(state.knownIncomplete ?? []);
+      ).toEqual(expectedIncomplete);
     });
   }
 }

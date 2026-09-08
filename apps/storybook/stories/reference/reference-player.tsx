@@ -250,6 +250,42 @@ const layoutCss = `
   font-size: 0.875rem;
   text-align: left;
 }
+/* Paint plus placement, not the full .playdeck-example-menu class (#467).
+   Paint alone was measured insufficient: axe still reported bgOverlap with
+   background/border/border-radius and position: static, and neither
+   position: relative nor isolation: isolate changed that either — only
+   taking the box out of normal flow lets axe resolve a background for the
+   radio items behind it. position/bottom/right/z-index match
+   .playdeck-example-menu's own values, so the captions menu now opens
+   upward from its trigger exactly like the settings menu.
+
+   Still omitted: flex-direction: column, max-height and overflow-y (#467).
+   An unstyled menuitemradio group laying out as a row is correct for a
+   headless library, not a defect, so nothing here turns it into a column,
+   and the captions menu stays a non-scroller
+   (the primitive's default is unchanged). display: flex and min-width are
+   also omitted: nothing here needs the box wider than its content, and
+   without flex-direction: column there is nothing for display: flex to
+   arrange — the row above is the browser's own default inline-block flow
+   for the (still otherwise unstyled) button items, not something this rule
+   produces.
+
+   padding matches .playdeck-example-menu's 0.25rem: without it the box's
+   border would sit flush against the first and last item's own edges,
+   which reads as a mistake rather than a menu. CaptionsMenu spreads its
+   props onto SettingsMenu, the root wrapper, not onto SettingsMenuContent —
+   the part that needs this rule — so it is reached with a descendant
+   selector instead of a class on the content element directly. */
+.playdeck-example-captions [data-playdeck-part='settings-menu'] {
+  position: absolute;
+  bottom: calc(100% + 0.25rem);
+  right: 0;
+  z-index: 25;
+  padding: 0.25rem;
+  background: #11151c;
+  border: 1px solid #2a2f3a;
+  border-radius: 8px;
+}
 .playdeck-example-error {
   display: flex;
   flex-direction: column;
@@ -520,19 +556,26 @@ export const ReferencePlayer = ({
   // outside it is painted nowhere even when its rect is on-screen.
   //
   // Found by part rather than by class, so the CaptionsMenu preset's content is
-  // covered as well: it renders `SettingsMenuContent` itself and takes no
-  // className from here. That is also why the height bound is conditional. A
-  // bound costs reachability nothing only where the box can scroll to what the
-  // bound cuts off, and only the settings menu can: `.playdeck-example-menu`
-  // carries `overflow-y: auto`, the captions menu takes no className from here
-  // and so computes `overflow-y: visible` (measured). Bounding that one would
-  // clip items with no way to reach them — the very unreachability #413 is
-  // about. So the computed value is read and a non-scroller keeps its natural
-  // height, with only the shift applied to it. The limit that leaves is real
-  // and cannot be papered over here: a non-scrolling menu taller than the
-  // Viewport still cannot fit inside it. Today none is — the captions menu is a
-  // static, in-flow box in the control row with one text track — and giving it
-  // the composition's scrolling presentation is a separate change.
+  // covered as well: it renders `SettingsMenuContent` itself, reached from
+  // outside only through a descendant selector (#467) rather than a class on
+  // the content element directly, and now opens upward from its trigger the
+  // same way the settings menu does. That is also why the height bound is
+  // conditional. A bound costs reachability nothing only where the box can
+  // scroll to what the bound cuts off, and only the settings menu can:
+  // `.playdeck-example-menu` carries `overflow-y: auto`, the captions menu's
+  // rule (`.playdeck-example-captions`) deliberately sets no `overflow-y` —
+  // an unstyled menuitemradio group laying out as a row is correct for a
+  // headless library, not a defect (#467), so the row layout stays and the
+  // box stays a non-scroller — and so it still computes `overflow-y: visible`
+  // (measured).
+  // Bounding that one would clip items with no way to reach them — the very
+  // unreachability #413 is about. So the computed value is read and a
+  // non-scroller keeps its natural height, with only the shift applied to it.
+  // The limit that leaves is real and cannot be papered over here: a
+  // non-scrolling menu taller than the Viewport still cannot fit inside it.
+  // Today none is — the captions menu holds one "Off" entry plus one text
+  // track — and giving it the composition's scrolling presentation is a
+  // separate change.
   //
   // Both properties are cleared before measuring, so each pass reads the
   // stylesheet's own placement rather than the previous pass's answer and can
@@ -608,11 +651,16 @@ export const ReferencePlayer = ({
     // therefore passes through it.
     //
     // Observing it is only safe because a pass cannot resize it. `translate`
-    // never affects layout, and the one menu a pass gives a `max-height` to is
-    // `position: absolute`, so its height reaches nothing outside itself
-    // (measured: bounding it fires neither a frame nor a Viewport observer,
-    // while doing the same to the in-flow captions menu fires both — that menu
-    // is left alone for the reason above, which closes this loop as well).
+    // never affects layout, and the one menu a pass ever gives a `max-height`
+    // to — the settings menu, the only scroller — is `position: absolute`, so
+    // its height reaches nothing outside itself (measured: bounding it fires
+    // neither a frame nor a Viewport observer). The captions menu is
+    // `position: absolute` too now (#467), so bounding it would carry the
+    // same guarantee, but nothing ever does: it stays a non-scroller by
+    // design (`overflow-y: visible` — #467's ruling that an unstyled
+    // menuitemradio group laying out as a row is correct for a headless
+    // library), so the scroller-only condition above keeps it out regardless
+    // of either menu's positioning.
     //
     // That leaves one gap — a text-size change at a width where the Viewport is
     // ratio-locked resizes the menu without resizing the frame — which no test
@@ -685,8 +733,12 @@ export const ReferencePlayer = ({
                 <Player.CaptionsIcon />
               </Player.CaptionsButton>
               {/* Default children: CaptionsMenu's own trigger already renders
-                  CaptionsIcon, not a text label. */}
-              <Player.CaptionsMenu />
+                  CaptionsIcon, not a text label. The className lands on
+                  CaptionsMenu's root wrapper (it spreads {...props} onto
+                  SettingsMenu, not onto SettingsMenuContent), so the rule
+                  above reaches the content through a descendant selector
+                  (#467). */}
+              <Player.CaptionsMenu className="playdeck-example-captions" />
               <ExampleSettingsMenu />
               <Player.PipButton className="playdeck-example-fold">
                 {state.pictureInPicture ? (
