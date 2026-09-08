@@ -62,14 +62,32 @@ type Row = {
  * sampled has to be the whole control, thumb included, so the clip is the
  * input — but the two surfaces the thumb is measured against are painted by
  * `seek-buffered`, a 6px bar (0.375rem; it was 0.25rem, 4px, before #613 grew
- * the default) that does NOT sit on the input's own centre line. Measured on
- * this story under pinned Playwright (1.61.1), as row offsets inside the
- * input's box: the bar occupies rows 19-24 on Blink, measured 2026-09-08.
- * When this comment was introduced, 2026-08-24, it was recorded at rows
- * 22-25 on Blink and Gecko and rows 23-26 on WebKit; Gecko and WebKit were
- * not re-measured today and still carry that figure. Against an input centre
- * of row 22, sampling the input's centre therefore reads the engine's own
- * track on WebKit and never the theme's bar at all.
+ * the default). Re-measured on this story under pinned Playwright (1.61.1),
+ * 2026-09-08, as row offsets inside the input's box: the bar now occupies
+ * rows 19-24 on both Blink and Gecko, against an input centre of row 22 — so
+ * the bar covers the centre row on both engines.
+ *
+ * It did not always. When this comment was introduced, 2026-08-24, the
+ * figure was rows 22-25 on Blink and Gecko and rows 23-26 on WebKit: the bar
+ * still reached the centre row on the first two, but only just — row 22 was
+ * its top edge, and the bar's own centre sat 2px lower — while WebKit's
+ * missed the centre row altogether. Before #597 (fixing #541) a range input was
+ * inline-level, so `seek-slider` ran taller than the input by the line box's
+ * descender space while `seek-buffered` centres on that container — a gap
+ * between the two centres that was a function of the inherited font. #597
+ * put `display: block` on the input, collapsing container onto input and
+ * recentring the bar; #613 then grew the bar from 4px to 6px. The two
+ * changes compose into the asymmetry #692 traced: at the top edge, 2px up
+ * from recentring and 1px from growth net to 3px; at the bottom edge, 2px up
+ * and 1px back net to 1px.
+ *
+ * WebKit was not re-measured today — it cannot launch on the development
+ * machine, so CI's matrix is the only instrument for it — and still carries
+ * its 2026-08-24 figure of rows 23-26. The cause above is layout-level
+ * rather than an engine paint quirk, so WebKit very likely moved the same
+ * way, but that is unverified. On its recorded figure, sampling the input's
+ * centre therefore reads the engine's own track on WebKit and never the
+ * theme's bar at all.
  */
 const centreRow = async (
   page: Page,
