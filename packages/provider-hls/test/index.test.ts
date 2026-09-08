@@ -9,7 +9,7 @@ import type {
 import { createSeekingVideo } from '@playdeck/test-support/seeking-video';
 import { createHlsProvider } from '../src/index';
 import { HLS_JS_ELEMENT_ERROR_TIMEOUT_MS } from '../src/error-recovery';
-import { captureRethrows } from './fixtures/capture-rethrows';
+import { captureRethrows } from '@playdeck/test-support/capture-rethrows';
 import { FakeHls, fakeHlsLoader } from './fixtures/fake-hls';
 
 const source = { type: 'hls', src: '/hls/master.m3u8' } as const;

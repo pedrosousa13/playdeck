@@ -2,7 +2,7 @@
 
 import { expect, test } from 'vitest';
 import { PlayerController } from '@playdeck/core';
-import { captureRethrows } from './fixtures/capture-rethrows';
+import { captureRethrows } from '@playdeck/test-support/capture-rethrows';
 import { createFakeTrack } from '@playdeck/test-support/fake-text-tracks';
 import { latest, mountNative } from './fixtures/fake-text-tracks';
 

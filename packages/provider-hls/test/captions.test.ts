@@ -2,7 +2,7 @@
 
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createHlsProvider, type HlsSubtitleTrackLike } from '../src/index';
-import { captureRethrows } from './fixtures/capture-rethrows';
+import { captureRethrows } from '@playdeck/test-support/capture-rethrows';
 import { FakeHls, fakeHlsLoader } from './fixtures/fake-hls';
 import {
   createFakeTrack,
