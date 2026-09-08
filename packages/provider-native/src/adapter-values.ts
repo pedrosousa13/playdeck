@@ -3,6 +3,7 @@ import type {
   CommandResult,
   PlayerError,
   PlayerEventDetailMap,
+  PlayerEventOrigin,
   PlayerEventType,
   ProviderEvent,
   ProviderEventFor,
@@ -26,14 +27,19 @@ export type EmitProviderState = (
   event?: ProviderEvent
 ) => (() => void) | undefined;
 
+// `origin` defaults to `'provider'`, what every raw DOM media event is: the
+// element, not a Playdeck command, produced it. `restartFromBoundary` in
+// `playback.ts` is the one caller that passes `'system'` instead, for the one
+// event it raises itself rather than the element -- see the comment there.
 export const providerEvent = <Type extends PlayerEventType>(
   type: Type,
   originalEvent: Event,
-  detail: PlayerEventDetailMap[Type]
+  detail: PlayerEventDetailMap[Type],
+  origin: PlayerEventOrigin = 'provider'
 ): ProviderEventFor<Type> => ({
   type,
   detail,
-  origin: 'provider',
+  origin,
   originalEvent
 });
 

@@ -356,18 +356,25 @@ export const libraries = [
     composition: 'core + native provider, no control parts',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 21267 bytes measured 2026-09-15 -- 20.7685546875 KB, 20.77 KB to two
+    // 21520 bytes measured 2026-09-19 -- 21.015625 KB, 21.02 KB to two
     // places, rounded up to the next 0.25 KB. See the `libraries` doc
-    // comment above for what raising this means. The growth from 20.75 KB
-    // (#659's own committed figure, main's own ceiling before #662's
-    // `providers` prop merged into this branch) is #662's provider seam:
+    // comment above for what raising this means. What carried this row past
+    // 21.00 KB is #673's loop-restart attribution: `restartFromBoundary`
+    // (`provider-native/src/playback.ts`) now marks its own `play` so the
+    // viewport's ownership survives a wrap, and the provider-event helper
+    // (`adapter-values.ts`) carries that origin through. Both sit in the
+    // native provider, which this composition includes by definition, so
+    // the cost lands here rather than only on the compositions that render
+    // parts. Only part of the distance from the last committed figure is
+    // this issue's: that figure was 21267 bytes measured 2026-09-15, and
+    // `results.md` on `main` last measured this row at 20.96 KB on
+    // 2026-09-17, so the rest accrued there without breaching. The
+    // 2026-09-15 raise was #662's provider seam:
     // `detectSourceWithProviders`'s allowlist walk over a `detect` return
     // (`everyStringPermitted`, `provider-loaders.ts`) and its cycle guard,
     // which every composition below reaches regardless of which parts it
-    // renders -- the guard's own `seen.delete` bookkeeping, needed so it
-    // declines a genuine cycle without also refusing an acyclic diamond,
-    // added a further 18 bytes on top of the figure first measured for it.
-    ceilingKb: 21
+    // renders.
+    ceilingKb: 21.25
   },
   {
     name: 'Playdeck',
@@ -393,16 +400,21 @@ export const libraries = [
       'core + primitives + native provider + one control (PlayButton)',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 23046 bytes measured 2026-09-15 -- 22.505859375 KB, 22.51 KB to two
-    // places, rounded up to the next 0.25 KB. This row previously held at
-    // 22.5 KB (#659's own committed figure): its earlier #662 measurement,
-    // 23039 bytes, was 22.4990234375 KB, genuinely one byte under that
-    // ceiling despite `results.md` displaying both figures as "22.50". The
-    // cycle guard's own `seen.delete` bookkeeping -- described on the "no
-    // parts" row above, needed so it declines a genuine cycle without also
-    // refusing an acyclic diamond -- added 7 bytes, which is enough to cross
-    // that byte-under margin and require this raise.
-    ceilingKb: 22.75,
+    // 23302 bytes measured 2026-09-19 -- 22.755859375 KB, 22.76 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 22.75 KB is #673's loop-restart attribution, the same change described
+    // on the "no
+    // parts" row above: it lands in the native provider, which this
+    // composition also includes, so both rows move together. As there, only
+    // part of the distance from the last committed figure is this issue's
+    // -- that figure was 23046 bytes measured 2026-09-15, and `results.md`
+    // on `main` last measured this row at 22.69 KB on 2026-09-17. That row
+    // had held at 22.5 KB (#659's own committed figure): its earlier #662
+    // measurement, 23039 bytes, was 22.4990234375 KB, genuinely one byte
+    // under that ceiling despite `results.md` displaying both figures as
+    // "22.50", and the #662 cycle guard's `seen.delete` bookkeeping added
+    // the 7 bytes that crossed it.
+    ceilingKb: 23,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
