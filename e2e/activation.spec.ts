@@ -367,6 +367,51 @@ test('a player auto-paused by leaving the viewport resumes when it scrolls back 
   await expect(play).toHaveAttribute('data-state', 'playing');
 });
 
+// #695: a single re-entry cannot observe this bug, because the resume
+// itself still happens -- it is issued off `'auto-paused'`, which #309's
+// guard still recognises correctly at that crossing. The defect was in what
+// the resume left behind: `playbackOwnership` silently fell to `'none'` once
+// the resumed play's `'autoplay'` origin was consumed by a patch that could
+// not carry it and resolved as `'provider'`. Nothing about that shows up at
+// the resume itself -- `'none'` and `'auto-paused'` both read as `"playing"`
+// right then. It only surfaces on the *next* exit: with ownership at
+// `'none'`, the player behaves exactly as designed for a viewer-owned player
+// (see 'a player the viewer takes over from autoplay keeps playing when it
+// scrolls out of view' below) and never auto-pauses again. That the first
+// crossing stays clean is #695's own evidence rather than an assumption: its
+// WebKit run confirms the exit pause at 0.695 as `'autoplay'`, so the first
+// autoplay's origin survived and only the resume's was lost.
+//
+// Demonstrated red, by substitute mutation. WebKit cannot launch on the
+// development machine, and on chromium this passes with or without the fix,
+// so `provider-native`'s `onPlay` was made to emit `onPlaying`'s eventless
+// `{ playback: 'playing' }` ahead of its own patch, reproducing the
+// `playing`-before-`play` interleaving on an engine that does not produce
+// it. With that mutation and `player-controller.ts`'s gate reverted, the
+// last assertion below fails on chromium: `expect(locator)
+// .toHaveAttribute` expected "paused", received "playing", 5000ms timeout.
+// With the gate restored it passes. The mutation is coarser than the defect
+// -- it double-emits on every play, not only on a resume -- so it also
+// reddens the single-re-entry neighbour above, which the real WebKit
+// behaviour does not.
+test('a player resumed by re-entering the viewport still auto-pauses on the next exit', async ({
+  page
+}) => {
+  await page.goto(viewportScrollStory);
+  const play = await mountedPlayButton(page);
+
+  await scrollPlayerIntoView(page);
+  await expect(play).toHaveAttribute('data-state', 'playing');
+  await scrollPlayerOutOfView(page);
+  await expect(play).toHaveAttribute('data-state', 'paused');
+
+  await scrollPlayerIntoView(page);
+  await expect(play).toHaveAttribute('data-state', 'playing');
+
+  await scrollPlayerOutOfView(page);
+  await expect(play).toHaveAttribute('data-state', 'paused');
+});
+
 test('a player the viewer takes over from autoplay keeps playing when it scrolls out of view', async ({
   page
 }) => {
