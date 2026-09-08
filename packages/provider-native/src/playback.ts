@@ -219,6 +219,46 @@ export const createNativePlayback = (
   // not always the value it wrote. See `onTimeUpdate`.
   let correctionLandedAt: number | undefined;
   let replayGeneration = 0;
+  // The generation of whichever `restartFromBoundary` call is currently
+  // waiting on its own `media.play()` to produce the `play` event it means to
+  // label `'system'` -- `undefined` when none is. Set from the LOCAL
+  // `generation` a restart already captured, not a bare flag, because two
+  // calls can overlap (#673: `onTimeUpdate`'s boundary branch re-triggers on
+  // every `timeupdate` while a declined seek leaves `currentTime` at or past
+  // `endTime`, so a second restart can start before an earlier one's
+  // `media.play()` has settled), and `play()`'s returned promise settles when
+  // playback actually begins, not when the `play` event fires -- an unbounded
+  // window an overlapping restart's own event can easily land inside.
+  //
+  // Two things follow from that, and both matter:
+  //
+  // - `onPlay` reads AND clears this, rather than each call's own `finally`
+  //   doing the clearing: an earlier restart's `media.play()` can settle
+  //   -- and run its `finally` -- before a LATER restart's own `play` event
+  //   has fired, and a `finally` that cleared unconditionally would erase a
+  //   generation that still describes an event yet to come.
+  // - Each call's `finally` only clears a generation that is still its own
+  //   (`restartingGeneration === generation`): an overlapping later restart
+  //   may already have overwritten this with its own (newer) generation by
+  //   the time an earlier one settles, and that earlier call's settling must
+  //   not erase a flag it no longer owns.
+  //
+  // `onPlay` also re-validates against the live `replayGeneration`, not only
+  // definedness: a value left over from a restart that a later, unrelated
+  // operation (`pause`, `retry`, a seek, an error -- everything else that
+  // bumps `replayGeneration`) has since superseded no longer describes
+  // whatever plays next, even where nothing explicitly cleared it.
+  //
+  // This does not, and does not need to, tell a restart's play apart from one
+  // an API caller issues through the controller: that call's own origin is
+  // decided by `player-controller.ts`'s pending-origin machinery, which
+  // overrides whatever this would have said (`confirmedPlaybackOrigin ??
+  // event.origin`, in `setProvider`'s subscribe callback). A viewer or API
+  // play can only reach a paused element by way of a real pause first, which
+  // already drops `playbackOwnership` to `'none'` in `use-activation.ts`
+  // regardless of this -- so the two directions of mislabelling are not
+  // symmetric, and only the one above needed fixing.
+  let restartingGeneration: number | undefined;
   // A counter of its own rather than a reuse of `replayGeneration`: that one
   // guards the boundary loop's deferred `play()`, and bumping it on every seek
   // would also cancel a legitimate in-flight loop replay a seek happens to
@@ -358,6 +398,7 @@ export const createNativePlayback = (
     emit({ currentTime: restartTime, buffering: false });
     void Promise.resolve().then(async () => {
       if (isDestroyed() || generation !== replayGeneration) return;
+      restartingGeneration = generation;
       try {
         await media.play();
       } catch (cause) {
@@ -370,6 +411,14 @@ export const createNativePlayback = (
           seeking: false,
           error: failure.error
         });
+      } finally {
+        // Only clear a generation this very call set -- see the comment
+        // above `restartingGeneration`. A rejected `play()` fires no `play`
+        // event to consume it in `onPlay`, so this is that path's own net;
+        // a successful one is ordinarily already consumed there well before
+        // this runs.
+        if (restartingGeneration === generation)
+          restartingGeneration = undefined;
       }
     });
   };
@@ -377,13 +426,24 @@ export const createNativePlayback = (
   const onPlay = (originalEvent: Event): void => {
     boundaryEnded = false;
     seekingFromEnded = false;
+    // Consume-once, and re-validated against the live generation rather than
+    // mere definedness -- see the comment above `restartingGeneration`. This
+    // is the one read that counts, and it clears the field immediately so a
+    // later, unrelated `play` is never mislabelled by a generation this event
+    // has already spent.
+    const origin =
+      restartingGeneration !== undefined &&
+      restartingGeneration === replayGeneration
+        ? 'system'
+        : undefined;
+    restartingGeneration = undefined;
     emit(
       {
         playback: 'playing',
         buffering: false,
         currentTime: media.currentTime
       },
-      providerEvent('play', originalEvent, undefined)
+      providerEvent('play', originalEvent, undefined, origin)
     );
   };
   const onPlaying = (): void => {
@@ -391,6 +451,19 @@ export const createNativePlayback = (
   };
   const onPause = (originalEvent: Event): void => {
     if (boundaryEnded) return;
+    // A native `loop`-less element pauses itself, and fires this event, the
+    // moment it reaches its natural end -- before the `ended` event that
+    // reaches `onEnded` below and, when `loop` is configured, restarts it
+    // immediately (#673). `boundaryEnded` cannot guard this one: it is only
+    // ever set from the non-loop branch of `onEnded`, which has not run yet
+    // when this fires, so a looping player's every wrap published a transient
+    // `'provider'`-origin pause of its own -- indistinguishable from a viewer
+    // pressing pause, and enough on its own to read as a takeover before the
+    // loop's `play` event ever arrived. `media.ended` is what tells the two
+    // apart: true here only for the natural-end pause a loop is about to
+    // restart from, false for a real one -- a viewer's own pause, mid-clip,
+    // never reaches `media.ended`.
+    if (loop && media.ended) return;
     emit(
       { playback: 'paused' },
       providerEvent('pause', originalEvent, undefined)

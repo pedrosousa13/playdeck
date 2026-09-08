@@ -1020,19 +1020,29 @@ export const useActivation = (
   // is set only by this hook's own `controller.playWithOrigin('autoplay')`
   // (the re-entry resume below) and by `Root`'s own autoplay attempt, which is
   // what a `loading: 'viewport'` session with `autoplay` set arms in the first
-  // place. Any other origin -- `'user'`, `'api'`, `'provider'`, `'system'` --
-  // means a viewer or a caller took the wheel, and ownership drops to
-  // `'none'` so a later exit leaves that playback alone. `pause` is the mirror
-  // image: only a pause carrying the `'autoplay'` origin is this hook's own,
-  // recorded as `'auto-paused'` so a later re-entry knows there is something
-  // of its own to resume; every other pause -- a viewer pressing the button
-  // included -- is a deliberate stop that re-entry must never override.
-  // `ended` always returns to `'none'`: there is nothing left running for a
-  // later exit to pause, and nothing paused for a later re-entry to resume.
+  // place. Any other origin -- `'user'`, `'api'`, `'provider'` -- means a
+  // viewer or a caller took the wheel, and ownership drops to `'none'` so a
+  // later exit leaves that playback alone. `pause` is the mirror image: only
+  // a pause carrying the `'autoplay'` origin is this hook's own, recorded as
+  // `'auto-paused'` so a later re-entry knows there is something of its own
+  // to resume; every other pause -- a viewer pressing the button included --
+  // is a deliberate stop that re-entry must never override. `ended` always
+  // returns to `'none'`: there is nothing left running for a later exit to
+  // pause, and nothing paused for a later re-entry to resume.
+  //
+  // `'system'` is neither (#673): it is `provider-native`'s own label for a
+  // loop restart's `play` event -- `restartFromBoundary` in `playback.ts`
+  // continuing playback it started, not a new play the viewer took over
+  // with. Ownership must survive the wrap rather than being reset OR
+  // (re-)granted by it, so a `'system'` play is read here and left alone:
+  // whatever ownership already stood -- `'autoplaying'` for a viewport
+  // session still crossing its own boundaries, `'none'` for one a viewer
+  // already took over -- carries forward unchanged.
   useEffect(() => {
     if (options.loading !== 'viewport') return;
     const controller = options.controller;
     const unsubscribePlay = controller.on('play', (event) => {
+      if (event.origin === 'system') return;
       session.current.playbackOwnership =
         event.origin === 'autoplay' ? 'autoplaying' : 'none';
     });

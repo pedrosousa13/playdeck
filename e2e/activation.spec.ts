@@ -407,3 +407,64 @@ test('a player a viewer paused deliberately stays paused across a scroll out and
   await scrollPlayerIntoView(page);
   await assertPlaybackHolds(page, 'paused');
 });
+
+// #673: `ViewportAutoplayScrollLoopMuted` (`player-fixture.stories.tsx`) is
+// the same tall scroll page as `viewportScrollStory` above, but `loop: true`
+// on the 1s default tracer rather than `endTime`-less 10s `long` one -- short
+// enough to wrap on its own, more than once, while a spec holds it in view.
+const viewportScrollLoopStory =
+  '/iframe.html?id=fixtures-playerfixture--viewport-autoplay-scroll-loop-muted&viewMode=story';
+
+// Polls `PlayerState.currentTime` for a drop -- the playhead going backward
+// is what a loop restart looks like from outside, real playback advancing
+// forward the rest of the time -- rather than a fixed wait, so this cannot
+// race the clip's own ~1s length under load. `getState` off
+// `window.playdeckHandle`, the same instrument `e2e/buffered-real.spec.ts`
+// and others already read `currentTime` through.
+const waitForLoopWrap = async (page: Page): Promise<void> => {
+  let previous = await page.evaluate(
+    () => window.playdeckHandle?.getState().currentTime ?? 0
+  );
+  await expect
+    .poll(
+      async () => {
+        const current = await page.evaluate(
+          () => window.playdeckHandle?.getState().currentTime ?? 0
+        );
+        const wrapped = current < previous;
+        previous = current;
+        return wrapped;
+      },
+      { timeout: 5_000 }
+    )
+    .toBe(true);
+};
+
+// The bug's own shape: `restartFromBoundary` (`provider-native/src/playback.ts`)
+// used to play the media directly, so the loop's own `play` event carried the
+// `'provider'` origin and #309's ownership rule read it as a viewer taking
+// over -- correct on the first exit, and never auto-pausing again after the
+// player had looped even once. This crosses the viewport boundary twice
+// (`scrollPlayerOutOfView` at each half), with a loop wrap awaited in between
+// both, so a fix that only survived the first wrap would still fail the
+// second.
+test('a looping viewport-autoplayed player auto-pauses on every exit, even after it has wrapped', async ({
+  page
+}) => {
+  await page.goto(viewportScrollLoopStory);
+  const play = await mountedPlayButton(page);
+
+  await scrollPlayerIntoView(page);
+  await expect(play).toHaveAttribute('data-state', 'playing');
+  await waitForLoopWrap(page);
+
+  await scrollPlayerOutOfView(page);
+  await expect(play).toHaveAttribute('data-state', 'paused');
+
+  await scrollPlayerIntoView(page);
+  await expect(play).toHaveAttribute('data-state', 'playing');
+  await waitForLoopWrap(page);
+
+  await scrollPlayerOutOfView(page);
+  await expect(play).toHaveAttribute('data-state', 'paused');
+});

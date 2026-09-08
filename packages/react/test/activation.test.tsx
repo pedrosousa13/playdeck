@@ -611,6 +611,19 @@ const playEvent = {
   detail: undefined,
   origin: 'provider'
 } as const;
+// What a loop restart's `play` event looks like by the time it reaches this
+// hook (#673): `provider-native`'s `restartFromBoundary` calls `media.play()`
+// directly, never through `playWithOrigin`, so there is no pending origin for
+// the controller to confirm against and `'system'` -- the origin
+// `providerEvent` in that package's `adapter-values.ts` labels that one event
+// with -- passes straight through. Emitted with no preceding `playWithOrigin`
+// call, unlike `playAs` below, for the same reason: a loop restart is not
+// this hook's own command either.
+const loopRestartPlayEvent = {
+  type: 'play',
+  detail: undefined,
+  origin: 'system'
+} as const;
 const pauseEvent = {
   type: 'pause',
   detail: undefined,
@@ -861,6 +874,80 @@ test('a later exit does not pause once a viewer has taken over playback', async 
   await playAs(controller, fake, 'autoplay');
 
   await playAs(controller, fake, 'user');
+
+  act(() =>
+    observer.intersect({ isIntersecting: false, intersectionRatio: 0 })
+  );
+  await act(async () => undefined);
+
+  expect(pauseWithOrigin).not.toHaveBeenCalledWith('autoplay');
+});
+
+// #673: before the fix, `playbackOwnership`'s `play` listener read any origin
+// but `'autoplay'` as a takeover, `'system'` included, so a looping player's
+// very first wrap handed ownership away and no exit after it ever paused the
+// player again -- the bug the issue is named for. This is the regression that
+// matters most: it is a default `pnpm test` run, not an `@real` one, so it is
+// the assertion that has to fail on its own where an `@real`-only one would
+// not have (`docs/agents/demonstrated-red.md`).
+test("a loop restart's play event does not release ownership from the viewport", async () => {
+  const { controller, fake, observer, pauseWithOrigin } =
+    await setUpViewportPlayback();
+  await playAs(controller, fake, 'autoplay');
+
+  act(() => fake.emit({ playback: 'playing' }, loopRestartPlayEvent));
+
+  act(() =>
+    observer.intersect({ isIntersecting: false, intersectionRatio: 0 })
+  );
+
+  await vi.waitFor(() =>
+    expect(pauseWithOrigin).toHaveBeenCalledExactlyOnceWith('autoplay')
+  );
+});
+
+// Beyond the first wrap: ownership has to survive every loop, not just one,
+// or a player that wrapped twice would still go dark on the second exit.
+test('a looping viewport-autoplayed player auto-pauses on every exit, not only the first', async () => {
+  const { controller, fake, observer, playWithOrigin, pauseWithOrigin } =
+    await setUpViewportPlayback();
+  await playAs(controller, fake, 'autoplay');
+  act(() => fake.emit({ playback: 'playing' }, loopRestartPlayEvent));
+
+  act(() =>
+    observer.intersect({ isIntersecting: false, intersectionRatio: 0 })
+  );
+  await vi.waitFor(() =>
+    expect(pauseWithOrigin).toHaveBeenCalledExactlyOnceWith('autoplay')
+  );
+  act(() => fake.emit({ playback: 'paused' }, pauseEvent));
+
+  act(() => observer.intersect());
+  await vi.waitFor(() =>
+    expect(playWithOrigin).toHaveBeenNthCalledWith(2, 'autoplay')
+  );
+  act(() => fake.emit({ playback: 'playing' }, playEvent));
+  act(() => fake.emit({ playback: 'playing' }, loopRestartPlayEvent));
+
+  act(() =>
+    observer.intersect({ isIntersecting: false, intersectionRatio: 0 })
+  );
+
+  await vi.waitFor(() =>
+    expect(pauseWithOrigin).toHaveBeenNthCalledWith(2, 'autoplay')
+  );
+});
+
+// The mirror of the two tests above: a loop restart must not grant ownership
+// either, only preserve whatever already stood. A viewer who pressed the
+// native controls owns the playback that loops from then on, exactly as they
+// would own one that never looped at all.
+test('a viewer-controlled loop restart does not hand ownership back to the viewport', async () => {
+  const { controller, fake, observer, pauseWithOrigin } =
+    await setUpViewportPlayback();
+  await playAs(controller, fake, 'user');
+
+  act(() => fake.emit({ playback: 'playing' }, loopRestartPlayEvent));
 
   act(() =>
     observer.intersect({ isIntersecting: false, intersectionRatio: 0 })
