@@ -12,7 +12,7 @@
 // `PauseIcon` twice for one control that names neither in the issue's own
 // composition.
 //
-// This row sits between `playdeck.tsx` (no control parts) and
+// This row sits between `playdeck.tsx` (one `ActivationButton`) and
 // `playdeck-control-bar.tsx` (five parts): it is the composition that makes
 // "only what you use loads" checkable against a number, rather than the
 // direct comparison for any other library's own row -- see
