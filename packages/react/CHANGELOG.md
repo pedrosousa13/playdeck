@@ -1,5 +1,271 @@
 # @playdeck/react
 
+## 1.1.0
+
+### Minor Changes
+
+- f6bf30b: Add `@playdeck/react/docked.css`, a second theme, and give both themes one control-bar contract
+
+  `docked.css` docks the control bar under the picture instead of overlaying it,
+  never auto-hides, and carries its own light and dark colour defaults. It is a
+  separate stylesheet rather than a variant of `theme.css`, and the two must not
+  be loaded on the same document: both open `@layer playdeck`, so two files
+  declaring that layer merge into one and compete for the selectors they share on
+  source order alone. Import one or the other.
+
+  `theme.css` also gains an auto-hiding, wrapping control bar. The bar splits onto
+  its own row for the seek slider below 48rem, the volume slider expands on hover
+  or focus instead of taking up permanent width, and the whole bar fades after
+  2500ms of no input while playing.
+
+  Alongside them, three fixes to `theme.css`: the seek and volume thumbs now sit
+  on their own track instead of drifting with the consumer's inherited font
+  (#541); the activation part's size is now a floor a consumer's own sizing and
+  label can grow past, rather than a fixed value that clipped or silently
+  overrode them (#552); and a bare player with no stylesheet no longer paints the
+  browser's own button face over its poster (#555).
+
+  That last fix changes what a consumer's own CSS can reach, which is why this is
+  a minor rather than a patch. `ActivationButton` now writes its fill and border
+  as inline styles that read `--playdeck-activation-fill` and
+  `--playdeck-activation-border`, so a plain `background` or `border` declaration
+  written against `[data-playdeck-part='activation']` in a stylesheet no longer
+  lands — an inline declaration beats any stylesheet, whatever its specificity.
+  Set the two custom properties instead, from anywhere the button inherits them:
+
+  ```css
+  [data-playdeck-part='activation'] {
+    --playdeck-activation-fill: #fff;
+    --playdeck-activation-border: 1px solid #0003;
+  }
+  ```
+
+  A `style` prop passed to `ActivationButton` is unaffected: it is spread after
+  the primitive's own styles and still wins.
+
+- d36f242: Remove `loadIframeApi` from the YouTube provider option bag
+
+  `PlayerProviderOptions['youtube']` accepted `loadIframeApi`, a function, even
+  though every other provider bag was guarded to primitives (#579 left this one
+  bag aside for its own decision). `providerOptionsEqual` compares a bag's own
+  keys with `Object.is`, which a function can never satisfy for a fresh value —
+  so `providerOptions={{ youtube: { loadIframeApi: () => ... } }}` written
+  inline, a new function every render, retired the YouTube activation and
+  rebuilt its embed on every render, losing playback position, exactly the
+  hazard #579 closed for `hls`.
+
+  `loadIframeApi` is now reachable only on `YouTubeProviderOptions` itself, the
+  provider's own documented test seam, by mounting `createYouTubeProvider`
+  directly:
+
+  ```tsx
+  import { createYouTubeProvider } from '@playdeck/provider-youtube';
+
+  createYouTubeProvider(mount, videoId, { loadIframeApi: fakeLoader });
+  ```
+
+  A `Player.Root` consumer who was passing `loadIframeApi` through
+  `providerOptions.youtube` now gets a type error at that key: this removes a
+  previously accepted public option, not just its runtime behaviour. It ships in
+  a minor because no released version of Playdeck has a consumer to break.
+  `host` remains the bag's one key, unaffected.
+
+  There is no consumer-facing, data-shaped replacement for choosing how the
+  iframe API loads — unlike `hls`'s `build`, nothing in `youtube`'s own options
+  names a choice to select between — so none is added here. One would be
+  expressed as data, the way `build` is, if a real need for it turns up.
+
+- 2096dc1: Pause viewport-started playback on exit, resume it on re-entry
+
+  `loading: 'viewport'` activated a provider on first intersection and, with
+  autoplay, started playback there — but the `IntersectionObserver` behind it
+  latched once both gates were crossed and never acted on a later crossing, so a
+  player that scrolled out of view kept playing indefinitely, and scrolling back
+  did nothing either way (#309).
+
+  The observer now lives for the whole session under `loading: 'viewport'`
+  instead of self-disconnecting. It reads a new `playbackOwnership` record —
+  `'none'`, `'autoplaying'` or `'auto-paused'` — kept by watching the controller's
+  own `play` and `pause` events for the `'autoplay'` origin `#playWithOrigin`
+  already threads: exit pauses playback only while ownership reads
+  `'autoplaying'`, and re-entry resumes it only while ownership reads
+  `'auto-paused'`. Resumed playback is issued under the same `'autoplay'` origin,
+  so a later exit still recognises it as the viewport's to pause.
+
+  This is new behaviour under an existing default, not a new prop, so it is a
+  minor bump rather than a major one — but it is a real behaviour change a
+  consumer should know about. **A player that autoplayed by scrolling into view
+  and was relied on to keep playing offscreen will now stop** the moment it
+  leaves the viewport. **A viewer's own play or pause is never overridden**: only
+  playback the viewport itself started is paused on exit, and only a pause the
+  viewport itself issued is resumed on re-entry — a viewer who presses play
+  before scrolling away is left running, and a viewer who pauses deliberately is
+  never resumed by scrolling back.
+
+  Only `loading: 'viewport'` is affected. `'eager'` and `'interaction'` start
+  playback the viewport never owns, so neither is touched.
+
+- 687260f: Read the seek slider's touch-target floor from `--playdeck-seek-slider-min-block-size`, not a literal 44
+
+  The wrapper `Player.SeekSlider` renders and the range input inside it both set
+  `minHeight: 44` as an inline style, so a theme could not shrink the seek row
+  below 44px the way `--playdeck-control-size` already lets it shrink the
+  button row (#598) — an inline style beats any stylesheet, and a literal has
+  no token underneath it for a stylesheet to override.
+
+  Both now read `var(--playdeck-seek-slider-min-block-size, 2.75rem)` instead,
+  the same move #598 made for every button-shaped control's own target. The
+  default is unchanged: a bare consumer with no stylesheet loaded still gets a
+  44px floor. `theme.css` and `docked.css` set the token to `1.5rem` — the WCAG
+  2.5.8 minimum — in their own "below 48rem" query, independently of the
+  button-row size, so the bar's own height can come down on a phone without
+  shrinking the button row's 40px target underneath it.
+
+- f42f118: Read the button row's touch-target floor from `--playdeck-control-min-size`, not `--playdeck-control-size`
+
+  `controlTargetStyle`'s inline `minWidth`/`minHeight` and every button-shaped
+  part's `inline-size`/`block-size` class rule read the same token,
+  `--playdeck-control-size`. That let a consumer's own override of the token
+  shrink the floor along with the size, so the documented 44px minimum touch
+  target (Theme.mdx: "a smaller value is clamped up rather than obeyed") did
+  not hold — measured directly, `--playdeck-control-size: 2.25rem` on an
+  ancestor produced a 36px control, not a 44px one clamped up.
+
+  `controlTargetStyle` now reads `var(--playdeck-control-min-size, 2.75rem)`
+  instead, a token neither stylesheet declares on its own. The default is
+  unchanged: a bare consumer with no stylesheet loaded still gets a 44px
+  floor, and `--playdeck-control-size` alone can no longer undercut it.
+  `theme.css` and `docked.css` set the new token to `2.5rem` alongside
+  `--playdeck-control-size` in their own "below 48rem" query, so the phone
+  row-two fix (#598) that shrinks the button row to a 40px target is
+  unaffected — that query is the one place besides the desktop default that
+  moves the floor.
+
+- dc71c32: Select an hls.js build through `Player.Root`
+
+  `createHlsProvider` has always taken `loadHls`, for pinning an hls.js version
+  or swapping in `hls.js/light`, but nothing a `Player.Root` consumer could pass
+  reached it — the option was reachable only by mounting the HLS adapter
+  directly (#579).
+
+  `HlsProviderOptions` gains `build`, `'full'` (the default) or `'light'`, a name
+  rather than the loader function itself. `@playdeck/react`'s
+  `PlayerProviderOptions` gains a matching `hls` bag:
+
+  ```tsx
+  <Player.Root
+    providerOptions={{ hls: { build: 'light' } }}
+    source={{ type: 'hls', src: '/master.m3u8' }}
+  >
+    {/* … */}
+  </Player.Root>
+  ```
+
+  `build` is a primitive by design, not a shorthand that happens to be one:
+  every value a provider option bag declares is compared with `Object.is`
+  (`providerBagEqual`), so a function passed inline — a new one on every render —
+  would tear the hls.js engine down and rebuild it, and lose the playback
+  position, on every render that passed it. `loadHls` itself stays exactly where
+  it was, for pinning a version or serving hls.js from somewhere else, and
+  reaching it still means mounting `createHlsProvider` directly.
+
+  `PlayerProviderOptions`'s bags are now guarded at the type level to reject a
+  function-valued option the same way — a bag typed through the new (internal)
+  `PrimitiveOptionBag` constraint fails to compile if a future option is a
+  function, rather than shipping the same hazard `build` was added to avoid.
+  `youtube`'s existing `loadIframeApi` predated the guard; #628 closes that gap
+  the same way, and its own changeset in this release describes it.
+
+- 7deed3e: A provider can supply its own poster, and `Player.Root` can ask for it
+
+  The library had a poster sink and no poster source: `Player.Poster` and
+  `Player.PosterImage` render whatever a consumer hands them, and nothing ever
+  asked a provider what still it would use on its own. YouTube, Vimeo and
+  Wistia each know one; native files and HLS manifests do not.
+
+  `PlayerCapabilities` gains `providerPoster`, in the vocabulary `Availability`
+  already defines. YouTube answers `available` immediately — its still is
+  `https://i.ytimg.com/vi/<id>/hqdefault.jpg`, derivable from the video id alone
+  and costing no request. (`hqdefault.jpg`, deliberately not
+  `maxresdefault.jpg`: the larger file 404s silently on a video that was never
+  uploaded at a high enough resolution to have one, where `hqdefault.jpg` is
+  generated for every upload.) Vimeo and Wistia answer `unknown: 'provider-check'`
+  and resolve to `available` or `unavailable: 'source'` once a dedicated oEmbed
+  request settles — opt-in, exactly like Vimeo's existing `customControls`
+  probe, so a consumer who never asks for a poster never causes the request.
+  Native and HLS answer `unavailable: 'source'` immediately: a file and a
+  manifest have no still of their own. `PlayerState` gains a matching
+  `providerPosterUrl: string | null`, `null` until the capability resolves to
+  `available`.
+
+  `@playdeck/react`'s `Player.Root` gains a `poster` prop, taking a URL, a
+  `ResponsivePoster`, or the literal `'provider'`. `'provider'` opts a Vimeo or
+  Wistia source into its oEmbed probe (folded into the provider's own option
+  bag the way `controls` and `loop` already are — ADR-0004) and, once the
+  still resolves, feeds it to any `Player.Poster` that renders no children of
+  its own as its default image. A `Player.Poster` given children keeps
+  rendering exactly those, unconditionally — a consumer-supplied poster always
+  wins. A consumer who sets no `poster` prop sees no behavioural change at all:
+  nothing resolves, nothing is requested, and `Player.Poster` renders only what
+  it always has.
+
+  `@playdeck/core`'s `PlayerCapabilities` and `PlayerState` both gain a required
+  field: any object built to satisfy either type — a custom provider adapter, a
+  test fixture — needs the new field before it type-checks again. It ships in a
+  minor because no released version of Playdeck has a consumer to break.
+
+- 62b13f2: Add `playThreshold` to `Player.Root`, so a player can prefetch early and play late
+
+  `loadThreshold` decided both when the provider attached and, because autoplay
+  fires once the provider is ready, when playback began. Those are two decisions
+  with different costs. Loading at the first visible pixel is cheap and makes
+  playback instant when the viewer reaches the player; starting playback there
+  spends bandwidth on a player nobody is looking at. Raising `loadThreshold` to
+  delay the second also delayed the first, which removed the reason to prefetch at
+  all, so `loadThreshold={0} playThreshold={0.5}` — load at the first pixel, play
+  at half visible — was unreachable.
+
+  `playThreshold` defaults to `loadThreshold`, so a player that sets neither, or
+  only `loadThreshold`, loads and plays on the same crossing it always did. One
+  `IntersectionObserver` watches both, and the taller-than-root escape that keeps
+  an oversized box from stalling on an unreachable `loadThreshold` covers
+  `playThreshold` too.
+
+  A `playThreshold` below `loadThreshold` is a configuration error rather than a
+  silent clamp — it asks the player to start before it is allowed to load — and is
+  reported the way the `loading="interaction"` with autoplay conflict already is.
+
+### Patch Changes
+
+- 80e35be: Stop a bundler pruning `import '@playdeck/react/theme.css'`
+
+  `sideEffects` listed `./esm-only.cjs` and nothing else. An array is exhaustive:
+  every other shipped file, `theme.css` among them, was declared side-effect-free.
+  A bare stylesheet import binds nothing, so with no side effect left to preserve
+  a bundler is entitled to drop it, and the consumer gets an unstyled player in
+  their production build with no error at build time and none at runtime. The dev
+  server does not tree-shake, so it looks correct there.
+
+  The array now also carries `*.css`.
+
+- Updated dependencies [1df041b]
+- Updated dependencies [f582807]
+- Updated dependencies [6b24591]
+- Updated dependencies [f6c086c]
+- Updated dependencies [7fc47b9]
+- Updated dependencies [e74dc58]
+- Updated dependencies [dc71c32]
+- Updated dependencies [7deed3e]
+- Updated dependencies [2902590]
+- Updated dependencies [7356cef]
+- Updated dependencies [eb6232e]
+  - @playdeck/provider-native@1.1.0
+  - @playdeck/core@1.1.0
+  - @playdeck/provider-hls@1.1.0
+  - @playdeck/provider-youtube@1.1.0
+  - @playdeck/provider-vimeo@1.1.0
+  - @playdeck/provider-wistia@1.1.0
+
 ## 1.0.0
 
 ### Major Changes

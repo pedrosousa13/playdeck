@@ -1,5 +1,99 @@
 # @playdeck/provider-vimeo
 
+## 1.1.0
+
+### Minor Changes
+
+- 7deed3e: A provider can supply its own poster, and `Player.Root` can ask for it
+
+  The library had a poster sink and no poster source: `Player.Poster` and
+  `Player.PosterImage` render whatever a consumer hands them, and nothing ever
+  asked a provider what still it would use on its own. YouTube, Vimeo and
+  Wistia each know one; native files and HLS manifests do not.
+
+  `PlayerCapabilities` gains `providerPoster`, in the vocabulary `Availability`
+  already defines. YouTube answers `available` immediately — its still is
+  `https://i.ytimg.com/vi/<id>/hqdefault.jpg`, derivable from the video id alone
+  and costing no request. (`hqdefault.jpg`, deliberately not
+  `maxresdefault.jpg`: the larger file 404s silently on a video that was never
+  uploaded at a high enough resolution to have one, where `hqdefault.jpg` is
+  generated for every upload.) Vimeo and Wistia answer `unknown: 'provider-check'`
+  and resolve to `available` or `unavailable: 'source'` once a dedicated oEmbed
+  request settles — opt-in, exactly like Vimeo's existing `customControls`
+  probe, so a consumer who never asks for a poster never causes the request.
+  Native and HLS answer `unavailable: 'source'` immediately: a file and a
+  manifest have no still of their own. `PlayerState` gains a matching
+  `providerPosterUrl: string | null`, `null` until the capability resolves to
+  `available`.
+
+  `@playdeck/react`'s `Player.Root` gains a `poster` prop, taking a URL, a
+  `ResponsivePoster`, or the literal `'provider'`. `'provider'` opts a Vimeo or
+  Wistia source into its oEmbed probe (folded into the provider's own option
+  bag the way `controls` and `loop` already are — ADR-0004) and, once the
+  still resolves, feeds it to any `Player.Poster` that renders no children of
+  its own as its default image. A `Player.Poster` given children keeps
+  rendering exactly those, unconditionally — a consumer-supplied poster always
+  wins. A consumer who sets no `poster` prop sees no behavioural change at all:
+  nothing resolves, nothing is requested, and `Player.Poster` renders only what
+  it always has.
+
+  `@playdeck/core`'s `PlayerCapabilities` and `PlayerState` both gain a required
+  field: any object built to satisfy either type — a custom provider adapter, a
+  test fixture — needs the new field before it type-checks again. It ships in a
+  minor because no released version of Playdeck has a consumer to break.
+
+### Patch Changes
+
+- f6c086c: Show React first in every provider README
+
+  `@playdeck/react` is the only renderer Playdeck ships, but every provider
+  README led with core-level construction code and left a React consumer to
+  translate it themselves. Each provider README now opens with a compiled
+  `Player.Root` example — YouTube and Vimeo reuse the fixtures already proven in
+  the provider setup guide, and native, HLS and Wistia each get a new one. The
+  neutral, core-level example moves under a new "Without React" heading, kept
+  verbatim, for the two cases where it is still the right tool: writing a
+  provider adapter, or hosting a player somewhere other than React.
+
+  `@playdeck/core`'s README states the same ordering: React is the default path
+  for building UI, and using core directly is a deliberate choice with its own
+  reasons, rather than the implicit default it read as before. Nothing about the
+  layering changed — core and the providers still know nothing about React.
+
+- 7fc47b9: Read a Vimeo player value that arrives as a string, so the published position follows the embed
+
+  The Vimeo SDK's `checkUrlTimeParam` hands `setCurrentTime` the substring it
+  matched out of the embedding page's url without coercing it, and the embed
+  echoes that string back in the `seconds` of every event it publishes afterwards.
+  The adapter refused anything that was not already a number, so it never learned
+  the playhead had moved: the embed sat at one position while Playdeck went on
+  publishing another, with nothing to say the two disagreed. A consumer reading
+  `currentTime` got a value the player was not at.
+
+  The coercion now reads a finite number however it arrived, and it is deliberately
+  every value this adapter takes off that bridge — `seconds`, `percent`,
+  `duration`, `volume`, `playbackRate`, `videoWidth` and `videoHeight` — because
+  what varies is the transport, not the field: these cross a `postMessage`
+  boundary as untyped JSON and nothing on the way types them.
+
+  Only one string shape is read, and it is the shape the SDK forwards: an ordinary
+  decimal number, with optional ASCII whitespace around it and an optional sign.
+  Everything else is refused — an empty or whitespace-only string, a non-numeric
+  one, `null`, `NaN`, and the exotic numeric literals `Number` would otherwise
+  have accepted (`'0x10'` as 16, `'0b11'` as 3, `'0o17'` as 15, `'1e3'` as 1000),
+  along with a non-breaking space that `trim` would have stripped. That narrowness
+  is deliberate: the string on this path is a slice of the embedding page's url,
+  so the grammar accepted here is a grammar somebody else writes. A bare
+  `Number(value)` would have given none of it — `Number('')` is 0, so coercing
+  straight through would have turned a report carrying nothing into a valid
+  playhead position of zero and published it.
+
+- Updated dependencies [f582807]
+- Updated dependencies [f6c086c]
+- Updated dependencies [7deed3e]
+- Updated dependencies [2902590]
+  - @playdeck/core@1.1.0
+
 ## 1.0.0
 
 ### Major Changes

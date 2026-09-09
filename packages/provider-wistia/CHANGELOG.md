@@ -1,5 +1,71 @@
 # @playdeck/provider-wistia
 
+## 1.1.0
+
+### Minor Changes
+
+- 7deed3e: A provider can supply its own poster, and `Player.Root` can ask for it
+
+  The library had a poster sink and no poster source: `Player.Poster` and
+  `Player.PosterImage` render whatever a consumer hands them, and nothing ever
+  asked a provider what still it would use on its own. YouTube, Vimeo and
+  Wistia each know one; native files and HLS manifests do not.
+
+  `PlayerCapabilities` gains `providerPoster`, in the vocabulary `Availability`
+  already defines. YouTube answers `available` immediately — its still is
+  `https://i.ytimg.com/vi/<id>/hqdefault.jpg`, derivable from the video id alone
+  and costing no request. (`hqdefault.jpg`, deliberately not
+  `maxresdefault.jpg`: the larger file 404s silently on a video that was never
+  uploaded at a high enough resolution to have one, where `hqdefault.jpg` is
+  generated for every upload.) Vimeo and Wistia answer `unknown: 'provider-check'`
+  and resolve to `available` or `unavailable: 'source'` once a dedicated oEmbed
+  request settles — opt-in, exactly like Vimeo's existing `customControls`
+  probe, so a consumer who never asks for a poster never causes the request.
+  Native and HLS answer `unavailable: 'source'` immediately: a file and a
+  manifest have no still of their own. `PlayerState` gains a matching
+  `providerPosterUrl: string | null`, `null` until the capability resolves to
+  `available`.
+
+  `@playdeck/react`'s `Player.Root` gains a `poster` prop, taking a URL, a
+  `ResponsivePoster`, or the literal `'provider'`. `'provider'` opts a Vimeo or
+  Wistia source into its oEmbed probe (folded into the provider's own option
+  bag the way `controls` and `loop` already are — ADR-0004) and, once the
+  still resolves, feeds it to any `Player.Poster` that renders no children of
+  its own as its default image. A `Player.Poster` given children keeps
+  rendering exactly those, unconditionally — a consumer-supplied poster always
+  wins. A consumer who sets no `poster` prop sees no behavioural change at all:
+  nothing resolves, nothing is requested, and `Player.Poster` renders only what
+  it always has.
+
+  `@playdeck/core`'s `PlayerCapabilities` and `PlayerState` both gain a required
+  field: any object built to satisfy either type — a custom provider adapter, a
+  test fixture — needs the new field before it type-checks again. It ships in a
+  minor because no released version of Playdeck has a consumer to break.
+
+### Patch Changes
+
+- f6c086c: Show React first in every provider README
+
+  `@playdeck/react` is the only renderer Playdeck ships, but every provider
+  README led with core-level construction code and left a React consumer to
+  translate it themselves. Each provider README now opens with a compiled
+  `Player.Root` example — YouTube and Vimeo reuse the fixtures already proven in
+  the provider setup guide, and native, HLS and Wistia each get a new one. The
+  neutral, core-level example moves under a new "Without React" heading, kept
+  verbatim, for the two cases where it is still the right tool: writing a
+  provider adapter, or hosting a player somewhere other than React.
+
+  `@playdeck/core`'s README states the same ordering: React is the default path
+  for building UI, and using core directly is a deliberate choice with its own
+  reasons, rather than the implicit default it read as before. Nothing about the
+  layering changed — core and the providers still know nothing about React.
+
+- Updated dependencies [f582807]
+- Updated dependencies [f6c086c]
+- Updated dependencies [7deed3e]
+- Updated dependencies [2902590]
+  - @playdeck/core@1.1.0
+
 ## 1.0.0
 
 ### Major Changes
