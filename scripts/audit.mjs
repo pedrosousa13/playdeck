@@ -53,8 +53,8 @@
 //
 // The fourth is the report disagreeing with itself. `pnpm audit --json` states
 // what it found twice -- once as the `advisories` list, and once as
-// per-severity counts in `metadata.vulnerabilities` -- and only the first is
-// rebuilt when something suppresses an advisory. The count that was not
+// per-severity finding counts in `metadata.vulnerabilities` -- and only the
+// first is rebuilt when something suppresses an advisory. The count that was not
 // decremented is then evidence of an advisory this file was never shown, which
 // is the one signal here that does not depend on how the advisory was hidden:
 // the `auditConfig` check above watches one block of one file, and
@@ -136,8 +136,9 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
  * @typedef {{ key: string; identifiers: string[] }} AuditSuppression
  *
  * One severity at which the report contradicts itself: `counted` is what
- * `metadata.vulnerabilities` accounts for there, `carried` is how many
- * advisories the list actually holds at it.
+ * `metadata.vulnerabilities` accounts for there, `carried` is how many findings
+ * the list actually holds at it -- findings rather than advisory entries,
+ * because that is the unit the metadata counts in. See unreportedAdvisories.
  * @typedef {{ severity: string; counted: number; carried: number }} UnreportedSeverity
  */
 
@@ -435,12 +436,24 @@ export const departedPackages = (baseline, current) => {
  * records that at all. Whatever hid the advisory, the count it did not
  * decrement is still in the report.
  *
- * Sound because the metadata counts advisories rather than findings or paths:
+ * Compared against the findings the list carries rather than the advisories,
+ * because the metadata counts findings. This was measured the other way once --
  * on a tree whose 12 advisories carried 19 findings across 21 dependency paths,
- * `metadata.vulnerabilities` read exactly the per-severity advisory counts. (It
- * counts findings instead when pnpm is invoked from outside the workspace with
- * `-C`. `pnpm()` above always runs with cwd at the repository root, so the gate
- * is always in the advisory-counting mode.)
+ * `metadata.vulnerabilities` read exactly the per-severity advisory counts --
+ * and that measurement no longer holds. Re-measured 2026-09-09 on this
+ * repository, at the repository root: `{moderate: 3, high: 6, critical: 2}`
+ * against a list of 10 advisories carrying 5 high entries and 6 high findings.
+ * The metadata matched the findings exactly and the advisories not at all,
+ * because one advisory -- GHSA-rgj7-g3m4-5g8c, against sharp -- covered two
+ * installed versions of the same package (0.35.2 under wrangler, 0.35.3 under
+ * next) and so carried two findings under one entry. Counting entries reported
+ * that ordinary tree as a report missing an advisory, which is a false positive
+ * and failed every pull request until the comparison moved.
+ *
+ * An advisory spanning two installed versions is the whole trigger, so nothing
+ * about it is specific to sharp: any advisory matching two versions of one
+ * package does it again. That is why the fix is to count what the metadata
+ * counts rather than to reach for the one advisory that exposed the mismatch.
  *
  * Compared per severity rather than as one total, which the sum agrees with and
  * cannot: the list is always a subset of what the metadata counted, so no
@@ -449,7 +462,19 @@ export const departedPackages = (baseline, current) => {
  * the failure being able to name the severity and both counts, so an operator
  * can tell what was hidden rather than only that something was.
  *
- * What remains, stated rather than hidden: a severity outside `SEVERITY_ORDER`
+ * What remains, stated rather than hidden, and first because it is what moved:
+ * a pnpm that counts advisories again -- the mode the paragraph above measured
+ * and lost -- makes this comparison weaker rather than wrong. Findings are
+ * never fewer than the entries carrying them, so counting findings cannot
+ * invent a failure; what it can do, in that mode, is miss one. A hidden
+ * single-finding advisory at a severity where another advisory happens to carry
+ * a spare finding leaves the two totals equal and passes. Detecting that would
+ * mean knowing which rule pnpm counted by, and the report does not say. The
+ * direction of the trade is deliberate: this gate fails pull requests, so a
+ * miss confined to one contrived shape costs less than a false positive that
+ * fires on any tree where one advisory spans two installed versions.
+ *
+ * Also: a severity outside `SEVERITY_ORDER`
  * is not compared, so a name a later pnpm invents can be counted by the metadata
  * and hidden from the list with nothing here noticing. Widening the comparison
  * to every key the metadata carries is what would close it, and that is exactly
@@ -464,7 +489,10 @@ export const unreportedAdvisories = ({ advisories, metadata }) => {
   /** @type {Map<string, number>} */
   const carried = new Map();
   for (const advisory of Object.values(advisories))
-    carried.set(advisory.severity, (carried.get(advisory.severity) ?? 0) + 1);
+    carried.set(
+      advisory.severity,
+      (carried.get(advisory.severity) ?? 0) + advisory.findings.length
+    );
   return COUNTED_SEVERITIES.map((severity) => ({
     severity,
     counted: metadata.vulnerabilities[severity] ?? 0,
@@ -746,7 +774,7 @@ const formatReport = (
   // whether or not any workspace setting records it.
   for (const entry of unreported) {
     lines.push(
-      `UNREPORTED   ${entry.severity.padEnd(8)}  metadata counts ${entry.counted}, the advisory list carries ${entry.carried}`,
+      `UNREPORTED   ${entry.severity.padEnd(8)}  metadata counts ${entry.counted}, the advisory list carries ${entry.carried} finding(s)`,
       `              the report contradicts itself, so advisories were dropped from it before this gate read them`
     );
   }
