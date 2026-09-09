@@ -139,12 +139,15 @@ const REACT_EXTERNALS = [
  * names which of a module's exports tree-shaking kept in this chunk, and
  * esbuild's metafile records only `bytesInOutput` per input, nothing about
  * which named exports reached the output (confirmed against a real metafile
- * while building this file, 2026-09-09). It exists for one reason: three of
- * `@playdeck/react`'s own source files merge into a single `dist/index.js`
- * (`packages/react/vite.config.ts`'s `build.lib`), so `moduleIds` alone
- * cannot say whether a composition reached `SettingsMenu` or `VolumeSlider`
- * -- that moduleId is present whenever any of the package's exports is used
- * at all. `reachedForbiddenModule` below is the only reader.
+ * while building this file, 2026-09-09). It exists for one reason:
+ * `@playdeck/react` builds as a library to a single `dist/index.js`
+ * (`packages/react/vite.config.ts`'s `build.lib`), so every one of its source
+ * files lands in that one module -- `settings-menu.tsx`,
+ * `transport-controls.tsx` and `captions.tsx`, which hold the exports
+ * `PLAY_ONLY_FORBIDDEN_MODULES` names, among them. `moduleIds` alone
+ * therefore cannot say whether a composition reached `SettingsMenu` or
+ * `VolumeSlider`: that moduleId is present whenever any of the package's
+ * exports is used at all. `reachedForbiddenModule` below is the only reader.
  * @typedef {{
  *   fileName: string;
  *   code: string;
