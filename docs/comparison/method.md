@@ -850,3 +850,28 @@ checkout's. The date on `results.md`'s header records when the file was last
 regenerated, not a promise about how current it still is — re-run the command
 above whenever a pinned version changes, a library is added, or a figure is
 doubted.
+
+Each of the four Playdeck rows also carries a **committed ceiling** — a
+`ceilingKb` field beside that row's own entry in `scripts/compare-libraries.mjs`'s
+`libraries` array, not a number in this document's prose, so a ceiling change
+is a diff to the harness's own data rather than a side effect of editing this
+file. `pnpm compare:libraries` and `pnpm compare:libraries:check` both fail,
+naming the row and its measured and committed figures, the moment a row's
+Vite gzip size passes its ceiling — whether that run is regenerating
+`results.md` or only checking it, so a growth past the ceiling can never be
+committed by regenerating the doc and then re-committing the moved ceiling
+along with it. Each ceiling started at the row's own figure on the day #649
+added it, rounded up to the next 0.25 KB, and stays there until someone
+raises it on purpose: edit the `ceilingKb` value in `libraries`, in the same
+commit as whatever grew the row, and say in that commit what grew and why —
+the same "deliberate, reviewable edit with a stated reason" #649 asked this
+mechanism to produce, rather than a ceiling that silently tracks whatever the
+row happens to measure. Shrinking a composition back under its existing
+ceiling needs no such edit; only raising the ceiling itself does.
+
+The play-only row carries a second, independent gate: its reachable Vite
+chunks must not reach the menu primitives, either slider, captions rendering,
+or any provider other than native — see `scripts/compare-libraries.mjs`'s
+`PLAY_ONLY_FORBIDDEN_MODULES` for the exact list and where each name was read
+from. That check fails naming the specific module reached, and is unrelated
+to the ceiling above: a composition can breach either, both or neither.
