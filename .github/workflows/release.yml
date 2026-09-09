@@ -128,6 +128,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # `verify-packaging.mjs` drives a real browser for its smoke test.
       - run: pnpm exec playwright install --with-deps chromium
+      # `apps/site`'s build runs `scripts/media-sprite-fright.mjs` before
+      # `astro build`, which needs `ffmpeg` on the runner, and `pnpm build`
+      # builds the whole workspace rather than only the publishable packages.
+      # `ci.yml` and `deploy-site.yml` both carry this line already; this
+      # workflow did not, and the 1.1.0 release failed here when the
+      # `ubuntu-latest` image stopped shipping `ffmpeg`.
+      - run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
       - run: pnpm build
       - run: pnpm test:packages
 
@@ -226,6 +233,13 @@ jobs:
       # No `actions/cache` here, unlike `ci.yml`: this workflow runs a handful
       # of times a year, so the cache would be cold on almost every run.
       - run: pnpm exec playwright install --with-deps chromium
+      # `apps/site`'s build runs `scripts/media-sprite-fright.mjs` before
+      # `astro build`, which needs `ffmpeg` on the runner, and `pnpm build`
+      # builds the whole workspace rather than only the publishable packages.
+      # `ci.yml` and `deploy-site.yml` both carry this line already; this
+      # workflow did not, and the 1.1.0 release failed here when the
+      # `ubuntu-latest` image stopped shipping `ffmpeg`.
+      - run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
       - run: pnpm build
       # `test:packages` is deliberately absent: it runs in `package-verify`
       # above, which this job `needs:`. Do not add it back here.
