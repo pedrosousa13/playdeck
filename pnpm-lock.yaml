@@ -183,6 +183,9 @@ importers:
       '@playdeck/provider-hls':
         specifier: workspace:*
         version: link:../../packages/provider-hls
+      '@playdeck/provider-native':
+        specifier: workspace:*
+        version: link:../../packages/provider-native
       '@storybook/addon-a11y':
         specifier: 10.5.3
         version: 10.5.3(storybook@10.5.3(@types/react@19.2.17)(prettier@3.9.6)(react@19.2.8))
@@ -5373,7 +5376,6 @@ packages:
 
   shaka-player@5.2.8:
     resolution: {integrity: sha512-CLverPUQCw/ouNsVVo6SVPBNt31Tf6H9h3aZqWaILe9y/WE4Ok5scImkHSriOFo5udm/OShPOH3YNH3Sb3quEA==}
-    engines: {node: '>=18'}
 
   sharp@0.35.2:
     resolution: {integrity: sha512-FVtFjtBCMiJS6yb5CX7Sop45WFMpeGw6oRKuJnXYgf/f1ms/D7LE/ZUSNxnW7rZ/dbslQWYkoqFHGPaDBtaK4w==}

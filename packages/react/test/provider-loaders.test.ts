@@ -1,16 +1,27 @@
 // @vitest-environment happy-dom
 
 import { expect, expectTypeOf, test, vi } from 'vitest';
-import type { ResolvedPlayerSource } from '@playdeck/core';
+import {
+  detectSource,
+  type ProviderAdapter,
+  type ResolvedPlayerSource
+} from '@playdeck/core';
 import type { HlsProviderOptions } from '@playdeck/provider-hls';
 import type { VimeoProviderOptions } from '@playdeck/provider-vimeo';
 import type { WistiaProviderOptions } from '@playdeck/provider-wistia';
 import type { YouTubeProviderOptions } from '@playdeck/provider-youtube';
 import type {
   PlayerProviderOptions,
-  PrimitiveOptionBag
+  PrimitiveOptionBag,
+  ProviderRegistration,
+  SuppliedProviderOptions,
+  SuppliedSource
 } from '../src/provider-loaders';
-import { loadProvider } from '../src/provider-loaders';
+import {
+  detectSourceWithProviders,
+  loadProvider
+} from '../src/provider-loaders';
+import type { RootProps } from '../src/root';
 
 vi.mock('@playdeck/provider-hls', () => ({
   createHlsProvider: vi.fn(() => ({ provider: 'hls' }))
@@ -262,4 +273,184 @@ test('reports source types without an installed adapter', async () => {
       source: { type: 'unknown-provider' } as unknown as ResolvedPlayerSource
     })
   ).rejects.toThrow('No provider adapter is installed for unknown-provider.');
+});
+
+// `providers`: `Player.Root`'s seam for a source kind beyond the five above.
+// The tests below drive `detectSourceWithProviders` and `loadProvider`
+// directly -- the two functions `root.tsx` and `use-activation.ts` call, so a
+// claim proven here is a claim proven about exactly what a consumer's
+// `providers` prop reaches.
+type AcmeSource = { readonly type: 'acme'; readonly videoId: string };
+type AcmeOptions = { readonly quality?: 'sd' | 'hd' };
+
+test('tries the five built-in kinds before any supplied provider, even one whose detect would also match', () => {
+  const detect = vi.fn();
+  const result = detectSourceWithProviders(
+    'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    { acme: { detect, load: vi.fn() } }
+  );
+  expect(result).toEqual({
+    status: 'success',
+    input: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    source: { type: 'youtube', videoId: 'dQw4w9WgXcQ' }
+  });
+  expect(detect).not.toHaveBeenCalled();
+});
+
+test('walks supplied providers in declaration order, stopping at the first whose detect accepts the URL', () => {
+  const url = 'https://example.com/media/42';
+  const first = vi.fn(() => undefined);
+  const second = vi.fn(() => ({ type: 'second', id: '42' }) as const);
+  const third = vi.fn(() => ({ type: 'third', id: '42' }) as const);
+
+  const result = detectSourceWithProviders(url, {
+    first: { detect: first, load: vi.fn() },
+    second: { detect: second, load: vi.fn() },
+    third: { detect: third, load: vi.fn() }
+  });
+
+  expect(first).toHaveBeenCalledWith(url);
+  expect(second).toHaveBeenCalledWith(url);
+  expect(third).not.toHaveBeenCalled();
+  expect(result).toMatchObject({
+    status: 'success',
+    source: { type: 'second', id: '42' }
+  });
+});
+
+test('declines a URL no built-in kind and no supplied provider recognises', () => {
+  const detect = vi.fn(() => undefined);
+  const result = detectSourceWithProviders('https://example.com/nothing-here', {
+    acme: { detect, load: vi.fn() }
+  });
+  expect(detect).toHaveBeenCalledWith('https://example.com/nothing-here');
+  expect(result.status).toBe('failure');
+});
+
+// The security-sensitive guarantee: a scheme the shared allowlist refuses
+// never reaches a supplied provider's own `detect`, the same gate core's own
+// `detectSource` applies ahead of every one of its five built-in hosts.
+test('never hands a forbidden-scheme URL to a supplied detect', () => {
+  const detect = vi.fn();
+  const result = detectSourceWithProviders('javascript:alert(1)', {
+    acme: { detect, load: vi.fn() }
+  });
+  expect(detect).not.toHaveBeenCalled();
+  expect(result.status).toBe('failure');
+});
+
+test('behaves exactly like detectSource when no providers are supplied', () => {
+  expect(
+    detectSourceWithProviders('https://example.com/nothing', undefined)
+  ).toEqual(detectSource('https://example.com/nothing'));
+});
+
+test('dispatches a supplied kind to its own registration, with the mount, source and its own option bag', async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(async () => adapter);
+  const load = vi.fn(async () => factory);
+  const media = document.createElement('div');
+  const source: AcmeSource = { type: 'acme', videoId: '1' };
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providerOptions: { acme: { quality: 'hd' } } as never,
+      providers: { acme: { detect: vi.fn(), load } },
+      source
+    })
+  ).resolves.toBe(adapter);
+  expect(load).toHaveBeenCalledOnce();
+  expect(factory).toHaveBeenCalledWith(media, source, { quality: 'hd' });
+});
+
+test('reports a supplied kind with no matching registration the same way as an unrecognised type', async () => {
+  await expect(
+    loadProvider({
+      media: null,
+      nativeOptions,
+      providers: { other: { detect: vi.fn(), load: vi.fn() } },
+      source: { type: 'acme' } as unknown as ResolvedPlayerSource
+    })
+  ).rejects.toThrow('No provider adapter is installed for acme.');
+});
+
+// The inertness `provider-loaders.ts`'s own comment on `detectSourceWithProviders`
+// relies on: a `providers` entry keyed by a reserved, built-in name never
+// actually runs, because the five built-in branches in `loadProvider` dispatch
+// on `source.type` before its own `providers` lookup ever does.
+test('never lets a providers entry keyed by a built-in name intercept the built-in dispatch', async () => {
+  const { createHlsProvider } = await import('@playdeck/provider-hls');
+  const media = document.createElement('video');
+  const source = { type: 'hls', src: '/master.m3u8' } as const;
+  const suppliedLoad = vi.fn();
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providers: { hls: { detect: vi.fn(), load: suppliedLoad } },
+      source
+    })
+  ).resolves.toMatchObject({ provider: 'hls' });
+  expect(createHlsProvider).toHaveBeenCalled();
+  expect(suppliedLoad).not.toHaveBeenCalled();
+});
+
+test('a supplied kind types its own source shape and its own providerOptions key without weakening the five built-in kinds', () => {
+  type AcmeProviders = {
+    readonly acme: ProviderRegistration<AcmeSource, AcmeOptions>;
+  };
+
+  expectTypeOf<SuppliedSource<AcmeProviders>>().toEqualTypeOf<AcmeSource>();
+  expectTypeOf<SuppliedProviderOptions<AcmeProviders>>().toEqualTypeOf<{
+    readonly acme?: AcmeOptions;
+  }>();
+
+  // `RootProps<AcmeProviders>['source']` accepts the supplied kind's own
+  // shape directly, alongside every built-in form.
+  const suppliedSource: RootProps<AcmeProviders>['source'] = {
+    type: 'acme',
+    videoId: '1'
+  };
+  const builtInSource: RootProps<AcmeProviders>['source'] = {
+    type: 'youtube',
+    videoId: '1'
+  };
+  const stringSource: RootProps<AcmeProviders>['source'] =
+    'https://example.com';
+  void suppliedSource;
+  void builtInSource;
+  void stringSource;
+
+  const options: RootProps<AcmeProviders>['providerOptions'] = {
+    acme: { quality: 'hd' },
+    hls: { build: 'light' }
+  };
+  void options;
+});
+
+test('rejects a source object whose type matches no registered kind at the type level', () => {
+  type AcmeProviders = {
+    readonly acme: ProviderRegistration<AcmeSource, AcmeOptions>;
+  };
+  // @ts-expect-error `mystery` names neither a built-in kind nor an entry of
+  // `AcmeProviders`.
+  const invalid: RootProps<AcmeProviders>['source'] = { type: 'mystery' };
+  void invalid;
+});
+
+// The other half of "without weakening the built-in kinds' typing": a
+// `RootProps` given no type argument -- every consumer who never sets
+// `providers`, `root-props.test.ts`'s own subject -- accepts none of a
+// supplied kind's shapes at all. Red without `PlayerSource`'s `Extra`
+// defaulting to `never`: a default of `unknown` or `{}` would admit
+// `AcmeSource` here even with `providers` never opted into, which is exactly
+// the widening this generic parameter must not cause.
+test('accepts no supplied-kind source at all when providers is never opted into', () => {
+  // @ts-expect-error `AcmeSource` is not a member of the non-generic
+  // `PlayerSource` union `RootProps['source']` defaults to.
+  const invalid: RootProps['source'] = { type: 'acme', videoId: '1' };
+  void invalid;
 });

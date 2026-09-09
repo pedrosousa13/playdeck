@@ -19,13 +19,21 @@ import {
 import {
   loadProvider,
   type PlayerMediaMount,
-  type ResolvedProviderOptions
+  type PlayerProviders,
+  type ResolvedProviderOptions,
+  type SuppliedProviderSource
 } from './provider-loaders.js';
 
 export type {
   PlayerMediaMount,
   PlayerProviderOptions,
-  ResolvedProviderOptions
+  PlayerProviders,
+  ProviderAdapterFactory,
+  ProviderRegistration,
+  ResolvedProviderOptions,
+  SuppliedProviderOptions,
+  SuppliedProviderSource,
+  SuppliedSource
 } from './provider-loaders.js';
 
 export type PlayerLoadingStrategy = 'eager' | 'viewport' | 'interaction';
@@ -57,6 +65,12 @@ export type UseActivationOptions = {
   readonly prepareMedia: (media: PlayerMediaMount) => void;
   readonly preload: PlayerPreload;
   readonly providerOptions?: ResolvedProviderOptions;
+  // Passed straight through to `loadProvider`'s own `providers` field once
+  // loading actually happens (below); this hook makes no decision on the
+  // strength of it. `Root`'s own `detectSource` layer (`provider-loaders.ts`'s
+  // `detectSourceWithProviders`) is what already decided whether the source
+  // this hook is loading came from one of these registrations at all.
+  readonly providers?: PlayerProviders;
   readonly source: SourceDetectionResult;
 };
 
@@ -194,15 +208,29 @@ const providerBagEqual = (
   return [...keys].every((key) => Object.is(left?.[key], right?.[key]));
 };
 
-// One line per provider key, as `nativeOptionsEqual` names its own three.
+// Every top-level key either bag carries -- the four built-in ones
+// (`wistia`, `youtube`, `vimeo`, `hls`) and, once a consumer's `providers`
+// prop opens up a further key, that one too -- compared bag by bag with
+// `providerBagEqual`, for the same reason that function itself exists: an
+// inline `providerOptions={{ acme: { … } }}` literal is a new object on every
+// render, and a reference compare on either level would tear a provider down
+// and rebuild it each time (#579, extended to a supplied kind's own key on
+// the same terms). One merged key set rather than one named line per key,
+// unlike `nativeOptionsEqual` above: that function's three fields are fixed
+// forever, while this one's keys grow by one every time a consumer's
+// `providers` prop does, and a named line could only ever enumerate the four
+// this package ships loaders for.
 const providerOptionsEqual = (
   left: ResolvedProviderOptions | undefined,
   right: ResolvedProviderOptions | undefined
-): boolean =>
-  providerBagEqual(left?.wistia, right?.wistia) &&
-  providerBagEqual(left?.youtube, right?.youtube) &&
-  providerBagEqual(left?.vimeo, right?.vimeo) &&
-  providerBagEqual(left?.hls, right?.hls);
+): boolean => {
+  const l = left as Record<string, Record<string, unknown>> | undefined;
+  const r = right as Record<string, Record<string, unknown>> | undefined;
+  for (const key in { ...l, ...r }) {
+    if (!providerBagEqual(l?.[key], r?.[key])) return false;
+  }
+  return true;
+};
 
 // A browser can report an intersection ratio a hair under the geometrically
 // exact value it is crossing -- documented for `threshold: 1`, where subpixel
@@ -1090,7 +1118,8 @@ export const useActivation = (
       media,
       nativeOptions,
       providerOptions,
-      source: source.source as ResolvedPlayerSource
+      providers: loadOptions.providers,
+      source: source.source as ResolvedPlayerSource<SuppliedProviderSource>
     })
       .then((adapter) => {
         if (

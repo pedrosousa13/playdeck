@@ -20,6 +20,9 @@
     "paths": {
       "@playdeck/core": ["../../packages/core/dist/index.d.ts"],
       "@playdeck/provider-hls": ["../../packages/provider-hls/dist/index.d.ts"],
+      "@playdeck/provider-native": [
+        "../../packages/provider-native/dist/index.d.ts"
+      ],
       "@playdeck/react": ["../../packages/react/dist/index.d.ts"],
       // `apps/site`'s own alias, so `seek-slider-order.contract.test.ts` can
       // typecheck its import of `BenchIsland.tsx` the same way it resolves at
@@ -34,6 +37,7 @@
   "references": [
     { "path": "../../packages/core" },
     { "path": "../../packages/provider-hls" },
+    { "path": "../../packages/provider-native" },
     { "path": "../../packages/react" }
   ],
   // The two archetype compositions are named one by one rather than swept in

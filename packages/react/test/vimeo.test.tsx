@@ -328,9 +328,9 @@ test('forwards suppressSeoMetadata to createVimeoProvider', async () => {
 // SIDEPRO's regression, mirrored from `youtube.test.tsx`: `providerOptionsEqual`
 // in `use-activation.ts` must compare the `vimeo` bag by value, or a changed
 // bag looks unchanged and the embed never re-attaches to pick it up. This is
-// the trap: delete the `providerBagEqual(left?.vimeo, right?.vimeo)` line and
-// this test fails, because the second render is then judged equal to the
-// first and `createVimeoProvider` is never called again.
+// the trap: make `providerOptionsEqual` skip the `vimeo` key and this test
+// fails, because the second render is then judged equal to the first and
+// `createVimeoProvider` is never called again.
 test('re-attaches the Vimeo adapter when the controls prop changes', async () => {
   const { rerender } = render(
     <Player.Root

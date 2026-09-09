@@ -361,7 +361,24 @@ export const Media = ({
   }
 
   if (source.source.type !== 'video' && source.source.type !== 'hls') {
-    return null;
+    // A supplied kind (`Player.Root`'s `providers` prop): the three built-in
+    // embeds are already handled above, so reaching here with neither `video`
+    // nor `hls` means core's own `detectSource` did not produce this source.
+    // The same plain div mount those three embeds attach into, never a
+    // `<video>` -- a supplied kind's own field for a media URL, if it has
+    // one, is not something this component can read generically the way
+    // `VideoFileSource.sources` is. The registration's own `load` factory is
+    // free to build whatever DOM it needs inside this mount, exactly as
+    // `createWistiaProvider` appends its own custom element into the div it
+    // is given.
+    return (
+      <div
+        data-playdeck-part="media"
+        key={sourceKey(source)}
+        ref={registerMedia}
+        style={{ ...mediaStyle, ...style }}
+      />
+    );
   }
 
   const passthrough = { ...rest };

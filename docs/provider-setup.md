@@ -330,6 +330,113 @@ source refuses `blob:` because its manifest loader fetches the URL itself.
 Anything else — a missing field, an id in the wrong shape, a value that is
 neither a string nor an object — is refused as `invalid-source`.
 
+## Supplying your own provider
+
+`Player.Root`'s `providers` prop registers a source kind beyond the five
+above, keyed by the name it goes by: a `detect`/`load` pair per kind, and the
+map may hold more than one.
+
+```
+providers={{
+  example: {
+    detect: (url) => /* a source object of this kind, or undefined */,
+    load: () => /* a Promise of the factory that builds the adapter */
+  }
+}}
+```
+
+`detect` takes a URL string — exactly what `source` is when it is not an
+explicit object — and either turns it into this kind's own source object, or
+declines by returning `undefined`. `load` is a lazy factory: calling it is
+what performs this kind's own dynamic import, the same way this package's own
+`await import('@playdeck/provider-hls')` never runs for a page that plays
+nothing but MP4. What it resolves to is a second function, called with the
+mount point, the detected source and this kind's own `providerOptions` bag,
+that builds and returns the running `ProviderAdapter` -- the same interface
+[`@playdeck/core`](../packages/core) documents, and every built-in loader
+already produces.
+
+Detection tries the five built-in kinds first — a supplied kind can never
+intercept a URL a built-in host already claims — and only on a built-in
+refusal walks `providers`' own entries, in the order they were given, using
+the first whose `detect` accepts the URL. `hls`, `video`, `youtube`, `vimeo`
+and `wistia` are reserved names: a `providers` entry keyed by one of them is
+never reachable, because a resolved source of that `type` is dispatched by
+this package's own built-in loader first, whatever registered it.
+
+The same shared allowlist runs ahead of every supplied `detect`, exactly where
+it runs ahead of every built-in host inside `detectSource` — a `source` whose
+scheme the allowlist refuses (`javascript:`, `data:`, and anything else not
+covered by [Shared rules for a source string](#shared-rules-for-a-source-string))
+never reaches a supplied `detect` at all. This is why the two are typed as
+they are: nothing this package writes ever reads a field of the source
+`detect` returns as a URL, so once past that gate a supplied kind is trusted
+the same way its own `load` factory already is.
+
+`providerOptions` takes a further key for each supplied kind, alongside the
+four built-in ones, compared for equality the same way — so an inline object
+literal does not tear the provider down and rebuild it every render (see
+[`build`](#the-other-three-providers) above for what that comparison guards
+against).
+
+<!-- example:provider-setup-providers -->
+
+```tsx
+import * as Player from '@playdeck/react';
+import type {
+  ProviderAdapterFactory,
+  ProviderRegistration
+} from '@playdeck/react';
+
+// A source kind this package ships no loader for. Everything past this point
+// is the shape any consumer's own provider takes: a source object of its own,
+// and a lazy factory that turns it into a running ProviderAdapter -- the same
+// interface `@playdeck/provider-hls` and the other four built-in packages
+// already produce.
+type ExampleSource = { readonly type: 'example'; readonly clipId: string };
+type ExampleOptions = { readonly quality?: 'sd' | 'hd' };
+
+// Declared rather than implemented: this file exists to type-check the shape
+// `providers` takes, not to ship a real adapter. A real one attaches to the
+// mount point, drives playback, and reports state back through the same
+// ProviderAdapter interface `createNativeProvider` and friends implement.
+declare const createExampleAdapter: ProviderAdapterFactory<
+  ExampleSource,
+  ExampleOptions
+>;
+
+const exampleProvider: ProviderRegistration<ExampleSource, ExampleOptions> = {
+  // Turns a URL none of the five built-in kinds recognise into the source
+  // object above, or declines by returning undefined.
+  detect: (url) => {
+    const match = /^https:\/\/example\.com\/clips\/([\w-]+)$/.exec(url);
+    return match ? { type: 'example', clipId: match[1]! } : undefined;
+  },
+  // Lazy: `load` is only called once a source of this kind actually needs
+  // it, the same way this package's own dynamic `import('@playdeck/provider-hls')`
+  // never runs for a page that plays nothing but MP4.
+  load: () => Promise.resolve(createExampleAdapter)
+};
+
+export const ExampleProviderClip = () => (
+  <Player.Root
+    providerOptions={{ example: { quality: 'hd' } }}
+    providers={{ example: exampleProvider }}
+    source="https://example.com/clips/tracer"
+  >
+    <Player.Viewport>
+      <Player.Media />
+    </Player.Viewport>
+  </Player.Root>
+);
+```
+
+<!-- /example -->
+
+Passing no `providers` prop at all costs nothing beyond the seam itself: there
+is no registry and no module-level state, so a source kind never registered is
+never imported.
+
 ## What a refusal reads like
 
 A refused source is published on `PlayerState.error` and rendered by

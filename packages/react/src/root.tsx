@@ -1,7 +1,6 @@
 import {
   PlayerController,
   bindMediaSession,
-  detectSource,
   getMediaSessionCoordinator,
   type AutoplayMode,
   type MediaMetadataInput,
@@ -19,11 +18,15 @@ import {
   type PosterState
 } from './player-context.js';
 import { DefaultPosterContext, type ResponsivePoster } from './poster.js';
+import { detectSourceWithProviders } from './provider-loaders.js';
 import {
   useActivation,
   type PlayerMediaMount,
   type PlayerProviderOptions,
-  type ResolvedProviderOptions
+  type PlayerProviders,
+  type ResolvedProviderOptions,
+  type SuppliedProviderOptions,
+  type SuppliedSource
 } from './use-activation.js';
 import { sourceKey } from './viewport-media.js';
 import { createVolumeRequest } from './volume-request.js';
@@ -71,7 +74,7 @@ type SourceTransition = {
 // does not hold everywhere, while the mechanism behind each rule -- including
 // why a zero `startTime` is not written -- is owned by
 // `provider-native/src/playback.ts` and is not repeated here.
-export type RootProps = {
+export type RootProps<P extends PlayerProviders = Record<string, never>> = {
   readonly autoplay?: AutoplayMode;
   readonly captionRenderer?: 'custom' | 'native';
   readonly children: ReactNode;
@@ -177,10 +180,44 @@ export type RootProps = {
   readonly poster?: string | ResponsivePoster | 'provider';
   readonly preload?: import('./use-activation.js').PlayerPreload;
   // Compared by value, not by reference, so an inline literal is safe to
-  // pass: see `providerOptionsEqual` in `use-activation.ts`.
-  readonly providerOptions?: PlayerProviderOptions;
+  // pass: see `providerOptionsEqual` in `use-activation.ts`, which compares
+  // every key either bag carries -- a key named after a `providers` entry
+  // included -- so an inline `providerOptions={{ acme: { … } }}` is exactly
+  // as safe as `providerOptions={{ hls: { … } }}` is today.
+  readonly providerOptions?: PlayerProviderOptions & SuppliedProviderOptions<P>;
+  /**
+   * Source kinds beyond the five this package ships a loader for, keyed by
+   * the name the resolved source's own `type` carries. `detect` takes a URL
+   * string and turns it into this kind's own source object, or declines by
+   * returning `undefined`; `load` is a lazy factory -- calling it is what
+   * performs this kind's own dynamic import, mirroring the way
+   * `@playdeck/provider-hls` and the other four packages are only ever
+   * imported once a source of their kind actually needs one.
+   *
+   * `detectSource` tries the five built-in kinds first and only then walks
+   * `providers`' own entries, in the order they were given, using the first
+   * whose `detect` accepts the `source` string -- so a supplied kind can
+   * never intercept a URL a built-in host already claims. `hls`, `video`,
+   * `youtube`, `vimeo` and `wistia` are reserved names for the same reason: a
+   * `providers` entry keyed by one of them can never be reached, because a
+   * resolved source of that `type` is dispatched by this package's own
+   * built-in loader first, whatever registered it.
+   *
+   * `detect` is the only way a supplied kind's source is ever resolved --
+   * `PlayerSource<Extra>` (`@playdeck/core`) admits an explicit object of a
+   * supplied kind's own shape too, for the type this generic parameter opens
+   * up, but constructing one by hand rather than through a registration's
+   * `detect` does not resolve to a provider here.
+   *
+   * Unset by default. There is no registry and no module-level state behind
+   * this prop -- `providers` is read where it is passed and nowhere else --
+   * so a `Root` that never sets it adds no import beyond what
+   * `scripts/compare-libraries.mjs`'s play-only row already measures, and its
+   * committed ceiling there is what checks that claim on every run.
+   */
+  readonly providers?: P;
   readonly ref?: Ref<PlayerHandle>;
-  readonly source: PlayerSource;
+  readonly source: PlayerSource<SuppliedSource<P>>;
   /**
    * Start playback at this offset in seconds. A value that is not finite, or
    * not above zero, is no start at all — zero asks for the start the media
@@ -222,7 +259,7 @@ const takeSuperseded = <Value,>(
   return matched;
 };
 
-export const Root = ({
+export const Root = <P extends PlayerProviders = Record<string, never>>({
   autoplay = false,
   captionRenderer,
   children,
@@ -248,12 +285,13 @@ export const Root = ({
   playThreshold = loadThreshold,
   poster,
   providerOptions,
+  providers,
   ref,
   source,
   startTime,
   preload = 'metadata',
   volume
-}: RootProps) => {
+}: RootProps<P>) => {
   const [controller] = useState(() => new PlayerController());
   const [hiddenTransition, setHiddenTransition] = useState<SourceTransition>();
   // `hiddenTransition` also latches on a decoded frame with no confirmed play
@@ -334,7 +372,10 @@ export const Root = ({
     undefined
   );
   const mediaMetadataSeed = useRef(mediaMetadata);
-  const detectedSource = useMemo(() => detectSource(source), [source]);
+  const detectedSource = useMemo(
+    () => detectSourceWithProviders(source, providers),
+    [source, providers]
+  );
   const sourceKeyForRender = sourceKey(detectedSource);
   const [sourceTransition, setSourceTransition] = useState<SourceTransition>(
     () => ({ key: sourceKeyForRender })
@@ -778,6 +819,7 @@ export const Root = ({
     prepareMedia,
     preload,
     providerOptions: resolvedProviderOptions,
+    providers,
     source: detectedSource
   });
 

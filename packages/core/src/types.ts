@@ -506,15 +506,29 @@ export type VimeoSource = { type: 'vimeo'; videoId: string; hash?: string };
 
 export type WistiaSource = { type: 'wistia'; mediaId: string };
 
-export type PlayerSource =
+// Closed over the five built-in kinds by default (`Extra` defaults to
+// `never`, which a union absorbs without contributing a member), so every
+// existing caller -- `apps/site/src/bench-sources.ts`'s `resolvePlayerSource`
+// among them -- keeps typechecking against exactly the union it always did,
+// with no type argument to add. `Extra` is `@playdeck/react`'s own seam: a
+// `Player.Root` given a `providers` prop opens it to that prop's own source
+// shapes (`packages/react/src/provider-loaders.ts`'s `SuppliedSource`), so a
+// supplied kind's `source` value typechecks the same way `{ type: 'youtube',
+// videoId }` already does, without widening what every consumer who never
+// passes `providers` is allowed to write here.
+export type PlayerSource<Extra = never> =
   | string
   | VideoFileSource
   | HlsSource
   | YouTubeSource
   | VimeoSource
-  | WistiaSource;
+  | WistiaSource
+  | Extra;
 
-export type ResolvedPlayerSource = Exclude<PlayerSource, string>;
+export type ResolvedPlayerSource<Extra = never> = Exclude<
+  PlayerSource<Extra>,
+  string
+>;
 
 // `unsupported-format` is the one of these four that names a cause rather than
 // describing a shape. It is a well-formed URL whose path ends in a streaming

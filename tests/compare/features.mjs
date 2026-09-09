@@ -1257,15 +1257,15 @@ export const axes = [
     label: 'Other hosted providers (named)',
     entries: {
       Playdeck: {
-        status: 'no',
+        status: 'partial',
         anchor: {
-          kind: 'absent-in-tree',
-          module: ['@playdeck/core', '@playdeck/react'],
-          glob: ['**/*.js', '**/*.d.ts'],
-          includes: 'Twitch'
+          kind: 'types',
+          module: '@playdeck/react',
+          path: 'dist/root.d.ts',
+          includes: 'readonly providers?: P;'
         },
-        source: PLAYDECK_TREE,
-        note: '`PlayerSource` is a closed union of exactly five source kinds (packages/core/dist/types.d.ts), so no further hosted platform can be passed.'
+        source: 'packages/react/dist/root.d.ts (`RootProps.providers`)',
+        note: "No named hosted platform ships in the box, but `Player.Root`'s `providers` prop lets a consumer register one of their own: a `detect`/`load` pair keyed by the source-kind name, tried once the five built-in kinds fail to detect a URL. Shipping an actual Twitch/Mux/etc. adapter through it is left to the consumer or a separate package."
       },
       'react-player': {
         status: 'yes',
@@ -1774,15 +1774,15 @@ export const axes = [
     label: 'Plugin system',
     entries: {
       Playdeck: {
-        status: 'no',
+        status: 'partial',
         anchor: {
-          kind: 'absent-in-tree',
-          module: ['@playdeck/core', '@playdeck/react'],
-          glob: ['**/*.js', '**/*.d.ts'],
-          includes: 'registerPlugin'
+          kind: 'types',
+          module: '@playdeck/react',
+          path: 'dist/root.d.ts',
+          includes: 'readonly providers?: P;'
         },
-        source: PLAYDECK_TREE,
-        note: 'Extensibility is React composition (compose primitives, pass props/render props), not a plugin registry.'
+        source: 'packages/react/dist/root.d.ts (`RootProps.providers`)',
+        note: "Extensibility is still mostly React composition (compose primitives, pass props/render props), not a registry a plugin calls into -- with one seam: `Player.Root`'s `providers` prop lets a consumer register a `detect`/`load` pair for a source kind this package does not ship a loader for. No hook over commands or events exists yet."
       },
       'react-player': {
         status: 'yes',
