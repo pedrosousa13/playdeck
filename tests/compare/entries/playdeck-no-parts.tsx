@@ -11,14 +11,18 @@
 // never draws would not be a fact about either library's cost for the same
 // thing.
 //
-// `loading="interaction"` is kept from playdeck.tsx rather than dropped: it
-// is what makes `@playdeck/provider-native` load through a dynamic `import()`
-// instead of a static one, and that import site lives in `Root`'s own
-// `use-activation.ts` dependency (`packages/react/src/use-activation.ts`,
-// which imports `provider-loaders.ts`), not in `ActivationButton` -- so it
-// stays reachable in this fixture's build graph with no activation element
-// present to trigger it, confirmed by reading those two files rather than
-// assumed.
+// `loading="interaction"` is kept from playdeck.tsx rather than dropped, so
+// the two rows differ only by the parts they draw. It is not what makes
+// `@playdeck/provider-native` load dynamically: `loadProvider`
+// (`packages/react/src/provider-loaders.ts`) takes no `loading` argument at
+// all and branches on `source.type`, so a `video` source reaches
+// `await import('@playdeck/provider-native')` at every loading strategy.
+// `loading` decides when `loadProvider` is called, not whether the import is
+// static. What matters here is where that import site sits: in `Root`'s own
+// `use-activation.ts` dependency, which imports `provider-loaders.ts`, and
+// not in `ActivationButton` -- so the provider stays reachable in this
+// fixture's build graph with no activation element present. Confirmed by
+// reading those two files rather than assumed.
 import { createRoot } from 'react-dom/client';
 import * as Player from '@playdeck/react';
 

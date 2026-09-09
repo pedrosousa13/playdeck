@@ -6,11 +6,12 @@
 // `usePlayerState` subscription either). `PlayButton` renders with no
 // children -- `PlayButtonProps` (`packages/react/src/transport-controls.tsx`)
 // makes `children` optional, and this fixture asks a bundler what one control
-// part costs, not what a finished-looking button looks like; playdeck.tsx and
-// playdeck-control-bar.tsx already own the icon-swap pattern for a played/
-// paused button and adding a copy of it here would measure `PlayIcon` and
-// `PauseIcon` twice for one control that names neither in the issue's own
-// composition.
+// part costs, not what a finished-looking button looks like.
+// playdeck-control-bar.tsx already owns the icon-swap pattern for a played/
+// paused button; playdeck.tsx does not -- it renders one static
+// `Player.PlayIcon` inside an `ActivationButton` and never swaps it. Adding
+// either shape here would measure icon components for a control the issue's
+// own composition names without them.
 //
 // This row sits between `playdeck.tsx` (one `ActivationButton`) and
 // `playdeck-control-bar.tsx` (five parts): it is the composition that makes
