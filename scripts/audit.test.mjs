@@ -1254,8 +1254,9 @@ test('no baseline runs no comparison', () => {
 // only the half that was emptied. Both captured trees agree exactly, which is
 // what makes the disagreement worth failing on.
 // A list carrying one advisory per severity named, each a real captured
-// advisory relabelled: the comparison reads `severity` and counts entries, so
-// the rest of the shape is the capture's rather than invented here.
+// advisory relabelled: the comparison reads `severity` and sums `findings`, so
+// the rest of the shape is the capture's rather than invented here. Every
+// captured advisory carries exactly one finding, so an entry here counts one.
 /** @param {readonly string[]} severities */
 const listing = (severities) => {
   const [advisory] = Object.values(developmentOnly.audit.advisories);
@@ -1330,6 +1331,66 @@ test('a list carrying everything the metadata counted reports nothing', () => {
   for (const variant of [shipped, developmentOnly]) {
     assert.deepEqual(unreportedAdvisories(variant.audit), []);
   }
+});
+
+test('one advisory covering two installed versions is not a hidden advisory', () => {
+  // The false positive this comparison was moved to findings for. Both
+  // captures carry exactly one finding per advisory, so entries and findings
+  // agree in them and neither could ever have caught this: it took a real
+  // advisory -- GHSA-rgj7-g3m4-5g8c, against sharp -- matching two installed
+  // versions of one package, which pnpm returns as one entry carrying two
+  // findings while the metadata counts both. Counting entries read that as an
+  // advisory dropped from the list and failed every pull request against an
+  // ordinary tree.
+  const [advisory] = Object.values(developmentOnly.audit.advisories);
+  const [finding] = advisory.findings;
+  assert.deepEqual(
+    unreportedAdvisories({
+      advisories: {
+        0: {
+          ...advisory,
+          severity: 'high',
+          findings: [
+            { ...finding, version: '0.35.2' },
+            { ...finding, version: '0.35.3' }
+          ]
+        }
+      },
+      metadata: {
+        vulnerabilities: { info: 0, low: 0, moderate: 0, high: 2, critical: 0 },
+        totalDependencies: 6
+      }
+    }),
+    []
+  );
+});
+
+test('an advisory hidden from a list whose entries span two versions is still reported', () => {
+  // The other side of the same move, so the trade is pinned rather than
+  // assumed: counting findings must not stop the gate seeing a suppression.
+  // The list holds the two-finding advisory alone; the metadata still counts
+  // the three findings it had before one single-finding advisory was hidden.
+  const [advisory] = Object.values(developmentOnly.audit.advisories);
+  const [finding] = advisory.findings;
+  assert.deepEqual(
+    unreportedAdvisories({
+      advisories: {
+        0: {
+          ...advisory,
+          severity: 'high',
+          findings: [
+            { ...finding, version: '0.35.2' },
+            { ...finding, version: '0.35.3' }
+          ]
+        }
+      },
+      metadata: {
+        vulnerabilities: { info: 0, low: 0, moderate: 0, high: 3, critical: 0 },
+        totalDependencies: 6
+      }
+    }),
+    [{ severity: 'high', counted: 3, carried: 2 }]
+  );
 });
 
 // `development-only` agrees with its own metadata and passes today, so raising
