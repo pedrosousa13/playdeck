@@ -19,11 +19,11 @@
 // have. `write: false` keeps the build in memory, the same way
 // readme-bytes.mjs's `minifiedGzipKilobytes` does, so this never touches disk
 // and never risks measuring a stale dist/ left over from a previous run.
-// Two rows are Playdeck, measuring the same entry point's worth of
-// primitives at two different control-bar compositions -- see the
-// `libraries` array below and docs/comparison/method.md's "Equivalent
-// composition per library" for which of the two is the fair comparison for
-// which other row.
+// Four rows are Playdeck, measuring the same package's primitives at four
+// different control compositions, from no control parts at all to a full
+// control bar -- see the `libraries` array below and
+// docs/comparison/method.md's "Equivalent composition per library" for which
+// of the four is the fair comparison for which other row.
 //
 // ---- the esbuild cross-check ------------------------------------------------
 //
@@ -156,10 +156,27 @@ const REACT_EXTERNALS = [
  */
 export const libraries = [
   {
+    name: 'Playdeck (no parts)',
+    package: '@playdeck/react',
+    entry: 'entries/playdeck-no-parts.tsx',
+    composition: 'core + native provider, no control parts',
+    requiredChunk: (chunk) =>
+      chunk.moduleIds.some((id) => id.includes('/provider-native/'))
+  },
+  {
     name: 'Playdeck',
     package: '@playdeck/react',
     entry: 'entries/playdeck.tsx',
     composition: 'core + primitives + native provider',
+    requiredChunk: (chunk) =>
+      chunk.moduleIds.some((id) => id.includes('/provider-native/'))
+  },
+  {
+    name: 'Playdeck (play-only)',
+    package: '@playdeck/react',
+    entry: 'entries/playdeck-play-only.tsx',
+    composition:
+      'core + primitives + native provider + one control (PlayButton)',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/'))
   },
