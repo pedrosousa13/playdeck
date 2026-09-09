@@ -8,16 +8,20 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
+  checkCeiling,
   delta,
   excludedChunks,
   gzipBytes,
   kb,
+  libraries,
   lineDiff,
   maskVolatile,
   normalizeEsbuildOutputs,
   notCounted,
+  PLAY_ONLY_FORBIDDEN_MODULES,
   pinnedVersion,
   reachableChunks,
+  reachedForbiddenModule,
   renderResultsDoc,
   renderTable
 } from './compare-libraries.mjs';
@@ -34,7 +38,7 @@ const scriptsDir = dirname(fileURLToPath(import.meta.url));
 // like the real ones rather than the real libraries.
 
 /**
- * @param {{ fileName: string; code?: string; isEntry?: boolean; imports?: string[]; dynamicImports?: string[]; moduleIds?: string[] }} overrides
+ * @param {{ fileName: string; code?: string; isEntry?: boolean; imports?: string[]; dynamicImports?: string[]; moduleIds?: string[]; moduleRenderedExports?: Record<string, readonly string[]> }} overrides
  */
 const chunk = (overrides) => ({
   code: '',
@@ -905,6 +909,47 @@ test('compare-libraries --check exits non-zero and prints a diff when a figure i
   }
 });
 
+// `PLAYDECK_COMPARE_STUB_ROW_NAME` / `_BYTES` (see `testSeam` in
+// compare-libraries.mjs) name the stub row after a real Playdeck row so
+// `main`'s `libraries.find(...)` lookup finds a real `ceilingKb` to check
+// the stub's artificially heavy `bytes` against -- an "artificially heavier
+// composition" (#649's acceptance criterion) that runs the real CLI
+// end to end, not just the pure `checkCeiling` function below.
+test('compare-libraries --check fails a Playdeck row that measures past its committed ceiling, naming the row and both figures', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'compare-libraries-cli-'));
+  try {
+    const doc = join(dir, 'results.md');
+    const overCeiling = libraries.find(
+      (library) => library.name === 'Playdeck (no parts)'
+    );
+    assert.ok(
+      overCeiling?.ceilingKb !== undefined,
+      'Playdeck (no parts) should carry a ceilingKb'
+    );
+    const heavyBytes = Math.round(overCeiling.ceilingKb * 1024) + 1024;
+    const env = {
+      PLAYDECK_COMPARE_DOC: doc,
+      PLAYDECK_COMPARE_STUB: '1',
+      PLAYDECK_COMPARE_STUB_ROW_NAME: overCeiling.name,
+      PLAYDECK_COMPARE_STUB_ROW_BYTES: String(heavyBytes)
+    };
+    const checked = runCli('compare-libraries.mjs', ['--check'], env);
+    assert.notEqual(checked.status, 0);
+    assert.match(checked.stderr, /Playdeck \(no parts\) measures/);
+    assert.match(
+      checked.stderr,
+      new RegExp(kb(heavyBytes).replace('.', '\\.'))
+    );
+    assert.match(
+      checked.stderr,
+      new RegExp(kb(overCeiling.ceilingKb * 1024).replace('.', '\\.'))
+    );
+    assert.match(checked.stderr, /past its committed ceiling/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 // ---- the control-bar row's own label ------------------------------------------
 
 // `results.md` and `docs/comparison/method.md` both say the Playdeck control-bar
@@ -960,4 +1005,290 @@ test('the control-bar fixture still carries exactly the five parts both document
     'utf8'
   );
   assert.match(method, /five of Media\s+Chrome's seven controls/);
+});
+
+// ---- checkCeiling and the four committed Playdeck ceilings (#649) -----------
+
+test('checkCeiling does not throw at or under the ceiling', () => {
+  assert.doesNotThrow(() => checkCeiling('Playdeck (no parts)', 20 * 1024, 20));
+  assert.doesNotThrow(() =>
+    checkCeiling('Playdeck (no parts)', 20 * 1024 - 1, 20)
+  );
+});
+
+test('checkCeiling throws naming the row and both the measured and ceiling figures once bytes pass it', () => {
+  // Red: 21000 bytes stands in for an "artificially heavier composition"
+  // (#649's acceptance criterion) measuring past Playdeck (no parts)'s
+  // committed 20 KB ceiling -- confirmed failing this way (a live run
+  // against the real CLI, driven through a stubbed row named after this
+  // same library, is the test right above this section).
+  assert.throws(
+    () => checkCeiling('Playdeck (no parts)', 21000, 20),
+    /Playdeck \(no parts\) measures 20\.51 KB, past its committed ceiling of 20\.00 KB/
+  );
+});
+
+test('exactly the four Playdeck rows carry a ceiling; no other library row does', () => {
+  const playdeckRowNames = new Set([
+    'Playdeck (no parts)',
+    'Playdeck',
+    'Playdeck (play-only)',
+    'Playdeck (control bar)'
+  ]);
+  for (const library of libraries) {
+    if (playdeckRowNames.has(library.name)) {
+      assert.equal(
+        typeof library.ceilingKb,
+        'number',
+        `${library.name} should carry a ceilingKb`
+      );
+    } else {
+      assert.equal(
+        library.ceilingKb,
+        undefined,
+        `${library.name} should not carry a ceilingKb -- only the four Playdeck rows do (#649)`
+      );
+    }
+  }
+});
+
+/**
+ * `Math.ceil(kb / 0.25) * 0.25` computed in integer hundredths-of-a-KB
+ * rather than in floating point, so a measured figure like 19.90 -- not
+ * exactly representable in binary floating point -- cannot round the wrong
+ * way by the kind of error `19.9 / 0.25` itself is prone to.
+ * @param {number} measuredKb
+ * @returns {number}
+ */
+const roundUpToQuarterKb = (measuredKb) => {
+  const measuredCents = Math.round(measuredKb * 100);
+  const quarterCents = 25;
+  return (Math.ceil(measuredCents / quarterCents) * quarterCents) / 100;
+};
+
+/** One results.md table row, as its trimmed cells. @param {string} line @returns {string[]} */
+const tableRowCells = (line) =>
+  line
+    .split('|')
+    .slice(1, -1)
+    .map((cell) => cell.trim());
+
+test("each Playdeck row's committed ceiling is that row's own results.md figure, rounded up to the next 0.25 KB", async () => {
+  const repoRoot = join(scriptsDir, '..');
+  const results = await readFile(
+    join(repoRoot, 'docs/comparison/results.md'),
+    'utf8'
+  );
+  const rows = new Map(
+    results
+      .split('\n')
+      .filter((line) => line.startsWith('|'))
+      .map(tableRowCells)
+      .map((cells) => [cells[0], cells])
+  );
+
+  for (const library of libraries) {
+    if (library.ceilingKb === undefined) continue;
+    const row = rows.get(library.name);
+    assert.ok(row, `${library.name} has no row in docs/comparison/results.md`);
+    const measuredKb = Number(
+      /** @type {string[]} */ (row)[3]?.replace(' KB', '')
+    );
+    assert.ok(
+      Number.isFinite(measuredKb),
+      `${library.name}'s "Gzipped (Vite)" cell did not parse as a number`
+    );
+    assert.equal(
+      library.ceilingKb,
+      roundUpToQuarterKb(measuredKb),
+      `${library.name}'s ceilingKb should be ${measuredKb} KB rounded up to the next 0.25 KB`
+    );
+  }
+});
+
+// ---- reachedForbiddenModule and the play-only row's module gate (#649) ------
+
+// `chunk` is the same hand-built-fixture helper the `reachableChunks` tests
+// above use -- no real `vite build` here either, for the same reason stated
+// at this file's own header.
+
+test('reachedForbiddenModule returns undefined when nothing reachable carries a forbidden export or a forbidden provider', () => {
+  const chunks = [
+    chunk({
+      fileName: 'entry.js',
+      isEntry: true,
+      moduleIds: ['/repo/packages/react/dist/index.js'],
+      moduleRenderedExports: {
+        '/repo/packages/react/dist/index.js': [
+          'Root',
+          'Media',
+          'Viewport',
+          'Controls',
+          'PlayButton'
+        ]
+      }
+    })
+  ];
+  assert.equal(
+    reachedForbiddenModule(chunks, PLAY_ONLY_FORBIDDEN_MODULES),
+    undefined
+  );
+});
+
+test('reachedForbiddenModule names a reached menu primitive', () => {
+  // Red: standing in for tests/compare/entries/playdeck-play-only.tsx being
+  // edited to import `Player.SettingsMenu` -- a hand-built chunk carrying
+  // that export, the way `reachableChunks` above already stands in for a
+  // real chunk graph. Confirmed against the real fixture too: adding
+  // `<Player.SettingsMenu />` to that file and running
+  // `node scripts/compare-libraries.mjs --check` failed with "Playdeck
+  // (play-only)'s reachable chunks reach SettingsMenu, which this
+  // composition ... does not use.", and passed again once the edit was
+  // reverted.
+  const chunks = [
+    chunk({
+      fileName: 'entry.js',
+      isEntry: true,
+      moduleRenderedExports: {
+        '/repo/packages/react/dist/index.js': ['PlayButton', 'SettingsMenu']
+      }
+    })
+  ];
+  assert.equal(
+    reachedForbiddenModule(chunks, PLAY_ONLY_FORBIDDEN_MODULES),
+    'SettingsMenu'
+  );
+});
+
+test('reachedForbiddenModule names a reached slider', () => {
+  const chunks = [
+    chunk({
+      fileName: 'entry.js',
+      isEntry: true,
+      moduleRenderedExports: {
+        '/repo/packages/react/dist/index.js': ['PlayButton', 'VolumeSlider']
+      }
+    })
+  ];
+  assert.equal(
+    reachedForbiddenModule(chunks, PLAY_ONLY_FORBIDDEN_MODULES),
+    'VolumeSlider'
+  );
+});
+
+test('reachedForbiddenModule names reached captions rendering', () => {
+  const chunks = [
+    chunk({
+      fileName: 'entry.js',
+      isEntry: true,
+      moduleRenderedExports: {
+        '/repo/packages/react/dist/index.js': ['PlayButton', 'Captions']
+      }
+    })
+  ];
+  assert.equal(
+    reachedForbiddenModule(chunks, PLAY_ONLY_FORBIDDEN_MODULES),
+    'Captions'
+  );
+});
+
+test('reachedForbiddenModule names a reached non-native provider by its own package directory', () => {
+  const chunks = [
+    chunk({
+      fileName: 'entry.js',
+      isEntry: true,
+      moduleRenderedExports: {
+        '/repo/packages/react/dist/index.js': ['PlayButton']
+      }
+    }),
+    chunk({
+      fileName: 'youtube.js',
+      moduleIds: ['/repo/packages/provider-youtube/dist/index.js']
+    })
+  ];
+  assert.equal(
+    reachedForbiddenModule(chunks, PLAY_ONLY_FORBIDDEN_MODULES),
+    '@playdeck/provider-youtube'
+  );
+});
+
+test("PLAY_ONLY_FORBIDDEN_MODULES' menu and captions names are exactly packages/react/src/index.tsx's own re-export lists for those two files, and its slider names are the right two of transport-controls.tsx's five", async () => {
+  const repoRoot = join(scriptsDir, '..');
+  const indexSource = await readFile(
+    join(repoRoot, 'packages/react/src/index.tsx'),
+    'utf8'
+  );
+
+  /**
+   * The runtime (not `export type`) re-export list index.tsx names from one
+   * of its own relative module paths.
+   * @param {string} modulePath
+   * @returns {string[]}
+   */
+  const runtimeExportsFrom = (modulePath) => {
+    const escaped = modulePath.replace(/\./g, '\\.');
+    const match = indexSource.match(
+      new RegExp(`export \\{([^}]*)\\} from '${escaped}';`)
+    );
+    if (!match) {
+      throw new Error(
+        `index.tsx has no runtime export block from '${modulePath}'`
+      );
+    }
+    return /** @type {string} */ (match[1])
+      .split(',')
+      .map((name) => name.trim())
+      .filter(Boolean);
+  };
+
+  const forbiddenNames = new Set(
+    PLAY_ONLY_FORBIDDEN_MODULES.map((entry) => entry.name)
+  );
+
+  const menuExports = runtimeExportsFrom('./settings-menu.js');
+  assert.deepEqual(
+    [...menuExports].sort(),
+    [
+      'MenuItem',
+      'MenuRadioGroup',
+      'MenuRadioItem',
+      'SettingsMenu',
+      'SettingsMenuContent',
+      'SettingsMenuTrigger'
+    ].sort()
+  );
+  for (const name of menuExports) assert.ok(forbiddenNames.has(name), name);
+
+  const captionsExports = runtimeExportsFrom('./captions.js');
+  assert.deepEqual(
+    [...captionsExports].sort(),
+    ['Captions', 'CaptionsButton', 'CaptionsMenu'].sort()
+  );
+  for (const name of captionsExports) assert.ok(forbiddenNames.has(name), name);
+
+  const transportControlsExports = runtimeExportsFrom(
+    './transport-controls.js'
+  );
+  assert.deepEqual(
+    [...transportControlsExports].sort(),
+    ['MuteButton', 'PlayButton', 'SeekSlider', 'Time', 'VolumeSlider'].sort()
+  );
+  assert.ok(forbiddenNames.has('VolumeSlider'));
+  assert.ok(forbiddenNames.has('SeekSlider'));
+  // The other three -- PlayButton, MuteButton, Time -- are ordinary
+  // controls this row (or the control-bar row) legitimately reaches, and
+  // must stay out of the forbidden list.
+  assert.ok(!forbiddenNames.has('PlayButton'));
+  assert.ok(!forbiddenNames.has('MuteButton'));
+  assert.ok(!forbiddenNames.has('Time'));
+});
+
+test('the play-only row is the only library entry carrying forbiddenModules', () => {
+  for (const library of libraries) {
+    if (library.name === 'Playdeck (play-only)') {
+      assert.equal(library.forbiddenModules, PLAY_ONLY_FORBIDDEN_MODULES);
+    } else {
+      assert.equal(library.forbiddenModules, undefined, library.name);
+    }
+  }
 });
