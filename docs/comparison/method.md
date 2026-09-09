@@ -307,16 +307,28 @@ The judgement call the Agent Brief asks to be written down: what "the same
 thing" means across six libraries with six different ideas of what a video
 player is.
 
-**Playdeck** is measured twice, as two rows, because one composition cannot be
-the fair comparison for both react-player (which draws no control surface of
-its own) and Media Chrome, Vidstack and Video.js (which each draw a full
-control bar). The issue's own warning about comparing a headless core against
-a library that "bundles their own UI or a full playback engine" applies just
-as much to comparing the wrong Playdeck row against the wrong alternative: the
-one-button row against a seven-button bar, or the control-bar row against a
-composition with no control bar at all, would each overstate a gap that is
-really a difference in what was built, not in how much either library costs
-for the same thing.
+**Playdeck** is measured four times, as four rows, because one composition
+cannot be the fair comparison for react-player (which draws no control
+surface of its own), for the "only what you use loads" claim (which needs a
+number for one control, not zero or five), and for Media Chrome, Vidstack and
+Video.js (which each draw a full control bar). The issue's own warning about
+comparing a headless core against a library that "bundles their own UI or a
+full playback engine" applies just as much to comparing the wrong Playdeck row
+against the wrong alternative: the one-button row against a seven-button bar,
+or the control-bar row against a composition with no control bar at all, would
+each overstate a gap that is really a difference in what was built, not in
+how much either library costs for the same thing.
+
+**Playdeck (no parts)** (`tests/compare/entries/playdeck-no-parts.tsx`) is
+`Player.Root`, `Player.Viewport` and `Player.Media` alone — core plus the
+native provider, and no control part of any kind, not even the one-button
+`Player.ActivationButton` the row below adds. **This row is the fair
+comparison against react-player's row**, and is the more honest one of the two
+Playdeck rows that could be read against it: react-player renders no UI of its
+own for a plain MP4 either (see the react-player paragraph below), so a row
+that also renders none is the one that isolates the library cost from the "did
+it draw a button" difference — the plain **Playdeck** row one paragraph down
+draws one.
 
 **Playdeck** (`tests/compare/entries/playdeck.tsx`) is the composition
 `README.md`'s byte table already calls "MP4 or WebM": `Player.Root` with
@@ -335,9 +347,24 @@ bundles this fixture's actual five imports through a real bundler. The two
 numbers are not interchangeable, and this harness's approach is the one doing
 here what it does for every other library: measuring what this specific,
 named set of imports costs, not an upper bound over every possible selection.
-**This row is the fair comparison against react-player**, whose own row below
-is likewise one control-free composition (native browser controls on a bare
-`<video>`) rather than a drawn control bar.
+**This row sits between the no-parts row above it and the play-only row
+below it** rather than being the fair comparison against any other library's
+row on its own: it draws one part more than react-player's no-UI composition
+(an `ActivationButton`, not a `PlayButton`, so it is not the play-only row's
+composition either), and one control fewer than the five-of-seven control bar
+further down.
+
+**Playdeck (play-only)** (`tests/compare/entries/playdeck-play-only.tsx`) is
+the same fixture as the no-parts row, plus one `Player.Controls` wrapping one
+`Player.PlayButton` with no icon children — the number behind the "only what
+you use loads" claim, isolated to the smallest control a consumer could add.
+**This row is not the fair comparison against any other library's row**: no
+other library measured here ships a bare, unstyled play button as its own
+default composition, so it exists to make one specific claim checkable
+against a figure rather than to sit beside a competitor. Read it against the
+no-parts row above it instead — the difference between the two rows in
+`results.md` is what `Player.Controls` plus one `Player.PlayButton` cost on
+their own, with the native provider and everything above them held fixed.
 
 **Playdeck (control bar)** (`tests/compare/entries/playdeck-control-bar.tsx`)
 is the same fixture plus a `Player.Controls` holding the parts that
@@ -370,9 +397,10 @@ resolves to its `html` player — a thin wrapper around a native `<video>` — t
 only provider in that array that is not `React.lazy`-loaded, so `controls`
 here means the same thing it means on a bare `<video>` element: the browser's
 own native control set, not any UI react-player draws itself. Its row in
-`results.md` is smaller than Playdeck's one-button row, and the honest reason
-is not that react-player is a smaller library; it is that this row draws no
-custom UI at all, while Playdeck's row draws one button.
+`results.md` is smaller than Playdeck's no-parts row too, and the honest
+reason is not that react-player is a smaller library; both rows draw no
+custom UI, so the remaining gap is core-plus-native-provider weight, not a
+button either row draws.
 
 **Vidstack** (`entries/vidstack.tsx`) is `<MediaPlayer src="…mp4">` wrapping
 `<MediaProvider />` and `<DefaultVideoLayout icons={defaultLayoutIcons} />` —
@@ -448,12 +476,12 @@ reachability logic either.
 The issue's fairness rule is not satisfied by a bytes table alone, and reading
 one number off `results.md` without this paragraph would misread it:
 
-- **react-player's row is smaller than Playdeck's one-button row here** (see
-  `results.md`), and the honest reason is that its row draws no UI at all —
-  native browser controls on a bare `<video>` — while Playdeck's row draws
-  one styled button. A reader who wants zero custom UI gets it from
-  react-player for less code than Playdeck's core, and the two are not
-  otherwise comparable at this composition.
+- **react-player's row is smaller than Playdeck's no-parts row here** (see
+  `results.md`), and both draw no custom UI — native browser controls on a
+  bare `<video>` for react-player, no controls of any kind for Playdeck's
+  no-parts row — so the remaining gap is not one either library spends on a
+  button. A reader who wants zero custom UI gets it from react-player for
+  less code than Playdeck's core plus native provider.
 - **Media Chrome ships two controls Playdeck's control-bar row does not**:
   a seek-backward and a seek-forward button. Playdeck has no
   `SeekBackwardButton` or `SeekForwardButton` part — only the icons meant to
@@ -811,7 +839,7 @@ pnpm compare:libraries
 `package.json` `exports` field points at its own `dist/`, gitignored and not
 rebuilt by `pnpm install` alone — the same reason CI's `docs:bytes:check` runs
 inside the `build` job rather than beside `docs:check` in `static`. A stale
-`dist/` changes Playdeck's two rows and nothing else, silently, which is
+`dist/` changes Playdeck's four rows and nothing else, silently, which is
 what makes it worth checking first rather than after `--check` fails.
 
 `pnpm compare:libraries:check` fails if a fresh run would produce different
