@@ -118,6 +118,6 @@ test("every escaping import in apps/site is one of @playdeck/site#build's turbo.
   assert.deepEqual(
     uncovered(escapes, globs),
     [],
-    'declare the path above as an input of @playdeck/site#build in turbo.json'
+    'declare the path(s) above as input(s) of @playdeck/site#build in turbo.json'
   );
 });

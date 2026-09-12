@@ -23,13 +23,14 @@
     // against a stale site.
     //
     // `$TURBO_DEFAULT$` keeps the package's own files in the set and adds
-    // these beside them, rather than replacing them. `scripts/site-build-
-    // inputs.test.mjs` catches a regression of the same shape for a plain
-    // relative import crossing this package's boundary -- it cannot see a
-    // path built at runtime from a string, the way `docs/provider-setup.md`,
-    // `docs/comparison/**`, `apps/storybook/stories/*.mdx` and
+    // these beside them, rather than replacing them.
+    // `scripts/site-build-inputs.test.mjs` catches a regression of the same
+    // shape for a plain relative import crossing this package's boundary --
+    // it cannot see a path built at runtime from a string, the way
+    // `docs/provider-setup.md`, `docs/comparison/**`,
+    // `apps/storybook/stories/*.mdx`, `packages/*/README.md` and
     // `packages/*/package.json` are all read through `join(repoRoot, ...)`
-    // rather than imported, so those four stay a manual audit.
+    // rather than imported, so those five stay a manual audit.
     "@playdeck/site#build": {
       "dependsOn": ["^build"],
       "inputs": [

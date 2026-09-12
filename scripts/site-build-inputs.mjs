@@ -12,10 +12,21 @@
 // 'package.json')` in `src/reference-packages.mjs` -- is not: `repoRoot`,
 // `COMPARISON_DIR` and `pkg.path` are values, not source text naming a path,
 // and finding what they resolve to in general means running the module rather
-// than reading it. `docs/comparison/**`, `apps/storybook/stories/*.mdx` and
+// than reading it. `docs/provider-setup.md`, `docs/comparison/**`,
+// `apps/storybook/stories/*.mdx`, `packages/*/README.md` and
 // `packages/*/package.json` all reach the site build this second way, so this
-// module cannot verify any of the three -- they were added to `turbo.json` by
-// the audit #711 recorded, and stay correct only as long as that audit does.
+// module cannot verify any of the five -- they were added to `turbo.json` by
+// the audit #711 recorded, and this module's static-import check stands
+// beside that audit rather than replacing it.
+//
+// Two narrower gaps sit inside the mechanism this module does cover. It
+// walks only `apps/site/astro.config.ts` and `apps/site/src`, and never
+// follows into a script one of those files imports -- so a new
+// `scripts/*.mjs` import added inside `scripts/readme-bytes.mjs` itself
+// would cross this package's boundary unseen. And `FROM_SPECIFIER` and
+// `BARE_SPECIFIER` both match a static `import`/`from` clause; neither
+// matches `await import('…')` or `import.meta.glob('…')`, so either form
+// would also escape undetected.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, extname, join, relative, resolve, sep } from 'node:path';
