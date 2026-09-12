@@ -339,6 +339,64 @@ test('never hands a forbidden-scheme URL to a supplied detect', () => {
   expect(result.status).toBe('failure');
 });
 
+// The bypass this closes: a `detect` return is exactly as arbitrary a shape as
+// an explicit source object is, so it is exactly as capable of hiding a
+// forbidden scheme a level or more down, and the fix applies the same
+// `everyStringPermitted` walk to it. A registration whose `detect` fails that
+// walk is treated as a decline, not a reason to fail detection outright, so a
+// later registration that would have matched honestly still gets its turn --
+// both halves are asserted below.
+test('refuses a detect return carrying a forbidden scheme nested inside it, and continues to a later registration', () => {
+  const dishonest = vi.fn(() => ({
+    type: 'acme',
+    config: { url: 'javascript:alert(1)' }
+  }));
+  const honest = vi.fn(() => ({ type: 'other', id: '1' }) as const);
+
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    acme: { detect: dishonest, load: vi.fn() },
+    other: { detect: honest, load: vi.fn() }
+  });
+
+  expect(dishonest).toHaveBeenCalledWith('https://example.com/media/1');
+  expect(honest).toHaveBeenCalledWith('https://example.com/media/1');
+  expect(result).toMatchObject({
+    status: 'success',
+    source: { type: 'other', id: '1' }
+  });
+});
+
+test('still resolves a detect return that carries no forbidden scheme, unchanged', () => {
+  const detect = vi.fn(() => ({ type: 'acme', videoId: 'abc123' }) as const);
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    acme: { detect, load: vi.fn() }
+  });
+  expect(result).toEqual({
+    status: 'success',
+    input: 'https://example.com/media/1',
+    source: { type: 'acme', videoId: 'abc123' }
+  });
+});
+
+// The string/`detect` half of the reserved-name guarantee: a registration
+// keyed by one of the five built-in names never even has its `detect` called,
+// on any URL, whatever it would have returned -- the object-path half of the
+// same guarantee is proven separately below, against an explicit source
+// object.
+test('never calls detect for a registration keyed by a reserved built-in name', () => {
+  const hlsDetect = vi.fn(
+    () => ({ type: 'hls', src: 'https://evil.test/x.m3u8' }) as const
+  );
+  const youtubeDetect = vi.fn();
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    hls: { detect: hlsDetect, load: vi.fn() },
+    youtube: { detect: youtubeDetect, load: vi.fn() }
+  });
+  expect(hlsDetect).not.toHaveBeenCalled();
+  expect(youtubeDetect).not.toHaveBeenCalled();
+  expect(result.status).toBe('failure');
+});
+
 test('behaves exactly like detectSource when no providers are supplied', () => {
   expect(
     detectSourceWithProviders('https://example.com/nothing', undefined)
@@ -384,6 +442,24 @@ test('does not refuse a plain non-URL string field on an explicit supplied-kind 
     { acme: { detect: vi.fn(), load: vi.fn() } }
   );
   expect(result).toMatchObject({ status: 'success' });
+});
+
+// The object-path half of the reserved-name guarantee: `{ type: 'hls' }` with
+// no `src` field fails core's own `sourceFromExplicitObject` (`hls` requires
+// one), so this falls through to the supplied path exactly as an object of an
+// unregistered kind would. Even with a registration actually keyed `hls`, that
+// object is never resolved through it -- without the reserved-name skip,
+// `everyStringPermitted` would have passed this object trivially (its only
+// string, `'hls'`, names no scheme) and returned it as a resolved `hls`
+// source missing the `src` field core's own validation exists to require.
+test('does not resolve an explicit object whose type is a reserved built-in name through the supplied path', () => {
+  const detect = vi.fn();
+  const result = detectSourceWithProviders(
+    { type: 'hls' },
+    { hls: { detect, load: vi.fn() } }
+  );
+  expect(detect).not.toHaveBeenCalled();
+  expect(result.status).toBe('failure');
 });
 
 test('refuses an explicit object whose type matches no registered provider', () => {
@@ -462,10 +538,15 @@ test('reports a supplied kind with no matching registration the same way as an u
   ).rejects.toThrow('No provider adapter is installed for acme.');
 });
 
-// The inertness `provider-loaders.ts`'s own comment on `detectSourceWithProviders`
-// relies on: a `providers` entry keyed by a reserved, built-in name never
-// actually runs, because the five built-in branches in `loadProvider` dispatch
-// on `source.type` before its own `providers` lookup ever does.
+// One half of the inertness `provider-loaders.ts`'s own comment on
+// `RESERVED_PROVIDER_NAMES` now describes in full: a `providers` entry keyed by
+// a reserved, built-in name never has its `load` run, because the five
+// built-in branches in `loadProvider` dispatch on `source.type` before its own
+// `providers` lookup ever does. The other half -- that such a registration
+// never has its `detect` called either -- is proven separately above, by
+// `detectSourceWithProviders` never invoking it (`never calls detect for a
+// registration keyed by a reserved built-in name`); the two together are what
+// make a reserved-keyed registration inert rather than only its `load` half.
 test('never lets a providers entry keyed by a built-in name intercept the built-in dispatch', async () => {
   const { createHlsProvider } = await import('@playdeck/provider-hls');
   const media = document.createElement('video');

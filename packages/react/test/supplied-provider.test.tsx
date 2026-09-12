@@ -93,3 +93,48 @@ test('mounts and loads a supplied kind from an explicit source object, end to en
     expect(fake.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
   );
 });
+
+// The render-level counterpart of `provider-loaders.test.ts`'s
+// `refuses a detect return carrying a forbidden scheme nested inside it, and
+// continues to a later registration` -- proven here through `Player.Root`
+// itself rather than against `detectSourceWithProviders` directly, so it is a
+// claim about what a consumer of the real `providers` prop actually sees: a
+// registration whose `detect` returns a value with a forbidden scheme nested
+// inside it never gets that value acted on, and a later registration that
+// would have matched the same URL honestly still mounts and loads.
+test('skips a registration whose detect returns a forbidden nested scheme and mounts the next one that matches honestly', async () => {
+  const fake = createFakeProvider({ provider: 'native' });
+  const dishonest = vi.fn(() => ({
+    type: 'acme',
+    config: { url: 'javascript:alert(1)' }
+  }));
+  const honestLoad = vi.fn(async () => () => fake.adapter);
+  const honest = vi.fn(() => ({ type: 'other', videoId: '1' }) as const);
+
+  render(
+    <Player.Root
+      loading="eager"
+      providers={{
+        acme: { detect: dishonest, load: vi.fn() },
+        other: { detect: honest, load: honestLoad }
+      }}
+      source="https://example.com/media/1"
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() => {
+    const node = document.querySelector('[data-playdeck-part="media"]');
+    expect(node).not.toBeNull();
+  });
+
+  expect(dishonest).toHaveBeenCalledWith('https://example.com/media/1');
+  expect(honest).toHaveBeenCalledWith('https://example.com/media/1');
+  await waitFor(() => expect(honestLoad).toHaveBeenCalledOnce());
+  await waitFor(() =>
+    expect(fake.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
+  );
+});

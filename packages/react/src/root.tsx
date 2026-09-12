@@ -198,10 +198,12 @@ export type RootProps<P extends PlayerProviders = Record<string, never>> = {
    * `providers`' own entries, in the order they were given, using the first
    * whose `detect` accepts the `source` string -- so a supplied kind can
    * never intercept a URL a built-in host already claims. `hls`, `video`,
-   * `youtube`, `vimeo` and `wistia` are reserved names for the same reason: a
-   * `providers` entry keyed by one of them can never be reached, because a
-   * resolved source of that `type` is dispatched by this package's own
-   * built-in loader first, whatever registered it.
+   * `youtube`, `vimeo` and `wistia` are reserved names: a `providers` entry
+   * keyed by one of them is skipped outright, on both this string path and
+   * the explicit-object path below, before its `detect` is ever called or its
+   * entry is ever looked up -- not only inert once a resolved source of that
+   * `type` reaches this package's own built-in loader, which dispatches on
+   * `type` first regardless of which registration produced it.
    *
    * `source` also accepts an explicit object of a supplied kind directly --
    * `PlayerSource<Extra>` (`@playdeck/core`) is what opens that up, for the

@@ -437,13 +437,16 @@ is actually detected, that resolves to the function which builds the running
 Tried only once all five built-in kinds refuse a URL, in the order the
 `providers` map's own entries were declared — the one order object property
 enumeration guarantees. `hls`, `video`, `youtube`, `vimeo` and `wistia` are
-reserved names a supplied provider can register under but never actually
-reach: a resolved source of that `type` is dispatched to the matching
-built-in loader first, whatever registered it. An explicit source object of a
-registered kind resolves too, without ever calling `detect` — it has already
-declared its own kind through its `type` field — provided every string value
-anywhere inside it, nested included, clears the same `isPermittedSourceUrl`
-allowlist a URL string does. `PlayerSource`'s generic parameter
+reserved names a supplied provider can register under but that registration
+is skipped outright, before its `detect` is ever called and before an
+explicit object of that `type` is ever looked up against `providers` — not
+only unreachable once a resolved source of that `type` is dispatched to the
+matching built-in loader first, whatever registered it. An explicit source
+object of a registered, non-reserved kind resolves too, without ever calling
+`detect` — it has already declared its own kind through its `type` field —
+provided every string value anywhere inside it, nested included, clears the
+same `isPermittedSourceUrl` allowlist a URL string does; a `detect` return is
+held to the same allowlist before it is accepted, for the same reason. `PlayerSource`'s generic parameter
 (`packages/core/src/types.ts`) is what a supplied provider's own source shape
 opens the type up through, without touching what the five built-in kinds
 accept when a consumer never sets `providers` at all.

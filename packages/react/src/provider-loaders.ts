@@ -198,8 +198,11 @@ export type ProviderRegistration<
 // (`detect`'s return) and contravariantly (`load`'s factory's own `source`
 // parameter), so it is invariant overall, and TypeScript's structural checks
 // reject a `ProviderRegistration<AcmeSource, AcmeOptions>` against any
-// concrete pair here -- `unknown` fails the covariant side, `never` fails the
-// contravariant one, and the two built-in kinds' own concrete types would
+// concrete pair here -- `unknown` fails the contravariant side (`load`'s
+// factory's own `source` parameter), `never` fails the covariant one
+// (`detect`'s return type), verified with `tsc --strict` against a minimal
+// two-member repro of this same shape -- and the two built-in kinds' own
+// concrete types would
 // reject each other's registration the same way a heterogeneous map always
 // rejects a narrower member under strict function-parameter variance. `any`
 // is the one pair this constraint can hold every registration to at once,
@@ -392,6 +395,32 @@ const everyStringPermitted = (value: unknown): boolean => {
   return true;
 };
 
+// The five source-kind names `loadProvider` above dispatches to
+// unconditionally, ahead of ever consulting `providers`. A registration keyed
+// by one of these is skipped in both paths below -- before its `detect` is
+// even called on the string path, and before its entry is looked up at all on
+// the explicit-object path -- rather than merely finding, once called, that
+// `loadProvider` routes a resolved source of that `type` to the matching
+// built-in branch regardless of which registration produced it.
+//
+// That is not only dead code being pruned: proven by probe, a registration
+// keyed `hls` whose `detect` returned `{ type: 'hls', src:
+// 'https://evil.test/injected.m3u8' }` had that `detect` actually called --
+// `true` -- and its return routed straight to `loadProvider`'s built-in `hls`
+// branch, which builds the adapter from it directly and never runs it through
+// `sourceFromExplicitObject`'s own per-kind validation (`isPermittedSourceUrl`
+// against `src`, `packages/core/src/source-detection.ts`). Skipping the
+// registration here, before either path can call it, closes that: a
+// registration cannot masquerade as a built-in kind's own resolved source by
+// returning one shaped like it.
+const RESERVED_PROVIDER_NAMES: readonly string[] = [
+  'hls',
+  'video',
+  'youtube',
+  'vimeo',
+  'wistia'
+];
+
 // `Root`'s own `detectSource`, layered over core's: core's own five-kind
 // `detectSource` runs first and wins outright on success, so a supplied kind
 // never gets a look-in on a URL -- or an explicit object -- a built-in host
@@ -404,18 +433,33 @@ const everyStringPermitted = (value: unknown): boolean => {
 // object's own enumeration order -- insertion order for the string keys this
 // map is ever given, the one order property enumeration guarantees (ECMA-262
 // `OwnPropertyKeys`), which is declaration order as `Root`'s own doc comment
-// on `providers` promises -- using the first whose `detect` accepts it.
+// on `providers` promises -- using the first whose `detect` both accepts the
+// string and returns a value `everyStringPermitted` clears. That walk is the
+// same one the explicit-object path below applies to an object handed in
+// directly -- a `detect` return is exactly as arbitrary a shape, so it is
+// exactly as capable of hiding a forbidden scheme a level or more down, and
+// proven so by the same probe `RESERVED_PROVIDER_NAMES` above cites: a
+// registration whose `detect` returned `{ type: 'acme', config: { url:
+// 'javascript:alert(1)' } }` used to have that value accepted outright,
+// because only the explicit-object path had ever run this walk. A `detect`
+// return that fails it is treated as a decline, not as a reason to fail
+// detection outright: the loop below simply keeps walking the remaining
+// registrations, exactly as it already does when `detect` itself returns
+// `undefined`, because one registration returning a value this package
+// refuses to trust is not grounds to veto a later registration that would
+// have matched honestly.
 //
 // An explicit object is resolved without ever calling a registration's
 // `detect`: `detect` takes a URL string by contract, and an object arriving
 // here has already declared its own kind through its `type` field, the same
 // way `sourceFromExplicitObject` skips every built-in host detector and goes
 // straight to per-kind validation once `input.type` names one. So a record
-// whose `type` is a non-empty string matching a registered `providers` key is
-// accepted as that kind's resolved source directly, once `everyStringPermitted`
-// above has cleared every string value nested anywhere inside it. A `type`
-// matching no registration, or a `type` that is not a string at all, falls
-// through to the built-in failure below unchanged -- there is nothing a
+// whose `type` is a non-empty string matching a registered `providers` key,
+// and not one of `RESERVED_PROVIDER_NAMES`, is accepted as that kind's
+// resolved source directly, once `everyStringPermitted` above has cleared
+// every string value nested anywhere inside it. A `type` matching no
+// registration, a reserved name, or a `type` that is not a string at all,
+// falls through to the built-in failure below unchanged -- there is nothing a
 // supplied kind could resolve it to.
 //
 // Deliberately not done here: the built-in `video` and `hls` branches of
@@ -457,8 +501,9 @@ export const detectSourceWithProviders = (
       return builtin;
     }
     for (const key in providers) {
+      if (RESERVED_PROVIDER_NAMES.includes(key)) continue;
       const source = providers[key]?.detect(input);
-      if (source) {
+      if (source && everyStringPermitted(source)) {
         return {
           status: 'success',
           input,
@@ -474,6 +519,7 @@ export const detectSourceWithProviders = (
     if (
       typeof kind === 'string' &&
       kind !== '' &&
+      !RESERVED_PROVIDER_NAMES.includes(kind) &&
       providers[kind] &&
       everyStringPermitted(input)
     ) {

@@ -292,8 +292,11 @@ export const libraries = [
     composition: 'core + primitives + native provider',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 20.56 KB measured 2026-09-09, rounded up to the next 0.25 KB.
-    ceilingKb: 20.75
+    // Raised from 20.75 KB (previously measured 20.56 KB): #662's reserved-name
+    // guard and its validation of a `detect` return (`detectSourceWithProviders`,
+    // `provider-loaders.ts`) reach this composition the same as every other one
+    // below. 20.76 KB measured 2026-09-12, rounded up to the next 0.25 KB.
+    ceilingKb: 21
   },
   {
     name: 'Playdeck (play-only)',
