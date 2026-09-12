@@ -392,9 +392,12 @@ is.
 
 `providerOptions` takes a further key for each supplied kind, alongside the
 four built-in ones, compared for equality the same way — so an inline object
-literal does not tear the provider down and rebuild it every render (see
-[`build`](#the-other-three-providers) above for what that comparison guards
-against).
+literal does not tear the provider down and rebuild it every render, the same
+guard that keeps an inline `hls` `build` option from rebuilding the engine.
+Deliberately not a link: this section is shared by every provider page, and
+`## The other three providers`, where `build` is documented, is split per
+provider and so carries no anchor on most of them (#528's link check is what
+catches that).
 
 <!-- example:provider-setup-providers -->
 
