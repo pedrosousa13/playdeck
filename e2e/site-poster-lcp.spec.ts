@@ -55,6 +55,17 @@ import { expect, test, type Page } from '@playwright/test';
  * at chromium — the `currentSrc` no longer resolves to a file
  * `posterRequestUrls` recognises as either pinned candidate, so
  * `expect(received).toBe(1)` / `Received: 0`.
+ *
+ * The DPR2 mobile test below is additive for the same reason the 1280px one
+ * is: at 375px, `100vw` and this fix's `POSTER_SIZES` both resolve under
+ * 960px even doubled for DPR2 (750px and 654px respectively), so a full
+ * revert cannot redden it either. Substitute mutation: with `POSTER_SIZES`
+ * temporarily set to `(min-width: 1009px) 1104px, 960px` — the value an
+ * earlier attempt at this same fix shipped and was reverted, because its
+ * unconditional `960px` fallback ignores viewport width below 1009px
+ * entirely — the same test fails at chromium: `currentSrc` resolves to
+ * `.../sprite-fright-hls-poster-1920w.webp` where the assertion expects the
+ * 960w file (measured 2026-09-12).
  */
 const landing = 'http://127.0.0.1:4322/';
 
@@ -94,7 +105,7 @@ test('the default poster is preloaded from the served HTML, before any script ru
 
   const imagesizes = /imagesizes="([^"]*)"/.exec(link)?.[1];
   expect(imagesizes).toBe(
-    '(min-width: 72rem) calc(72rem - 3rem), calc(100vw - 3rem)'
+    '(min-width: 1009px) 1104px, (min-width: 961px) 960px, calc(100vw - 48px)'
   );
 
   expect(link).toContain('fetchpriority="high"');
@@ -126,6 +137,45 @@ test('exactly one poster variant is fetched at a mobile width, and it matches th
   expect(
     await posterImage(page).evaluate((el: HTMLImageElement) => el.currentSrc)
   ).toContain(NARROW_POSTER);
+});
+
+test('exactly one poster variant is fetched at a mobile width under DPR2, and it matches the box', async ({
+  browser
+}) => {
+  /*
+   * A `sizes` candidate is compared against the viewport width times device
+   * pixel ratio, not the viewport width alone -- so a correct `sizes` and an
+   * incorrect one can agree at DPR1 and disagree once a real phone's DPR is
+   * in the picture. `newContext` rather than the default `page` fixture is
+   * what lets this test set `deviceScaleFactor` at all; every other test in
+   * this file runs at the Playwright default of 1.
+   */
+  const context = await browser.newContext({
+    viewport: { width: 375, height: 800 },
+    deviceScaleFactor: 2
+  });
+  const page = await context.newPage();
+
+  const requests: string[] = [];
+  page.on('request', (r) => requests.push(r.url()));
+
+  await page.goto(landing);
+  await expect(posterImage(page)).toBeVisible();
+  await page.waitForLoadState('networkidle');
+
+  const fetched = posterRequestUrls(requests);
+  expect(new Set(fetched).size).toBe(1);
+
+  // The stage is still 327px wide here (100vw - 48px of `.page` gutter, same
+  // as the DPR1 case above); at DPR2 that is an effective 654px target,
+  // still under the 960w candidate, so the correct pick is unchanged. See
+  // the "demonstrated red" note at the top of this file for what a
+  // rejected earlier value did to this same case.
+  expect(
+    await posterImage(page).evaluate((el: HTMLImageElement) => el.currentSrc)
+  ).toContain(NARROW_POSTER);
+
+  await context.close();
 });
 
 test('exactly one poster variant is fetched at a narrow-desktop width, and it matches the box', async ({
