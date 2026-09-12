@@ -357,21 +357,38 @@ that builds and returns the running `ProviderAdapter` -- the same interface
 already produces.
 
 Detection tries the five built-in kinds first — a supplied kind can never
-intercept a URL a built-in host already claims — and only on a built-in
-refusal walks `providers`' own entries, in the order they were given, using
-the first whose `detect` accepts the URL. `hls`, `video`, `youtube`, `vimeo`
-and `wistia` are reserved names: a `providers` entry keyed by one of them is
-never reachable, because a resolved source of that `type` is dispatched by
-this package's own built-in loader first, whatever registered it.
+intercept a URL, or an explicit object, a built-in host already claims — and
+only on a built-in refusal walks `providers`' own entries, in the order they
+were given, using the first whose `detect` accepts the URL. `hls`, `video`,
+`youtube`, `vimeo` and `wistia` are reserved names: a `providers` entry keyed
+by one of them is never reachable, because a resolved source of that `type`
+is dispatched by this package's own built-in loader first, whatever
+registered it.
 
-The same shared allowlist runs ahead of every supplied `detect`, exactly where
-it runs ahead of every built-in host inside `detectSource` — a `source` whose
-scheme the allowlist refuses (`javascript:`, `data:`, and anything else not
-covered by [Shared rules for a source string](#shared-rules-for-a-source-string))
-never reaches a supplied `detect` at all. This is why the two are typed as
-they are: nothing this package writes ever reads a field of the source
-`detect` returns as a URL, so once past that gate a supplied kind is trusted
-the same way its own `load` factory already is.
+An explicit object of a supplied kind — `{ type: 'example', clipId: '…' }` —
+resolves without ever calling `detect`: `detect` takes a URL string, and an
+object handed to `source` has already declared its own kind through its
+`type` field, so it is validated directly instead, the same way an explicit
+object of a built-in kind (the table above) skips that kind's own host and
+path detection. A `type` matching no registered `providers` key is refused,
+same as any other unrecognised source. Unlike the built-in `video` and `hls`
+kinds, a supplied kind's own values are never rewritten — there is no known
+field on an arbitrary shape to normalise a protocol-relative `//host/...`
+value on, so it reaches `load`'s factory exactly as given. If that form
+matters to your provider, normalise it yourself before handing the object to
+`Player.Root`.
+
+The same shared allowlist runs ahead of every supplied `detect` and every
+explicit object of a supplied kind, exactly where it runs ahead of every
+built-in host inside `detectSource` — a `source` whose scheme the allowlist
+refuses (`javascript:`, `data:`, and anything else not covered by
+[Shared rules for a source string](#shared-rules-for-a-source-string)) never
+reaches a supplied `detect`, and a string carrying one nested anywhere inside
+an explicit object — not just a top-level field — refuses the whole object the
+same way. This is why `detect` is typed as it is: nothing this package writes
+ever reads a field of the source `detect` returns as a URL, so once past that
+gate a supplied kind is trusted the same way its own `load` factory already
+is.
 
 `providerOptions` takes a further key for each supplied kind, alongside the
 four built-in ones, compared for equality the same way — so an inline object

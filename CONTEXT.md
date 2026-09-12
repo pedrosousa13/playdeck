@@ -439,10 +439,14 @@ Tried only once all five built-in kinds refuse a URL, in the order the
 enumeration guarantees. `hls`, `video`, `youtube`, `vimeo` and `wistia` are
 reserved names a supplied provider can register under but never actually
 reach: a resolved source of that `type` is dispatched to the matching
-built-in loader first, whatever registered it. `PlayerSource`'s generic
-parameter (`packages/core/src/types.ts`) is what a supplied provider's own
-source shape opens the type up through, without touching what the five
-built-in kinds accept when a consumer never sets `providers` at all.
+built-in loader first, whatever registered it. An explicit source object of a
+registered kind resolves too, without ever calling `detect` — it has already
+declared its own kind through its `type` field — provided every string value
+anywhere inside it, nested included, clears the same `isPermittedSourceUrl`
+allowlist a URL string does. `PlayerSource`'s generic parameter
+(`packages/core/src/types.ts`) is what a supplied provider's own source shape
+opens the type up through, without touching what the five built-in kinds
+accept when a consumer never sets `providers` at all.
 _Avoid_: plugin, custom provider, provider plugin
 
 ### Styling

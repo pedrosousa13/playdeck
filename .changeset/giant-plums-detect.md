@@ -34,16 +34,20 @@ this kind's own `providerOptions` bag.
 
 Detection tries the five built-in kinds first and only then walks
 `providers`' own entries, in declaration order, using the first whose
-`detect` accepts the URL — a supplied kind can never intercept a URL a
-built-in host already claims, and `hls`, `video`, `youtube`, `vimeo` and
-`wistia` are reserved names a `providers` entry can never actually reach for
-the same reason. The shared URL allowlist (`isPermittedSourceUrl`) runs ahead
-of every supplied `detect`, exactly where it runs ahead of every built-in
-host inside `detectSource` — a scheme the allowlist refuses never reaches
-provider-authored code. `providerOptions` gains a further key per supplied
-kind, compared for equality the same way the four built-in bags already are,
-so an inline object literal does not tear the provider down and rebuild it
-every render.
+`detect` accepts the URL — a supplied kind can never intercept a URL, or an
+explicit source object, a built-in host already claims, and `hls`, `video`,
+`youtube`, `vimeo` and `wistia` are reserved names a `providers` entry can
+never actually reach for the same reason. An explicit source object of a
+registered kind resolves too, without calling `detect` — it has already
+declared its own kind through its `type` field — once every string value
+anywhere inside it, nested included, passes the same allowlist a URL string
+does. The shared URL allowlist (`isPermittedSourceUrl`) runs ahead of every
+supplied `detect` and every explicit object alike, exactly where it runs
+ahead of every built-in host inside `detectSource` — a scheme the allowlist
+refuses never reaches provider-authored code. `providerOptions` gains a
+further key per supplied kind, compared for equality the same way the four
+built-in bags already are, so an inline object literal does not tear the
+provider down and rebuild it every render.
 
 There is no registry and no module-level mutable state: a `Player.Root` that
 never sets `providers` reaches none of this at runtime, and the play-only row

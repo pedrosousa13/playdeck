@@ -203,11 +203,22 @@ export type RootProps<P extends PlayerProviders = Record<string, never>> = {
    * resolved source of that `type` is dispatched by this package's own
    * built-in loader first, whatever registered it.
    *
-   * `detect` is the only way a supplied kind's source is ever resolved --
-   * `PlayerSource<Extra>` (`@playdeck/core`) admits an explicit object of a
-   * supplied kind's own shape too, for the type this generic parameter opens
-   * up, but constructing one by hand rather than through a registration's
-   * `detect` does not resolve to a provider here.
+   * `source` also accepts an explicit object of a supplied kind directly --
+   * `PlayerSource<Extra>` (`@playdeck/core`) is what opens that up, for the
+   * type this generic parameter closes over -- resolved without ever calling
+   * `detect`: a registration's `detect` takes a URL string by contract, and an
+   * object handed in has already declared its own kind through its `type`
+   * field, so it goes straight to validation instead, the same way an
+   * explicit object of a built-in kind skips that kind's own host and path
+   * detection. Every string value anywhere inside it, nested included, still
+   * passes through the same `isPermittedSourceUrl` allowlist every built-in
+   * source's fields do (`provider-loaders.ts`'s `detectSourceWithProviders`
+   * and its `everyStringPermitted` helper) -- a forbidden scheme cannot reach
+   * a supplied provider's own factory by arriving as an object instead of a
+   * URL. Unlike the built-in `video` and `hls` kinds, a supplied kind's own
+   * values are never rewritten -- there is no known field of an arbitrary
+   * shape to normalise a protocol-relative `//host/...` value on, so it is
+   * carried through exactly as given.
    *
    * Unset by default. There is no registry and no module-level state behind
    * this prop -- `providers` is read where it is passed and nowhere else --

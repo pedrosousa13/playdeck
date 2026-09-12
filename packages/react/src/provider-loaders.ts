@@ -1,4 +1,8 @@
-import type { ProviderAdapter, ResolvedPlayerSource } from '@playdeck/core';
+import type {
+  PlayerSource,
+  ProviderAdapter,
+  ResolvedPlayerSource
+} from '@playdeck/core';
 import { detectSource, isPermittedSourceUrl } from '@playdeck/core';
 import type { SourceDetectionResult } from '@playdeck/core';
 import type { HlsBuild } from '@playdeck/provider-hls';
@@ -343,50 +347,143 @@ export const loadProvider = async ({
   throw new Error(`No provider adapter is installed for ${source.type}.`);
 };
 
+// Whether every string reachable inside `value` -- its own value if it is one
+// itself, or any string nested through an object or array at any depth --
+// passes `isPermittedSourceUrl(value, undefined)`. `undefined` is passed for
+// `type` throughout because a supplied kind's own shape carries no field this
+// package knows to be a URL, let alone which built-in source kind it might
+// belong to (a supplied kind's `blob:` field, if it has one, is refused the
+// same way an unresolved bare string refuses it -- there is no `'video'` to
+// pass here to admit it, unlike the built-in `video` branch above).
+//
+// Reading `isPermittedSourceUrl`'s own body and doc comment
+// (`packages/core/src/source-detection.ts`) confirms both halves of why this
+// rule is safe to apply to an arbitrary field rather than only a known one:
+// it returns `true` whenever the value names no scheme at all (`schemeOf`
+// returns `undefined` for it), which is what lets a plain id
+// (`"dQw4w9WgXcQ"`), a relative path, or any other non-URL string pass
+// through untouched -- and it returns `false` only for the two cases that
+// matter, a forbidden scheme (`javascript:`, `data:`, and `blob:` outside a
+// `video` source) or a value the URL parser would strip characters from
+// before parsing. Neither of those depends on which field the string came
+// from, which is what makes one allowlist call correct for every string in an
+// unknown shape.
+//
+// The recursion is not a defensive flourish: a shallow, top-level-only check
+// would leave a nested field as a live bypass of this exact gate -- `{ type:
+// 'acme', config: { url: 'javascript:alert(1)' } } ` refuses at the top level
+// (no string named `type` is a URL) while carrying a forbidden scheme one
+// level down. A supplied kind's shape is arbitrary, so there is no schema
+// here to check a known field against instead; every string, at every depth,
+// is the only rule that cannot be routed around by nesting the dangerous
+// value one level deeper than whatever a shallow check happened to look at.
+const everyStringPermitted = (value: unknown): boolean => {
+  if (typeof value === 'string') {
+    return isPermittedSourceUrl(value, undefined);
+  }
+  if (Array.isArray(value)) {
+    return value.every(everyStringPermitted);
+  }
+  if (typeof value === 'object' && value !== null) {
+    return Object.values(value).every(everyStringPermitted);
+  }
+  // A number, boolean, null or undefined names no URL, so it needs no check
+  // and cannot fail one.
+  return true;
+};
+
 // `Root`'s own `detectSource`, layered over core's: core's own five-kind
 // `detectSource` runs first and wins outright on success, so a supplied kind
-// never gets a look-in on a URL a built-in host already claims. Only on a
-// built-in refusal, and only for a URL string -- `PlayerSource<Extra>`
-// (`@playdeck/core`'s `types.ts`) admits an explicit object of a supplied
-// kind too, but nothing here ever resolves one from scratch; only
-// `detect(url)`'s own return value does, which is what `Root`'s own doc
-// comment on `providers` documents as the supported path -- does a
-// `providers` entry get a turn, walked in the object's own enumeration order:
-// insertion order for the string keys this map is ever given, the one order
-// property enumeration guarantees (ECMA-262 `OwnPropertyKeys`), which is
-// declaration order as that same doc comment promises.
+// never gets a look-in on a URL -- or an explicit object -- a built-in host
+// already claims. Only on a built-in refusal does a `providers` entry get a
+// turn, and there are two distinct shapes of refusal this handles, mirroring
+// the two ways core itself resolves a source (`sourceFromExplicitObject` vs.
+// the string path, `packages/core/src/source-detection.ts`):
 //
-// The security-sensitive step is the `isPermittedSourceUrl` check ahead of
-// that loop: it is core's own gate, applied here exactly where core applies
-// it itself -- ahead of every host-specific detector inside `detectSource`
-// (`@playdeck/core`'s `source-detection.ts`) -- so a forbidden scheme or a
-// parser-stripped edge is refused before any supplied `detect` ever sees the
-// string, never after. Skipping this step and handing a supplied `detect` the
-// raw, unchecked string would let a `javascript:` URL reach provider-authored
-// code that might echo it straight into a source object of its own, which is
-// the validation bypass this seam must not be.
+// A string is walked against every `providers` entry's own `detect`, in the
+// object's own enumeration order -- insertion order for the string keys this
+// map is ever given, the one order property enumeration guarantees (ECMA-262
+// `OwnPropertyKeys`), which is declaration order as `Root`'s own doc comment
+// on `providers` promises -- using the first whose `detect` accepts it.
+//
+// An explicit object is resolved without ever calling a registration's
+// `detect`: `detect` takes a URL string by contract, and an object arriving
+// here has already declared its own kind through its `type` field, the same
+// way `sourceFromExplicitObject` skips every built-in host detector and goes
+// straight to per-kind validation once `input.type` names one. So a record
+// whose `type` is a non-empty string matching a registered `providers` key is
+// accepted as that kind's resolved source directly, once `everyStringPermitted`
+// above has cleared every string value nested anywhere inside it. A `type`
+// matching no registration, or a `type` that is not a string at all, falls
+// through to the built-in failure below unchanged -- there is nothing a
+// supplied kind could resolve it to.
+//
+// Deliberately not done here: the built-in `video` and `hls` branches of
+// `sourceFromExplicitObject` also rewrite a protocol-relative `//host/...`
+// value to `https://host/...` (`resolveNetworkPath`) before writing it
+// through, because those two kinds have a known field to rewrite. A supplied
+// kind's shape is arbitrary, so there is no single field -- or set of fields
+// -- this package could rewrite without either guessing wrong or walking the
+// whole object a second time to mutate it, which is more risk to a
+// provider-authored shape than the rewrite buys back: `isPermittedSourceUrl`
+// already permits the protocol-relative form unchanged, so refusing to
+// rewrite costs nothing on the allowlist side, only the normalisation. A
+// supplied kind therefore receives its own values exactly as given, and a
+// provider author who cares about the protocol-relative form must normalise
+// it themselves (documented in `docs/provider-setup.md`'s "Explicit source
+// objects" section).
+//
+// Both shapes share the same security-sensitive gate: `isPermittedSourceUrl`
+// is core's own allowlist, applied here exactly where core applies it itself
+// -- ahead of every host-specific detector inside `detectSource` for the
+// string path, and ahead of per-kind validation inside
+// `sourceFromExplicitObject` for the object path -- so a forbidden scheme or a
+// parser-stripped edge is refused before any supplied `detect` or resolved
+// source ever reaches provider-authored code, never after. Skipping this
+// step would let a `javascript:` URL -- top-level or nested -- reach a
+// provider's own factory, which is the validation bypass this seam must not
+// be.
 export const detectSourceWithProviders = (
   input: unknown,
   providers: PlayerProviders | undefined
 ): SourceDetectionResult => {
   const builtin = detectSource(input);
-  if (
-    builtin.status === 'success' ||
-    !providers ||
-    typeof input !== 'string' ||
-    !isPermittedSourceUrl(input, undefined)
-  ) {
+  if (builtin.status === 'success' || !providers) {
     return builtin;
   }
-  for (const key in providers) {
-    const source = providers[key]?.detect(input);
-    if (source) {
+
+  if (typeof input === 'string') {
+    if (!isPermittedSourceUrl(input, undefined)) {
+      return builtin;
+    }
+    for (const key in providers) {
+      const source = providers[key]?.detect(input);
+      if (source) {
+        return {
+          status: 'success',
+          input,
+          source: source as ResolvedPlayerSource
+        };
+      }
+    }
+    return builtin;
+  }
+
+  if (typeof input === 'object' && input !== null && !Array.isArray(input)) {
+    const kind = (input as Record<string, unknown>).type;
+    if (
+      typeof kind === 'string' &&
+      kind !== '' &&
+      providers[kind] &&
+      everyStringPermitted(input)
+    ) {
       return {
         status: 'success',
-        input,
-        source: source as ResolvedPlayerSource
+        input: input as PlayerSource,
+        source: input as ResolvedPlayerSource
       };
     }
   }
+
   return builtin;
 };

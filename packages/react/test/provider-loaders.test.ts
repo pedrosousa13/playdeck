@@ -345,6 +345,92 @@ test('behaves exactly like detectSource when no providers are supplied', () => {
   ).toEqual(detectSource('https://example.com/nothing'));
 });
 
+// The tests below drive the explicit-object path `detectSourceWithProviders`
+// added: a source handed in as an object of a registered supplied kind,
+// rather than a URL string for a registration's own `detect` to turn into
+// one. `detect` above always declines (`vi.fn(() => undefined)`), which is
+// what proves resolution here does not go through it at all.
+test('resolves an explicit object of a registered supplied kind without ever calling its detect', () => {
+  const detect = vi.fn(() => undefined);
+  const source = { type: 'acme', videoId: '1' };
+  const result = detectSourceWithProviders(source, {
+    acme: { detect, load: vi.fn() }
+  });
+  expect(detect).not.toHaveBeenCalled();
+  expect(result).toEqual({ status: 'success', input: source, source });
+});
+
+// The bypass case this whole seam exists to close: a shallow, top-level-only
+// check would see no string named directly on the object and let this
+// through. `config.url` is two levels deep, under a key this package has no
+// schema for -- there is no "known field" to check instead for a supplied
+// kind, which is exactly why every string, at every depth, has to clear the
+// allowlist.
+test('refuses an explicit supplied-kind object carrying a forbidden scheme nested inside it', () => {
+  const detect = vi.fn();
+  const result = detectSourceWithProviders(
+    { type: 'acme', config: { url: 'javascript:alert(1)' } },
+    { acme: { detect, load: vi.fn() } }
+  );
+  expect(detect).not.toHaveBeenCalled();
+  expect(result.status).toBe('failure');
+});
+
+test('does not refuse a plain non-URL string field on an explicit supplied-kind object', () => {
+  // `videoId` names no scheme at all, so `isPermittedSourceUrl` passes it
+  // through untouched -- the same rule that lets a bare YouTube id resolve.
+  const result = detectSourceWithProviders(
+    { type: 'acme', videoId: 'abc123' },
+    { acme: { detect: vi.fn(), load: vi.fn() } }
+  );
+  expect(result).toMatchObject({ status: 'success' });
+});
+
+test('refuses an explicit object whose type matches no registered provider', () => {
+  const result = detectSourceWithProviders(
+    { type: 'unregistered', id: '1' },
+    { acme: { detect: vi.fn(), load: vi.fn() } }
+  );
+  expect(result.status).toBe('failure');
+});
+
+test('still resolves an explicit object of a built-in kind through core, unaffected by a registered providers map', () => {
+  const detect = vi.fn();
+  const builtinSource = { type: 'youtube', videoId: 'dQw4w9WgXcQ' };
+  const result = detectSourceWithProviders(builtinSource, {
+    acme: { detect, load: vi.fn() }
+  });
+  expect(detect).not.toHaveBeenCalled();
+  expect(result).toEqual(detectSource(builtinSource));
+});
+
+test('an explicit object of a registered supplied kind detects and dispatches to that registration through loadProvider', async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(async () => adapter);
+  const load = vi.fn(async () => factory);
+  const detect = vi.fn();
+  const media = document.createElement('div');
+  const explicitSource = { type: 'acme', videoId: '1' };
+
+  const detected = detectSourceWithProviders(explicitSource, {
+    acme: { detect, load }
+  });
+  expect(detected).toMatchObject({ status: 'success', source: explicitSource });
+  expect(detect).not.toHaveBeenCalled();
+  if (detected.status !== 'success') throw new Error('expected a success');
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providers: { acme: { detect, load } },
+      source: detected.source
+    })
+  ).resolves.toBe(adapter);
+  expect(load).toHaveBeenCalledOnce();
+  expect(factory).toHaveBeenCalledWith(media, explicitSource, undefined);
+});
+
 test('dispatches a supplied kind to its own registration, with the mount, source and its own option bag', async () => {
   const adapter = { provider: 'native' } as unknown as ProviderAdapter;
   const factory = vi.fn(async () => adapter);

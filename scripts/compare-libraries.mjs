@@ -274,10 +274,16 @@ export const libraries = [
     composition: 'core + native provider, no control parts',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 19.90 KB measured 2026-09-09 (docs/comparison/results.md's "Gzipped
-    // (Vite)" column that same day), rounded up to the next 0.25 KB -- see
-    // the `libraries` doc comment above for what raising this means.
-    ceilingKb: 20
+    // Raised from 20 KB (previously measured 19.90 KB) to cover the
+    // explicit-object path `detectSourceWithProviders` gained for a supplied
+    // provider kind (#662): every composition below reaches
+    // `provider-loaders.ts` regardless of which parts it renders, so the
+    // added validation logic (`everyStringPermitted` and its recursive
+    // check) lands in this row's own gzip figure too, not only the
+    // play-only row's. 20.04 KB measured 2026-09-12, rounded up to the next
+    // 0.25 KB -- see the `libraries` doc comment above for what raising this
+    // means.
+    ceilingKb: 20.25
   },
   {
     name: 'Playdeck',
@@ -297,8 +303,13 @@ export const libraries = [
       'core + primitives + native provider + one control (PlayButton)',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 21.63 KB measured 2026-09-09, rounded up to the next 0.25 KB.
-    ceilingKb: 21.75,
+    // Raised from 21.75 KB (previously measured 21.63 KB) for the same
+    // reason as the "no parts" row above: the explicit-object path
+    // `detectSourceWithProviders` gained for a supplied provider kind
+    // (#662) adds validation logic every composition reaches, this row
+    // included. 21.79 KB measured 2026-09-12, rounded up to the next 0.25
+    // KB.
+    ceilingKb: 22,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {

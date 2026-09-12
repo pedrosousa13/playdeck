@@ -56,3 +56,40 @@ test('mounts a media div and reaches attach/load for a supplied kind, end to end
     expect(fake.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
   );
 });
+
+// The explicit-object counterpart to the test above: `source` is an object of
+// the registered `acme` kind rather than a URL, so resolution goes through
+// `detectSourceWithProviders`'s object path instead of `detect` -- `detect` is
+// still supplied here and is asserted never called, which is what proves this
+// end to end rather than merely at the unit level (`provider-loaders.test.ts`
+// proves the same claim against `detectSourceWithProviders` directly).
+test('mounts and loads a supplied kind from an explicit source object, end to end through Player.Root, without calling detect', async () => {
+  const fake = createFakeProvider({ provider: 'native' });
+  const detect = vi.fn<
+    (url: string) => { type: 'acme'; videoId: string } | undefined
+  >(() => undefined);
+  const load = vi.fn(async () => () => fake.adapter);
+
+  render(
+    <Player.Root
+      loading="eager"
+      providers={{ acme: { detect, load } }}
+      source={{ type: 'acme', videoId: '1' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() => {
+    const node = document.querySelector('[data-playdeck-part="media"]');
+    expect(node).not.toBeNull();
+  });
+
+  expect(detect).not.toHaveBeenCalled();
+  await waitFor(() => expect(load).toHaveBeenCalledOnce());
+  await waitFor(() =>
+    expect(fake.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
+  );
+});
