@@ -22,6 +22,13 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
  * The site is served by the second `webServer` entry in `playwright.config.ts`.
  * The storybook one owns `baseURL`, so this address is written out rather than
  * navigated to as a path.
+ *
+ * The switch itself is also pinned here, not only the colours it drives: its
+ * trigger carries both a Tooltip and a DropdownMenu, and the tooltip must
+ * never render while the menu is open (#642). WebKit cannot launch on the
+ * authoring machine (two missing system libraries), so every red recorded
+ * below is chromium and firefox only; CI's WebKit run is what covers the
+ * third engine.
  */
 const SITE = 'http://127.0.0.1:4322';
 
@@ -156,23 +163,43 @@ test('a code block follows an explicit choice in both directions', async ({
 });
 
 /**
+ * The DOM element radix-ui@1.6.7 paints for an open tooltip, matched by a CSS
+ * role selector rather than fetched through `getByRole('tooltip')`: with the
+ * menu open, Radix marks everything outside it `aria-hidden`, which
+ * `getByRole` respects and a plain CSS selector does not. Measured (chromium,
+ * 2026-09-12): a tooltip left open behind an open menu has `domCount: 1`,
+ * `display: block`, and a 109x28 box painted over the first menu item, while
+ * `getByRole('tooltip')` counts 0 — a role query here would pass against the
+ * unfixed component.
+ */
+const tooltipLocator = (page: Page) => page.locator('[role="tooltip"]');
+
+/**
  * Asserts the first menu item, not something layered over it, is what a
  * pointer at that item's own centre would reach. The absence of a tooltip
  * element is the cause; this is the consequence the reader actually meets,
  * and it stays true whatever a future overlay is built from.
+ *
+ * Demonstrated red (docs/agents/demonstrated-red.md): in both tests above,
+ * the `toHaveCount(0)` assertion aborts the test before this one runs, so
+ * `expect(hit).toBe(true)` below was checked on its own — with
+ * `toHaveCount` temporarily removed from the pointer test, against
+ * `origin/main`'s component, measured 2026-09-12: it failed on both
+ * chromium and firefox, `expect(received).toBe(expected) // Object.is
+ * equality / Expected: true / Received: false`.
  */
-const expectItemTakesThePointer = async (
-  page: Page,
-  item: Locator
-): Promise<void> => {
-  const box = await item.boundingBox();
-  expect(box).not.toBeNull();
-  const hit = await page.evaluate(
-    ({ x, y }) => {
+const expectItemTakesThePointer = async (item: Locator): Promise<void> => {
+  const box = (await item.boundingBox())!;
+  // `element.contains(hit)`, not `hit.closest(...)`: a `closest` match would
+  // pass for *any* menu item, while this has to prove *this* item was
+  // reached — the same distinction `e2e/menu-placement.spec.ts`'s
+  // `placementOf` draws with the identical call.
+  const hit = await item.evaluate(
+    (element, { x, y }) => {
       const el = document.elementFromPoint(x, y);
-      return el === null ? null : el.closest('[role="menuitemradio"]') !== null;
+      return el !== null && element.contains(el);
     },
-    { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 }
+    { x: box.x + box.width / 2, y: box.y + box.height / 2 }
   );
   expect(hit).toBe(true);
 };
@@ -180,35 +207,30 @@ const expectItemTakesThePointer = async (
 test('the tooltip never renders while the menu is open, opened by keyboard', async ({
   page
 }) => {
-  // #642: the trigger carries both a Tooltip and a DropdownMenu through
-  // nested `asChild`, and nothing coupled their open states — a tooltip that
+  // The trigger carries both a Tooltip and a DropdownMenu through nested
+  // `asChild`, and nothing coupled their open states — a tooltip that
   // (re)opened while the menu was open rendered over the first item and
-  // took its click.
+  // took its click (#642).
   //
-  // Demonstrated red, measured on 2026-09-12: this keyboard path passes
-  // against the unfixed component on chromium and firefox, because Radix's
-  // own focus management moves focus into the menu and closes the tooltip
-  // on the way. So it carries a substitute mutation instead, per
-  // `docs/agents/demonstrated-red.md`: with the gate removed and the tooltip
-  // forced open (`open={true}` in `ThemeToggleIsland.tsx`), both assertions
-  // below fail on chromium — `expect(locator).toHaveCount(expected) failed /
-  // Expected: 0 / Received: 1`. Before these assertions read the DOM rather
-  // than the accessibility tree, that same mutation left them GREEN, which
-  // is why they read the DOM now.
+  // Demonstrated red, measured on 2026-09-12 (chromium): this keyboard path
+  // passes against the unfixed component, because Radix's own focus
+  // management moves focus into the menu and closes the tooltip on the way.
+  // So it carries a substitute mutation instead, per
+  // `docs/agents/demonstrated-red.md`: with the gate removed and the
+  // tooltip forced open (`open={true}` in `ThemeToggleIsland.tsx`),
+  // `toHaveCount(0)` fails — `expect(locator).toHaveCount(expected) failed /
+  // Expected: 0 / Received: 1`. `expectItemTakesThePointer` still passes
+  // under that same mutation: `elementFromPoint` at the item's centre still
+  // returns the `menuitemradio`, because the forced-open tooltip does not
+  // cover it here. The hit-test assertion's own red comes from the pointer
+  // test below instead.
   //
   // The pointer path below has a real red and needs no substitute: against
-  // the component as it stands on `main`, it fails on both chromium and
-  // firefox with the same `Expected: 0 / Received: 1`.
+  // the component as it stands on `origin/main`, it fails on both chromium
+  // and firefox with the same `Expected: 0 / Received: 1`.
   await page.goto(SITE);
   const trigger = page.locator('[data-theme-toggle]');
-  // `[role="tooltip"]` as a CSS selector, deliberately, not
-  // `getByRole('tooltip')`: Radix marks everything outside an open menu
-  // `aria-hidden`, and a role query skips the accessibility tree, so a
-  // tooltip that is in the DOM, painted, and sitting over the first menu
-  // item reads as absent to `getByRole` — measured: `domCount: 1`,
-  // `display: block`, a 109x28 box over the menu, and `getByRole` count 0.
-  // A role query here would pass against the unfixed component.
-  const tooltip = page.locator('[role="tooltip"]');
+  const tooltip = tooltipLocator(page);
   const item = page.getByRole('menuitemradio', { name: 'Light', exact: true });
 
   // Baseline, menu closed: hover still opens the tooltip exactly as before.
@@ -223,38 +245,43 @@ test('the tooltip never renders while the menu is open, opened by keyboard', asy
   await expect(tooltip).toBeVisible();
   await page.keyboard.press('ArrowDown');
   await expect(item).toBeVisible();
+  // Measured (chromium, 2026-09-12): immediately after `ArrowDown`,
+  // `[role="tooltip"]` briefly reads count 1 — a `data-state="closed"` node
+  // still exit-animating, not one still open. `toHaveCount(0)` passes only
+  // because it polls until the animation finishes, not because the node was
+  // never there. It never intercepts either way: `elementFromPoint` at the
+  // item's centre already returns the `menuitemradio` while that node is
+  // still in the DOM, so the intent holds throughout.
   await expect(tooltip).toHaveCount(0);
-  await expectItemTakesThePointer(page, item);
+  await expectItemTakesThePointer(item);
 });
 
 test('the tooltip never renders while the menu is open, opened by pointer', async ({
   page
 }) => {
-  // A plain `trigger.click()` cannot exercise this: a `click` always
-  // completes it on Chromium and Firefox, and Radix's own trigger closes the
-  // tooltip on its own `click` unconditionally, cancelling any open still in
-  // flight before the assertion below could ever see it — instrumenting the
-  // unfixed component's `data-state` and the tooltip role directly across
-  // repeated hover/click/re-hover sequences (on both engines) never once
-  // caught them open together. What the click closes is a request that
-  // *committed*; a request that is still only pending when the trigger's
-  // own DropdownMenu half opens the menu is a different case Radix's own
-  // `click` handling never reaches, because opening the menu needs nothing
-  // past `pointerdown` and no `click` follows here to cancel it — matching
-  // the CI failure's own trace, which named a `delayed-open` tooltip
-  // intercepting the click meant for the menu item. It is reproduced
-  // directly, dispatching the same events by hand and stopping one short of
-  // `click`, rather than hoping a real gesture lands in the same gap.
+  // A tooltip open request that is still pending survives `pointerdown`,
+  // and the trigger's own DropdownMenu half needs nothing past
+  // `pointerdown` to open the menu — no `click` follows here to cancel the
+  // pending tooltip, which is why the sequence below stops one short of a
+  // click. A plain `trigger.click()` cannot exercise this: Radix's own
+  // trigger closes the tooltip on its own `click` unconditionally, and that
+  // only ever cancels a request that has already committed.
+  //
+  // `page.mouse.move` + `page.mouse.down()` (real input, no `up`) cannot
+  // reach that pending state, checked directly rather than assumed: each is
+  // its own round trip to the browser, and radix-ui@1.6.7's `TooltipTrigger`
+  // schedules its open via a bare `window.setTimeout(handleOpen, 0)`
+  // (`delayDuration` is 0 here), which fires in the gap between the two
+  // calls. Measured (chromium and firefox, 2026-09-12, against
+  // `origin/main`'s component): reading `[role="tooltip"]`'s `data-state`
+  // right before `mouse.down()` already shows `"delayed-open"` — the request
+  // has committed — so the trigger's own `onPointerDown` (which closes only
+  // an *open* tooltip) closes it correctly on both engines, and the bug
+  // never reproduces. Dispatching the same events by hand, synchronously,
+  // keeps `pointerdown` inside the request's still-pending window instead.
   await page.goto(SITE);
   const trigger = page.locator('[data-theme-toggle]');
-  // `[role="tooltip"]` as a CSS selector, deliberately, not
-  // `getByRole('tooltip')`: Radix marks everything outside an open menu
-  // `aria-hidden`, and a role query skips the accessibility tree, so a
-  // tooltip that is in the DOM, painted, and sitting over the first menu
-  // item reads as absent to `getByRole` — measured: `domCount: 1`,
-  // `display: block`, a 109x28 box over the menu, and `getByRole` count 0.
-  // A role query here would pass against the unfixed component.
-  const tooltip = page.locator('[role="tooltip"]');
+  const tooltip = tooltipLocator(page);
   const item = page.getByRole('menuitemradio', { name: 'Light', exact: true });
   // The island is `client:only="react"` (see `ThemeToggleIsland.tsx`'s own
   // header) and is not on the page until it hydrates.
@@ -282,12 +309,16 @@ test('the tooltip never renders while the menu is open, opened by pointer', asyn
     el.dispatchEvent(new PointerEvent('pointerup', opts));
   });
   await expect(item).toBeVisible();
-  // The tooltip's own open timer, scheduled by the `pointermove` above,
-  // settles on the next tick even at a zero `delayDuration` — give it the
-  // chance a real reopen would have before asserting it never rendered.
+  // The tooltip's own open timer is scheduled via radix-ui@1.6.7's
+  // `window.setTimeout(handleOpen, delayDuration)`, and this file's
+  // `TooltipProvider` sets `delayDuration` to 0 — one macrotask is all it
+  // needs to settle. 100ms is far more than that macrotask costs; it is a
+  // margin against CI scheduling jitter, not a measured requirement, and
+  // gives a real reopen every chance it would have before asserting it
+  // never rendered.
   await page.waitForTimeout(100);
   await expect(tooltip).toHaveCount(0);
-  await expectItemTakesThePointer(page, item);
+  await expectItemTakesThePointer(item);
 });
 
 test('the choice holds on a document page as well as on the argument page', async ({
