@@ -311,64 +311,24 @@ export const defaultBenchSource = (): BenchSource => {
  * at all. `POSTER_SIZES` existing as one shared string rather than three is
  * what rules that out (#611).
  *
- * Mirrors `index.astro`'s `.page` rule -- see that rule's own comment for the
- * reciprocal half of this pairing -- because nothing between that element and
- * the stage adds a width or padding of its own: `.bench`, `.bench__frame` and
- * `.bench__stage` in `Bench.astro` are all 100% inline, so the stage is
- * `.page`'s content box, whatever that resolves to. `.page`'s own rule is
- * `max-inline-size: 72rem` with `padding: var(--space-6) var(--space-5)
- * var(--space-9)` -- a three-value shorthand whose middle value,
- * `var(--space-5)` (1.5rem, `tokens.css`), applies to both inline sides
- * (3rem total) -- so below that ceiling the content box is the viewport
- * minus that padding, and at or above it `.page` has stopped growing and the
- * content box is fixed at 72rem minus that padding regardless of viewport.
+ * Mirrors `index.astro`'s `.page` rule exactly -- see that rule's own
+ * comment for the reciprocal half of this pairing -- because nothing between
+ * that element and the stage adds a width or padding of its own: `.bench`,
+ * `.bench__frame` and `.bench__stage` in `Bench.astro` are all 100% inline,
+ * so the stage is `.page`'s content box, whatever that resolves to.
+ * `.page`'s own rule is `max-inline-size: 72rem` with `padding: var(--space-6)
+ * var(--space-5) var(--space-9)` -- a three-value shorthand whose middle
+ * value, `var(--space-5)` (1.5rem, `tokens.css`), applies to both inline
+ * sides (3rem total) -- so below that ceiling the content box is
+ * `calc(100vw - 3rem)` and at or above it, `.page` has stopped growing and
+ * the content box is fixed at `calc(72rem - 3rem)` regardless of viewport.
  * Measured against the built site with Playwright/chromium on 2026-09-12:
  * `#bench-stage`'s own `getBoundingClientRect().width` was 1104px at both
  * 1280 and 1440 viewport widths (above the ceiling) and 327px at 375 (below
- * it).
- *
- * Stated here in flat px, not the `rem`/`calc()` form that mirrors those
- * rules directly, because that form is what CI's `e2e (webkit)` job caught:
- * `e2e/site-poster-lcp.spec.ts`'s narrow-desktop case, at a 1000px viewport,
- * has chromium and firefox both resolve it to the 960w poster and WebKit
- * resolve it to 1920w -- with exactly one request made, so this is a real
- * disagreement over what the expression evaluates to, not `imagesizes` going
- * unread on the preload. Which term inside the old expression WebKit reads
- * differently -- `calc()` itself, `rem`, or `100vw` against a rendered
- * scrollbar -- is not established, and WebKit cannot run on the machine that
- * investigated this to isolate one. Rather than chase that, this form drops
- * `rem` and nested `calc()` wherever it can, on the reasoning that a mismatch
- * confined to unit handling cannot surface from a value that does not use
- * the unit.
- *
- * `1104px` is `.page`'s ceiling minus its inline padding at the browser
- * default root size (72rem - 3rem at 16px/rem) -- the fixed content-box
- * width the old expression named for every viewport at or above the
- * ceiling. `1009px` is `960 + 48 + 1`: the first viewport whose content box
- * (viewport minus the 48px of padding) exceeds the narrower poster
- * candidate rather than sitting exactly on it.
- *
- * The middle term, `(min-width: 961px) 960px`, is the one doing real work
- * rather than restating the ceiling term in px. A first attempt at this fix
- * used only `(min-width: 1009px) 1104px, 960px`, which reads correctly for
- * every viewport at or above 961px but leaves the unconditional `960px`
- * fallback answering for every viewport below 961px too, phones included --
- * and `sizes` is multiplied by device pixel ratio, so a 375px phone at DPR2
- * resolved that fallback to 1920px and downloaded the wide file, doubling
- * the transfer #611 is about on exactly the class of device it complains
- * about. Naming the 961-1008px band explicitly (real content box 913-960px)
- * closes that regression without giving up on the WebKit case: it is one
- * plain constant, so nothing about `calc()` or `rem` is asked of the one
- * viewport CI actually observed failing, and if the expression's remaining
- * `calc()` still misresolves somewhere WebKit has not been observed to fail,
- * only the viewports below 961px are left exposed to it -- degrading to
- * today's shipped behaviour there rather than to the mobile regression
- * above. `calc(100vw - 48px)` is that fallback, kept as exact arithmetic
- * rather than another constant because DPR multiplication is what makes
- * precision matter most in exactly the range below 961px.
+ * it) -- exactly what this expression resolves to at each.
  */
 export const POSTER_SIZES =
-  '(min-width: 1009px) 1104px, (min-width: 961px) 960px, calc(100vw - 48px)';
+  '(min-width: 72rem) calc(72rem - 3rem), calc(100vw - 3rem)';
 
 /**
  * What `Player.Root`'s `source` prop actually receives for one entry, once

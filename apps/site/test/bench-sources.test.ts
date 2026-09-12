@@ -20,14 +20,12 @@ import type { PlayerProvider } from '@playdeck/core';
 // other four.
 const BENCH_PROVIDERS: PlayerProvider[] = ['hls', 'youtube', 'vimeo', 'wistia'];
 
-// `POSTER_SIZES` derives its two breakpoints from `.page`'s CSS in
-// `index.astro` and from `hls`'s own poster widths -- see that constant's own
-// comment in `bench-sources.ts` for the reasoning -- so a hand-typed
-// expectation here would go on passing the day any of those drift. This reads
-// `.page`'s rule, the token its inline padding names and `hls`'s poster
-// `srcSet` straight out of the source instead, so the expectation below is
-// derived from the same values the page actually ships rather than retyped
-// from them.
+// `POSTER_SIZES` hand-mirrors `.page`'s CSS in `index.astro` -- see that
+// constant's own comment in `bench-sources.ts` for the reasoning -- so a
+// hand-typed expectation here would go on passing the day either one drifts.
+// This reads `.page`'s rule and the token its inline padding names straight
+// out of the source files instead, so the expectation below is derived from
+// the same CSS the page actually ships rather than retyped from it.
 const here = dirname(fileURLToPath(import.meta.url));
 const pageSource = readFileSync(join(here, '../src/pages/index.astro'), 'utf8');
 const tokensSource = readFileSync(
@@ -76,42 +74,7 @@ if (Number.isNaN(inlinePaddingRem)) {
   );
 }
 
-// `POSTER_SIZES` states its two upper breakpoints in flat px, not `rem` --
-// see that constant's own comment in `bench-sources.ts` for why. `html` has
-// no `font-size` rule anywhere in this site (`base.css`'s own comment on
-// that rule is why: the root size is left at the browser default on
-// purpose), so there is no token this derivation can read that number back
-// from -- 16 is that default, not a value drifting CSS could change.
-const ROOT_FONT_SIZE_PX = 16;
-
-const ceilingRem = Number(/^([\d.]+)rem$/.exec(ceiling)?.[1]);
-if (Number.isNaN(ceilingRem)) {
-  throw new Error(
-    `bench-sources.test.ts: \`.page\`'s max-inline-size is not a plain rem length (got ${JSON.stringify(ceiling)}).`
-  );
-}
-
-const inlinePaddingPx = inlinePaddingRem * 2 * ROOT_FONT_SIZE_PX;
-const contentBoxAtCeilingPx = ceilingRem * ROOT_FONT_SIZE_PX - inlinePaddingPx;
-
-// The narrower of `hls`'s two poster widths -- read off its own `srcSet`
-// rather than retyped, the same reasoning as every figure above -- is what
-// both of `POSTER_SIZES`'s lower breakpoints are stated in terms of; see
-// that constant's own comment for why.
-const hlsPosterWidths = [
-  ...defaultBenchSource()
-    .poster('/')
-    .srcSet.matchAll(/(\d+)w/g)
-].map((match) => Number(match[1]));
-if (hlsPosterWidths.length === 0) {
-  throw new Error(
-    "bench-sources.test.ts: could not read hls's poster srcSet widths."
-  );
-}
-const narrowPosterWidth = Math.min(...hlsPosterWidths);
-
-const midBandViewportPx = narrowPosterWidth + 1;
-const ceilingBandViewportPx = narrowPosterWidth + inlinePaddingPx + 1;
+const inlinePaddingTotal = `${inlinePaddingRem * 2}rem`;
 
 describe('benchSources', () => {
   it('has exactly one entry per bench provider, and no extras', () => {
@@ -144,9 +107,9 @@ describe('benchSources', () => {
     expect(defaultBenchSource().provider).toBe('hls');
   });
 
-  it("derives POSTER_SIZES from index.astro's .page rule, tokens.css's inline-padding token and hls's poster widths", () => {
+  it("derives POSTER_SIZES from index.astro's .page rule and tokens.css's inline-padding token", () => {
     expect(POSTER_SIZES).toBe(
-      `(min-width: ${ceilingBandViewportPx}px) ${contentBoxAtCeilingPx}px, (min-width: ${midBandViewportPx}px) ${narrowPosterWidth}px, calc(100vw - ${inlinePaddingPx}px)`
+      `(min-width: ${ceiling}) calc(${ceiling} - ${inlinePaddingTotal}), calc(100vw - ${inlinePaddingTotal})`
     );
   });
 
