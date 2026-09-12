@@ -20,6 +20,74 @@ any row that looks wrong, or read the harness's own header comment for how
 each of the two figures is built up from its own bundler's module graph --
 Rollup's, via Vite, for one; esbuild's own for the other.
 
+## Who this is for
+
+The reader this page is written for is a product team embedding video in a
+React application — a course platform, a catalogue, a marketing site, or
+documentation — choosing what to build the player on. Playdeck describes
+itself to that reader with three words, and each is tied to something
+checkable rather than asserted on its own.
+
+**Lightest** is `results.md`'s own bundle-size tables: the "Gzipped" and "Not
+counted" columns, produced by `scripts/compare-libraries.mjs` and
+cross-checked against a second bundler in "Cross-checked with a second
+bundler" below. A reader who doubts the word runs `pnpm compare:libraries` and
+reads the number the harness produces, not a number typed into this page.
+
+**Most customizable** is the composition model "Equivalent composition per
+library" below describes for Playdeck's four rows: a consumer imports the
+parts they use, from none (the no-parts row) to one bare button (the
+play-only row) to a full bar (the control-bar row), rather than installing one
+configured player and working around whatever it already drew.
+`docs/comparison/features.md`'s "Plugin system" row reads `no` for Playdeck for
+the same reason seen from the other side: there is no registry to extend
+because extension is composing primitives, not registering against one.
+
+**Most performant** is a claim about this repository's own rules, not a
+comparative one — nothing this page measures is a runtime number; "What is
+not measured, and why" below says exactly that about playback performance.
+What backs the word instead is a set of gates this repository fails its own
+build over: the committed per-row ceiling on the four Playdeck compositions
+("Date and how to re-run" below), which fails `pnpm compare:libraries` and
+`pnpm compare:libraries:check` the moment a row's gzipped size passes it; the
+play-only row's own `PLAY_ONLY_FORBIDDEN_MODULES` check, which fails the same
+two commands if that row's reachable chunks touch a menu primitive, either
+slider, captions rendering, or any provider other than native; and
+`tests/bundle/native-only/test.mjs`, run by `pnpm test:bundle` in a real
+Chromium, which fails if any provider chunk is requested before a consumer
+clicks the activation button. None of the three measures an alternative;
+all three measure Playdeck against a number or a rule this repository
+committed to and can fail its own build on.
+
+Three things Playdeck deliberately does not do, each already decided and
+recorded elsewhere in this repository, restated here because a reader
+comparing libraries meets the gap before they would find the reason:
+
+**DASH** stays out of scope. `.out-of-scope/dash.md` is the record: no browser
+plays DASH natively the way Safari and iOS already play HLS from a plain
+`<video src>`, so a DASH provider costs a full adaptive-bitrate engine on every
+platform with no configuration that costs an adapter alone, the way HLS does.
+The decision is `#447`'s.
+
+**DRM** is out of scope because there is no EME story under it. Playdeck never
+calls `requestMediaKeySystemAccess`, and no provider it ships exposes a
+key-system option for a consumer to configure. `@playdeck/provider-hls`'s full
+hls.js build carries hls.js's own EME support; its README names EME among what
+the `light` build compiles out, which is the only place this adapter's own
+docs mention it — there is no option anywhere in `createHlsProvider` that
+turns it on. Where DRM plays at all here, it plays inside a provider's own
+iframe under that provider's own rules — `docs/third-party-requests.md`
+records YouTube's `allow` list carrying `encrypted-media` and Vimeo's
+withholding it — which is a fact about those frames, not a capability
+Playdeck built or configures.
+
+**Ads and playlists** are out of scope. Both belong to the broadcast shape of a
+player — a single surface that owns an ad break or a queue across items — and
+neither has shipped in this repository. Extension today is React composition,
+not a plugin registry (`docs/comparison/features.md`'s "Plugin system" row,
+again); if either arrives, it arrives later as an external plugin once this
+library grows plugin seams of its own, not as something built in.
+
 ## What is measured
 
 Gzipped bytes for one fixed composition per library: **a player that plays one
