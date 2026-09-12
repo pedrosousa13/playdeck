@@ -602,7 +602,7 @@
    * the reveal below, rather than naming the slider bare: `pointer-events: none`
    * takes an element out of hit testing, so a slider with no mute button beside
    * it could never match its own `:hover` branch and would be invisible and
-   * pointer-unreachable at once (#598). A standalone `VolumeSlider` is simply
+   * pointer-unreachable at once. A standalone `VolumeSlider` is simply
    * visible instead.
    *
    * Every branch of the reveal selector ends on the slider as its subject,

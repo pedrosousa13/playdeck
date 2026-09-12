@@ -247,19 +247,21 @@ test('the seek input sits on its own track under a different inherited font', as
  *
  * The theme reveals this control rather than showing it, but only where it
  * follows a `MuteButton`: the hidden rest state under `(pointer: fine)` is
- * qualified by that adjacent-sibling relationship (#598), and this story
- * renders the slider alone, with no button beside it, so it now sits at
- * `opacity: 1` from the start. Before #598 the rest state named every volume
- * slider, this one included; `.focus()` below is kept from that version of
- * the file rather than removed, because it lands on the same
- * `:focus-within` branch of the reveal selector list that is already `1`
- * here and so costs this measurement nothing.
+ * qualified by that adjacent-sibling relationship, and this story renders the
+ * slider alone, with no button beside it, so it now sits at `opacity: 1` from
+ * the start. Before that rule was scoped to the adjacent-sibling relationship,
+ * the rest state named every volume slider, this one included; `.focus()`
+ * below is kept from that version of the file rather than removed, because it
+ * lands on the same `:focus-within` branch of the reveal selector list that is
+ * already `1` here and so costs this measurement nothing.
  *
- * The reveal is a 150ms `opacity` transition, so the opacity is polled to 1
- * before anything is sampled rather than waited out on a timeout — the same
- * idiom `e2e/theme-idle.spec.ts` measures the bar's own fade with. The focus
- * ring this raises is `outline` at `outline-offset: 2px`, which paints outside
- * the border box `centreRow` clips to, so it reaches no sampled pixel.
+ * The `transition` declaration now lives only in the mute-button-qualified
+ * rest-state rule, so this standalone slider never gets it: `.focus()`'s
+ * effect is synchronous and the poll below waits on nothing. It is kept
+ * anyway, in the same idiom `e2e/theme-idle.spec.ts` uses to poll a fade that
+ * does apply there, because it costs this measurement nothing. The focus ring
+ * this raises is `outline` at `outline-offset: 2px`, which paints outside the
+ * border box `centreRow` clips to, so it reaches no sampled pixel.
  */
 const volumeRow = async (page: Page): Promise<Row> => {
   await page.goto(themedStory('player-volumeslider--half-volume'));

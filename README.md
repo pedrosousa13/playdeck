@@ -80,7 +80,7 @@ initial graph.
 Lazy loading is worth stating in bytes rather than in adjectives, because the
 number a reader cares about is the one for the source they are playing, and for
 one of these sources it is large. Gzip, excluding React itself and the optional
-`theme.css` (12.0 KB) and `docked.css` (6.3 KB):
+`theme.css` (12.2 KB) and `docked.css` (6.6 KB):
 
 <!-- bytes:table -->
 
@@ -122,7 +122,7 @@ change that moves a bundle cannot leave a stale number in them.
 
 Every Playdeck package in this table is measured by `pnpm test:budgets` on each
 CI run, against a reference figure it prints but never enforces: core weighs in
-at 8.0 KB, the primitives at 18.2 KB, `theme.css` at 2.3 KB and `docked.css` at
+at 8.0 KB, the primitives at 18.2 KB, `theme.css` at 2.4 KB and `docked.css` at
 2.6 KB — the two stylesheets measured on their CSS rules with the comments
 stripped, because both ship as authored and measuring the whole file would
 really be measuring their prose. None of the four can ever fail a build over it;
