@@ -250,10 +250,11 @@ for (const entry of readySources) {
              * owed the same match between screen and file a scripted reader
              * gets. `sizes` is `POSTER_SIZES` — the stage's own real width,
              * not `100vw` — because the frame is narrower than the viewport
-             * above `bench-sources.ts`'s own breakpoint; see that constant's
-             * comment for the derivation. It has to be the exact string the
-             * preload link `index.astro` puts in the document head carries,
-             * or a no-JavaScript reader's browser resolves a different
+             * above the breakpoint `index.astro`'s `.page` rule sets; see
+             * `POSTER_SIZES`'s own comment in `bench-sources.ts` for the
+             * derivation. It has to be the exact string the preload link
+             * `index.astro` puts in the document head carries, or a
+             * no-JavaScript reader's browser resolves a different
              * candidate than the one already in flight. */
           }
           <img

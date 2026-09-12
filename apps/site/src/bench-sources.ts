@@ -19,8 +19,8 @@
  *
  * `hls` is listed first, which is what makes it the switch's default
  * position -- `BenchIsland.tsx` reads `readySources[0]` for its initial
- * state, and `Bench.astro` reads `benchSources.find((entry) => entry.ready)`
- * for the same fact on the no-JavaScript path. It earns the position on the
+ * state, and `Bench.astro` reads `defaultBenchSource()` for the same fact on
+ * the no-JavaScript path. It earns the position on the
  * page's own terms, not just alphabetically: `bench-quiet.ts` reports a
  * same-origin load as "no third party has been contacted", so the switch now
  * rests on the position that makes the page's central claim easiest to
@@ -284,12 +284,11 @@ export const readySources = benchSources.filter((entry) => entry.ready);
 /**
  * The switch's resting position -- `benchSources.find(ready)`, guarded
  * against `undefined` once here rather than at each call site. `Bench.astro`
- * reads this for the no-JavaScript fallback and, since #611, for the
- * document-head poster preload that has to name the same position;
+ * reads this for the no-JavaScript fallback and for the document-head poster
+ * preload that has to name the same position (the preload is #611's fix);
  * `BenchIsland.tsx` still reads `readySources[0]` separately for its own
- * initial render state, the same fact by a different route -- this file's own
- * module comment records why that duplication predates this helper and is
- * deliberate.
+ * initial render state, the same fact reached by a different, pre-existing
+ * route that this helper does not fold in.
  */
 export const defaultBenchSource = (): BenchSource => {
   const entry = benchSources.find((candidate) => candidate.ready);
@@ -308,22 +307,25 @@ export const defaultBenchSource = (): BenchSource => {
  * `BenchIsland.tsx` mounts. One string here is what keeps a preload's
  * `imagesizes` from silently disagreeing with what the rendered image
  * actually asks for -- disagreement there fetches a second poster variant
- * rather than the one that matches the box, which is worse than no preload at
- * all (#611).
+ * rather than the one that matches the box, which is worse than no preload
+ * at all. `POSTER_SIZES` existing as one shared string rather than three is
+ * what rules that out (#611).
  *
- * Mirrors `index.astro`'s `.page` rule exactly, because nothing between that
- * element and the stage adds a width or padding of its own: `.bench`,
+ * Mirrors `index.astro`'s `.page` rule exactly -- see that rule's own
+ * comment for the reciprocal half of this pairing -- because nothing between
+ * that element and the stage adds a width or padding of its own: `.bench`,
  * `.bench__frame` and `.bench__stage` in `Bench.astro` are all 100% inline,
  * so the stage is `.page`'s content box, whatever that resolves to.
- * `.page`'s own rule is `max-inline-size: 72rem` with `padding-inline:
- * var(--space-5)` (1.5rem, both sides -- 3rem total, `tokens.css`), so below
- * that ceiling the content box is `calc(100vw - 3rem)` and at or above it,
- * `.page` has stopped growing and the content box is fixed at
- * `calc(72rem - 3rem)` regardless of viewport. Measured against the built
- * site with Playwright/chromium: `#bench-stage`'s own
- * `getBoundingClientRect().width` was 1104px at both 1280 and 1440 viewport
- * widths (above the ceiling) and 327px at 375 (below it) -- exactly what this
- * expression resolves to at each.
+ * `.page`'s own rule is `max-inline-size: 72rem` with `padding: var(--space-6)
+ * var(--space-5) var(--space-9)` -- a three-value shorthand whose middle
+ * value, `var(--space-5)` (1.5rem, `tokens.css`), applies to both inline
+ * sides (3rem total) -- so below that ceiling the content box is
+ * `calc(100vw - 3rem)` and at or above it, `.page` has stopped growing and
+ * the content box is fixed at `calc(72rem - 3rem)` regardless of viewport.
+ * Measured against the built site with Playwright/chromium on 2026-09-12:
+ * `#bench-stage`'s own `getBoundingClientRect().width` was 1104px at both
+ * 1280 and 1440 viewport widths (above the ceiling) and 327px at 375 (below
+ * it) -- exactly what this expression resolves to at each.
  */
 export const POSTER_SIZES =
   '(min-width: 72rem) calc(72rem - 3rem), calc(100vw - 3rem)';

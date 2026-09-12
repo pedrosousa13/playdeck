@@ -8,12 +8,19 @@
  * theme, and a defect that only appears on a page somebody forgot something on
  * is the kind worth making structurally impossible.
  *
- * That script is inline, unbundled and first in the head, all three for the
- * same reason: it has to have run before the first paint. A module script —
- * which is what Astro produces without `is:inline` — is deferred by definition
- * and runs after the document is parsed, so the reader would see the light
- * theme painted and then replaced. A theme that arrives in two steps is worse
- * than no theme switch at all.
+ * That script is inline and unbundled, both for the same reason: it has to
+ * have run before the first paint. A module script — which is what Astro
+ * produces without `is:inline` — is deferred by definition and runs after
+ * the document is parsed, so the reader would see the light theme painted
+ * and then replaced. A theme that arrives in two steps is worse than no
+ * theme switch at all.
+ *
+ * A page's own `<slot name="head">` content can sit above this script in
+ * document order — `/`'s poster preload does, discovered as early as
+ * possible so the scanner sees it before anything else in the head — and
+ * that guarantee still holds: a `<link>`, preload or not, neither executes
+ * nor blocks a later script from running, so nothing a page puts in that
+ * slot delays when this one does.
  *
  * It sets `data-theme` only when a choice is stored. Leaving the attribute
  * unset otherwise is what hands the decision to `tokens.css`'s
@@ -88,12 +95,12 @@ const shouldTrackWithPlausible =
     <title>{title}</title>
     {
       /* A page-specific addition to the head, discovered as early as
-       * possible -- before the analytics script and the theme script below,
+       * possible — before the analytics script and the theme script below,
        * both of which a page's own head content never needs to come after.
-       * `/` uses it for the bench poster's `<link rel="preload">` (#611):
-       * that element has to be a document-head resource for the preload
-       * scanner to see it before any script runs, and no page-shared markup
-       * in this file is the right place for one page's own poster. */
+       * `/` uses it for the bench poster's `<link rel="preload">`: that
+       * element has to be a document-head resource for the preload scanner
+       * to see it before any script runs, and no page-shared markup in this
+       * file is the right place for one page's own poster (its fix, #611). */
     }
     <slot name="head" />
     {

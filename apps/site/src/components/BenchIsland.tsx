@@ -480,11 +480,11 @@ const Stage = ({
        * `srcSet` carries both widths `bench-sources.ts` ships for whichever
        * position is selected. `sizes` is `POSTER_SIZES`, that file's one
        * exported description of the stage's real CSS width at every
-       * breakpoint (not `100vw`, which overstates it -- #611: the stage is
-       * narrower than the viewport above `bench-sources.ts`'s own
-       * breakpoint, so `100vw` asked a browser to resolve a wider image than
-       * the box ever shows). It is the same string the document-head preload
-       * link `index.astro` renders and the `<noscript>` fallback in
+       * breakpoint (not `100vw`, which overstates it: the stage is narrower
+       * than the viewport above the breakpoint `index.astro`'s `.page` rule
+       * sets, so `100vw` asked a browser to resolve a wider image than the
+       * box ever shows -- #611). It is the same string the document-head
+       * preload link `index.astro` renders and the `<noscript>` fallback in
        * `Bench.astro` both carry, which is what keeps this island from
        * fetching a second variant once it mounts over that preload. `src`
        * stays the narrower file, for the one reader whose browser reads

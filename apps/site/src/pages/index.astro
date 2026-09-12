@@ -112,15 +112,15 @@ const preloadPoster = defaultBenchSource().poster(base);
     {
       /* Makes the bench's poster -- the page's LCP element -- discoverable
        * to the preload scanner before `BenchIsland.tsx`'s `client:only`
-       * island has hydrated (#611). `imagesrcset`/`imagesizes` have to name
-       * exactly what the island's `Player.PosterImage` and the `<noscript>`
-       * fallback in `Bench.astro` both resolve to for this same position, or
-       * this fetches a second variant instead of replacing the one they
-       * already ask for: `href` and `imagesrcset` both come from
+       * island has hydrated (the fix for #611). `imagesrcset`/`imagesizes`
+       * have to name exactly what the island's `Player.PosterImage` and the
+       * `<noscript>` fallback in `Bench.astro` both resolve to for this same
+       * position, or this fetches a second variant instead of replacing the
+       * one they already ask for: `href` and `imagesrcset` both come from
        * `preloadPoster`, the same `entry.poster(base)` call both of those
-       * consumers make, and `imagesizes` is `POSTER_SIZES`, `bench-sources.ts`'s
-       * one exported `sizes` string. `fetchpriority`, not `loading`: a
-       * preload has no lazy/eager state of its own to set. */
+       * consumers make, and `imagesizes` is `POSTER_SIZES`,
+       * `bench-sources.ts`'s one exported `sizes` string. `fetchpriority`,
+       * not `loading`: a preload has no lazy/eager state of its own to set. */
     }
     <link
       rel="preload"
@@ -266,6 +266,11 @@ const preloadPoster = defaultBenchSource().poster(base);
 </script>
 
 <style>
+  /* `max-inline-size` and the inline half of `padding` below are duplicated
+   * in `bench-sources.ts`'s `POSTER_SIZES`, and the two have to stay
+   * identical for the reason given there: change either value here without
+   * updating that constant and the bench poster's `sizes` silently stops
+   * matching the box it actually renders in. */
   .page {
     max-inline-size: 72rem;
     margin-inline: auto;

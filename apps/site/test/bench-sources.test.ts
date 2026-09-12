@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   benchSources,
@@ -17,6 +20,62 @@ import type { PlayerProvider } from '@playdeck/core';
 // other four.
 const BENCH_PROVIDERS: PlayerProvider[] = ['hls', 'youtube', 'vimeo', 'wistia'];
 
+// `POSTER_SIZES` hand-mirrors `.page`'s CSS in `index.astro` -- see that
+// constant's own comment in `bench-sources.ts` for the reasoning -- so a
+// hand-typed expectation here would go on passing the day either one drifts.
+// This reads `.page`'s rule and the token its inline padding names straight
+// out of the source files instead, so the expectation below is derived from
+// the same CSS the page actually ships rather than retyped from it.
+const here = dirname(fileURLToPath(import.meta.url));
+const pageSource = readFileSync(join(here, '../src/pages/index.astro'), 'utf8');
+const tokensSource = readFileSync(
+  join(here, '../src/styles/tokens.css'),
+  'utf8'
+);
+
+const pageRule = /\.page\s*\{([^}]*)\}/.exec(pageSource)?.[1];
+if (pageRule === undefined) {
+  throw new Error(
+    "bench-sources.test.ts: could not find index.astro's `.page` rule."
+  );
+}
+
+const ceiling = /max-inline-size:\s*([^;]+);/.exec(pageRule)?.[1]?.trim();
+if (ceiling === undefined) {
+  throw new Error('bench-sources.test.ts: `.page` has no `max-inline-size`.');
+}
+
+// The three-value `padding` shorthand's middle value is what applies to both
+// inline sides -- see `bench-sources.ts`'s own comment on `POSTER_SIZES` for
+// why that is the value this derivation doubles.
+const paddingValues = /padding:\s*([^;]+);/
+  .exec(pageRule)?.[1]
+  ?.trim()
+  .split(/\s+/);
+if (paddingValues?.length !== 3) {
+  throw new Error(
+    `bench-sources.test.ts: \`.page\`'s padding is not the three-value shorthand this derivation expects (got ${JSON.stringify(paddingValues)}).`
+  );
+}
+
+const inlinePaddingVar = /var\((--[\w-]+)\)/.exec(paddingValues[1])?.[1];
+if (inlinePaddingVar === undefined) {
+  throw new Error(
+    "bench-sources.test.ts: could not read `.page`'s inline padding token."
+  );
+}
+
+const inlinePaddingRem = Number(
+  new RegExp(`${inlinePaddingVar}:\\s*([\\d.]+)rem;`).exec(tokensSource)?.[1]
+);
+if (Number.isNaN(inlinePaddingRem)) {
+  throw new Error(
+    `bench-sources.test.ts: could not read ${inlinePaddingVar} from tokens.css.`
+  );
+}
+
+const inlinePaddingTotal = `${inlinePaddingRem * 2}rem`;
+
 describe('benchSources', () => {
   it('has exactly one entry per bench provider, and no extras', () => {
     expect(benchSources.map((entry) => entry.provider).sort()).toEqual(
@@ -35,23 +94,22 @@ describe('benchSources', () => {
     expect(readySources[0]?.provider).toBe('hls');
   });
 
-  // #611: `Bench.astro` and `index.astro` both need the switch's resting
-  // position -- the no-JavaScript fallback and, since #611, the document-head
-  // poster preload both name it -- so this is the same fact `readySources[0]`
-  // above already asserts, from the guarded helper both files actually call.
-  it('resolves the same default entry as readySources[0]', () => {
-    expect(defaultBenchSource().provider).toBe(readySources[0]?.provider);
+  // `Bench.astro` and `index.astro` both need the switch's resting position
+  // -- the no-JavaScript fallback and the document-head poster preload both
+  // name it (#611) -- through `defaultBenchSource`, the guarded helper both
+  // files actually call. Pinned against the literal `benchSources[0]`/
+  // `readySources[0]` already establish elsewhere, rather than against
+  // `readySources[0]` itself: `.find(ready)` and `.filter(ready)[0]` agree
+  // for any array, so comparing one to the other can never fail on its own
+  // -- only a real assertion against the switch's actual default exercises
+  // `defaultBenchSource`'s own implementation.
+  it("resolves defaultBenchSource() to hls, the switch's actual default", () => {
+    expect(defaultBenchSource().provider).toBe('hls');
   });
 
-  // The stage's real width at every breakpoint, not `100vw` -- see the
-  // constant's own comment in `bench-sources.ts` for the derivation from
-  // `index.astro`'s `.page` rule. Pinned as a literal string rather than
-  // re-derived here, because every consumer (the preload link, the
-  // `<noscript>` fallback and the island) has to use this exact string, not
-  // merely one that happens to compute the same pixel values.
-  it('exports one sizes string every poster consumer has to share', () => {
+  it("derives POSTER_SIZES from index.astro's .page rule and tokens.css's inline-padding token", () => {
     expect(POSTER_SIZES).toBe(
-      '(min-width: 72rem) calc(72rem - 3rem), calc(100vw - 3rem)'
+      `(min-width: ${ceiling}) calc(${ceiling} - ${inlinePaddingTotal}), calc(100vw - ${inlinePaddingTotal})`
     );
   });
 
