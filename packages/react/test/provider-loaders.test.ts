@@ -1,16 +1,27 @@
 // @vitest-environment happy-dom
 
 import { expect, expectTypeOf, test, vi } from 'vitest';
-import type { ResolvedPlayerSource } from '@playdeck/core';
+import {
+  detectSource,
+  type ProviderAdapter,
+  type ResolvedPlayerSource
+} from '@playdeck/core';
 import type { HlsProviderOptions } from '@playdeck/provider-hls';
 import type { VimeoProviderOptions } from '@playdeck/provider-vimeo';
 import type { WistiaProviderOptions } from '@playdeck/provider-wistia';
 import type { YouTubeProviderOptions } from '@playdeck/provider-youtube';
 import type {
   PlayerProviderOptions,
-  PrimitiveOptionBag
+  PrimitiveOptionBag,
+  ProviderRegistration,
+  SuppliedProviderOptions,
+  SuppliedSource
 } from '../src/provider-loaders';
-import { loadProvider } from '../src/provider-loaders';
+import {
+  detectSourceWithProviders,
+  loadProvider
+} from '../src/provider-loaders';
+import type { RootProps } from '../src/root';
 
 vi.mock('@playdeck/provider-hls', () => ({
   createHlsProvider: vi.fn(() => ({ provider: 'hls' }))
@@ -262,4 +273,393 @@ test('reports source types without an installed adapter', async () => {
       source: { type: 'unknown-provider' } as unknown as ResolvedPlayerSource
     })
   ).rejects.toThrow('No provider adapter is installed for unknown-provider.');
+});
+
+// `providers`: `Player.Root`'s seam for a source kind beyond the five above.
+// The tests below drive `detectSourceWithProviders` and `loadProvider`
+// directly -- the two functions `root.tsx` and `use-activation.ts` call, so a
+// claim proven here is a claim proven about exactly what a consumer's
+// `providers` prop reaches.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md's fallback: the feature
+// is additive, so a substitute mutation stands in for reverting it). Each
+// mutation below was applied alone to `provider-loaders.ts`, run with
+// `pnpm vitest run packages/react/test/provider-loaders.test.ts`, and
+// reverted afterwards:
+// - `detectSourceWithProviders` short-circuited to `return builtin;` before
+//   ever consulting `providers` failed 7: "walks supplied providers in
+//   declaration order, stopping at the first whose detect accepts the URL",
+//   "declines a URL no built-in kind and no supplied provider recognises",
+//   "refuses a detect return carrying a forbidden scheme nested inside it,
+//   and continues to a later registration", "still resolves a detect return
+//   that carries no forbidden scheme, unchanged", "resolves an explicit
+//   object of a registered supplied kind without ever calling its detect",
+//   "does not refuse a plain non-URL string field on an explicit
+//   supplied-kind object", "an explicit object of a registered supplied kind
+//   detects and dispatches to that registration through loadProvider".
+// - `everyStringPermitted` (`provider-loaders.ts`) made to always return
+//   `true` failed 2: "refuses a detect return carrying a forbidden scheme
+//   nested inside it, and continues to a later registration", "refuses an
+//   explicit supplied-kind object carrying a forbidden scheme nested inside
+//   it".
+// - The `RESERVED_PROVIDER_NAMES` skip dropped from both
+//   `detectSourceWithProviders` paths, and `loadProvider`'s own `providers`
+//   lookup moved ahead of its five built-in branches, failed 3: "never calls
+//   detect for a registration keyed by a reserved built-in name", "does not
+//   resolve an explicit object whose type is a reserved built-in name
+//   through the supplied path", "never lets a providers entry keyed by a
+//   built-in name intercept the built-in dispatch".
+// - `SuppliedSource` (below) collapsed to `never` for every key, dropping
+//   its derivation of a registration's own `Source`, made `pnpm typecheck`
+//   report TS2344 at "a supplied kind types its own source shape and its own
+//   providerOptions key without weakening the five built-in kinds"'s own
+//   `expectTypeOf<SuppliedSource<AcmeProviders>>().toEqualTypeOf<AcmeSource>()`
+//   line, and cascaded into a real TS2322 on that same test's
+//   `suppliedSource` assignment and on `supplied-provider.test.tsx`'s own use
+//   of the type.
+type AcmeSource = { readonly type: 'acme'; readonly videoId: string };
+type AcmeOptions = { readonly quality?: 'sd' | 'hd' };
+
+test('tries the five built-in kinds before any supplied provider, even one whose detect would also match', () => {
+  const detect = vi.fn();
+  const result = detectSourceWithProviders(
+    'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    { acme: { detect, load: vi.fn() } }
+  );
+  expect(result).toEqual({
+    status: 'success',
+    input: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    source: { type: 'youtube', videoId: 'dQw4w9WgXcQ' }
+  });
+  expect(detect).not.toHaveBeenCalled();
+});
+
+test('walks supplied providers in declaration order, stopping at the first whose detect accepts the URL', () => {
+  const url = 'https://example.com/media/42';
+  const first = vi.fn(() => undefined);
+  const second = vi.fn(() => ({ type: 'second', id: '42' }) as const);
+  const third = vi.fn(() => ({ type: 'third', id: '42' }) as const);
+
+  const result = detectSourceWithProviders(url, {
+    first: { detect: first, load: vi.fn() },
+    second: { detect: second, load: vi.fn() },
+    third: { detect: third, load: vi.fn() }
+  });
+
+  expect(first).toHaveBeenCalledWith(url);
+  expect(second).toHaveBeenCalledWith(url);
+  expect(third).not.toHaveBeenCalled();
+  expect(result).toMatchObject({
+    status: 'success',
+    source: { type: 'second', id: '42' }
+  });
+});
+
+test('declines a URL no built-in kind and no supplied provider recognises', () => {
+  const detect = vi.fn(() => undefined);
+  const result = detectSourceWithProviders('https://example.com/nothing-here', {
+    acme: { detect, load: vi.fn() }
+  });
+  expect(detect).toHaveBeenCalledWith('https://example.com/nothing-here');
+  expect(result.status).toBe('failure');
+});
+
+// The security-sensitive guarantee: a scheme the shared allowlist refuses
+// never reaches a supplied provider's own `detect`, the same gate core's own
+// `detectSource` applies ahead of every one of its five built-in hosts.
+test('never hands a forbidden-scheme URL to a supplied detect', () => {
+  const detect = vi.fn();
+  const result = detectSourceWithProviders('javascript:alert(1)', {
+    acme: { detect, load: vi.fn() }
+  });
+  expect(detect).not.toHaveBeenCalled();
+  expect(result.status).toBe('failure');
+});
+
+// The bypass this closes: a `detect` return is exactly as arbitrary a shape as
+// an explicit source object is, so it is exactly as capable of hiding a
+// forbidden scheme a level or more down, and the fix applies the same
+// `everyStringPermitted` walk to it. A registration whose `detect` fails that
+// walk is treated as a decline, not a reason to fail detection outright, so a
+// later registration that would have matched honestly still gets its turn --
+// both halves are asserted below.
+test('refuses a detect return carrying a forbidden scheme nested inside it, and continues to a later registration', () => {
+  const dishonest = vi.fn(() => ({
+    type: 'acme',
+    config: { url: 'javascript:alert(1)' }
+  }));
+  const honest = vi.fn(() => ({ type: 'other', id: '1' }) as const);
+
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    acme: { detect: dishonest, load: vi.fn() },
+    other: { detect: honest, load: vi.fn() }
+  });
+
+  expect(dishonest).toHaveBeenCalledWith('https://example.com/media/1');
+  expect(honest).toHaveBeenCalledWith('https://example.com/media/1');
+  expect(result).toMatchObject({
+    status: 'success',
+    source: { type: 'other', id: '1' }
+  });
+});
+
+test('still resolves a detect return that carries no forbidden scheme, unchanged', () => {
+  const detect = vi.fn(() => ({ type: 'acme', videoId: 'abc123' }) as const);
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    acme: { detect, load: vi.fn() }
+  });
+  expect(result).toEqual({
+    status: 'success',
+    input: 'https://example.com/media/1',
+    source: { type: 'acme', videoId: 'abc123' }
+  });
+});
+
+// The string/`detect` half of the reserved-name guarantee: a registration
+// keyed by one of the five built-in names never even has its `detect` called,
+// on any URL, whatever it would have returned -- the object-path half of the
+// same guarantee is proven separately below, against an explicit source
+// object.
+test('never calls detect for a registration keyed by a reserved built-in name', () => {
+  const hlsDetect = vi.fn(
+    () => ({ type: 'hls', src: 'https://evil.test/x.m3u8' }) as const
+  );
+  const youtubeDetect = vi.fn();
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    hls: { detect: hlsDetect, load: vi.fn() },
+    youtube: { detect: youtubeDetect, load: vi.fn() }
+  });
+  expect(hlsDetect).not.toHaveBeenCalled();
+  expect(youtubeDetect).not.toHaveBeenCalled();
+  expect(result.status).toBe('failure');
+});
+
+test('behaves exactly like detectSource when no providers are supplied', () => {
+  expect(
+    detectSourceWithProviders('https://example.com/nothing', undefined)
+  ).toEqual(detectSource('https://example.com/nothing'));
+});
+
+// The tests below drive the explicit-object path `detectSourceWithProviders`
+// added: a source handed in as an object of a registered supplied kind,
+// rather than a URL string for a registration's own `detect` to turn into
+// one. `detect` above always declines (`vi.fn(() => undefined)`), which is
+// what proves resolution here does not go through it at all.
+test('resolves an explicit object of a registered supplied kind without ever calling its detect', () => {
+  const detect = vi.fn(() => undefined);
+  const source = { type: 'acme', videoId: '1' };
+  const result = detectSourceWithProviders(source, {
+    acme: { detect, load: vi.fn() }
+  });
+  expect(detect).not.toHaveBeenCalled();
+  expect(result).toEqual({ status: 'success', input: source, source });
+});
+
+// The bypass case this whole seam exists to close: a shallow, top-level-only
+// check would see no string named directly on the object and let this
+// through. `config.url` is two levels deep, under a key this package has no
+// schema for -- there is no "known field" to check instead for a supplied
+// kind, which is exactly why every string, at every depth, has to clear the
+// allowlist.
+test('refuses an explicit supplied-kind object carrying a forbidden scheme nested inside it', () => {
+  const detect = vi.fn();
+  const result = detectSourceWithProviders(
+    { type: 'acme', config: { url: 'javascript:alert(1)' } },
+    { acme: { detect, load: vi.fn() } }
+  );
+  expect(detect).not.toHaveBeenCalled();
+  expect(result.status).toBe('failure');
+});
+
+test('does not refuse a plain non-URL string field on an explicit supplied-kind object', () => {
+  // `videoId` names no scheme at all, so `isPermittedSourceUrl` passes it
+  // through untouched -- the same rule that lets a bare YouTube id resolve.
+  const result = detectSourceWithProviders(
+    { type: 'acme', videoId: 'abc123' },
+    { acme: { detect: vi.fn(), load: vi.fn() } }
+  );
+  expect(result).toMatchObject({ status: 'success' });
+});
+
+// The object-path half of the reserved-name guarantee: `{ type: 'hls' }` with
+// no `src` field fails core's own `sourceFromExplicitObject` (`hls` requires
+// one), so this falls through to the supplied path exactly as an object of an
+// unregistered kind would. Even with a registration actually keyed `hls`, that
+// object is never resolved through it -- without the reserved-name skip,
+// `everyStringPermitted` would have passed this object trivially (its only
+// string, `'hls'`, names no scheme) and returned it as a resolved `hls`
+// source missing the `src` field core's own validation exists to require.
+test('does not resolve an explicit object whose type is a reserved built-in name through the supplied path', () => {
+  const detect = vi.fn();
+  const result = detectSourceWithProviders(
+    { type: 'hls' },
+    { hls: { detect, load: vi.fn() } }
+  );
+  expect(detect).not.toHaveBeenCalled();
+  expect(result.status).toBe('failure');
+});
+
+test('refuses an explicit object whose type matches no registered provider', () => {
+  const result = detectSourceWithProviders(
+    { type: 'unregistered', id: '1' },
+    { acme: { detect: vi.fn(), load: vi.fn() } }
+  );
+  expect(result.status).toBe('failure');
+});
+
+test('still resolves an explicit object of a built-in kind through core, unaffected by a registered providers map', () => {
+  const detect = vi.fn();
+  const builtinSource = { type: 'youtube', videoId: 'dQw4w9WgXcQ' };
+  const result = detectSourceWithProviders(builtinSource, {
+    acme: { detect, load: vi.fn() }
+  });
+  expect(detect).not.toHaveBeenCalled();
+  expect(result).toEqual(detectSource(builtinSource));
+});
+
+test('an explicit object of a registered supplied kind detects and dispatches to that registration through loadProvider', async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(async () => adapter);
+  const load = vi.fn(async () => factory);
+  const detect = vi.fn();
+  const media = document.createElement('div');
+  const explicitSource = { type: 'acme', videoId: '1' };
+
+  const detected = detectSourceWithProviders(explicitSource, {
+    acme: { detect, load }
+  });
+  expect(detected).toMatchObject({ status: 'success', source: explicitSource });
+  expect(detect).not.toHaveBeenCalled();
+  if (detected.status !== 'success') throw new Error('expected a success');
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providers: { acme: { detect, load } },
+      source: detected.source
+    })
+  ).resolves.toBe(adapter);
+  expect(load).toHaveBeenCalledOnce();
+  expect(factory).toHaveBeenCalledWith(media, explicitSource, undefined);
+});
+
+test('dispatches a supplied kind to its own registration, with the mount, source and its own option bag', async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(async () => adapter);
+  const load = vi.fn(async () => factory);
+  const media = document.createElement('div');
+  const source: AcmeSource = { type: 'acme', videoId: '1' };
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providerOptions: { acme: { quality: 'hd' } } as never,
+      providers: { acme: { detect: vi.fn(), load } },
+      source
+    })
+  ).resolves.toBe(adapter);
+  expect(load).toHaveBeenCalledOnce();
+  expect(factory).toHaveBeenCalledWith(media, source, { quality: 'hd' });
+});
+
+test('reports a supplied kind with no matching registration the same way as an unrecognised type', async () => {
+  await expect(
+    loadProvider({
+      media: null,
+      nativeOptions,
+      providers: { other: { detect: vi.fn(), load: vi.fn() } },
+      source: { type: 'acme' } as unknown as ResolvedPlayerSource
+    })
+  ).rejects.toThrow('No provider adapter is installed for acme.');
+});
+
+// One half of the inertness `provider-loaders.ts`'s own comment on
+// `RESERVED_PROVIDER_NAMES` now describes in full: a `providers` entry keyed by
+// a reserved, built-in name never has its `load` run, because the five
+// built-in branches in `loadProvider` dispatch on `source.type` before its own
+// `providers` lookup ever does. The other half -- that such a registration
+// never has its `detect` called either -- is proven separately above, by
+// `detectSourceWithProviders` never invoking it (`never calls detect for a
+// registration keyed by a reserved built-in name`); the two together are what
+// make a reserved-keyed registration inert rather than only its `load` half.
+test('never lets a providers entry keyed by a built-in name intercept the built-in dispatch', async () => {
+  const { createHlsProvider } = await import('@playdeck/provider-hls');
+  const media = document.createElement('video');
+  const source = { type: 'hls', src: '/master.m3u8' } as const;
+  const suppliedLoad = vi.fn();
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providers: { hls: { detect: vi.fn(), load: suppliedLoad } },
+      source
+    })
+  ).resolves.toMatchObject({ provider: 'hls' });
+  expect(createHlsProvider).toHaveBeenCalled();
+  expect(suppliedLoad).not.toHaveBeenCalled();
+});
+
+test('a supplied kind types its own source shape and its own providerOptions key without weakening the five built-in kinds', () => {
+  type AcmeProviders = {
+    readonly acme: ProviderRegistration<AcmeSource, AcmeOptions>;
+  };
+
+  expectTypeOf<SuppliedSource<AcmeProviders>>().toEqualTypeOf<AcmeSource>();
+  expectTypeOf<SuppliedProviderOptions<AcmeProviders>>().toEqualTypeOf<{
+    readonly acme?: AcmeOptions;
+  }>();
+
+  // `RootProps<AcmeProviders>['source']` accepts the supplied kind's own
+  // shape directly, alongside every built-in form.
+  const suppliedSource: RootProps<AcmeProviders>['source'] = {
+    type: 'acme',
+    videoId: '1'
+  };
+  const builtInSource: RootProps<AcmeProviders>['source'] = {
+    type: 'youtube',
+    videoId: '1'
+  };
+  const stringSource: RootProps<AcmeProviders>['source'] =
+    'https://example.com';
+  void suppliedSource;
+  void builtInSource;
+  void stringSource;
+
+  const options: RootProps<AcmeProviders>['providerOptions'] = {
+    acme: { quality: 'hd' },
+    hls: { build: 'light' }
+  };
+  void options;
+});
+
+test('rejects a source object whose type matches no registered kind at the type level', () => {
+  type AcmeProviders = {
+    readonly acme: ProviderRegistration<AcmeSource, AcmeOptions>;
+  };
+  // @ts-expect-error `mystery` names neither a built-in kind nor an entry of
+  // `AcmeProviders`.
+  const invalid: RootProps<AcmeProviders>['source'] = { type: 'mystery' };
+  void invalid;
+});
+
+// The other half of "without weakening the built-in kinds' typing": a
+// `RootProps` given no type argument -- every consumer who never sets
+// `providers`, `root-props.test.ts`'s own subject -- accepts none of a
+// supplied kind's shapes at all. `RootProps['source']` resolves here to
+// `PlayerSource<SuppliedProviderSource>`, not `PlayerSource<never>`, so what
+// actually refuses the literal below is the excess-property check against
+// `SuppliedProviderSource`'s own exact shape (`videoId` is not one of its
+// fields) -- confirmed by widening `SuppliedProviderSource`
+// (`provider-loaders.ts`) to `{ readonly type: string; readonly [key:
+// string]: unknown }`: `pnpm typecheck` then reported `TS2578: Unused
+// '@ts-expect-error' directive` at this test's own line below, reverted
+// afterwards.
+test('accepts no supplied-kind source at all when providers is never opted into', () => {
+  // @ts-expect-error `AcmeSource` is not a member of the non-generic
+  // `PlayerSource` union `RootProps['source']` defaults to.
+  const invalid: RootProps['source'] = { type: 'acme', videoId: '1' };
+  void invalid;
 });

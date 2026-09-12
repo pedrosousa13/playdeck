@@ -27,7 +27,7 @@ under any of these libraries -- so that limit is written in the footnote
 instead, for every column alike. `docs/comparison/method.md`'s "Features"
 section has the full rule.
 
-Measured 2026-09-09 against `tests/compare`'s pinned installs:
+Measured 2026-09-12 against `tests/compare`'s pinned installs:
 `Playdeck` 1.1.0, `react-player` 3.4.0, `Vidstack` 1.15.6, `Media Chrome` 4.19.2, `Video.js` 8.24.0, `Video.js 10 (beta)` 10.0.0-beta.32.
 
 | Axis                                                | Playdeck      | react-player  | Vidstack      | Media Chrome  | Video.js     | Video.js 10 (beta) |
@@ -48,14 +48,14 @@ Measured 2026-09-09 against `tests/compare`'s pinned installs:
 | YouTube                                             | yes[^79]      | yes[^80]      | yes[^81]      | plugin[^82]   | plugin[^83]  | yes[^84]           |
 | Vimeo                                               | yes[^85]      | yes[^86]      | yes[^87]      | plugin[^88]   | plugin[^89]  | yes[^90]           |
 | Wistia                                              | yes[^91]      | yes[^92]      | no[^93]       | plugin[^94]   | no[^95]      | no[^96]            |
-| Other hosted providers (named)                      | no[^97]       | yes[^98]      | no[^99]       | plugin[^100]  | no[^101]     | yes[^102]          |
+| Other hosted providers (named)                      | partial[^97]  | yes[^98]      | no[^99]       | plugin[^100]  | no[^101]     | yes[^102]          |
 | Audio tracks                                        | no[^103]      | no[^104]      | yes[^105]     | yes[^106]     | yes[^107]    | yes[^108]          |
 | Chapters                                            | partial[^109] | no[^110]      | yes[^111]     | partial[^112] | yes[^113]    | yes[^114]          |
 | Thumbnails / preview on seek                        | no[^115]      | no[^116]      | yes[^117]     | yes[^118]     | plugin[^119] | yes[^120]          |
 | Playlists                                           | no[^121]      | no[^122]      | no[^123]      | no[^124]      | plugin[^125] | no[^126]           |
 | Ads / IMA                                           | no[^127]      | no[^128]      | no[^129]      | no[^130]      | plugin[^131] | no[^132]           |
 | Analytics hooks                                     | no[^133]      | no[^134]      | no[^135]      | no[^136]      | plugin[^137] | yes[^138]          |
-| Plugin system                                       | no[^139]      | yes[^140]     | no[^141]      | no[^142]      | yes[^143]    | no[^144]           |
+| Plugin system                                       | partial[^139] | yes[^140]     | no[^141]      | no[^142]      | yes[^143]    | no[^144]           |
 | Shipped skin / theme                                | yes[^145]     | no[^146]      | yes[^147]     | no[^148]      | yes[^149]    | yes[^150]          |
 | Headless, independently composable parts            | yes[^151]     | no[^152]      | yes[^153]     | yes[^154]     | no[^155]     | yes[^156]          |
 | Requires an external stylesheet for usable controls | no[^157]      | no[^158]      | yes[^159]     | no[^160]      | yes[^161]    | yes[^162]          |
@@ -257,7 +257,7 @@ Measured 2026-09-09 against `tests/compare`'s pinned installs:
 
 [^96]: **Wistia — Video.js 10 (beta)**: no. mechanical check: no file of `@videojs/react` and `@videojs/core` and `@videojs/media` and `@videojs/spf` and `@videojs/store` and `@videojs/utils` matching `**/*.js` or `**/*.d.ts` contains `istia`. Source: @videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react and in the five `@videojs/*` packages it depends on (installed packages)
 
-[^97]: **Other hosted providers (named) — Playdeck**: no. `PlayerSource` is a closed union of exactly five source kinds (packages/core/dist/types.d.ts), so no further hosted platform can be passed. mechanical check: no file of `@playdeck/core` and `@playdeck/react` matching `**/*.js` or `**/*.d.ts` contains `Twitch`. Source: packages/core and packages/react, every `.js` and `.d.ts` file each ships under `dist/` after `pnpm build`
+[^97]: **Other hosted providers (named) — Playdeck**: partial. No named hosted platform ships in the box, but `Player.Root`'s `providers` prop lets a consumer register one of their own: a `detect`/`load` pair keyed by the source-kind name, tried once the five built-in kinds fail to detect a URL. Shipping an actual Twitch/Mux/etc. adapter through it is left to the consumer or a separate package. mechanical check: `@playdeck/react`'s `dist/root.d.ts` includes `readonly providers?: P;`. Source: packages/react/dist/root.d.ts (`RootProps.providers`)
 
 [^98]: **Other hosted providers (named) — react-player**: yes. Mux, Twitch, TikTok and Spotify each have their own `Config` key and a lazy-loaded provider. mechanical check: `react-player`'s `dist/types.d.ts` includes `mux?: Record<string, unknown>;`. Source: react-player 3.4.0, node_modules/react-player/dist/types.d.ts (installed package)
 
@@ -341,7 +341,7 @@ Measured 2026-09-09 against `tests/compare`'s pinned installs:
 
 [^138]: **Analytics hooks — Video.js 10 (beta)**: yes. A `MuxData` component ships in the package; it reports to Mux Data, and no other analytics vendor has a component here. mechanical check: `@videojs/react/media/mux-data` exports `MuxData`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/docs (the package ships its own documentation) (`concepts/mux-data.md`)
 
-[^139]: **Plugin system — Playdeck**: no. Extensibility is React composition (compose primitives, pass props/render props), not a plugin registry. mechanical check: no file of `@playdeck/core` and `@playdeck/react` matching `**/*.js` or `**/*.d.ts` contains `registerPlugin`. Source: packages/core and packages/react, every `.js` and `.d.ts` file each ships under `dist/` after `pnpm build`
+[^139]: **Plugin system — Playdeck**: partial. Extensibility is still mostly React composition (compose primitives, pass props/render props), not a registry a plugin calls into -- with one seam: `Player.Root`'s `providers` prop lets a consumer register a `detect`/`load` pair for a source kind this package does not ship a loader for. No hook over commands or events exists yet. mechanical check: `@playdeck/react`'s `dist/root.d.ts` includes `readonly providers?: P;`. Source: packages/react/dist/root.d.ts (`RootProps.providers`)
 
 [^140]: **Plugin system — react-player**: yes. `ReactPlayer.addCustomPlayer` and `removeCustomPlayers` are assigned in the shipped code and typed in `dist/index.d.ts`; they register and drop a custom player implementation. mechanical check: `react-player`'s `dist/ReactPlayer.js` includes `ReactPlayer.addCustomPlayer =`. Source: react-player 3.4.0, node_modules/react-player/dist/ReactPlayer.js and README.md (installed package), the `addCustomPlayer` / `removeCustomPlayers` lines
 

@@ -1,4 +1,10 @@
-import type { ProviderAdapter, ResolvedPlayerSource } from '@playdeck/core';
+import type {
+  PlayerSource,
+  ProviderAdapter,
+  ResolvedPlayerSource
+} from '@playdeck/core';
+import { detectSource, isPermittedSourceUrl } from '@playdeck/core';
+import type { SourceDetectionResult } from '@playdeck/core';
 import type { HlsBuild } from '@playdeck/provider-hls';
 import type { NativePlaybackOptions } from '@playdeck/provider-native';
 import type { VimeoProviderOptions } from '@playdeck/provider-vimeo';
@@ -133,37 +139,173 @@ export type ResolvedProviderOptions = {
   readonly hls?: PlayerProviderOptions['hls'];
 };
 
+// The minimum shape a supplied kind's own detected source carries: enough for
+// `loadProvider`'s dispatch below to route by `type`, the same field every
+// built-in `ResolvedPlayerSource` member already carries one of. A
+// registration's fields beyond `type` are its own business, not this
+// package's -- `loadProvider` never reads them, only passes the whole object
+// on to the registration's own factory.
+export type SuppliedProviderSource = { readonly type: string };
+
+// What calling a `ProviderRegistration.load()` resolves to: not the adapter
+// itself, but the factory that builds one, given a mount point and the
+// detected source -- the same two-step shape every built-in branch below
+// already takes inline. `await import('@playdeck/provider-hls')` resolves the
+// module; `createHlsProvider(media, source, options)`, the export that import
+// hands back, is the call that actually builds the adapter. `load()` is
+// "lazy" because calling it is what performs a supplied kind's own dynamic
+// import; calling what it resolves to is what performs the build.
+export type ProviderAdapterFactory<
+  Source extends SuppliedProviderSource,
+  Options extends Record<string, PrimitiveOptionValue> = Record<string, never>
+> = (
+  media: PlayerMediaMount | null,
+  source: Source,
+  options?: Options
+) => ProviderAdapter | Promise<ProviderAdapter>;
+
+/**
+ * One entry of `Root`'s `providers` prop, keyed by the source-kind name it
+ * registers: `detect` turns a URL into this kind's own source object, or
+ * declines by returning `undefined`; `load` is the lazy factory above.
+ *
+ * `Source` types the object `detect` builds, which `loadProvider` later hands
+ * unchanged to the loaded factory -- it must carry its own `type` literal so a
+ * resolved source can be routed back to this registration by name, the way
+ * `source.type === 'hls'` already routes to the built-in HLS branch. `Options`
+ * types the bag a consumer may pass under this kind's own key in
+ * `providerOptions`, guarded by `PrimitiveOptionBag` above for the reason
+ * `PlayerProviderOptions`'s own doc comment gives: `providerOptionsEqual`
+ * (`use-activation.ts`) compares every such bag with `Object.is`, which is
+ * only meaningful over primitives.
+ */
+export type ProviderRegistration<
+  Source extends SuppliedProviderSource = SuppliedProviderSource,
+  Options extends Record<string, PrimitiveOptionValue> = Record<string, never>
+> = {
+  readonly detect: (url: string) => Source | undefined;
+  readonly load: () => Promise<ProviderAdapterFactory<Source, Options>>;
+};
+
+// The constraint `Root`'s own `providers` prop is generic over: a map from a
+// source-kind name to its registration. Exported so a consumer naming a
+// wrapper component's own prop -- `RootProps<MyProviders>` -- has something to
+// bound `MyProviders` by without reaching into `ProviderRegistration`'s own
+// type parameters by hand.
+//
+// `any`, not a concrete pair of types or `ProviderRegistration`'s own
+// defaults: `Source` appears in `ProviderRegistration` both covariantly
+// (`detect`'s return) and contravariantly (`load`'s factory's own `source`
+// parameter), so it is invariant overall, and TypeScript's structural checks
+// reject a `ProviderRegistration<AcmeSource, AcmeOptions>` against any
+// concrete pair here -- `unknown` fails the contravariant side (`load`'s
+// factory's own `source` parameter), `never` fails the covariant one
+// (`detect`'s return type), verified with `tsc --strict` against a minimal
+// two-member repro of this same shape -- and the two built-in kinds' own
+// concrete types would
+// reject each other's registration the same way a heterogeneous map always
+// rejects a narrower member under strict function-parameter variance. `any`
+// is the one pair this constraint can hold every registration to at once,
+// exactly the way `ComponentType<any>` holds a heterogeneous React tree
+// together; nothing downstream reads this alias's own `Source`/`Options` --
+// `SuppliedSource` and `SuppliedProviderOptions` below re-derive each
+// registration's own pair through `infer`, which is what keeps a consumer's
+// own types exact despite the constraint they are bound by.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- see above
+export type PlayerProviders = Record<string, ProviderRegistration<any, any>>;
+
+// The union of every supplied kind's own source shape in `P`, closed over
+// `PlayerSource`'s generic parameter (`@playdeck/core`'s `types.ts`) the same
+// way the five built-in kinds close over the non-generic union. `never` where
+// `P` supplies no entries -- `keyof {} ` is `never`, and a mapped type indexed
+// by `never` is itself `never` -- which is what keeps
+// `PlayerSource<SuppliedSource<P>>` identical to the plain, non-generic
+// `PlayerSource` for a `Root` that never sets `providers` (`root.tsx`'s own
+// default `P`). The second `any` this `infer` pattern reaches past is what it
+// is not asking about -- `Options`, re-derived on its own terms by
+// `SuppliedProviderOptions` below -- so it is not the same permissiveness
+// `PlayerProviders` needs; it holds only because `extends` accepts `any` in a
+// position it is not inferring through.
+export type SuppliedSource<P extends PlayerProviders> = {
+  [K in keyof P]: P[K] extends ProviderRegistration<
+    infer Source,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see above
+    any
+  >
+    ? Source
+    : never;
+}[keyof P];
+
+// The `providerOptions` keys `P` opens up, one per supplied kind, each typed
+// by that registration's own `Options` parameter -- folded into
+// `RootProps.providerOptions` alongside `PlayerProviderOptions`'s four
+// built-in keys (`root.tsx`). `Source`'s own `any` here is `SuppliedSource`'s
+// mirror image, for the same reason.
+export type SuppliedProviderOptions<P extends PlayerProviders> = {
+  [K in keyof P]?: P[K] extends ProviderRegistration<
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see above
+    any,
+    infer Options
+  >
+    ? Options
+    : never;
+};
+
 export type ProviderLoaderRequest = {
-  readonly source: ResolvedPlayerSource;
+  readonly source: ResolvedPlayerSource<SuppliedProviderSource>;
   readonly media: PlayerMediaMount | null;
   readonly nativeOptions: NativePlaybackOptions;
   readonly providerOptions?: ResolvedProviderOptions;
+  // Untyped by the specific `providers` map a consumer wrote: by the time a
+  // source reaches here it has already been detected, so all this function
+  // needs is to look a registration up by `source.type` and call it. The
+  // per-kind `Source`/`Options` typing lives at `Root`'s own boundary
+  // (`root.tsx`'s generic `RootProps<P>`), not here.
+  readonly providers?: PlayerProviders;
 };
 
 export const loadProvider = async ({
   media,
   nativeOptions,
   providerOptions,
+  providers,
   source
 }: ProviderLoaderRequest): Promise<ProviderAdapter> => {
-  if (source.type === 'hls') {
+  // The five built-in branches below are typechecked against the plain,
+  // non-generic union `ResolvedPlayerSource` -- what `source` was typed as
+  // before `providers` existed. `ResolvedPlayerSource<SuppliedProviderSource>`
+  // (`source`'s actual, wider parameter type) adds exactly one further
+  // member, `SuppliedProviderSource`, whose `type` is a plain `string`,
+  // overlapping every one of the five literals compared below -- so without
+  // this assertion, TypeScript could not narrow `source.type === 'hls'`
+  // down to `HlsSource` the way it could when the union held only literal
+  // discriminants, and every branch would fail to typecheck the value it
+  // hands its adapter factory. The two are exactly as unsound as the assertion
+  // in every other cast this file already makes after a runtime check has
+  // done the narrowing typescript's own control flow analysis cannot: the
+  // registration lookup below runs on the untouched, wider `source`, so a
+  // resolved source whose `type` this assertion turns out to be wrong about
+  // -- because it is genuinely a supplied kind's own shape -- is still
+  // dispatched correctly by that lookup, which never sees `builtin`.
+  const builtin = source as ResolvedPlayerSource;
+  if (builtin.type === 'hls') {
     if (!media || !(media instanceof HTMLVideoElement)) {
       throw new Error('The HLS provider requires a media mount.');
     }
     const { createHlsProvider } = await import('@playdeck/provider-hls');
-    return createHlsProvider(media, source, {
+    return createHlsProvider(media, builtin, {
       ...nativeOptions,
       ...providerOptions?.hls
     });
   }
-  if (source.type === 'video') {
+  if (builtin.type === 'video') {
     if (!media || !(media instanceof HTMLVideoElement)) {
       throw new Error('The native provider requires a media mount.');
     }
     const { createNativeProvider } = await import('@playdeck/provider-native');
     return createNativeProvider(media, nativeOptions);
   }
-  if (source.type === 'youtube') {
+  if (builtin.type === 'youtube') {
     if (!media) {
       throw new Error('The YouTube provider requires a media mount.');
     }
@@ -171,26 +313,223 @@ export const loadProvider = async ({
       await import('@playdeck/provider-youtube');
     return createYouTubeProvider(
       media,
-      source.videoId,
+      builtin.videoId,
       providerOptions?.youtube
     );
   }
-  if (source.type === 'vimeo') {
+  if (builtin.type === 'vimeo') {
     if (!media) {
       throw new Error('The Vimeo provider requires a media mount.');
     }
     const { createVimeoProvider } = await import('@playdeck/provider-vimeo');
-    return createVimeoProvider(media, source, providerOptions?.vimeo);
+    return createVimeoProvider(media, builtin, providerOptions?.vimeo);
   }
-  if (source.type === 'wistia') {
+  if (builtin.type === 'wistia') {
     if (!media) {
       throw new Error('The Wistia provider requires a media mount.');
     }
     const { createWistiaProvider } = await import('@playdeck/provider-wistia');
-    return createWistiaProvider(media, source, providerOptions?.wistia);
+    return createWistiaProvider(media, builtin, providerOptions?.wistia);
   }
-  // Every known source type is handled above, so `source` narrows to `never`
-  // here; read the type defensively for a runtime-only unknown source.
-  const unknownType = (source as { type?: string }).type ?? 'unknown';
-  throw new Error(`No provider adapter is installed for ${unknownType}.`);
+  // Not one of the five built-in kinds: a supplied kind, whose registration
+  // `providers` looks up by the resolved source's own `type`, the same field
+  // every branch above dispatches on. `providers` is `undefined` for a `Root`
+  // that never sets the prop, so this lookup is then `undefined?.[…]` --
+  // `undefined` -- and control falls straight through to the "no provider
+  // adapter" throw below, exactly as an unrecognised `source.type` already
+  // did before `providers` existed.
+  const registration = providers?.[source.type];
+  if (registration) {
+    const factory = await registration.load();
+    return factory(
+      media,
+      source,
+      (providerOptions as Record<string, unknown> | undefined)?.[source.type]
+    );
+  }
+  throw new Error(`No provider adapter is installed for ${source.type}.`);
+};
+
+// Whether every string reachable inside `value` -- its own value if it is one
+// itself, or any string nested through an object or array at any depth --
+// passes `isPermittedSourceUrl(value, undefined)`. `undefined` is passed for
+// `type` throughout because a supplied kind's own shape carries no field this
+// package knows to be a URL, let alone which built-in source kind it might
+// belong to (a supplied kind's `blob:` field, if it has one, is refused the
+// same way an unresolved bare string refuses it -- there is no `'video'` to
+// pass here to admit it, unlike the built-in `video` branch above).
+//
+// Reading `isPermittedSourceUrl`'s own body and doc comment
+// (`packages/core/src/source-detection.ts`) confirms both halves of why this
+// rule is safe to apply to an arbitrary field rather than only a known one:
+// it returns `true` whenever the value names no scheme at all (`schemeOf`
+// returns `undefined` for it), which is what lets a plain id
+// (`"dQw4w9WgXcQ"`), a relative path, or any other non-URL string pass
+// through untouched -- and it returns `false` only for the two cases that
+// matter, a forbidden scheme (`javascript:`, `data:`, and `blob:` outside a
+// `video` source) or a value the URL parser would strip characters from
+// before parsing. Neither of those depends on which field the string came
+// from, which is what makes one allowlist call correct for every string in an
+// unknown shape.
+//
+// The recursion is not a defensive flourish: a shallow, top-level-only check
+// would leave a nested field as a live bypass of this exact gate -- `{ type:
+// 'acme', config: { url: 'javascript:alert(1)' } } ` refuses at the top level
+// (no string named `type` is a URL) while carrying a forbidden scheme one
+// level down. A supplied kind's shape is arbitrary, so there is no schema
+// here to check a known field against instead; every string, at every depth,
+// is the only rule that cannot be routed around by nesting the dangerous
+// value one level deeper than whatever a shallow check happened to look at.
+const everyStringPermitted = (value: unknown): boolean => {
+  if (typeof value === 'string') {
+    return isPermittedSourceUrl(value, undefined);
+  }
+  if (Array.isArray(value)) {
+    return value.every(everyStringPermitted);
+  }
+  if (typeof value === 'object' && value !== null) {
+    return Object.values(value).every(everyStringPermitted);
+  }
+  // A number, boolean, null or undefined names no URL, so it needs no check
+  // and cannot fail one.
+  return true;
+};
+
+// The five source-kind names `loadProvider` above dispatches to
+// unconditionally, ahead of ever consulting `providers`. A registration keyed
+// by one of these is skipped in both paths below -- before its `detect` is
+// even called on the string path, and before its entry is looked up at all on
+// the explicit-object path -- rather than merely finding, once called, that
+// `loadProvider` routes a resolved source of that `type` to the matching
+// built-in branch regardless of which registration produced it.
+//
+// That is not only dead code being pruned: proven by probe, a registration
+// keyed `hls` whose `detect` returned `{ type: 'hls', src:
+// 'https://evil.test/injected.m3u8' }` had that `detect` actually called --
+// `true` -- and its return routed straight to `loadProvider`'s built-in `hls`
+// branch, which builds the adapter from it directly and never runs it through
+// `sourceFromExplicitObject`'s own per-kind validation (`isPermittedSourceUrl`
+// against `src`, `packages/core/src/source-detection.ts`). Skipping the
+// registration here, before either path can call it, closes that: a
+// registration cannot masquerade as a built-in kind's own resolved source by
+// returning one shaped like it.
+const RESERVED_PROVIDER_NAMES: readonly string[] = [
+  'hls',
+  'video',
+  'youtube',
+  'vimeo',
+  'wistia'
+];
+
+// `Root`'s own `detectSource`, layered over core's: core's own five-kind
+// `detectSource` runs first and wins outright on success, so a supplied kind
+// never gets a look-in on a URL -- or an explicit object -- a built-in host
+// already claims. Only on a built-in refusal does a `providers` entry get a
+// turn, and there are two distinct shapes of refusal this handles, mirroring
+// the two ways core itself resolves a source (`sourceFromExplicitObject` vs.
+// the string path, `packages/core/src/source-detection.ts`):
+//
+// A string is walked against every `providers` entry's own `detect`, in the
+// object's own enumeration order -- insertion order for the string keys this
+// map is ever given, the one order property enumeration guarantees (ECMA-262
+// `OwnPropertyKeys`), which is declaration order as `Root`'s own doc comment
+// on `providers` promises -- using the first whose `detect` both accepts the
+// string and returns a value `everyStringPermitted` clears. That walk is the
+// same one the explicit-object path below applies to an object handed in
+// directly -- a `detect` return is exactly as arbitrary a shape, so it is
+// exactly as capable of hiding a forbidden scheme a level or more down, and
+// proven so by the same probe `RESERVED_PROVIDER_NAMES` above cites: a
+// registration whose `detect` returned `{ type: 'acme', config: { url:
+// 'javascript:alert(1)' } }` used to have that value accepted outright,
+// because only the explicit-object path had ever run this walk. A `detect`
+// return that fails it is treated as a decline, not as a reason to fail
+// detection outright: the loop below simply keeps walking the remaining
+// registrations, exactly as it already does when `detect` itself returns
+// `undefined`, because one registration returning a value this package
+// refuses to trust is not grounds to veto a later registration that would
+// have matched honestly.
+//
+// An explicit object is resolved without ever calling a registration's
+// `detect`: `detect` takes a URL string by contract, and an object arriving
+// here has already declared its own kind through its `type` field, the same
+// way `sourceFromExplicitObject` skips every built-in host detector and goes
+// straight to per-kind validation once `input.type` names one. So a record
+// whose `type` is a non-empty string matching a registered `providers` key,
+// and not one of `RESERVED_PROVIDER_NAMES`, is accepted as that kind's
+// resolved source directly, once `everyStringPermitted` above has cleared
+// every string value nested anywhere inside it. A `type` matching no
+// registration, a reserved name, or a `type` that is not a string at all,
+// falls through to the built-in failure below unchanged -- there is nothing a
+// supplied kind could resolve it to.
+//
+// Deliberately not done here: the built-in `video` and `hls` branches of
+// `sourceFromExplicitObject` also rewrite a protocol-relative `//host/...`
+// value to `https://host/...` (`resolveNetworkPath`) before writing it
+// through, because those two kinds have a known field to rewrite. A supplied
+// kind's shape is arbitrary, so there is no single field -- or set of fields
+// -- this package could rewrite without either guessing wrong or walking the
+// whole object a second time to mutate it, which is more risk to a
+// provider-authored shape than the rewrite buys back: `isPermittedSourceUrl`
+// already permits the protocol-relative form unchanged, so refusing to
+// rewrite costs nothing on the allowlist side, only the normalisation. A
+// supplied kind therefore receives its own values exactly as given, and a
+// provider author who cares about the protocol-relative form must normalise
+// it themselves (documented in `docs/provider-setup.md`'s "Explicit source
+// objects" section).
+//
+// Both shapes share the same security-sensitive gate: `isPermittedSourceUrl`
+// is core's own allowlist, applied here exactly where core applies it itself
+// -- ahead of every host-specific detector inside `detectSource` for the
+// string path, and ahead of per-kind validation inside
+// `sourceFromExplicitObject` for the object path -- so a forbidden scheme or a
+// parser-stripped edge is refused before any supplied `detect` or resolved
+// source ever reaches provider-authored code, never after. Skipping this
+// step would let a `javascript:` URL -- top-level or nested -- reach a
+// provider's own factory, which is the validation bypass this seam must not
+// be.
+export const detectSourceWithProviders = (
+  input: unknown,
+  providers: PlayerProviders | undefined
+): SourceDetectionResult => {
+  const builtin = detectSource(input);
+  if (builtin.status === 'success' || !providers) {
+    return builtin;
+  }
+
+  if (typeof input === 'string') {
+    if (!isPermittedSourceUrl(input, undefined)) {
+      return builtin;
+    }
+    for (const [key, registration] of Object.entries(providers)) {
+      if (RESERVED_PROVIDER_NAMES.includes(key)) continue;
+      const source = registration.detect(input);
+      if (source && everyStringPermitted(source)) {
+        return {
+          status: 'success',
+          input,
+          source: source as ResolvedPlayerSource
+        };
+      }
+    }
+    return builtin;
+  }
+
+  if (typeof input === 'object' && input !== null && !Array.isArray(input)) {
+    const kind = (input as Record<string, unknown>).type;
+    if (
+      typeof kind === 'string' &&
+      kind !== '' &&
+      !RESERVED_PROVIDER_NAMES.includes(kind) &&
+      providers[kind] &&
+      everyStringPermitted(input)
+    ) {
+      return {
+        status: 'success',
+        input: input as PlayerSource,
+        source: input as ResolvedPlayerSource
+      };
+    }
+  }
+
+  return builtin;
 };

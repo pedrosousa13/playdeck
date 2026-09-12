@@ -426,6 +426,19 @@ the vocabulary that describes the third-party runtime a consumer supplied rather
 than the provider, the browser, the media or a policy.
 _Avoid_: hls light, the small build, the slim build
 
+**Supplied provider**:
+A source kind registered through `Player.Root`'s `providers` prop rather than
+shipped by this package — a `detect`/`load` pair keyed by the kind's own name
+(`ProviderRegistration`, `packages/react/src/provider-loaders.ts`). `detect`
+turns a URL into that kind's own source object, or declines; `load` is a lazy
+factory, called once a source of that kind is detected, that resolves to the
+function which builds the running `ProviderAdapter` — the same interface every
+built-in loader produces. Tried only after all five built-in kinds refuse, so
+a supplied kind can never intercept a URL a built-in host already claims —
+which is also why `hls`, `video`, `youtube`, `vimeo` and `wistia` are reserved
+names it cannot register under.
+_Avoid_: plugin, custom provider, provider plugin
+
 ### Styling
 
 See [ADR-0001](docs/adr/0001-structural-css-ships-inline.md) for why structural
