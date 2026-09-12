@@ -327,9 +327,22 @@
     cursor: pointer;
   }
 
+  /* The hidden rest state is scoped to the adjacent-sibling combinator, not
+   * the bare slider: `pointer-events: none` takes an element out of hit
+   * testing, so a slider with no mute button beside it could never match its
+   * own `:hover` branch and would be invisible and pointer-unreachable at once
+   * (#598). `inline-size` stays on the bare selector below because a
+   * standalone slider still needs its width -- only the hidden/reveal
+   * behaviour is conditional on the sibling. See `theme.css`'s own copy of
+   * this rule for the rest of the rationale; it is not repeated here. */
   @media (pointer: fine) {
     :where([data-playdeck-part='volume-slider']) {
       inline-size: 5rem;
+    }
+
+    :where(
+      [data-playdeck-part='mute-button'] + [data-playdeck-part='volume-slider']
+    ) {
       opacity: 0;
       pointer-events: none;
       transition: opacity var(--playdeck-transition-duration, 150ms)

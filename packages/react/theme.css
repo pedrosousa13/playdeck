@@ -598,6 +598,13 @@
    * and it is a hard switch rather than a transition — dragging a thumb that is
    * half-way through a fade is not a state worth animating into.
    *
+   * The hidden rest state is scoped to the same adjacent-sibling combinator as
+   * the reveal below, rather than naming the slider bare: `pointer-events: none`
+   * takes an element out of hit testing, so a slider with no mute button beside
+   * it could never match its own `:hover` branch and would be invisible and
+   * pointer-unreachable at once (#598). A standalone `VolumeSlider` is simply
+   * visible instead.
+   *
    * Every branch of the reveal selector ends on the slider as its subject,
    * whether qualified by the mute button's state through the adjacent-sibling
    * combinator or by the slider's own. `MuteButton` and `VolumeSlider` are
@@ -607,7 +614,9 @@
    * the button onto the control without it fading out under the pointer.
    */
   @media (pointer: fine) {
-    :where([data-playdeck-part='volume-slider']) {
+    :where(
+      [data-playdeck-part='mute-button'] + [data-playdeck-part='volume-slider']
+    ) {
       opacity: 0;
       pointer-events: none;
       transition: opacity var(--playdeck-transition-duration, 150ms)
