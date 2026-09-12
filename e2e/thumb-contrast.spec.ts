@@ -245,31 +245,23 @@ test('the seek input sits on its own track under a different inherited font', as
  * renders the input alone, so what a screenshot shows beside the thumb is the
  * slider itself. The seek slider is the opposite case, below.
  *
- * The theme reveals this control rather than showing it: under
- * `(pointer: fine)` it rests at `opacity: 0` with `pointer-events: none`, and
- * comes back to `opacity: 1` on hover or focus-within of `MuteButton` or of
- * itself. When this comment was introduced, 2026-09-03, it was recorded at
- * rest on this story, under pinned Playwright (1.61.1): both engines report
- * `opacity: '0'`, `pointer-events: 'none'`, and an `elementFromPoint` at the
- * slider's own centre that resolves to `viewport` — so a screenshot taken here
- * samples the story's ground through a fully transparent control, which is
- * exactly what it read: a darkest pixel of `rgb(11 14 19)`, the story's own
- * background, and a flat 1.00:1 either side of the thumb.
+ * The theme reveals this control rather than showing it, but only where it
+ * follows a `MuteButton`: the hidden rest state under `(pointer: fine)` is
+ * qualified by that adjacent-sibling relationship, and this story renders the
+ * slider alone, with no button beside it, so it now sits at `opacity: 1` from
+ * the start. Before that rule was scoped to the adjacent-sibling relationship,
+ * the rest state named every volume slider, this one included; `.focus()`
+ * below is kept from that version of the file rather than removed, because it
+ * lands on the same `:focus-within` branch of the reveal selector list that is
+ * already `1` here and so costs this measurement nothing.
  *
- * Focus, not hover, is what reveals it here. `pointer-events: none` takes the
- * element out of hit testing, so it cannot match `:hover` at all while at rest
- * — measured, a `mouse.move` onto its centre leaves all three of `opacity`,
- * `:hover` and the hit test unchanged on both engines. `focus()` needs no hit
- * target and lands on the `:focus-within` branch of the same selector list the
- * theme's spec writes down, which reads `opacity: '1'` and
- * `pointer-events: 'auto'` on both. That the standalone slider has no reachable
- * hover state is a property of the theme, not of this file.
- *
- * The reveal is a 150ms `opacity` transition, so the opacity is polled to 1
- * before anything is sampled rather than waited out on a timeout — the same
- * idiom `e2e/theme-idle.spec.ts` measures the bar's own fade with. The focus
- * ring this raises is `outline` at `outline-offset: 2px`, which paints outside
- * the border box `centreRow` clips to, so it reaches no sampled pixel.
+ * The `transition` declaration now lives only in the mute-button-qualified
+ * rest-state rule, so this standalone slider never gets it: `.focus()`'s
+ * effect is synchronous and the poll below waits on nothing. It is kept
+ * anyway, in the same idiom `e2e/theme-idle.spec.ts` uses to poll a fade that
+ * does apply there, because it costs this measurement nothing. The focus ring
+ * this raises is `outline` at `outline-offset: 2px`, which paints outside the
+ * border box `centreRow` clips to, so it reaches no sampled pixel.
  */
 const volumeRow = async (page: Page): Promise<Row> => {
   await page.goto(themedStory('player-volumeslider--half-volume'));
