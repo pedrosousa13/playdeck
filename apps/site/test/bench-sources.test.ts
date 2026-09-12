@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   benchSources,
   readySources,
-  resolvePlayerSource
+  resolvePlayerSource,
+  defaultBenchSource,
+  POSTER_SIZES
 } from '../src/bench-sources';
 import type { PlayerProvider } from '@playdeck/core';
 
@@ -31,6 +33,26 @@ describe('benchSources', () => {
   it('lists hls first, which is what makes it the switch’s default', () => {
     expect(benchSources[0]?.provider).toBe('hls');
     expect(readySources[0]?.provider).toBe('hls');
+  });
+
+  // #611: `Bench.astro` and `index.astro` both need the switch's resting
+  // position -- the no-JavaScript fallback and, since #611, the document-head
+  // poster preload both name it -- so this is the same fact `readySources[0]`
+  // above already asserts, from the guarded helper both files actually call.
+  it('resolves the same default entry as readySources[0]', () => {
+    expect(defaultBenchSource().provider).toBe(readySources[0]?.provider);
+  });
+
+  // The stage's real width at every breakpoint, not `100vw` -- see the
+  // constant's own comment in `bench-sources.ts` for the derivation from
+  // `index.astro`'s `.page` rule. Pinned as a literal string rather than
+  // re-derived here, because every consumer (the preload link, the
+  // `<noscript>` fallback and the island) has to use this exact string, not
+  // merely one that happens to compute the same pixel values.
+  it('exports one sizes string every poster consumer has to share', () => {
+    expect(POSTER_SIZES).toBe(
+      '(min-width: 72rem) calc(72rem - 3rem), calc(100vw - 3rem)'
+    );
   });
 
   it('never lets a ready entry produce a placeholder URL', () => {

@@ -76,7 +76,12 @@
  */
 import Sweep from './Sweep.astro';
 import BenchIsland from './BenchIsland';
-import { benchSources, readySources, resolvePlayerSource } from '../bench-sources';
+import {
+  readySources,
+  resolvePlayerSource,
+  defaultBenchSource,
+  POSTER_SIZES
+} from '../bench-sources';
 import { codeToHtml } from 'shiki';
 import type { ShikiTransformer } from 'shiki';
 import { shikiConfig } from '../shiki';
@@ -103,10 +108,7 @@ const base = import.meta.env.BASE_URL;
  * than written as a literal, so a change to the default position is one
  * file's edit rather than several.
  */
-const fallback = benchSources.find((entry) => entry.ready);
-if (fallback === undefined) {
-  throw new Error('Bench.astro: no ready source for the no-JavaScript fallback.');
-}
+const fallback = defaultBenchSource();
 const fallbackUrl = fallback.source(base);
 const poster = fallback.poster(base);
 const credit = fallback.credit;
@@ -241,17 +243,25 @@ for (const entry of readySources) {
           {
             /* The same still the island's player shows, here as a real `<img>`
              * — not a CSS background, so this path keeps the guarantee the
-             * rest of the page does. `srcset`/`sizes` for the same reason
-             * `BenchIsland.tsx`'s `Player.PosterImage` carries them: this is
-             * the largest image on the page, and a no-JavaScript reader on a
-             * narrow or a high-density screen is owed the same match between
-             * screen and file a scripted reader gets. */
+             * rest of the page does. `srcset`/`sizes`/`fetchpriority` for the
+             * same reason `BenchIsland.tsx`'s `Player.PosterImage` carries
+             * them: this is the largest image on the page, and a
+             * no-JavaScript reader on a narrow or a high-density screen is
+             * owed the same match between screen and file a scripted reader
+             * gets. `sizes` is `POSTER_SIZES` — the stage's own real width,
+             * not `100vw` — because the frame is narrower than the viewport
+             * above `bench-sources.ts`'s own breakpoint; see that constant's
+             * comment for the derivation. It has to be the exact string the
+             * preload link `index.astro` puts in the document head carries,
+             * or a no-JavaScript reader's browser resolves a different
+             * candidate than the one already in flight. */
           }
           <img
             class="bench__fallback-image"
             src={poster.src}
             srcset={poster.srcSet}
-            sizes="100vw"
+            sizes={POSTER_SIZES}
+            fetchpriority="high"
             alt=""
           />
           <span class="bench__fallback-label">Watch on {fallback.label} &rarr;</span>

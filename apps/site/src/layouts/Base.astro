@@ -87,6 +87,16 @@ const shouldTrackWithPlausible =
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     {
+      /* A page-specific addition to the head, discovered as early as
+       * possible -- before the analytics script and the theme script below,
+       * both of which a page's own head content never needs to come after.
+       * `/` uses it for the bench poster's `<link rel="preload">` (#611):
+       * that element has to be a document-head resource for the preload
+       * scanner to see it before any script runs, and no page-shared markup
+       * in this file is the right place for one page's own poster. */
+    }
+    <slot name="head" />
+    {
       shouldTrackWithPlausible && (
         <script
           is:inline

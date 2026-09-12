@@ -282,6 +282,53 @@ export const benchSources: readonly BenchSource[] = (
 export const readySources = benchSources.filter((entry) => entry.ready);
 
 /**
+ * The switch's resting position -- `benchSources.find(ready)`, guarded
+ * against `undefined` once here rather than at each call site. `Bench.astro`
+ * reads this for the no-JavaScript fallback and, since #611, for the
+ * document-head poster preload that has to name the same position;
+ * `BenchIsland.tsx` still reads `readySources[0]` separately for its own
+ * initial render state, the same fact by a different route -- this file's own
+ * module comment records why that duplication predates this helper and is
+ * deliberate.
+ */
+export const defaultBenchSource = (): BenchSource => {
+  const entry = benchSources.find((candidate) => candidate.ready);
+  if (entry === undefined) {
+    throw new Error(
+      'bench-sources.ts: no ready source for the switch default.'
+    );
+  }
+  return entry;
+};
+
+/**
+ * What every consumer of the resting poster's `sizes` attribute has to agree
+ * on: the document-head `<link rel="preload">` (`Bench.astro`), the
+ * `<noscript>` fallback's `<img>` (`Bench.astro`) and the live poster
+ * `BenchIsland.tsx` mounts. One string here is what keeps a preload's
+ * `imagesizes` from silently disagreeing with what the rendered image
+ * actually asks for -- disagreement there fetches a second poster variant
+ * rather than the one that matches the box, which is worse than no preload at
+ * all (#611).
+ *
+ * Mirrors `index.astro`'s `.page` rule exactly, because nothing between that
+ * element and the stage adds a width or padding of its own: `.bench`,
+ * `.bench__frame` and `.bench__stage` in `Bench.astro` are all 100% inline,
+ * so the stage is `.page`'s content box, whatever that resolves to.
+ * `.page`'s own rule is `max-inline-size: 72rem` with `padding-inline:
+ * var(--space-5)` (1.5rem, both sides -- 3rem total, `tokens.css`), so below
+ * that ceiling the content box is `calc(100vw - 3rem)` and at or above it,
+ * `.page` has stopped growing and the content box is fixed at
+ * `calc(72rem - 3rem)` regardless of viewport. Measured against the built
+ * site with Playwright/chromium: `#bench-stage`'s own
+ * `getBoundingClientRect().width` was 1104px at both 1280 and 1440 viewport
+ * widths (above the ceiling) and 327px at 375 (below it) -- exactly what this
+ * expression resolves to at each.
+ */
+export const POSTER_SIZES =
+  '(min-width: 72rem) calc(72rem - 3rem), calc(100vw - 3rem)';
+
+/**
  * What `Player.Root`'s `source` prop actually receives for one entry, once
  * `baseUrl` is known.
  *

@@ -4,6 +4,7 @@ import SiteHeader from '../components/SiteHeader.astro';
 import Bench from '../components/Bench.astro';
 import FeatureCards from '../components/FeatureCards.astro';
 import { measureBundles } from '../../../../scripts/bundle-budgets.mjs';
+import { defaultBenchSource, POSTER_SIZES } from '../bench-sources';
 
 /**
  * The landing page, as one instrument.
@@ -88,6 +89,18 @@ if (youtube === undefined) {
 }
 
 const install = 'pnpm add @playdeck/react';
+
+/*
+ * The bench's poster, resolved here rather than read back out of `<Bench />`:
+ * an Astro component renders its own markup and cannot hand a value up to an
+ * ancestor's `<head>`, so the one document-head resource this page needs is
+ * computed from `bench-sources.ts` directly, the same module `Bench.astro`
+ * itself reads for the identical fact (see that module's own comment on
+ * `defaultBenchSource` for why a second reader of it is an established
+ * pattern here rather than a new duplication).
+ */
+const base = import.meta.env.BASE_URL;
+const preloadPoster = defaultBenchSource().poster(base);
 ---
 
 <Base
@@ -95,6 +108,30 @@ const install = 'pnpm add @playdeck/react';
   documentation={false}
   stance="argument"
 >
+  <Fragment slot="head">
+    {
+      /* Makes the bench's poster -- the page's LCP element -- discoverable
+       * to the preload scanner before `BenchIsland.tsx`'s `client:only`
+       * island has hydrated (#611). `imagesrcset`/`imagesizes` have to name
+       * exactly what the island's `Player.PosterImage` and the `<noscript>`
+       * fallback in `Bench.astro` both resolve to for this same position, or
+       * this fetches a second variant instead of replacing the one they
+       * already ask for: `href` and `imagesrcset` both come from
+       * `preloadPoster`, the same `entry.poster(base)` call both of those
+       * consumers make, and `imagesizes` is `POSTER_SIZES`, `bench-sources.ts`'s
+       * one exported `sizes` string. `fetchpriority`, not `loading`: a
+       * preload has no lazy/eager state of its own to set. */
+    }
+    <link
+      rel="preload"
+      as="image"
+      href={preloadPoster.src}
+      imagesrcset={preloadPoster.srcSet}
+      imagesizes={POSTER_SIZES}
+      fetchpriority="high"
+    />
+  </Fragment>
+
   <SiteHeader documentation={false} />
 
   <main class="page">

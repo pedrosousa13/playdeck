@@ -76,6 +76,7 @@ import {
   benchSources,
   readySources,
   resolvePlayerSource,
+  POSTER_SIZES,
   type BenchCredit,
   type BenchPoster
 } from '@/bench-sources';
@@ -476,13 +477,19 @@ const Stage = ({
        * clip the control beside it is labelled to play, so describing it would
        * announce the same thing twice to a reader who cannot see either.
        *
-       * `srcSet` carries both widths `bench-sources.ts` ships -- 1024w and the
-       * film's own 2048w -- and `sizes` is `100vw` rather than a measurement of
-       * this frame's actual CSS width at every breakpoint: the frame is never
-       * wider than the viewport, so `100vw` never under-selects and asks a
-       * browser to pick the smaller file only where the viewport itself is
-       * narrow. `src` stays the 1024w file, for the one reader whose browser
-       * reads neither attribute.
+       * `srcSet` carries both widths `bench-sources.ts` ships for whichever
+       * position is selected. `sizes` is `POSTER_SIZES`, that file's one
+       * exported description of the stage's real CSS width at every
+       * breakpoint (not `100vw`, which overstates it -- #611: the stage is
+       * narrower than the viewport above `bench-sources.ts`'s own
+       * breakpoint, so `100vw` asked a browser to resolve a wider image than
+       * the box ever shows). It is the same string the document-head preload
+       * link `index.astro` renders and the `<noscript>` fallback in
+       * `Bench.astro` both carry, which is what keeps this island from
+       * fetching a second variant once it mounts over that preload. `src`
+       * stays the narrower file, for the one reader whose browser reads
+       * neither attribute. `fetchPriority="high"`: this is the page's LCP
+       * candidate.
        *
        * `showWhilePaused` only for `youtube`: that is the one position whose
        * iframe draws its own chrome -- a title bar, a "more videos" shelf, a
@@ -496,7 +503,8 @@ const Stage = ({
           alt=""
           src={poster.src}
           srcSet={poster.srcSet}
-          sizes="100vw"
+          sizes={POSTER_SIZES}
+          fetchPriority="high"
         />
       </Player.Poster>
       {/* Before the control bar and after the picture, which is the order the
