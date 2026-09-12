@@ -352,7 +352,7 @@ what performs this kind's own dynamic import, the same way this package's own
 `await import('@playdeck/provider-hls')` never runs for a page that plays
 nothing but MP4. What it resolves to is a second function, called with the
 mount point, the detected source and this kind's own `providerOptions` bag,
-that builds and returns the running `ProviderAdapter` -- the same interface
+that builds and returns the running `ProviderAdapter` — the same interface
 [`@playdeck/core`](../packages/core) documents, and every built-in loader
 already produces.
 
@@ -361,9 +361,11 @@ intercept a URL, or an explicit object, a built-in host already claims — and
 only on a built-in refusal walks `providers`' own entries, in the order they
 were given, using the first whose `detect` accepts the URL. `hls`, `video`,
 `youtube`, `vimeo` and `wistia` are reserved names: a `providers` entry keyed
-by one of them is never reachable, because a resolved source of that `type`
-is dispatched by this package's own built-in loader first, whatever
-registered it.
+by one of them is skipped outright, on both the string path and the
+explicit-object path, before its `detect` is ever called or its entry is ever
+looked up — not only inert once a resolved source of that `type` reaches this
+package's own built-in loader, which dispatches on `type` first regardless of
+which registration produced it.
 
 An explicit object of a supplied kind — `{ type: 'example', clipId: '…' }` —
 resolves without ever calling `detect`: `detect` takes a URL string, and an
@@ -399,6 +401,15 @@ Deliberately not a link: this section is shared by every provider page, and
 provider and so carries no anchor on most of them (#528's link check is what
 catches that).
 
+`controls`, `loop`, `startTime` and `endTime` reach a supplied kind not at all:
+`Root` folds each into whichever of the `youtube`, `vimeo` and `wistia` bags
+the detected source belongs to, and a supplied kind has none of those three, so
+the four props are silent no-ops on it — the divergence
+[ADR-0004](adr/0004-cross-provider-options-live-on-root.md) asks be declared
+rather than left to be discovered. A registration that wants to answer one of
+them takes it as a key in its own `Options` bag instead, read off its own
+`providerOptions` entry the way `youtube`, `vimeo` and `wistia` read theirs.
+
 <!-- example:provider-setup-providers -->
 
 ```tsx
@@ -410,7 +421,7 @@ import type {
 
 // A source kind this package ships no loader for. Everything past this point
 // is the shape any consumer's own provider takes: a source object of its own,
-// and a lazy factory that turns it into a running ProviderAdapter -- the same
+// and a lazy factory that turns it into a running ProviderAdapter — the same
 // interface `@playdeck/provider-hls` and the other four built-in packages
 // already produce.
 type ExampleSource = { readonly type: 'example'; readonly clipId: string };

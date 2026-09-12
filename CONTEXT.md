@@ -430,26 +430,13 @@ _Avoid_: hls light, the small build, the slim build
 A source kind registered through `Player.Root`'s `providers` prop rather than
 shipped by this package — a `detect`/`load` pair keyed by the kind's own name
 (`ProviderRegistration`, `packages/react/src/provider-loaders.ts`). `detect`
-turns a URL into that kind's own source object, or declines by returning
-`undefined`; `load` is a lazy factory, called only once a source of that kind
-is actually detected, that resolves to the function which builds the running
-`ProviderAdapter` — the same interface every built-in loader already produces.
-Tried only once all five built-in kinds refuse a URL, in the order the
-`providers` map's own entries were declared — the one order object property
-enumeration guarantees. `hls`, `video`, `youtube`, `vimeo` and `wistia` are
-reserved names a supplied provider can register under but that registration
-is skipped outright, before its `detect` is ever called and before an
-explicit object of that `type` is ever looked up against `providers` — not
-only unreachable once a resolved source of that `type` is dispatched to the
-matching built-in loader first, whatever registered it. An explicit source
-object of a registered, non-reserved kind resolves too, without ever calling
-`detect` — it has already declared its own kind through its `type` field —
-provided every string value anywhere inside it, nested included, clears the
-same `isPermittedSourceUrl` allowlist a URL string does; a `detect` return is
-held to the same allowlist before it is accepted, for the same reason. `PlayerSource`'s generic parameter
-(`packages/core/src/types.ts`) is what a supplied provider's own source shape
-opens the type up through, without touching what the five built-in kinds
-accept when a consumer never sets `providers` at all.
+turns a URL into that kind's own source object, or declines; `load` is a lazy
+factory, called once a source of that kind is detected, that resolves to the
+function which builds the running `ProviderAdapter` — the same interface every
+built-in loader produces. Tried only after all five built-in kinds refuse, so
+a supplied kind can never intercept a URL a built-in host already claims —
+which is also why `hls`, `video`, `youtube`, `vimeo` and `wistia` are reserved
+names it cannot register under.
 _Avoid_: plugin, custom provider, provider plugin
 
 ### Styling

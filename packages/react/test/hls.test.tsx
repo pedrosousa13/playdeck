@@ -58,11 +58,13 @@ test('forwards the hls build option to the hls adapter through Player.Root', asy
 
 // The regression #579 exists to prevent: `providerOptionsEqual`
 // (`use-activation.ts`) must compare the `hls` bag by value, or a changed bag
-// looks unchanged and the adapter never re-attaches to pick it up. Make
-// `providerOptionsEqual` skip the `hls` key and this test fails, because the
-// second render is then judged equal to the first and `createHlsProvider` is
-// never called again -- mirrored from the same regression `vimeo.test.tsx`
-// and `youtube.test.tsx` guard for their own bags.
+// looks unchanged and the adapter never re-attaches to pick it up. Confirmed
+// by adding `if (key === 'hls') continue;` at the top of that function's own
+// key loop and running `pnpm vitest run packages/react/test/hls.test.tsx`:
+// this test failed, because the second render is then judged equal to the
+// first and `createHlsProvider` is never called again -- reverted afterwards.
+// Mirrored from the same regression `vimeo.test.tsx` and `youtube.test.tsx`
+// guard for their own bags.
 test('re-attaches the HLS adapter when the build option changes', async () => {
   const { rerender } = render(
     <Player.Root

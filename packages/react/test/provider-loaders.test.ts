@@ -280,6 +280,43 @@ test('reports source types without an installed adapter', async () => {
 // directly -- the two functions `root.tsx` and `use-activation.ts` call, so a
 // claim proven here is a claim proven about exactly what a consumer's
 // `providers` prop reaches.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md's fallback: the feature
+// is additive, so a substitute mutation stands in for reverting it). Each
+// mutation below was applied alone to `provider-loaders.ts`, run with
+// `pnpm vitest run packages/react/test/provider-loaders.test.ts`, and
+// reverted afterwards:
+// - `detectSourceWithProviders` short-circuited to `return builtin;` before
+//   ever consulting `providers` failed 7: "walks supplied providers in
+//   declaration order, stopping at the first whose detect accepts the URL",
+//   "declines a URL no built-in kind and no supplied provider recognises",
+//   "refuses a detect return carrying a forbidden scheme nested inside it,
+//   and continues to a later registration", "still resolves a detect return
+//   that carries no forbidden scheme, unchanged", "resolves an explicit
+//   object of a registered supplied kind without ever calling its detect",
+//   "does not refuse a plain non-URL string field on an explicit
+//   supplied-kind object", "an explicit object of a registered supplied kind
+//   detects and dispatches to that registration through loadProvider".
+// - `everyStringPermitted` (`provider-loaders.ts`) made to always return
+//   `true` failed 2: "refuses a detect return carrying a forbidden scheme
+//   nested inside it, and continues to a later registration", "refuses an
+//   explicit supplied-kind object carrying a forbidden scheme nested inside
+//   it".
+// - The `RESERVED_PROVIDER_NAMES` skip dropped from both
+//   `detectSourceWithProviders` paths, and `loadProvider`'s own `providers`
+//   lookup moved ahead of its five built-in branches, failed 3: "never calls
+//   detect for a registration keyed by a reserved built-in name", "does not
+//   resolve an explicit object whose type is a reserved built-in name
+//   through the supplied path", "never lets a providers entry keyed by a
+//   built-in name intercept the built-in dispatch".
+// - `SuppliedSource` (below) collapsed to `never` for every key, dropping
+//   its derivation of a registration's own `Source`, made `pnpm typecheck`
+//   report TS2344 at "a supplied kind types its own source shape and its own
+//   providerOptions key without weakening the five built-in kinds"'s own
+//   `expectTypeOf<SuppliedSource<AcmeProviders>>().toEqualTypeOf<AcmeSource>()`
+//   line, and cascaded into a real TS2322 on that same test's
+//   `suppliedSource` assignment and on `supplied-provider.test.tsx`'s own use
+//   of the type.
 type AcmeSource = { readonly type: 'acme'; readonly videoId: string };
 type AcmeOptions = { readonly quality?: 'sd' | 'hd' };
 
@@ -611,10 +648,15 @@ test('rejects a source object whose type matches no registered kind at the type 
 // The other half of "without weakening the built-in kinds' typing": a
 // `RootProps` given no type argument -- every consumer who never sets
 // `providers`, `root-props.test.ts`'s own subject -- accepts none of a
-// supplied kind's shapes at all. Red without `PlayerSource`'s `Extra`
-// defaulting to `never`: a default of `unknown` or `{}` would admit
-// `AcmeSource` here even with `providers` never opted into, which is exactly
-// the widening this generic parameter must not cause.
+// supplied kind's shapes at all. `RootProps['source']` resolves here to
+// `PlayerSource<SuppliedProviderSource>`, not `PlayerSource<never>`, so what
+// actually refuses the literal below is the excess-property check against
+// `SuppliedProviderSource`'s own exact shape (`videoId` is not one of its
+// fields) -- confirmed by widening `SuppliedProviderSource`
+// (`provider-loaders.ts`) to `{ readonly type: string; readonly [key:
+// string]: unknown }`: `pnpm typecheck` then reported `TS2578: Unused
+// '@ts-expect-error' directive` at this test's own line below, reverted
+// afterwards.
 test('accepts no supplied-kind source at all when providers is never opted into', () => {
   // @ts-expect-error `AcmeSource` is not a member of the non-generic
   // `PlayerSource` union `RootProps['source']` defaults to.

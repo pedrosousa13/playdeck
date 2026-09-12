@@ -224,10 +224,11 @@ const providerOptionsEqual = (
   left: ResolvedProviderOptions | undefined,
   right: ResolvedProviderOptions | undefined
 ): boolean => {
-  const l = left as Record<string, Record<string, unknown>> | undefined;
-  const r = right as Record<string, Record<string, unknown>> | undefined;
-  for (const key in { ...l, ...r }) {
-    if (!providerBagEqual(l?.[key], r?.[key])) return false;
+  const leftBags = left as Record<string, Record<string, unknown>> | undefined;
+  const rightBags = right as
+    Record<string, Record<string, unknown>> | undefined;
+  for (const key in { ...leftBags, ...rightBags }) {
+    if (!providerBagEqual(leftBags?.[key], rightBags?.[key])) return false;
   }
   return true;
 };

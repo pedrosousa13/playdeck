@@ -276,11 +276,11 @@ export const libraries = [
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
     // Raised from 20 KB (previously measured 19.90 KB) to cover the
     // explicit-object path `detectSourceWithProviders` gained for a supplied
-    // provider kind (#662): every composition below reaches
+    // provider kind: every composition below reaches
     // `provider-loaders.ts` regardless of which parts it renders, so the
     // added validation logic (`everyStringPermitted` and its recursive
     // check) lands in this row's own gzip figure too, not only the
-    // play-only row's. 20.04 KB measured 2026-09-12, rounded up to the next
+    // play-only row's. 20.09 KB measured 2026-09-12, rounded up to the next
     // 0.25 KB -- see the `libraries` doc comment above for what raising this
     // means.
     ceilingKb: 20.25
@@ -292,10 +292,11 @@ export const libraries = [
     composition: 'core + primitives + native provider',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // Raised from 20.75 KB (previously measured 20.56 KB): #662's reserved-name
-    // guard and its validation of a `detect` return (`detectSourceWithProviders`,
-    // `provider-loaders.ts`) reach this composition the same as every other one
-    // below. 20.76 KB measured 2026-09-12, rounded up to the next 0.25 KB.
+    // Raised from 20.75 KB (previously measured 20.56 KB): the `providers`
+    // prop's reserved-name guard and its validation of a `detect` return
+    // (`detectSourceWithProviders`, `provider-loaders.ts`) reach this
+    // composition the same as every other one below. 20.77 KB measured
+    // 2026-09-12, rounded up to the next 0.25 KB.
     ceilingKb: 21
   },
   {
@@ -309,8 +310,8 @@ export const libraries = [
     // Raised from 21.75 KB (previously measured 21.63 KB) for the same
     // reason as the "no parts" row above: the explicit-object path
     // `detectSourceWithProviders` gained for a supplied provider kind
-    // (#662) adds validation logic every composition reaches, this row
-    // included. 21.79 KB measured 2026-09-12, rounded up to the next 0.25
+    // adds validation logic every composition reaches, this row
+    // included. 21.83 KB measured 2026-09-12, rounded up to the next 0.25
     // KB.
     ceilingKb: 22,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES

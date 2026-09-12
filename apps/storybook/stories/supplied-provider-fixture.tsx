@@ -4,9 +4,8 @@ import type { ProviderRegistration } from '@playdeck/react';
 import { assetUrl } from './asset-url';
 
 // A test-local provider for a source kind `@playdeck/react` ships no loader
-// for, built for #662's own e2e coverage. The tracker's dependency edge is
-// #663 blocked_by #662, so #663's own compiled example and workbench story
-// land after this one — #662 supplies its own, and this file is it.
+// for, registered through the `providers` seam to give the e2e suite a
+// supplied kind to drive without depending on a real third-party host.
 //
 // Not a first-party provider: it lives only in this Storybook app, is never
 // published, and its own playback is entirely `@playdeck/provider-native`'s

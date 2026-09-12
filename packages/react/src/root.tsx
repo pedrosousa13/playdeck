@@ -222,6 +222,16 @@ export type RootProps<P extends PlayerProviders = Record<string, never>> = {
    * shape to normalise a protocol-relative `//host/...` value on, so it is
    * carried through exactly as given.
    *
+   * `controls`, `loop`, `startTime` and `endTime` reach a supplied kind not at
+   * all: `resolvedProviderOptions` (below) folds each into whichever of the
+   * `youtube`, `vimeo` and `wistia` bags the detected source belongs to, and a
+   * supplied kind has none of those three -- so the four props are silent
+   * no-ops on it, the divergence ADR-0004 asks be declared rather than left to
+   * be discovered. A registration that wants to answer one of them takes it
+   * as a key in its own `Options` bag instead, read off `providerOptions`'s
+   * own entry for this kind the way `youtube`, `vimeo` and `wistia` read
+   * theirs.
+   *
    * Unset by default. There is no registry and no module-level state behind
    * this prop -- `providers` is read where it is passed and nowhere else --
    * so a `Root` that never sets it adds no import beyond what

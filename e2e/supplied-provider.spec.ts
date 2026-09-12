@@ -4,13 +4,11 @@ import { media, playButton } from './locators';
 const STORY =
   '/iframe.html?id=fixtures-suppliedproviderfixture--acme-clip&viewMode=story';
 
-// #662: `Player.Root`'s `providers` prop, driven through a full playback flow
+// `Player.Root`'s `providers` prop, driven through a full playback flow
 // against a source kind this package ships no loader for. The registration
 // itself is `apps/storybook/stories/supplied-provider-fixture.tsx`'s
-// test-local "acme" provider -- built for this issue's own e2e coverage,
-// since the tracker's dependency edge (#663 blocked_by #662) means the
-// compiled example and workbench story #663 would otherwise supply do not
-// exist yet.
+// test-local "acme" provider, built to give this spec a supplied kind to
+// drive without depending on a real third-party host.
 //
 // This proves the whole seam end to end in a real browser, not only the
 // dispatch `packages/react/test/provider-loaders.test.ts` and
@@ -21,6 +19,17 @@ const STORY =
 // fixture's factory attaches a real `<video>` inside it, and the player
 // reaches confirmed `playing`, `paused` and `ended` the same way
 // `native-mp4.spec.ts` proves for a built-in native source.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md's fallback: the feature
+// is additive, so a substitute mutation stands in for reverting it).
+// `detectSourceWithProviders` (`provider-loaders.ts`) made to never resolve a
+// supplied kind -- its string-path loop over `providers`' own entries
+// emptied, and its explicit-object lookup made to always miss -- run with
+// `pnpm test:e2e --project=chromium e2e/supplied-provider.spec.ts`: the test
+// below failed at its first assertion, `expect(...).toBe('native')` timing
+// out at 5000ms with `Received: null` (`window.playdeckHandle?.getState().
+// provider` never resolving), because `Root` never committed to the acme
+// detection at all. Reverted afterwards.
 test('plays, pauses, and ends a supplied-kind source through Player.Root', async ({
   page
 }) => {

@@ -6,7 +6,7 @@ import type {
 
 // A source kind this package ships no loader for. Everything past this point
 // is the shape any consumer's own provider takes: a source object of its own,
-// and a lazy factory that turns it into a running ProviderAdapter -- the same
+// and a lazy factory that turns it into a running ProviderAdapter — the same
 // interface `@playdeck/provider-hls` and the other four built-in packages
 // already produce.
 type ExampleSource = { readonly type: 'example'; readonly clipId: string };

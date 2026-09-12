@@ -500,9 +500,9 @@ export const detectSourceWithProviders = (
     if (!isPermittedSourceUrl(input, undefined)) {
       return builtin;
     }
-    for (const key in providers) {
+    for (const [key, registration] of Object.entries(providers)) {
       if (RESERVED_PROVIDER_NAMES.includes(key)) continue;
-      const source = providers[key]?.detect(input);
+      const source = registration.detect(input);
       if (source && everyStringPermitted(source)) {
         return {
           status: 'success',
