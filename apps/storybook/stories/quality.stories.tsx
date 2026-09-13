@@ -130,8 +130,8 @@ export const Unavailable: Story = {
 /**
  * `selectQuality` available, `selectQualityAuto` not -- the shape
  * `@playdeck/provider-vimeo` reports for a ladder with real rungs and no
- * `auto` entry (#653). The menu still renders, with every rung; only the
- * Auto row is absent, rather than present and inert.
+ * `auto` entry. The menu still renders, with every rung; only the Auto row
+ * is absent, rather than present and inert.
  */
 export const AutoUnavailable: Story = {
   parameters: ready(

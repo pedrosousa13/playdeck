@@ -193,9 +193,9 @@ always carry an `auto` entry, and where it does not, `selectQuality(null)`
 resolves `{ ok: false, reason: 'unsupported' }` against a real ladder that
 otherwise selects fine. `PlayerCapabilities.selectQualityAuto` is the signal
 that tells the two cases apart, and `Player.QualityMenu`'s Auto row is gated
-on it rather than on `selectQuality` (#653) -- a menu built over the older,
-single capability would render a radio item that silently does nothing when
-a viewer chose it.
+on it rather than on `selectQuality` -- a menu built over the older, single
+capability would render a radio item that silently does nothing when a
+viewer chose it.
 
 | Provider | `selectQualityAuto`                                   |
 | -------- | ----------------------------------------------------- |

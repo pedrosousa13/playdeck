@@ -191,7 +191,7 @@ export type PlayerCapabilities = {
   // the two: `currentLevel = -1` honours auto whenever hls.js has a ladder
   // at all. `QualityMenu` gates its Auto row on this rather than on
   // `selectQuality`, so a provider in the vimeo shape never renders a radio
-  // item that silently does nothing when chosen (#653).
+  // item that silently does nothing when chosen.
   readonly selectQualityAuto: Availability;
   readonly selectTextTrack: Availability;
   // Whether the provider can report chapters at all, which is what tells a
