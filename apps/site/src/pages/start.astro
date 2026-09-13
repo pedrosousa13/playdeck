@@ -289,12 +289,10 @@ const onward = [
 ];
 ---
 
-{
-  /* Deliberately not "Playdeck". `scripts/check-deploy-artifact.mjs` identifies
-   * the site's root document in a browser by a heading named exactly that, and
-   * a second document answering to the name would make that identification
-   * ambiguous. The two indexes carry the same constraint. */
-}
+{/* Deliberately not "Playdeck". `scripts/check-deploy-artifact.mjs` identifies
+ * the site's root document in a browser by a heading named exactly that, and
+ * a second document answering to the name would make that identification
+ * ambiguous. The two indexes carry the same constraint. */}
 <Base title="Start — Playdeck">
   <SiteHeader crumbs={[{ label: 'Start' }]} />
 
@@ -308,26 +306,25 @@ const onward = [
 
     <section class="step">
       <h2 id="install">Install</h2>
-      {
-        /* The command is selectable text and nothing more. `/` gives the same
-         * line a copy button, which is a convenience its close was designed
-         * around; a reader who arrived here came to read a page rather than to
-         * be handed one string, and a second script doing the same job on a
-         * document page is a second thing to keep working. */
-      }
-      <p class="command"><code>{install}</code></p>
+      {/* The command is selectable text and nothing more. `/` gives the same
+       * line a copy button, which is a convenience its close was designed
+       * around; a reader who arrived here came to read a page rather than to
+       * be handed one string, and a second script doing the same job on a
+       * document page is a second thing to keep working. */}
+      <p class="command">
+        <code>{install}</code>
+      </p>
       <p class="note">
         Peers you supply:
-        {
-          peers.map(([name, range], index) => (
-            <>
-              {index === 0 ? ' ' : ', '}
-              <code>
-                {name} {range}
-              </code>
-            </>
-          ))
-        }. Nothing else — the provider adapters are this package's own
+        {peers.map(([name, range], index) => (
+          <>
+            {index === 0 ? ' ' : ', '}
+            <code>
+              {name} {range}
+            </code>
+          </>
+        ))}
+        . Nothing else — the provider adapters are this package's own
         dependencies.
       </p>
     </section>
@@ -341,7 +338,9 @@ const onward = [
       </p>
       <figure class="well">
         <Code code={smallestSource} lang="tsx" {...shikiConfig} />
-        <figcaption><code>{smallestPath}</code></figcaption>
+        <figcaption>
+          <code>{smallestPath}</code>
+        </figcaption>
       </figure>
     </section>
 
@@ -350,27 +349,28 @@ const onward = [
         Everything the primitives give you
       </h2>
       <p>
-        The same shape with the rest of it: captions, a poster, and every control
-        the package ships. Nothing here is styled — the primitives render no CSS
-        of their own, and what each part puts in the DOM for you to style is in
-        {' '}
+        The same shape with the rest of it: captions, a poster, and every
+        control the package ships. Nothing here is styled — the primitives
+        render no CSS of their own, and what each part puts in the DOM for you
+        to style is in{' '}
         <a href={`${base}guides/contract/`}>the contract guide</a>. For a player
         that looks like something without writing any, add the optional default
-        theme, <code>{themeImport}</code>, which
-        {' '}
+        theme, <code>{themeImport}</code>, which{' '}
         <a href={packageUrl(entryPage.dir)}>the package reference</a> covers.
       </p>
       <figure class="well">
         <Code code={fullSource} lang="tsx" {...shikiConfig} />
-        <figcaption><code>{fullPath}</code></figcaption>
+        <figcaption>
+          <code>{fullPath}</code>
+        </figcaption>
       </figure>
       <p class="note">
         Controls draw themselves only where the provider behind them reports it
-        can honour the command, so this composition is a different set of buttons
-        against a YouTube video than against an MP4. Which capabilities each
-        adapter reports is in
-        {' '}
-        <a href={`${base}guides/capabilities-matrix/`}>the capability matrix</a>.
+        can honour the command, so this composition is a different set of
+        buttons against a YouTube video than against an MP4. Which capabilities
+        each adapter reports is in{' '}
+        <a href={`${base}guides/capabilities-matrix/`}>the capability matrix</a>
+        .
       </p>
     </section>
 
@@ -382,17 +382,14 @@ const onward = [
         dynamically, so the one your source selects is the only one a reader of
         your site downloads — together with whatever that adapter brings with
         it, which for HLS is almost all of the cost. Both columns are gzipped:
-        the adapter measured off the built artifact by the module
-        {' '}
-        <code>pnpm test:budgets</code> runs, and its dependency measured
-        from the entry a bundler resolves.
+        the adapter measured off the built artifact by the module{' '}
+        <code>pnpm test:budgets</code> runs, and its dependency measured from
+        the entry a bundler resolves.
       </p>
 
-      {
-        /* Its own scroll container, so a table wider than a phone scrolls inside
-         * the column rather than pushing the page sideways at 320px. The same
-         * treatment `/providers`' comparison gets, for the same reason. */
-      }
+      {/* Its own scroll container, so a table wider than a phone scrolls inside
+       * the column rather than pushing the page sideways at 320px. The same
+       * treatment `/providers`' comparison gets, for the same reason. */}
       <div class="scroller">
         <table class="costs">
           <caption class="u-visually-hidden">
@@ -403,40 +400,40 @@ const onward = [
             <tr>
               <th scope="col">Provider</th>
               <th scope="col">Adapter</th>
-              <th scope="col" class="costs__size">Gzipped</th>
+              <th scope="col" class="costs__size">
+                Gzipped
+              </th>
               <th scope="col">Brings with it</th>
             </tr>
           </thead>
           <tbody>
-            {
-              adapters.map((adapter) => (
-                <tr>
-                  <th scope="row">
-                    <a href={providerUrl(adapter.slug)}>{adapter.provider}</a>
-                  </th>
-                  <td>
-                    <a href={packageUrl(adapter.dir)}>
-                      <code>{adapter.name}</code>
-                    </a>
-                  </td>
-                  <td class="costs__size u-tabular">
-                    {adapter.size.toFixed(1)} kB
-                  </td>
-                  <td>
-                    {adapter.dependency === null ? (
-                      <span aria-hidden="true">&mdash;</span>
-                    ) : (
-                      <>
-                        <code>{adapter.dependency.package}</code>{' '}
-                        <span class="u-tabular">
-                          {adapter.dependency.kilobytes.toFixed(1)} kB
-                        </span>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))
-            }
+            {adapters.map((adapter) => (
+              <tr>
+                <th scope="row">
+                  <a href={providerUrl(adapter.slug)}>{adapter.provider}</a>
+                </th>
+                <td>
+                  <a href={packageUrl(adapter.dir)}>
+                    <code>{adapter.name}</code>
+                  </a>
+                </td>
+                <td class="costs__size u-tabular">
+                  {adapter.size.toFixed(1)} kB
+                </td>
+                <td>
+                  {adapter.dependency === null ? (
+                    <span aria-hidden="true">&mdash;</span>
+                  ) : (
+                    <>
+                      <code>{adapter.dependency.package}</code>{' '}
+                      <span class="u-tabular">
+                        {adapter.dependency.kilobytes.toFixed(1)} kB
+                      </span>
+                    </>
+                  )}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -446,25 +443,22 @@ const onward = [
         hls.js not even then where the browser plays HLS itself — Safari and iOS
         never fetch it. YouTube and Wistia bring nothing because they load their
         player from their own origin at run time, which is a request rather than
-        a package in your bundle. The primitives themselves are
-        {' '}
+        a package in your bundle. The primitives themselves are{' '}
         {primitives.size.toFixed(1)} kB gzipped, excluding React. A provider
-        name above links to the source values it accepts; the adapter beside
-        it links to what that package reports about itself.
+        name above links to the source values it accepts; the adapter beside it
+        links to what that package reports about itself.
       </p>
     </section>
 
     <section class="step">
       <h2 id="next">Where to go next</h2>
       <ul class="onward">
-        {
-          onward.map(({ href, label, line }) => (
-            <li>
-              <a href={href}>{label}</a>
-              <span>{line}</span>
-            </li>
-          ))
-        }
+        {onward.map(({ href, label, line }) => (
+          <li>
+            <a href={href}>{label}</a>
+            <span>{line}</span>
+          </li>
+        ))}
       </ul>
     </section>
   </main>

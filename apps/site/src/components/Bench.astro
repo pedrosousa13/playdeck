@@ -189,7 +189,11 @@ for (const entry of readySources) {
       ...shikiConfig,
       transformers: [
         ...shikiConfig.transformers,
-        { name: 'playdeck:bench-pre', pre: addBenchPreAttributes, line: markLineNumbers }
+        {
+          name: 'playdeck:bench-pre',
+          pre: addBenchPreAttributes,
+          line: markLineNumbers
+        }
       ]
     });
   }
@@ -197,66 +201,58 @@ for (const entry of readySources) {
 ---
 
 <div class="bench">
-  {
-    /* The instrument. `--elevation-instrument` and no border: `DESIGN.md`
-     * rule 4 allows an elevated element exactly one of the two, and
-     * border-under-blur is the pairing that stays banned. The allowlist names
-     * this element, and only this element, as what may spend that token. */
-  }
+  {/* The instrument. `--elevation-instrument` and no border: `DESIGN.md`
+   * rule 4 allows an elevated element exactly one of the two, and
+   * border-under-blur is the pairing that stays banned. The allowlist names
+   * this element, and only this element, as what may spend that token. */}
   <div class="bench__frame">
-    {
-      /* Where `StagePortal` in `BenchIsland.tsx` renders the player. It is
-       * only ever the portal's target: it renders nothing of its own, and
-       * with JavaScript blocked it holds the fallback below instead. */
-    }
+    {/* Where `StagePortal` in `BenchIsland.tsx` renders the player. It is
+     * only ever the portal's target: it renders nothing of its own, and
+     * with JavaScript blocked it holds the fallback below instead. */}
     <div
       class="bench__stage"
       id="bench-stage"
       style={`--bench-aspect-ratio: ${aspectRatio}`}
     >
-      {
-        /* With JavaScript the island is the whole player and this is inert
-         * text the parser never fetches from. Without it, this is the whole
-         * frame: the still, and a link to where the switch's default position
-         * plays.
-         *
-         * A link rather than a real `<video>`, even though the default
-         * position's own clip is same-origin now: what plays it is
-         * `@playdeck/react`'s HLS provider, which is a script like every
-         * hosted provider's embed is, so there is still nothing here for a
-         * browser with scripting off to attach to on its own. A plain
-         * `<video src={fallbackUrl}>` would not fix that either — an
-         * `.m3u8` address is a manifest, not a file a `<video>` element plays
-         * without either the browser's own native HLS support or hls.js
-         * running, and neither is available to a reader who has turned
-         * scripting off. A link is still the honest fallback for every
-         * position, hosted or same-origin: it costs one request, it costs it
-         * only on a click, and it never claims to be running a player it
-         * cannot run.
-         *
-         * `<noscript>` is `display: none` while scripts run, so this is never
-         * a second thing in the frame — it is the frame's only content exactly
-         * when the island is not there. */
-      }
+      {/* With JavaScript the island is the whole player and this is inert
+       * text the parser never fetches from. Without it, this is the whole
+       * frame: the still, and a link to where the switch's default position
+       * plays.
+       *
+       * A link rather than a real `<video>`, even though the default
+       * position's own clip is same-origin now: what plays it is
+       * `@playdeck/react`'s HLS provider, which is a script like every
+       * hosted provider's embed is, so there is still nothing here for a
+       * browser with scripting off to attach to on its own. A plain
+       * `<video src={fallbackUrl}>` would not fix that either — an
+       * `.m3u8` address is a manifest, not a file a `<video>` element plays
+       * without either the browser's own native HLS support or hls.js
+       * running, and neither is available to a reader who has turned
+       * scripting off. A link is still the honest fallback for every
+       * position, hosted or same-origin: it costs one request, it costs it
+       * only on a click, and it never claims to be running a player it
+       * cannot run.
+       *
+       * `<noscript>` is `display: none` while scripts run, so this is never
+       * a second thing in the frame — it is the frame's only content exactly
+       * when the island is not there. */}
       <noscript>
         <a class="bench__fallback" href={fallbackUrl}>
-          {
-            /* The same still the island's player shows, here as a real `<img>`
-             * — not a CSS background, so this path keeps the guarantee the
-             * rest of the page does. `srcset`/`sizes`/`fetchpriority` for the
-             * same reason `BenchIsland.tsx`'s `Player.PosterImage` carries
-             * them: this is the largest image on the page, and a
-             * no-JavaScript reader on a narrow or a high-density screen is
-             * owed the same match between screen and file a scripted reader
-             * gets. `sizes` is `POSTER_SIZES` — the stage's own real width,
-             * not `100vw` — because the frame is narrower than the viewport
-             * above the breakpoint `index.astro`'s `.page` rule sets; see
-             * `POSTER_SIZES`'s own comment in `bench-sources.ts` for the
-             * derivation. It has to be the exact string the preload link
-             * `index.astro` puts in the document head carries, or a
-             * no-JavaScript reader's browser resolves a different
-             * candidate than the one already in flight. */
-          }
+          {/* The same still the island's player shows, here as a real `<img>`
+           * — not a CSS background, so this path keeps the guarantee the
+           * rest of the page does. `srcset`/`sizes`/`fetchpriority` for the
+           * same reason `BenchIsland.tsx`'s `Player.PosterImage` carries
+           * them: this is the largest image on the page, and a
+           * no-JavaScript reader on a narrow or a high-density screen is
+           * owed the same match between screen and file a scripted reader
+           * gets. `sizes` is `POSTER_SIZES` — the stage's own real width,
+           * not `100vw` — because the frame is narrower than the viewport
+           * above the breakpoint `index.astro`'s `.page` rule sets; see
+           * `POSTER_SIZES`'s own comment in `bench-sources.ts` for the
+           * derivation. It has to be the exact string the preload link
+           * `index.astro` puts in the document head carries, or a
+           * no-JavaScript reader's browser resolves a different
+           * candidate than the one already in flight. */}
           <img
             class="bench__fallback-image"
             src={poster.src}
@@ -265,59 +261,56 @@ for (const entry of readySources) {
             fetchpriority="high"
             alt=""
           />
-          <span class="bench__fallback-label">Watch on {fallback.label} &rarr;</span>
+          <span class="bench__fallback-label">
+            Watch on {fallback.label} &rarr;
+          </span>
         </a>
       </noscript>
     </div>
-    {
-      /* The one gradient, in its one permitted accent form, rendered once on
-       * this page. `DESIGN.md` records that six sweeps down one page is the
-       * exact creep the one-gradient rule exists to stop, so this is the only
-       * call to this component here. */
-    }
+    {/* The one gradient, in its one permitted accent form, rendered once on
+     * this page. `DESIGN.md` records that six sweeps down one page is the
+     * exact creep the one-gradient rule exists to stop, so this is the only
+     * call to this component here. */}
     <Sweep form="accent" />
   </div>
 
-  {
-    /* The credit CC BY asks for wherever this media plays, including the
-     * no-JavaScript path above — which is why this is `<noscript>` rather
-     * than a line the island prints unconditionally. It is not unwrapped
-     * static markup: with a script running, `BenchIsland`'s own `Credit`
-     * mounts in its place and this paragraph is `display: none`, because it
-     * names only the switch's *default* film and a reader who has pressed the
-     * source switch is looking at a different one. Naming the wrong film
-     * would itself be the omission CC BY exists to prevent, only pointed the
-     * other way — so this is the no-script case, not a fallback that also
-     * happens to render first.
-     *
-     * Set at `--text-fn` in `--color-ink-subtle`, the same treatment
-     * `.bench__quiet` gets: it qualifies the instrument rather than
-     * captioning it, and it is not a footer, because CC BY asks for the
-     * credit to be findable near the work rather than at the end of the
-     * page. */
-  }
+  {/* The credit CC BY asks for wherever this media plays, including the
+   * no-JavaScript path above — which is why this is `<noscript>` rather
+   * than a line the island prints unconditionally. It is not unwrapped
+   * static markup: with a script running, `BenchIsland`'s own `Credit`
+   * mounts in its place and this paragraph is `display: none`, because it
+   * names only the switch's *default* film and a reader who has pressed the
+   * source switch is looking at a different one. Naming the wrong film
+   * would itself be the omission CC BY exists to prevent, only pointed the
+   * other way — so this is the no-script case, not a fallback that also
+   * happens to render first.
+   *
+   * Set at `--text-fn` in `--color-ink-subtle`, the same treatment
+   * `.bench__quiet` gets: it qualifies the instrument rather than
+   * captioning it, and it is not a footer, because CC BY asks for the
+   * credit to be findable near the work rather than at the end of the
+   * page. */}
   <noscript>
     <p class="bench__credit">
       <em>{credit.title}</em> &copy; {credit.holder}, licensed{' '}
       <a href={credit.licenceUrl} rel="license">
         {credit.licenceLabel}
-      </a>.
+      </a>
+      .
     </p>
   </noscript>
 
-  {
-    /* The island renders the credit for whichever film is actually selected
-     * (`Credit` in `BenchIsland.tsx`) as well as the line under the frame —
-     * see `QuietLine` there. Neither is static markup here: the credit has to
-     * say a different film's name the moment the source switch moves, and the
-     * quiet line has to say something different once the clip has loaded, and
-     * something different again once the source is somebody else's host. A
-     * no-JavaScript reader gets neither — the credit above stands in for the
-     * first, and the fallback link is a different player with its own
-     * behaviour that the quiet line would be describing incorrectly. `e2e`
-     * proves the resting claim: a spec records every request `/` makes at
-     * rest and fails if one leaves this origin. */
-  }
+  {/* The island renders the credit for whichever film is actually selected
+   * (`Credit` in `BenchIsland.tsx`) as well as the line under the frame —
+   * see `QuietLine` there. Neither is static markup here: the credit has to
+   * say a different film's name the moment the source switch moves, and the
+   * quiet line has to say something different once the clip has loaded, and
+   * something different again once the source is somebody else's host. A
+   * no-JavaScript reader gets neither — the credit above stands in for the
+   * first, and the fallback link is a different player with its own
+   * behaviour that the quiet line would be describing incorrectly. `e2e`
+   * proves the resting claim: a spec records every request `/` makes at
+   * rest and fails if one leaves this origin. */}
   <BenchIsland
     base={base}
     compositions={compositions}
@@ -508,7 +501,10 @@ for (const entry of readySources) {
   :global(.bench__stage) :global([data-playdeck-part='viewport']) {
     display: grid;
     grid-template-areas: 'stack';
-    aspect-ratio: var(--playdeck-media-aspect-ratio, var(--bench-aspect-ratio, 1920 / 804));
+    aspect-ratio: var(
+      --playdeck-media-aspect-ratio,
+      var(--bench-aspect-ratio, 1920 / 804)
+    );
     inline-size: 100%;
   }
 
@@ -563,8 +559,7 @@ for (const entry of readySources) {
    * Dropping the qualifier is safe because `data-bench-skin` is always
    * `theme` or `docked` now, never absent and never `none`: there is no third
    * position left for an unqualified rule to wrongly catch. */
-  :global(.bench__stage)
-    :global([data-playdeck-part='activation']) {
+  :global(.bench__stage) :global([data-playdeck-part='activation']) {
     grid-area: stack;
     grid-template-areas: 'face';
     place-content: center;
@@ -584,8 +579,7 @@ for (const entry of readySources) {
     outline-offset: calc(-1 * var(--space-1));
   }
 
-  :global(.bench__stage)
-    :global([data-playdeck-part='activation'])::before {
+  :global(.bench__stage) :global([data-playdeck-part='activation'])::before {
     content: '';
     grid-area: face;
     inline-size: var(--space-8);
@@ -594,8 +588,7 @@ for (const entry of readySources) {
     border-radius: var(--radius-pill);
   }
 
-  :global(.bench__stage)
-    :global([data-playdeck-part='activation'] > svg) {
+  :global(.bench__stage) :global([data-playdeck-part='activation'] > svg) {
     grid-area: face;
   }
 
@@ -703,13 +696,14 @@ for (const entry of readySources) {
   }
 
   :global(.bench__stage)
-    :global(
-      [data-playdeck-part='viewport'][data-bench-skin='docked']
-    )::before {
+    :global([data-playdeck-part='viewport'][data-bench-skin='docked'])::before {
     content: '';
     grid-area: stack;
     inline-size: 100%;
-    aspect-ratio: var(--playdeck-media-aspect-ratio, var(--bench-aspect-ratio, 1920 / 804));
+    aspect-ratio: var(
+      --playdeck-media-aspect-ratio,
+      var(--bench-aspect-ratio, 1920 / 804)
+    );
     pointer-events: none;
   }
 

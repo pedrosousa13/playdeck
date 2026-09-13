@@ -84,19 +84,17 @@ const plain = (reason: string) => reason.replaceAll('`', '');
     What each provider can answer
   </h2>
   <p class="truth__lede">
-    Every cell below was read out of <code>{PROVIDER_SETUP_DOC}</code> while this
-    page was built. Five providers in four columns — native files and HLS share
-    one, because that document covers them in one passage. They do not answer the
-    same question equally well, so the table does not pretend that they do: where
-    a fact cannot be known, the cell says so and carries the document's own reason
-    for it.
+    Every cell below was read out of <code>{PROVIDER_SETUP_DOC}</code> while
+    this page was built. Five providers in four columns — native files and HLS
+    share one, because that document covers them in one passage. They do not
+    answer the same question equally well, so the table does not pretend that
+    they do: where a fact cannot be known, the cell says so and carries the
+    document's own reason for it.
   </p>
 
-  {
-    /* `role="region"` with a name is what makes a focusable scroll container a
-     * landmark a screen reader can find rather than an unlabelled tab stop.
-     * `tabindex="0"` is what makes it scrollable without a pointer. */
-  }
+  {/* `role="region"` with a name is what makes a focusable scroll container a
+   * landmark a screen reader can find rather than an unlabelled tab stop.
+   * `tabindex="0"` is what makes it scrollable without a pointer. */}
   <div
     class="truth__scroll"
     role="region"
@@ -107,60 +105,56 @@ const plain = (reason: string) => reason.replaceAll('`', '');
       <thead>
         <tr>
           <td class="truth__corner"></td>
-          {
-            providers.map((provider) => (
-              <th class="truth__provider" scope="col">
-                <a
-                  class="truth__provider-link"
-                  href={`${import.meta.env.BASE_URL}providers/${provider.slug}/`}
-                >
-                  {provider.title}
-                </a>
-                <span class="truth__packages">
-                  {provider.packages.map((name) => (
-                    <code>@playdeck/{name}</code>
-                  ))}
-                </span>
-              </th>
-            ))
-          }
+          {providers.map((provider) => (
+            <th class="truth__provider" scope="col">
+              <a
+                class="truth__provider-link"
+                href={`${import.meta.env.BASE_URL}providers/${provider.slug}/`}
+              >
+                {provider.title}
+              </a>
+              <span class="truth__packages">
+                {provider.packages.map((name) => (
+                  <code>@playdeck/{name}</code>
+                ))}
+              </span>
+            </th>
+          ))}
         </tr>
       </thead>
       <tbody>
-        {
-          questions.map((question, row) => (
-            <tr>
-              <th class="truth__question" scope="row">
-                {question}
-              </th>
-              {providers.map((provider) => {
-                const reading = provider.readings[row];
-                return (
-                  <td class="truth__cell" data-state={reading.state}>
-                    <p class="truth__answer">
-                      <span class="truth__state">{reading.state}</span>
-                      {reading.items.length > 0 && (
-                        <span class="truth__count">{reading.items.length}</span>
-                      )}
-                    </p>
+        {questions.map((question, row) => (
+          <tr>
+            <th class="truth__question" scope="row">
+              {question}
+            </th>
+            {providers.map((provider) => {
+              const reading = provider.readings[row];
+              return (
+                <td class="truth__cell" data-state={reading.state}>
+                  <p class="truth__answer">
+                    <span class="truth__state">{reading.state}</span>
                     {reading.items.length > 0 && (
-                      <ul class="truth__items">
-                        {reading.items.map((item) => (
-                          <li>
-                            <code>{item}</code>
-                          </li>
-                        ))}
-                      </ul>
+                      <span class="truth__count">{reading.items.length}</span>
                     )}
-                    {reading.reason !== undefined && (
-                      <p class="truth__reason">{plain(reading.reason)}</p>
-                    )}
-                  </td>
-                );
-              })}
-            </tr>
-          ))
-        }
+                  </p>
+                  {reading.items.length > 0 && (
+                    <ul class="truth__items">
+                      {reading.items.map((item) => (
+                        <li>
+                          <code>{item}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {reading.reason !== undefined && (
+                    <p class="truth__reason">{plain(reading.reason)}</p>
+                  )}
+                </td>
+              );
+            })}
+          </tr>
+        ))}
       </tbody>
     </table>
   </div>
