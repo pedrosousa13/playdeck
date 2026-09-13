@@ -456,6 +456,7 @@ test('renders no Playdeck control layer over a ready YouTube embed', async () =>
         setVolume: { status: 'available' },
         setPlaybackRate: { status: 'available' },
         selectQuality: { status: 'unavailable', reason: 'provider' },
+        selectQualityAuto: { status: 'unavailable', reason: 'provider' },
         selectTextTrack: { status: 'unavailable', reason: 'source' },
         chapters: { status: 'unavailable', reason: 'provider' },
         fullscreen: { status: 'available' },

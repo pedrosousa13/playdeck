@@ -117,6 +117,8 @@ export const createNativeProvider = (
       // consumer gating a quality menu on it waited on a verdict that never
       // arrived.
       selectQuality: { status: 'unavailable', reason: 'source' },
+      // No ladder means no auto mode to offer either.
+      selectQualityAuto: { status: 'unavailable', reason: 'source' },
       selectTextTrack: textTracks.selectTextTrackAvailability(),
       chapters: textTracks.chaptersAvailability(),
       fullscreen: presentation.fullscreenAvailability(),
