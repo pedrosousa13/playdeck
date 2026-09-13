@@ -103,6 +103,44 @@ afterEach(() => {
 });
 
 describe('Player.QualityMenu', () => {
+  // Demonstrated red (docs/agents/demonstrated-red.md): this is additive
+  // code with no natural unfixed state, so what follows are substitute
+  // mutations, run and reverted.
+  //
+  // Gutted the part's render -- an unconditional `return null` right after
+  // the status gate in quality.tsx -- and ran this file:
+  //
+  //   × lists each quality plus Auto as menuitemradio with aria-checked reflecting selection
+  //   × the Auto row is checked, and labelled from the playing level, when selectedQualityId is null
+  //   × the Auto row reads plain "Auto" before a playing level is known
+  //   × selecting a quality calls controller.selectQuality with its id
+  //   × selecting Auto calls controller.selectQuality with null
+  //   × carries an accessible label on its trigger
+  //
+  //   Test Files  1 failed | 23 passed (24)
+  //        Tests  6 failed | 647 passed (653)
+  //
+  // Reverted, all 653 passed again. The test right below --
+  // "renders nothing when the selectQuality capability is not available" --
+  // is unaffected by that mutation (a gutted render still renders nothing),
+  // so it carries its own substitute mutation just above it instead.
+
+  // Demonstrated red, substitute mutation: this native-provider fixture's
+  // capabilities forced to `available` (`withSelectQuality(available)` in
+  // place of `withSelectQuality(notReadyAvailability)` below) stands in for
+  // a native adapter that incorrectly reported the capability. Ran:
+  //
+  //   AssertionError: expected <div …(3)>…(1)</div> to be null // Object.is equality
+  //    ❯ packages/react/test/quality.test.tsx:114:7
+  //      112|     expect(
+  //      113|       container.querySelector('[data-playdeck-part="settings-menu-root…
+  //      114|     ).toBe(null);
+  //         |       ^
+  //
+  //   Test Files  1 failed | 23 passed (24)
+  //        Tests  1 failed | 652 passed (653)
+  //
+  // Reverted, all 653 passed again.
   test('renders nothing when the selectQuality capability is not available', () => {
     const { container, emitState } = renderWithPlayer(<Player.QualityMenu />);
     emitState({
