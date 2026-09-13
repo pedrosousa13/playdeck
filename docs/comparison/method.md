@@ -24,24 +24,17 @@ Rollup's, via Vite, for one; esbuild's own for the other.
 
 The reader this page is written for is a product team embedding video in a
 React application — a course platform, a catalogue, a marketing site, or
-documentation — choosing what to build the player on. Playdeck describes
-itself to that reader with three words, and each is tied to something
-checkable rather than asserted on its own.
+documentation — choosing what to build the player on.
 
-**Lightest** is `results.md`'s own bundle-size tables: the "Gzipped (Vite)",
-"Gzipped (esbuild)" and "Not counted" columns, produced by
-`scripts/compare-libraries.mjs` and
-cross-checked against a second bundler in "Cross-checked with a second
-bundler" below. A reader who doubts the word runs `pnpm compare:libraries` and
-reads the number the harness produces, not a number typed into this page.
-
-**Most customizable** is the composition model "Equivalent composition per
-library" below describes for Playdeck's four rows: a consumer imports the
-parts they use.
-`docs/comparison/features.md`'s "Plugin system" row reads `no` for Playdeck,
-the same checked absence it would read for any library with no registry:
-there is no plugin registry here, and extension is composing primitives
-rather than registering against one.
+A consumer imports and composes exactly the parts they use: `Player.Root`,
+`Player.Viewport` and `Player.Media` for the core and its native provider, then
+whichever control parts the product needs on top — an `ActivationButton`, or a
+`Controls` wrapper holding some combination of `PlayButton`, `MuteButton`,
+`VolumeSlider`, `SeekSlider`, `Time` and `FullscreenButton`. `results.md`'s
+bundle tables measure four such compositions — **Playdeck (no parts)**,
+**Playdeck**, **Playdeck (play-only)** and **Playdeck (control bar)** — each
+described row by row in "Equivalent composition per library" below; the table
+carries what each one costs.
 
 **Most performant** is a claim about this repository's own rules, not a
 comparative one — nothing this page measures is a runtime number; "What is
