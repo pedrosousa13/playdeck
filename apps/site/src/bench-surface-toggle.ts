@@ -8,7 +8,7 @@
  * gesture sequence, and a moment is cheap to test against a function and
  * expensive to test against a mounted player with a real idle timer running.
  *
- * ---- the defect this closes (#598 follow-up) --------------------------------
+ * ---- the defect this closes (#622) ------------------------------------------
  *
  * `SurfaceToggle` is `Player.PlayButton` with its box opened out to the whole
  * picture, so every tap on it both wakes the bar (a `pointerdown` bubbles to

@@ -2,6 +2,15 @@
 
 ## 1.1.0
 
+**2026-09-13: the citations below are corrected.** The `(#598)` and `#598`
+citations in the `687260f` and `f42f118` entries below name the wrong issue. The
+work they describe — the button row's touch-target floor moving onto a token,
+and the phone row-two fix that reads it — is #622, "Fit the control bar in one
+row on phones, and rest the bench on the floating theme at every width". #598 is
+"A lone VolumeSlider is invisible and unreachable on a fine pointer", an
+unrelated issue landed later in #708. Left uncorrected below because this entry
+already shipped in the published 1.1.0 package; see #712.
+
 ### Minor Changes
 
 - f6bf30b: Add `@playdeck/react/docked.css`, a second theme, and give both themes one control-bar contract

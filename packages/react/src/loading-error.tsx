@@ -355,7 +355,7 @@ export const ErrorDisplay = ({
   );
 };
 
-// A `var()` read rather than the literal `44` it used to be (#598): an inline
+// A `var()` read rather than the literal `44` it used to be (#622): an inline
 // style beats any stylesheet, so a fixed number here would have made
 // `theme.css`'s and `docked.css`'s own "below 48rem" queries dead CSS the
 // moment either tried to shrink the control row for one row of phone-width

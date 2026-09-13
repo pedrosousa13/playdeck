@@ -492,7 +492,7 @@ const useSeekPreview = (
 };
 
 // The wrapper's and the input's own floor, below. A `var()` read rather than
-// the literal `44` they both used to carry, the same move #598 made for every
+// the literal `44` they both used to carry, the same move #622 made for every
 // button-shaped control's own target (`controlTargetStyle` in
 // `loading-error.tsx`): an inline style beats any stylesheet, so a fixed
 // number here would leave a theme's "below 48rem" query with nothing to

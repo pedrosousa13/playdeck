@@ -616,7 +616,7 @@ describe('SeekSlider', () => {
     const slider = screen.getByRole('slider', { name: 'Seek' });
     // A `var()` read, not the literal `44px` either used to carry, so a
     // theme's own "below 48rem" query can shrink the row -- the same move
-    // #598 made for every button-shaped control's own target. Falls back to
+    // #622 made for every button-shaped control's own target. Falls back to
     // 2.75rem, the desktop lock, for a bare consumer with no stylesheet
     // loaded.
     expect((wrapper as HTMLElement).style.minHeight).toBe(
