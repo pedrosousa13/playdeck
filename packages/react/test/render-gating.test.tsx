@@ -368,6 +368,18 @@ const PART_TABLE: Record<string, PartEntry> = {
     fields: new Set(['selectedTextTrackId', 'capabilities', 'textTracks']),
     mount: bare(Player.CaptionsMenu)
   },
+  // `quality` is read for the auto row's own label ("Auto (1080p)"), not for
+  // the selection check -- that is `selectedQualityId`. See the comment above
+  // `PlayerState.qualities` in types.ts.
+  QualityMenu: {
+    fields: new Set([
+      'selectedQualityId',
+      'quality',
+      'qualities',
+      'capabilities'
+    ]),
+    mount: bare(Player.QualityMenu)
+  },
   // Reads seven fields through one selector -- the shortcut layer has to know
   // every capability gate a bound key might act through, plus the values a
   // couple of those actions need (`muted`, `volume`, `selectedTextTrackId`,
@@ -658,6 +670,7 @@ const baselineCapabilities: PlayerCapabilities = {
   setVolume: available,
   setPlaybackRate: available,
   selectQuality: available,
+  selectQualityAuto: available,
   selectTextTrack: available,
   chapters: available,
   fullscreen: available,
@@ -672,6 +685,7 @@ const drivenCapabilities: PlayerCapabilities = {
   setVolume: unavailable,
   setPlaybackRate: unavailable,
   selectQuality: unavailable,
+  selectQualityAuto: unavailable,
   selectTextTrack: unavailable,
   chapters: unavailable,
   fullscreen: unavailable,

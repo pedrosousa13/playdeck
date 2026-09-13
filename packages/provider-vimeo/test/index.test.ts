@@ -343,6 +343,7 @@ const attachWithoutValidation = async (
       setVolume: playback.setVolumeAvailability(),
       setPlaybackRate: playback.setPlaybackRateAvailability(),
       selectQuality: qualityLevels.selectQualityAvailability(),
+      selectQualityAuto: qualityLevels.selectQualityAutoAvailability(),
       selectTextTrack: textTracks.selectTextTrackAvailability(),
       chapters: chapters.chaptersAvailability(),
       fullscreen: available,

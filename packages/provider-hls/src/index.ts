@@ -209,6 +209,13 @@ export const createHlsProvider = (
         engine === 'native'
           ? { status: 'unavailable', reason: 'provider' }
           : qualityLevels.selectQualityAvailability(),
+      // Same engine split as `selectQuality` above: the native engine has no
+      // selection surface at all, hls.js's has auto built in whenever it has
+      // one (see the comment on `selectQualityAutoAvailability`).
+      selectQualityAuto:
+        engine === 'native'
+          ? { status: 'unavailable', reason: 'provider' }
+          : qualityLevels.selectQualityAutoAvailability(),
       selectTextTrack:
         engine === 'hls.js'
           ? textTracks.selectTextTrackAvailability()

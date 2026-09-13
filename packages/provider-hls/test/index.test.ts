@@ -285,6 +285,55 @@ test('reports quality selection honestly per engine', async () => {
   });
 });
 
+// Demonstrated red (docs/agents/demonstrated-red.md), substitute mutation:
+// hardcoded `decorateCapabilities`'s `selectQualityAuto` branch to
+// `{ status: 'unavailable', reason: 'provider' }` regardless of engine or
+// ladder, and ran this file:
+//
+//   × reports auto offered exactly where quality selection is (hls.js
+//     always honours it)
+//
+//   Test Files  1 failed | 90 passed (91)
+//        Tests  1 failed | 2303 passed (2304)
+//
+// Reverted, all 2304 passed again.
+test('reports auto offered exactly where quality selection is (hls.js always honours it)', async () => {
+  const nativeHarness = createHarness(stubNativeHlsSupport);
+  await nativeHarness.provider.attach();
+  expect(nativeHarness.patches.at(-1)).toMatchObject({
+    capabilities: {
+      selectQualityAuto: { status: 'unavailable', reason: 'provider' }
+    }
+  });
+
+  const mseHarness = createHarness(stubMseOnlySupport);
+  await mseHarness.provider.attach();
+  expect(mseHarness.patches.at(-1)).toMatchObject({
+    capabilities: {
+      selectQualityAuto: { status: 'unknown', reason: 'provider-check' }
+    }
+  });
+  await mseHarness.provider.load();
+  const hls = currentFakeHls();
+  hls.levels = [{ height: 180 }, { height: 90 }];
+  hls.emit(FakeHls.Events.MANIFEST_PARSED, { levels: hls.levels });
+  expect(mseHarness.patches.at(-1)).toMatchObject({
+    capabilities: { selectQualityAuto: { status: 'available' } }
+  });
+
+  const emptyHarness = createHarness(stubMseOnlySupport);
+  await emptyHarness.provider.attach();
+  await emptyHarness.provider.load();
+  const emptyHls = currentFakeHls();
+  emptyHls.levels = [];
+  emptyHls.emit(FakeHls.Events.MANIFEST_PARSED, { levels: emptyHls.levels });
+  expect(emptyHarness.patches.at(-1)).toMatchObject({
+    capabilities: {
+      selectQualityAuto: { status: 'unavailable', reason: 'source' }
+    }
+  });
+});
+
 test('reports the current rendition after hls.js level switches', async () => {
   const { patches, provider } = createHarness(stubMseOnlySupport);
   await provider.attach();

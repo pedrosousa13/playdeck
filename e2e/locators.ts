@@ -56,6 +56,12 @@ export const captionsTriggerSelector =
 export const captionsTrigger = (page: Page) =>
   page.locator(captionsTriggerSelector);
 
+export const qualityTriggerSelector =
+  '[data-playdeck-part="settings-menu-trigger"][aria-label="Quality"]';
+
+export const qualityTrigger = (page: Page) =>
+  page.locator(qualityTriggerSelector);
+
 export const settingsMenuSelector = '[data-playdeck-part="settings-menu"]';
 
 export const settingsMenu = (page: Page) => page.locator(settingsMenuSelector);

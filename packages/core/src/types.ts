@@ -180,6 +180,19 @@ export type PlayerCapabilities = {
   readonly setVolume: Availability;
   readonly setPlaybackRate: Availability;
   readonly selectQuality: Availability;
+  // Whether an automatic-choice item belongs beside the published rungs --
+  // not derivable from `selectQuality` alone, because a provider can accept
+  // `selectQuality` for a real rung while refusing `selectQuality(null)` for
+  // auto. `@playdeck/provider-vimeo` is exactly that: it reports
+  // `selectQuality` available whenever its ladder has rungs, but its own
+  // `getQualities()` list does not always carry an `auto` entry, and
+  // `selectQuality(null)` resolves `unsupported` where it does not
+  // (`quality-levels.ts`'s `adopt`). `@playdeck/provider-hls` never splits
+  // the two: `currentLevel = -1` honours auto whenever hls.js has a ladder
+  // at all. `QualityMenu` gates its Auto row on this rather than on
+  // `selectQuality`, so a provider in the vimeo shape never renders a radio
+  // item that silently does nothing when chosen.
+  readonly selectQualityAuto: Availability;
   readonly selectTextTrack: Availability;
   // Whether the provider can report chapters at all, which is what tells a
   // provider that cannot ('unavailable' with the `provider` reason) apart from
