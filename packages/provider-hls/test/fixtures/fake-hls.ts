@@ -1,4 +1,5 @@
 import type {
+  HlsAudioTrackLike,
   HlsConfigLike,
   HlsInstanceLike,
   HlsLevelLike,
@@ -20,7 +21,8 @@ export class FakeHls implements HlsInstanceLike {
     MEDIA_ATTACHED: 'hlsMediaAttached',
     SUBTITLE_TRACKS_UPDATED: 'hlsSubtitleTracksUpdated',
     SUBTITLE_TRACK_SWITCH: 'hlsSubtitleTrackSwitch',
-    CUES_PARSED: 'hlsCuesParsed'
+    CUES_PARSED: 'hlsCuesParsed',
+    AUDIO_TRACKS_UPDATED: 'hlsAudioTracksUpdated'
   };
   static readonly ErrorTypes = {
     NETWORK_ERROR: 'networkError',
@@ -33,7 +35,9 @@ export class FakeHls implements HlsInstanceLike {
   // `hlsBuildSupportsSubtitles` tells them apart. Undefined by default, and
   // read as capable, so a test that says nothing about the build gets the
   // behaviour the full build has always had.
-  static DefaultConfig: { subtitleTrackController?: unknown } | undefined;
+  static DefaultConfig:
+    | { subtitleTrackController?: unknown; audioTrackController?: unknown }
+    | undefined;
   static reset = (): void => {
     FakeHls.instances = [];
     FakeHls.supported = true;
@@ -50,6 +54,8 @@ export class FakeHls implements HlsInstanceLike {
   recoverMediaErrorCalls = 0;
   swapAudioCodecCalls = 0;
   subtitleTracks: HlsSubtitleTrackLike[] = [];
+  audioTracks: HlsAudioTrackLike[] = [];
+  audioTrack = -1;
   config: HlsConfigLike | undefined;
   readonly #listeners = new Map<string, Set<FakeHlsListener>>();
 
@@ -78,6 +84,12 @@ export class FakeHls implements HlsInstanceLike {
   emitSubtitleTracksUpdated = (): void => {
     this.emit(FakeHls.Events.SUBTITLE_TRACKS_UPDATED, {
       subtitleTracks: this.subtitleTracks
+    });
+  };
+
+  emitAudioTracksUpdated = (): void => {
+    this.emit(FakeHls.Events.AUDIO_TRACKS_UPDATED, {
+      audioTracks: this.audioTracks
     });
   };
 
