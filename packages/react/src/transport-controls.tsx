@@ -1,4 +1,5 @@
 import type { PlayerProvider, TimeRange } from '@playdeck/core';
+import { formatTime } from './format-time.js';
 import {
   controlTargetStyle,
   useLoadingPresentation,
@@ -18,17 +19,6 @@ import {
   type ComponentPropsWithRef,
   type Ref
 } from 'react';
-
-const formatTime = (totalSeconds: number): string => {
-  const clamped = Math.max(0, Math.floor(totalSeconds));
-  const hours = Math.floor(clamped / 3600);
-  const minutes = Math.floor((clamped % 3600) / 60);
-  const seconds = clamped % 60;
-  const pad = (value: number): string => String(value).padStart(2, '0');
-  return hours > 0
-    ? `${hours}:${pad(minutes)}:${pad(seconds)}`
-    : `${minutes}:${pad(seconds)}`;
-};
 
 // How many digits sit after the point, including the ones `String` hides in
 // exponent form (it switches to it below 1e-6).

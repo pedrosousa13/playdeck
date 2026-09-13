@@ -68,6 +68,12 @@ export const playbackRateTriggerSelector =
 export const playbackRateTrigger = (page: Page) =>
   page.locator(playbackRateTriggerSelector);
 
+export const chaptersTriggerSelector =
+  '[data-playdeck-part="settings-menu-trigger"][aria-label="Chapters"]';
+
+export const chaptersTrigger = (page: Page) =>
+  page.locator(chaptersTriggerSelector);
+
 export const settingsMenuSelector = '[data-playdeck-part="settings-menu"]';
 
 export const settingsMenu = (page: Page) => page.locator(settingsMenuSelector);

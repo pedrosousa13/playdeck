@@ -86,13 +86,13 @@ one of these sources it is large. Gzip, excluding React itself and the optional
 
 | Playing                                           | Downloads                                                          | Total        |
 | ------------------------------------------------- | ------------------------------------------------------------------ | ------------ |
-| MP4 or WebM                                       | core 8.0 + primitives 18.6 + native 6.0                            | **32.6 KB**  |
-| HLS on Safari and iOS                             | the above + HLS adapter 5.0                                        | **37.6 KB**  |
-| HLS on Chrome, Edge, Firefox                      | the above + **hls.js 169.2**                                       | **206.8 KB** |
-| HLS on Chrome, Edge, Firefox, with `hls.js/light` | core + primitives + native + HLS adapter 37.6 + hls.js light 113.0 | **150.6 KB** |
-| YouTube                                           | core 8.0 + primitives 18.6 + adapter 6.2                           | **32.8 KB**  |
-| Vimeo                                             | core 8.0 + primitives 18.6 + adapter 8.3 + `@vimeo/player` 8.5     | **43.4 KB**  |
-| Wistia                                            | core 8.0 + primitives 18.6 + adapter 5.9                           | **32.5 KB**  |
+| MP4 or WebM                                       | core 8.0 + primitives 18.8 + native 6.0                            | **32.8 KB**  |
+| HLS on Safari and iOS                             | the above + HLS adapter 5.0                                        | **37.8 KB**  |
+| HLS on Chrome, Edge, Firefox                      | the above + **hls.js 169.2**                                       | **207.0 KB** |
+| HLS on Chrome, Edge, Firefox, with `hls.js/light` | core + primitives + native + HLS adapter 37.8 + hls.js light 113.0 | **150.8 KB** |
+| YouTube                                           | core 8.0 + primitives 18.8 + adapter 6.2                           | **33.0 KB**  |
+| Vimeo                                             | core 8.0 + primitives 18.8 + adapter 8.3 + `@vimeo/player` 8.5     | **43.6 KB**  |
+| Wistia                                            | core 8.0 + primitives 18.8 + adapter 5.9                           | **32.7 KB**  |
 
 <!-- /bytes -->
 
@@ -122,7 +122,7 @@ change that moves a bundle cannot leave a stale number in them.
 
 Every Playdeck package in this table is measured by `pnpm test:budgets` on each
 CI run, against a reference figure it prints but never enforces: core weighs in
-at 8.0 KB, the primitives at 18.6 KB, `theme.css` at 2.4 KB and `docked.css` at
+at 8.0 KB, the primitives at 18.8 KB, `theme.css` at 2.4 KB and `docked.css` at
 2.6 KB — the two stylesheets measured on their CSS rules with the comments
 stripped, because both ship as authored and measuring the whole file would
 really be measuring their prose. None of the four can ever fail a build over it;

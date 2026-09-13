@@ -27,8 +27,9 @@ without a boundary at all.
 The guides at [playdeck.video/guides](https://playdeck.video/guides/) carry the
 full styling contract ([**Contract**](https://playdeck.video/guides/contract/)),
 the caption guidance ([**Captions**](https://playdeck.video/guides/captions/)),
-the quality-selection guidance ([**Quality**](https://playdeck.video/guides/quality/))
-and the playback-rate guidance ([**Playback rate**](https://playdeck.video/guides/playback-rate/)).
+the quality-selection guidance ([**Quality**](https://playdeck.video/guides/quality/)),
+the playback-rate guidance ([**Playback rate**](https://playdeck.video/guides/playback-rate/))
+and the chapters guidance ([**Chapters**](https://playdeck.video/guides/chapters/)).
 Every primitive below is also staged, running, in this repository's Storybook
 workbench, which is a development tool rather than a published surface.
 
@@ -518,15 +519,16 @@ the global listener.
 
 `SettingsMenu`, `SettingsMenuTrigger`, `SettingsMenuContent`, `MenuItem`,
 `MenuRadioGroup`, `MenuRadioItem`, `CaptionsMenu`, `QualityMenu`,
-`PlaybackRateMenu`.
+`PlaybackRateMenu`, `ChaptersMenu`.
 
 `SettingsMenu` and the menu parts are also the building blocks the reference
 example below composes quality and playback rate from by hand, alongside one
-another, for a consumer who wants both under one trigger. `QualityMenu` and
-`PlaybackRateMenu` are the standalone primitives for a consumer who wants
-either on its own, the same way `CaptionsMenu` is for captions — covered in
-[**Quality**](https://playdeck.video/guides/quality/) and
-[**Playback rate**](https://playdeck.video/guides/playback-rate/).
+another, for a consumer who wants both under one trigger. `QualityMenu`,
+`PlaybackRateMenu` and `ChaptersMenu` are the standalone primitives for a
+consumer who wants one on its own, the same way `CaptionsMenu` is for
+captions — covered in [**Quality**](https://playdeck.video/guides/quality/),
+[**Playback rate**](https://playdeck.video/guides/playback-rate/) and
+[**Chapters**](https://playdeck.video/guides/chapters/).
 
 <!-- example:react-menus -->
 
@@ -614,6 +616,12 @@ export const Quality = () => <Player.QualityMenu />;
 // consumer who wants both under one trigger; this is the standalone
 // primitive for a consumer who wants playback rate on its own.
 export const Rate = () => <Player.PlaybackRateMenu />;
+
+// The chapter list, already wired to the player's own chapters and current
+// playback position. Unlike `Quality` and `Rate`, `RateMenu` above has no
+// hand-composed chapters group alongside it -- this is the only way this
+// package exposes chapters navigation.
+export const Chapters = () => <Player.ChaptersMenu />;
 ```
 
 <!-- /example -->

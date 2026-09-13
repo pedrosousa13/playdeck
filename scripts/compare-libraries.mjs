@@ -265,7 +265,27 @@ export const PLAY_ONLY_FORBIDDEN_MODULES = [
     // violation with or without `'PlaybackRateMenu'` named here. This entry
     // keeps the list's own stated convention -- every menu preset named
     // explicitly -- rather than being load-bearing on its own.
-    'PlaybackRateMenu'
+    'PlaybackRateMenu',
+    // Demonstrated red (docs/agents/demonstrated-red.md), recorded verbatim:
+    // temporarily importing `<Player.ChaptersMenu />` into
+    // tests/compare/entries/playdeck-play-only.tsx and running
+    // `node scripts/compare-libraries.mjs --check` (after a fresh
+    // `@playdeck/react` build, which this check bundles from) produced:
+    //
+    //   Playdeck (play-only)'s reachable chunks reach SettingsMenu, which
+    //   this composition (core + primitives + native provider + one control
+    //   (PlayButton)) does not use.
+    //
+    // Reverting the import returned the check to
+    // "docs/comparison/results.md already matches a fresh run". Honest note,
+    // the same one QualityMenu's and PlaybackRateMenu's own entries above
+    // carry: the failure attributes to `SettingsMenu`, not to this entry --
+    // ChaptersMenu is composed entirely of already-forbidden modules
+    // (SettingsMenu, MenuRadioGroup, MenuRadioItem), so the gate would have
+    // caught this violation with or without `'ChaptersMenu'` named here.
+    // This entry keeps the list's own stated convention -- every menu
+    // preset named explicitly -- rather than being load-bearing on its own.
+    'ChaptersMenu'
   ].map((name) => ({
     name,
     reachedBy: (/** @type {Chunk} */ chunk) => reachesExport(chunk, name)
