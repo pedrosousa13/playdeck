@@ -26,8 +26,9 @@ without a boundary at all.
 
 The guides at [playdeck.video/guides](https://playdeck.video/guides/) carry the
 full styling contract ([**Contract**](https://playdeck.video/guides/contract/)),
-the caption guidance ([**Captions**](https://playdeck.video/guides/captions/))
-and the quality-selection guidance ([**Quality**](https://playdeck.video/guides/quality/)).
+the caption guidance ([**Captions**](https://playdeck.video/guides/captions/)),
+the quality-selection guidance ([**Quality**](https://playdeck.video/guides/quality/))
+and the playback-rate guidance ([**Playback rate**](https://playdeck.video/guides/playback-rate/)).
 Every primitive below is also staged, running, in this repository's Storybook
 workbench, which is a development tool rather than a published surface.
 
@@ -516,15 +517,16 @@ the global listener.
 ### Menus
 
 `SettingsMenu`, `SettingsMenuTrigger`, `SettingsMenuContent`, `MenuItem`,
-`MenuRadioGroup`, `MenuRadioItem`, `CaptionsMenu`, `QualityMenu`.
+`MenuRadioGroup`, `MenuRadioItem`, `CaptionsMenu`, `QualityMenu`,
+`PlaybackRateMenu`.
 
-`SettingsMenu` and the menu parts are also the building blocks for a
-playback-rate menu, which has no dedicated primitive — the reference example
-below composes one from these, alongside a quality group built the same way
-for a consumer who wants both under one trigger. `QualityMenu` is the
-standalone primitive for a consumer who wants quality on its own, the same
-way `CaptionsMenu` is for captions — covered in
-[**Quality**](https://playdeck.video/guides/quality/).
+`SettingsMenu` and the menu parts are also the building blocks the reference
+example below composes quality and playback rate from by hand, alongside one
+another, for a consumer who wants both under one trigger. `QualityMenu` and
+`PlaybackRateMenu` are the standalone primitives for a consumer who wants
+either on its own, the same way `CaptionsMenu` is for captions — covered in
+[**Quality**](https://playdeck.video/guides/quality/) and
+[**Playback rate**](https://playdeck.video/guides/playback-rate/).
 
 <!-- example:react-menus -->
 
@@ -606,6 +608,12 @@ export const Captions = () => <Player.CaptionsMenu />;
 // a consumer who wants both under one trigger; this is the standalone
 // primitive for a consumer who wants quality on its own.
 export const Quality = () => <Player.QualityMenu />;
+
+// The rate ladder, already wired to the player's own playbackRate. `RateMenu`
+// above still composes a rate group by hand alongside quality, for a
+// consumer who wants both under one trigger; this is the standalone
+// primitive for a consumer who wants playback rate on its own.
+export const Rate = () => <Player.PlaybackRateMenu />;
 ```
 
 <!-- /example -->

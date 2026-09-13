@@ -107,6 +107,10 @@ export { QualityMenu } from './quality.js';
 
 export type { QualityMenuProps } from './quality.js';
 
+export { PlaybackRateMenu } from './playback-rate.js';
+
+export type { PlaybackRateMenuProps } from './playback-rate.js';
+
 export {
   MuteButton,
   PlayButton,

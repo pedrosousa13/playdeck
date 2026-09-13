@@ -392,6 +392,7 @@ const PlayerFixture = ({
         <Player.PlayButton />
         <Player.CaptionsButton />
         <Player.QualityMenu />
+        <Player.PlaybackRateMenu />
         {/*
           Mounted everywhere on purpose: "AirPlay" contains "Play", so a
           name-based Playwright lookup collides here (#73). It is a partial

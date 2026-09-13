@@ -380,6 +380,12 @@ const PART_TABLE: Record<string, PartEntry> = {
     ]),
     mount: bare(Player.QualityMenu)
   },
+  // `playbackRate` marks the active rung; `capabilities` gates on
+  // `setPlaybackRate.status`.
+  PlaybackRateMenu: {
+    fields: new Set(['playbackRate', 'capabilities']),
+    mount: bare(Player.PlaybackRateMenu)
+  },
   // Reads seven fields through one selector -- the shortcut layer has to know
   // every capability gate a bound key might act through, plus the values a
   // couple of those actions need (`muted`, `volume`, `selectedTextTrackId`,

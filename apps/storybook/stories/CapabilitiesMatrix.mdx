@@ -19,6 +19,7 @@ renders nothing.
 | `Player.PipButton`        | `pictureInPicture`                                    | `pictureInPicture` is `available`     |
 | `Player.AirPlayButton`    | `airPlay`                                             | `airPlay` is `available`              |
 | `Player.QualityMenu`      | `selectQuality`                                       | `selectQuality` is `available`        |
+| `Player.PlaybackRateMenu` | `setPlaybackRate`                                     | `setPlaybackRate` is `available`      |
 | `Player.Time`             | — (display)                                           | always                                |
 | `Player.Controls`         | `seek`, `setVolume`, `fullscreen`, `pictureInPicture` | container; children gate individually |
 
@@ -60,10 +61,12 @@ renders, not what is callable.
 `selectQuality` gates `Player.QualityMenu`, which composes `Player.SettingsMenu`/
 `Player.MenuRadioGroup`/`Player.MenuRadioItem` the same way `Player.CaptionsMenu`
 does, listing `PlayerState.qualities` plus an "Auto" row — see below for which
-providers populate that ladder. `setPlaybackRate` has no dedicated primitive,
-and is composed by the consumer instead — see the **Reference example**, whose
-settings menu builds a playback-rate group over
-`Player.SettingsMenu`/`Player.MenuRadioGroup`, gated on its own capability.
+providers populate that ladder. `setPlaybackRate` gates `Player.PlaybackRateMenu`
+the same way, listing a rate ladder (default `[0.5, 1, 1.5, 2]`, overridable via
+its `rates` prop) instead of a provider-published one — see the **Playback
+rate** guide. The **Reference example**'s settings menu still composes its own
+playback-rate group by hand over `Player.SettingsMenu`/`Player.MenuRadioGroup`,
+for a consumer who wants it alongside quality under one trigger.
 `chapters` gates no shipped control either: it says
 whether the provider can report the divisions in `PlayerState.chapters` at all,
 and a consumer composes its own markers over `Player.SeekSlider`, which already

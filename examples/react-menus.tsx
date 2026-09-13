@@ -75,3 +75,9 @@ export const Captions = () => <Player.CaptionsMenu />;
 // a consumer who wants both under one trigger; this is the standalone
 // primitive for a consumer who wants quality on its own.
 export const Quality = () => <Player.QualityMenu />;
+
+// The rate ladder, already wired to the player's own playbackRate. `RateMenu`
+// above still composes a rate group by hand alongside quality, for a
+// consumer who wants both under one trigger; this is the standalone
+// primitive for a consumer who wants playback rate on its own.
+export const Rate = () => <Player.PlaybackRateMenu />;
