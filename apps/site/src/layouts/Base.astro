@@ -93,26 +93,22 @@ const shouldTrackWithPlausible =
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
-    {
-      /* A page-specific addition to the head, discovered as early as
-       * possible — before the analytics script and the theme script below,
-       * both of which a page's own head content never needs to come after.
-       * `/` uses it for the bench poster's `<link rel="preload">`: that
-       * element has to be a document-head resource for the preload scanner
-       * to see it before any script runs, and no page-shared markup in this
-       * file is the right place for one page's own poster (its fix, #611). */
-    }
+    {/* A page-specific addition to the head, discovered as early as
+     * possible — before the analytics script and the theme script below,
+     * both of which a page's own head content never needs to come after.
+     * `/` uses it for the bench poster's `<link rel="preload">`: that
+     * element has to be a document-head resource for the preload scanner
+     * to see it before any script runs, and no page-shared markup in this
+     * file is the right place for one page's own poster (its fix, #611). */}
     <slot name="head" />
-    {
-      shouldTrackWithPlausible && (
-        <script
-          is:inline
-          defer
-          data-domain="playdeck.video"
-          src="https://analytics.pedrosousa.me/js/script.js"
-        ></script>
-      )
-    }
+    {shouldTrackWithPlausible && (
+      <script
+        is:inline
+        defer
+        data-domain="playdeck.video"
+        src="https://analytics.pedrosousa.me/js/script.js"
+      ></script>
+    )}
     <script is:inline>
       // `'playdeck-theme'` is duplicated from `ThemeToggle.astro`'s
       // `STORAGE_KEY` and the two have to stay identical: change one and the
@@ -131,14 +127,15 @@ const shouldTrackWithPlausible =
       }
     </script>
   </head>
-  {
-    /* `data-pagefind-ignore` on the `<body>` is how Pagefind is told to skip a
-     * page entirely rather than merely to skip a region of it, so this is the
-     * whole of the opt-out. Written as `undefined` rather than `false` because
-     * Pagefind reads the attribute's presence and not its value — `data-
-     * pagefind-ignore="false"` would exclude the page just as firmly. */
-  }
-  <body data-pagefind-ignore={documentation ? undefined : true} data-stance={stance}>
+  {/* `data-pagefind-ignore` on the `<body>` is how Pagefind is told to skip a
+   * page entirely rather than merely to skip a region of it, so this is the
+   * whole of the opt-out. Written as `undefined` rather than `false` because
+   * Pagefind reads the attribute's presence and not its value — `data-
+   * pagefind-ignore="false"` would exclude the page just as firmly. */}
+  <body
+    data-pagefind-ignore={documentation ? undefined : true}
+    data-stance={stance}
+  >
     <slot />
   </body>
 </html>

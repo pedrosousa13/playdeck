@@ -1,4 +1,13 @@
 export default {
   singleQuote: true,
-  trailingComma: 'none'
+  trailingComma: 'none',
+  plugins: ['prettier-plugin-astro'],
+  overrides: [
+    {
+      files: '*.astro',
+      options: {
+        parser: 'astro'
+      }
+    }
+  ]
 };

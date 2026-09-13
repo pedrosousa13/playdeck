@@ -102,18 +102,16 @@ const highlighted = await Promise.all(
 ---
 
 <section class="cards">
-  {
-    cards.map((card, index) => (
-      <a class="card" data-feature-card href={card.href}>
-        <span class="card__number">{String(index + 1).padStart(2, '0')}</span>
-        <h2 class="card__headline">{card.headline}</h2>
-        {card.lines.map((line) => (
-          <p class="card__line">{line}</p>
-        ))}
-        <div class="card__snippet" set:html={highlighted[index]} />
-      </a>
-    ))
-  }
+  {cards.map((card, index) => (
+    <a class="card" data-feature-card href={card.href}>
+      <span class="card__number">{String(index + 1).padStart(2, '0')}</span>
+      <h2 class="card__headline">{card.headline}</h2>
+      {card.lines.map((line) => (
+        <p class="card__line">{line}</p>
+      ))}
+      <div class="card__snippet" set:html={highlighted[index]} />
+    </a>
+  ))}
 </section>
 
 <style>

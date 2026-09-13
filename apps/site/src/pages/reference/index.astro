@@ -29,44 +29,38 @@ const versions = new Set(packages.map((entry) => entry.version));
 const common = versions.size === 1 ? packages[0].version : undefined;
 ---
 
-{
-  /* Deliberately not "Playdeck". `scripts/check-deploy-artifact.mjs` identifies
-   * the site's root document in a browser by a heading named exactly that, which
-   * is how the deployed artifact is proven to serve the site rather than
-   * something else at the origin root, and a second document answering to the
-   * name would make that identification ambiguous. `src/pages/design.astro`
-   * carries the same constraint. */
-}
+{/* Deliberately not "Playdeck". `scripts/check-deploy-artifact.mjs` identifies
+ * the site's root document in a browser by a heading named exactly that, which
+ * is how the deployed artifact is proven to serve the site rather than
+ * something else at the origin root, and a second document answering to the
+ * name would make that identification ambiguous. `src/pages/design.astro`
+ * carries the same constraint. */}
 <Base title="Reference — Playdeck">
   <SiteHeader crumbs={[{ label: 'Reference' }]} />
 
   <main class="page">
     <h1>Reference</h1>
     <p class="lead">
-      Every published package, rendered from the README that ships inside its own
-      npm tarball. There is no second copy: the page and the file a reader gets
-      from npm are the same text.
+      Every published package, rendered from the README that ships inside its
+      own npm tarball. There is no second copy: the page and the file a reader
+      gets from npm are the same text.
     </p>
     <Sweep form="accent" />
 
-    {
-      /* The way out of this page for the reader it is worst for (#547). This
-       * index answers "which package is which" and cannot answer "which one do
-       * I install", and a reader who arrives here from the landing page's pitch
-       * has the second question. Above the list rather than under it, because a
-       * reader who has already read eight names has answered it themselves. */
-    }
+    {/* The way out of this page for the reader it is worst for (#547). This
+     * index answers "which package is which" and cannot answer "which one do
+     * I install", and a reader who arrives here from the landing page's pitch
+     * has the second question. Above the list rather than under it, because a
+     * reader who has already read eight names has answered it themselves. */}
     <p class="detour">
       New to the library? <a href={startUrl}>Start</a> is one package, one
       composition, and what each provider costs.
     </p>
 
-    {
-      /* The two facts that were repeated down the column, said once each above
-       * it. A reader who wants to know what to type into `pnpm add` reads this
-       * line and the row's own name; a reader scanning for the right package
-       * reads only the part of each name that differs. */
-    }
+    {/* The two facts that were repeated down the column, said once each above
+     * it. A reader who wants to know what to type into `pnpm add` reads this
+     * line and the row's own name; a reader scanning for the right package
+     * reads only the part of each name that differs. */}
     <p class="summary">
       {scoped && (
         <>
@@ -74,48 +68,43 @@ const common = versions.size === 1 ? packages[0].version : undefined;
         </>
       )}
       {scoped && common !== undefined && ', '}
-      {
-        common !== undefined && (
-          <>
-            all at version <code class="u-tabular">{common}</code>
-          </>
-        )
-      }.
+      {common !== undefined && (
+        <>
+          all at version <code class="u-tabular">{common}</code>
+        </>
+      )}
+      .
     </p>
 
-    {
-      /* A list and not a grid of cards. Cards of identical size are the shape a
-       * container reaches for when nothing has been decided about the contents,
-       * and they cost a reader the one thing an index is for: every name close
-       * enough to the next to compare in one glance. Rows separated by a
-       * hairline, name aligned in its own column, no chrome. */
-    }
+    {/* A list and not a grid of cards. Cards of identical size are the shape a
+     * container reaches for when nothing has been decided about the contents,
+     * and they cost a reader the one thing an index is for: every name close
+     * enough to the next to compare in one glance. Rows separated by a
+     * hairline, name aligned in its own column, no chrome. */}
     <ul class="packages">
-      {
-        packages.map((entry) => (
-          <li class="package">
-            <h2 class="package__name">
-              <a href={packageUrl(entry.dir)}>
-                {scoped ? (
-                  <>
-                    <span class="u-visually-hidden">{scope}</span>
-                    {entry.name.slice(scope.length)}
-                  </>
-                ) : (
-                  entry.name
-                )}
-              </a>
-            </h2>
-            <p class="package__description">{entry.description}</p>
-            {common === undefined && (
-              <p class="package__version">
-                <span class="package__version-label">version</span>{' '}
-                <code class="u-tabular">{entry.version}</code>
-              </p>
-            )}
-          </li>
-        ))
-      }
+      {packages.map((entry) => (
+        <li class="package">
+          <h2 class="package__name">
+            <a href={packageUrl(entry.dir)}>
+              {scoped ? (
+                <>
+                  <span class="u-visually-hidden">{scope}</span>
+                  {entry.name.slice(scope.length)}
+                </>
+              ) : (
+                entry.name
+              )}
+            </a>
+          </h2>
+          <p class="package__description">{entry.description}</p>
+          {common === undefined && (
+            <p class="package__version">
+              <span class="package__version-label">version</span>{' '}
+              <code class="u-tabular">{entry.version}</code>
+            </p>
+          )}
+        </li>
+      ))}
     </ul>
   </main>
 </Base>
