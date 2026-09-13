@@ -1,5 +1,5 @@
 ---
-'@playdeck/core': major
+'@playdeck/core': minor
 '@playdeck/react': minor
 '@playdeck/provider-hls': minor
 '@playdeck/provider-vimeo': minor
@@ -38,7 +38,7 @@ mirrors `selectQuality` there. `@playdeck/provider-native`,
 their existing `selectQuality` verdict, for the same reason: none of the
 three offers quality selection at all.
 
-`@playdeck/core`'s `PlayerCapabilities` gains a required field, which is a
-breaking change under this project's 1.0 contract: any object built to
-satisfy that type — a custom provider adapter, a capabilities fixture in a
-test — needs the new field before it type-checks again.
+`@playdeck/core`'s `PlayerCapabilities` gains a required field: any object
+built to satisfy that type — a custom provider adapter, a capabilities
+fixture in a test — needs the new field before it type-checks again, the
+same compatibility impact `providerPoster` had when it landed (1.1.0).
