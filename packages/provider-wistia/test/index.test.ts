@@ -680,6 +680,7 @@ test('reports the whole capability record it can justify', async () => {
     selectQuality: { status: 'unavailable', reason: 'provider' },
     selectQualityAuto: { status: 'unavailable', reason: 'provider' },
     selectTextTrack: { status: 'unavailable', reason: 'provider' },
+    selectAudioTrack: { status: 'unavailable', reason: 'provider' },
     chapters: { status: 'unavailable', reason: 'provider' },
     fullscreen: { status: 'available' },
     pictureInPicture: { status: 'unavailable', reason: 'provider' },

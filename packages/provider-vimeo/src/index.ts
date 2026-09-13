@@ -288,6 +288,9 @@ export const createVimeoProvider = (
       selectQuality: qualityLevels.selectQualityAvailability(),
       selectQualityAuto: qualityLevels.selectQualityAutoAvailability(),
       selectTextTrack: textTracks.selectTextTrackAvailability(),
+      // The SDK exposes no audio-track surface for this adapter to wire a
+      // command to.
+      selectAudioTrack: { status: 'unavailable', reason: 'provider' },
       chapters: chapters.chaptersAvailability(),
       fullscreen: available,
       pictureInPicture: presentation.pictureInPictureAvailability(),

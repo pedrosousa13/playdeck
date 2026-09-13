@@ -237,6 +237,7 @@ export const createWistiaProvider = (
       selectQuality: outOfScope,
       selectQualityAuto: outOfScope,
       selectTextTrack: outOfScope,
+      selectAudioTrack: outOfScope,
       // Wistia's chapters are an inbound embed-option plugin: the embedder
       // supplies the list, and no documented read-back accessor exists (#182).
       chapters: outOfScope,
