@@ -102,6 +102,7 @@ const allNotReady = (): PlayerCapabilities => ({
   setVolume: notReady,
   setPlaybackRate: notReady,
   selectQuality: notReady,
+  selectQualityAuto: notReady,
   selectTextTrack: notReady,
   chapters: notReady,
   fullscreen: notReady,

@@ -20,6 +20,7 @@ export const freezeCapabilities = (
     setVolume: freezeAvailability(capabilities.setVolume),
     setPlaybackRate: freezeAvailability(capabilities.setPlaybackRate),
     selectQuality: freezeAvailability(capabilities.selectQuality),
+    selectQualityAuto: freezeAvailability(capabilities.selectQualityAuto),
     selectTextTrack: freezeAvailability(capabilities.selectTextTrack),
     chapters: freezeAvailability(capabilities.chapters),
     fullscreen: freezeAvailability(capabilities.fullscreen),
