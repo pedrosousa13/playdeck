@@ -515,11 +515,14 @@ the global listener.
 ### Menus
 
 `SettingsMenu`, `SettingsMenuTrigger`, `SettingsMenuContent`, `MenuItem`,
-`MenuRadioGroup`, `MenuRadioItem`, `CaptionsMenu`.
+`MenuRadioGroup`, `MenuRadioItem`, `CaptionsMenu`, `QualityMenu`.
 
-`SettingsMenu` and the menu parts are the building blocks for playback-rate and
-quality menus, which have no dedicated primitive — the reference example
-composes both from these.
+`SettingsMenu` and the menu parts are also the building blocks for a
+playback-rate menu, which has no dedicated primitive — the reference example
+below composes one from these, alongside a quality group built the same way
+for a consumer who wants both under one trigger. `QualityMenu` is the
+standalone primitive for a consumer who wants quality on its own, the same
+way `CaptionsMenu` is for captions.
 
 <!-- example:react-menus -->
 
@@ -595,6 +598,12 @@ export const RateMenu = () => {
 
 // The caption track list, already wired to the player's own tracks.
 export const Captions = () => <Player.CaptionsMenu />;
+
+// The quality ladder, already wired to the player's own qualities. `RateMenu`
+// above still composes a quality group by hand alongside playback rate, for
+// a consumer who wants both under one trigger; this is the standalone
+// primitive for a consumer who wants quality on its own.
+export const Quality = () => <Player.QualityMenu />;
 ```
 
 <!-- /example -->

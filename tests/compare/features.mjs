@@ -185,16 +185,13 @@ export const axes = [
     label: 'Quality selection',
     entries: {
       Playdeck: {
-        status: 'partial',
+        status: 'yes',
         anchor: {
-          kind: 'types',
-          module: '@playdeck/core',
-          path: 'dist/types.d.ts',
-          includes: 'readonly selectQuality: Availability;'
+          kind: 'export',
+          module: '@playdeck/react',
+          name: 'QualityMenu'
         },
-        source:
-          'packages/core/dist/types.d.ts (`PlayerCommand`, `PlayerCapabilities.selectQuality`)',
-        note: 'A `selectQuality` command and `PlayerQuality`/`qualities` state exist; no dedicated quality button or menu primitive ships, a consumer composes one from `SettingsMenu`.'
+        source: PLAYDECK_REACT_README
       },
       'react-player': {
         status: 'no',

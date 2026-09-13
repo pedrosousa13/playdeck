@@ -27,13 +27,13 @@ under any of these libraries -- so that limit is written in the footnote
 instead, for every column alike. `docs/comparison/method.md`'s "Features"
 section has the full rule.
 
-Measured 2026-09-09 against `tests/compare`'s pinned installs:
+Measured 2026-09-13 against `tests/compare`'s pinned installs:
 `Playdeck` 1.1.0, `react-player` 3.4.0, `Vidstack` 1.15.6, `Media Chrome` 4.19.2, `Video.js` 8.24.0, `Video.js 10 (beta)` 10.0.0-beta.32.
 
 | Axis                                                | Playdeck      | react-player  | Vidstack      | Media Chrome  | Video.js     | Video.js 10 (beta) |
 | --------------------------------------------------- | ------------- | ------------- | ------------- | ------------- | ------------ | ------------------ |
 | Captions / text tracks                              | yes[^1]       | partial[^2]   | yes[^3]       | yes[^4]       | yes[^5]      | yes[^6]            |
-| Quality selection                                   | partial[^7]   | no[^8]        | yes[^9]       | yes[^10]      | partial[^11] | yes[^12]           |
+| Quality selection                                   | yes[^7]       | no[^8]        | yes[^9]       | yes[^10]      | partial[^11] | yes[^12]           |
 | Playback rate                                       | partial[^13]  | plugin[^14]   | yes[^15]      | yes[^16]      | yes[^17]     | yes[^18]           |
 | Picture-in-picture                                  | yes[^19]      | partial[^20]  | yes[^21]      | yes[^22]      | yes[^23]     | yes[^24]           |
 | Fullscreen                                          | yes[^25]      | plugin[^26]   | yes[^27]      | yes[^28]      | yes[^29]     | yes[^30]           |
@@ -77,7 +77,7 @@ Measured 2026-09-09 against `tests/compare`'s pinned installs:
 
 [^6]: **Captions / text tracks — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react` exports `CaptionsButton`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
 
-[^7]: **Quality selection — Playdeck**: partial. A `selectQuality` command and `PlayerQuality`/`qualities` state exist; no dedicated quality button or menu primitive ships, a consumer composes one from `SettingsMenu`. mechanical check: `@playdeck/core`'s `dist/types.d.ts` includes `readonly selectQuality: Availability;`. Source: packages/core/dist/types.d.ts (`PlayerCommand`, `PlayerCapabilities.selectQuality`)
+[^7]: **Quality selection — Playdeck**: yes. mechanical check: `@playdeck/react` exports `QualityMenu`. Source: packages/react/README.md
 
 [^8]: **Quality selection — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `Quality`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 

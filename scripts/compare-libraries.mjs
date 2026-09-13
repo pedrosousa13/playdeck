@@ -204,6 +204,7 @@ const reachesExport = (chunk, exportName) =>
  *   legitimately.
  * - "captions rendering": `captions.tsx`'s entire export list -- `Captions`,
  *   `CaptionsButton`, `CaptionsMenu`.
+ * - "quality selection": `quality.tsx`'s one export, `QualityMenu`.
  * - "every provider other than native": matched the same way `requiredChunk`
  *   below matches `provider-native` itself, by the package's own directory
  *   appearing in a reachable chunk's `moduleIds`. `requiredChunk` already
@@ -225,7 +226,8 @@ export const PLAY_ONLY_FORBIDDEN_MODULES = [
     'SeekSlider',
     'Captions',
     'CaptionsButton',
-    'CaptionsMenu'
+    'CaptionsMenu',
+    'QualityMenu'
   ].map((name) => ({
     name,
     reachedBy: (/** @type {Chunk} */ chunk) => reachesExport(chunk, name)
