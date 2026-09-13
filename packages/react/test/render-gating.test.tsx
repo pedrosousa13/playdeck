@@ -996,11 +996,17 @@ describe('render gating (#651)', () => {
 
   // The issue's last criterion asks for the first run's per-part render
   // counts, recorded. Printed rather than hand-copied, so the table quoted
-  // in the PR body is reproducible: run with `PLAYDECK_RENDER_COUNTS=1` set
-  // (`PLAYDECK_RENDER_COUNTS=1 npx vitest run
-  // packages/react/test/render-gating.test.tsx -t "mounts every part"`) and
-  // a reader gets exactly the numbers this comment claims, not a transcript
-  // nobody can check.
+  // in the PR body is reproducible:
+  //
+  //   PLAYDECK_RENDER_COUNTS=1 npx vitest run \
+  //     packages/react/test/render-gating.test.tsx \
+  //     -t "mounts every part" --disable-console-intercept
+  //
+  // `--disable-console-intercept` is not optional and is why the flag is
+  // spelled out here rather than left to the reader: this repo's vitest run
+  // swallows `console.log` entirely by default -- a bare test logging a
+  // marker prints nothing at all -- so the command without it produces an
+  // empty transcript and looks like the table was never generated.
   test('mounts every part and drives every PlayerState field without an undeclared re-render', () => {
     const { fixture, counts } = setupAllParts();
 
