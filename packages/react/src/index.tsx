@@ -103,6 +103,10 @@ export type {
   SettingsMenuTriggerProps
 } from './settings-menu.js';
 
+export { QualityMenu } from './quality.js';
+
+export type { QualityMenuProps } from './quality.js';
+
 export {
   MuteButton,
   PlayButton,
