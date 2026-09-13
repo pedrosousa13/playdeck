@@ -51,7 +51,8 @@ import { getCollection } from 'astro:content';
  *
  * Contract first because it is the one every other page assumes: a headless
  * library's parts are its whole styling surface. Then what each provider can
- * actually do, then captions, then the optional stylesheet — which is the last
+ * actually do, then the two selection menus built over that capability data
+ * (captions, then quality), then the optional stylesheet — which is the last
  * in the list because it is the only one a consumer can decline entirely.
  *
  * The `Overview/*` documents that are **not** here are absent by decision
@@ -81,6 +82,7 @@ export const GUIDES = [
     slug: 'capabilities-matrix'
   },
   { file: 'apps/storybook/stories/Captions.mdx', slug: 'captions' },
+  { file: 'apps/storybook/stories/Quality.mdx', slug: 'quality' },
   { file: 'apps/storybook/stories/Theme.mdx', slug: 'theme' }
 ];
 

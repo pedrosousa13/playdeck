@@ -1,0 +1,85 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title="Overview/Quality" />
+
+# Quality
+
+Playdeck exposes the manual quality ladder a provider publishes —
+`PlayerState.qualities` — and one command to choose from it, `selectQuality`.
+Not every provider can: `capabilities.selectQuality` says so per source, and
+`Player.QualityMenu` renders nothing until it resolves `available`.
+
+## The state, and what `null` means
+
+Two fields, and a menu needs both:
+
+- **`qualities`** — the published ladder, each entry a
+  `{ id, height, width, bitrate }`. Any of the three measurements may be
+  `null` — a provider is not required to publish all of them, so a menu label
+  falls back from height to bitrate to the raw id.
+- **`selectedQualityId`** — what the consumer chose. `null` means automatic
+  (adaptive) selection, not "nothing selected" — there is always an active
+  level, and `quality` below names it.
+- **`quality`** — the level actually playing right now, which moves on its
+  own under adaptive selection. A menu's Auto row is checked from
+  `selectedQualityId === null` and _labelled_ from `quality`, e.g.
+  "Auto (1080p)" — the two fields answer different questions, and a menu
+  reading only one of them cannot show both.
+
+## Which providers publish a ladder
+
+| Provider | `selectQuality`                  | Where the ladder comes from                           |
+| -------- | -------------------------------- | ----------------------------------------------------- |
+| hls.js   | `available` with a manifest      | The manifest's levels, with height, width and bitrate |
+| vimeo    | `available` with a ladder        | The SDK's own quality list, height only               |
+| native   | `unavailable`, reason `source`   | The browser picks; nothing to enumerate               |
+| youtube  | `unavailable`, reason `provider` | Enumerable, but not selectable                        |
+| wistia   | `unavailable`, reason `provider` | No rung ladder to publish                             |
+
+The full account of each — why YouTube can enumerate but not select, why a
+Vimeo rung's `height` is a label rather than a measurement, why native HLS
+leaves `qualities` empty by design — is in the **Capabilities matrix** guide's
+`selectQuality` section; this page covers the state shape and the menu built
+over it.
+
+## Selecting a quality
+
+Two ways, both driving the same command: `controller.selectQuality(id | null)`
+directly, or `Player.QualityMenu`, which wires the whole ladder up for you.
+`null` means "let the provider choose" — the same auto mode `selectedQualityId`
+already means above.
+
+## `Player.QualityMenu`
+
+A preset assembly over `Player.SettingsMenu` / `Player.MenuRadioGroup` /
+`Player.MenuRadioItem`, in the same shape `Player.CaptionsMenu` takes over the
+same primitives: it renders nothing until `capabilities.selectQuality`
+resolves `available`, lists `qualities` plus the Auto row, marks the active
+item from `selectedQualityId`, and issues `selectQuality` when an item is
+chosen.
+
+It renders no `data-playdeck-part` of its own — every attribute a reader can
+style or query comes from the primitives it composes
+(`settings-menu-trigger`, `settings-menu`, `menu-radio-group`,
+`menu-radio-item`), the same **Contract** the other menu parts publish
+through.
+
+Pass children to fully customize the trigger/content; omit them for the
+default quality list.
+
+## Accessibility
+
+The trigger carries `aria-label="Quality"`, overridable the same way any
+other primitive's default label is — pass your own `aria-label` (or replace
+the trigger's children entirely). Each rung is `role="menuitemradio"` with
+`aria-checked` reflecting the current selection. Keyboard operation — Tab to
+the trigger, Enter or Space to open it, arrow keys to move roving focus among
+the rungs, Enter or Space to choose one, Escape to close — comes from
+`SettingsMenu`, the same primitive every other menu in this package composes,
+rather than anything `QualityMenu` implements itself.
+
+## Out of scope
+
+A standalone quality button, outside a menu, does not exist. `selectQuality`
+and `qualities` are exposed only through `Player.QualityMenu` and the menu
+primitives it is built from.

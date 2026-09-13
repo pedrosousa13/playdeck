@@ -25,8 +25,9 @@ directive; server code can call `detectSource` and the rest of that surface
 without a boundary at all.
 
 The guides at [playdeck.video/guides](https://playdeck.video/guides/) carry the
-full styling contract ([**Contract**](https://playdeck.video/guides/contract/))
-and the caption guidance ([**Captions**](https://playdeck.video/guides/captions/)).
+full styling contract ([**Contract**](https://playdeck.video/guides/contract/)),
+the caption guidance ([**Captions**](https://playdeck.video/guides/captions/))
+and the quality-selection guidance ([**Quality**](https://playdeck.video/guides/quality/)).
 Every primitive below is also staged, running, in this repository's Storybook
 workbench, which is a development tool rather than a published surface.
 
@@ -522,7 +523,8 @@ playback-rate menu, which has no dedicated primitive — the reference example
 below composes one from these, alongside a quality group built the same way
 for a consumer who wants both under one trigger. `QualityMenu` is the
 standalone primitive for a consumer who wants quality on its own, the same
-way `CaptionsMenu` is for captions.
+way `CaptionsMenu` is for captions — covered in
+[**Quality**](https://playdeck.video/guides/quality/).
 
 <!-- example:react-menus -->
 
