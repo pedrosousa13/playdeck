@@ -75,6 +75,20 @@ export type TextTrack = {
   readonly readiness: TextTrackReadiness;
 };
 
+// One selectable audio rendition, published as an ordered collection with its
+// own selection carried on each entry rather than in a sibling
+// `selectedAudioTrackId` field, the shape `TextTrack`/`selectedTextTrackId`
+// and `PlayerQuality`/`selectedQualityId` both use. The DOM's own
+// `AudioTrackList` and hls.js's own audio-tracks surface both enforce "at
+// most one enabled" on the track itself, with no separate selection slot to
+// mirror.
+export type AudioTrack = {
+  readonly id: string;
+  readonly label: string;
+  readonly language: string | null;
+  readonly active: boolean;
+};
+
 export type TextCue = {
   readonly id: string | null;
   readonly startTime: number;
@@ -194,6 +208,7 @@ export type PlayerCapabilities = {
   // item that silently does nothing when chosen.
   readonly selectQualityAuto: Availability;
   readonly selectTextTrack: Availability;
+  readonly selectAudioTrack: Availability;
   // Whether the provider can report chapters at all, which is what tells a
   // provider that cannot ('unavailable' with the `provider` reason) apart from
   // a source that simply has none (the `source` reason) — both publish an
@@ -262,6 +277,7 @@ export type PlayerCommand =
   | 'setPlaybackRate'
   | 'selectQuality'
   | 'selectTextTrack'
+  | 'selectAudioTrack'
   | 'requestFullscreen'
   | 'exitFullscreen'
   | 'requestPictureInPicture'
@@ -402,6 +418,7 @@ export type PlayerState = {
   readonly capabilities: PlayerCapabilities;
   readonly error: PlayerError | null;
   readonly textTracks: readonly TextTrack[];
+  readonly audioTracks: readonly AudioTrack[];
   // Ordered by ascending `startTime`, and empty both where the provider cannot
   // report chapters and where the source has none — `capabilities.chapters` is
   // what tells those two apart. Never routed through `textTracks`: nothing
@@ -579,6 +596,7 @@ export type ProviderAdapter = {
   setVolume?: (volume: number) => Promise<CommandResult>;
   setPlaybackRate?: (rate: number) => Promise<CommandResult>;
   selectTextTrack?: (track: string | null) => Promise<CommandResult>;
+  selectAudioTrack?: (id: string) => Promise<CommandResult>;
   requestFullscreen?: () => Promise<CommandResult>;
   exitFullscreen?: () => Promise<CommandResult>;
   requestPictureInPicture?: () => Promise<CommandResult>;

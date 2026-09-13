@@ -152,6 +152,7 @@ const initialCapabilities = (): PlayerCapabilities =>
     selectQuality: notReady,
     selectQualityAuto: notReady,
     selectTextTrack: notReady,
+    selectAudioTrack: notReady,
     chapters: notReady,
     fullscreen: notReady,
     pictureInPicture: notReady,
@@ -190,6 +191,7 @@ export const createInitialPlayerState = (): PlayerState =>
     capabilities: initialCapabilities(),
     error: null,
     textTracks: Object.freeze([]),
+    audioTracks: Object.freeze([]),
     chapters: Object.freeze([]),
     selectedTextTrackId: null,
     captionRendering: 'unavailable',
@@ -933,6 +935,8 @@ export class PlayerController {
     this.#command('setPlaybackRate', rate);
   selectTextTrack = (track: string | null): Promise<CommandResult> =>
     this.#command('selectTextTrack', track);
+  selectAudioTrack = (id: string): Promise<CommandResult> =>
+    this.#command('selectAudioTrack', id);
   requestFullscreen = (): Promise<CommandResult> =>
     this.#command('requestFullscreen');
   exitFullscreen = (): Promise<CommandResult> =>
@@ -998,6 +1002,7 @@ export class PlayerController {
       | 'setVolume'
       | 'setPlaybackRate'
       | 'selectTextTrack'
+      | 'selectAudioTrack'
       | 'requestFullscreen'
       | 'exitFullscreen'
       | 'requestPictureInPicture'
@@ -1063,6 +1068,7 @@ export class PlayerController {
       | 'setVolume'
       | 'setPlaybackRate'
       | 'selectTextTrack'
+      | 'selectAudioTrack'
       | 'requestFullscreen'
       | 'exitFullscreen'
       | 'requestPictureInPicture'

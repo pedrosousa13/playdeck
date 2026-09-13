@@ -81,6 +81,7 @@ const withSetPlaybackRate = (status: Availability): PlayerCapabilities => ({
   selectQuality: notReadyAvailability,
   selectQualityAuto: notReadyAvailability,
   selectTextTrack: notReadyAvailability,
+  selectAudioTrack: notReadyAvailability,
   chapters: notReadyAvailability,
   fullscreen: notReadyAvailability,
   pictureInPicture: notReadyAvailability,

@@ -88,6 +88,7 @@ const withChapters = (status: Availability): PlayerCapabilities => ({
   selectQuality: notReadyAvailability,
   selectQualityAuto: notReadyAvailability,
   selectTextTrack: notReadyAvailability,
+  selectAudioTrack: notReadyAvailability,
   chapters: status,
   fullscreen: notReadyAvailability,
   pictureInPicture: notReadyAvailability,

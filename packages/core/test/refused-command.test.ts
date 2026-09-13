@@ -88,6 +88,7 @@ const untagged: ReadonlyArray<
   ['setPlaybackRate', (c) => c.setPlaybackRate(2)],
   ['selectQuality', (c) => c.selectQuality(null)],
   ['selectTextTrack', (c) => c.selectTextTrack(null)],
+  ['selectAudioTrack', (c) => c.selectAudioTrack('a1')],
   ['requestFullscreen', (c) => c.requestFullscreen()],
   ['exitFullscreen', (c) => c.exitFullscreen()],
   ['requestPictureInPicture', (c) => c.requestPictureInPicture()],
