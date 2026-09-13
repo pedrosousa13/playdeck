@@ -1,5 +1,4 @@
 import type { PlayerQuality } from '@playdeck/core';
-import { SettingsIcon } from './icons.js';
 import { usePlayer, usePlayerState } from './player-context.js';
 import {
   MenuRadioGroup,
@@ -52,9 +51,12 @@ export const QualityMenu = ({ children, ...props }: QualityMenuProps) => {
     <SettingsMenu {...props}>
       {children ?? (
         <>
-          <SettingsMenuTrigger aria-label="Quality">
-            <SettingsIcon />
-          </SettingsMenuTrigger>
+          {/* No dedicated quality icon exists (unlike CaptionsMenu's
+              CaptionsIcon), so this relies on SettingsMenuTrigger's own
+              fallback -- `{children ?? <SettingsIcon />}` in
+              settings-menu.tsx -- the same way RateMenu
+              (examples/react-menus.tsx) does for the identical case. */}
+          <SettingsMenuTrigger aria-label="Quality" />
           <SettingsMenuContent>
             <MenuRadioGroup
               onValueChange={(value) => {
