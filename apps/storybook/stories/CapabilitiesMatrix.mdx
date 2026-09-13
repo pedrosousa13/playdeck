@@ -63,11 +63,10 @@ renders, not what is callable.
 does, listing `PlayerState.qualities` plus an "Auto" row — see below for which
 providers populate that ladder. `setPlaybackRate` gates `Player.PlaybackRateMenu`
 the same way, listing a rate ladder (default `[0.5, 1, 1.5, 2]`, overridable via
-its `rates` prop) instead of a provider-published one — see the
-[**Playback rate**](https://playdeck.video/guides/playback-rate/) guide. The
-**Reference example**'s settings menu still composes its own playback-rate
-group by hand over `Player.SettingsMenu`/`Player.MenuRadioGroup`, for a
-consumer who wants it alongside quality under one trigger.
+its `rates` prop) instead of a provider-published one — see the **Playback
+rate** guide. The **Reference example**'s settings menu still composes its own
+playback-rate group by hand over `Player.SettingsMenu`/`Player.MenuRadioGroup`,
+for a consumer who wants it alongside quality under one trigger.
 `chapters` gates no shipped control either: it says
 whether the provider can report the divisions in `PlayerState.chapters` at all,
 and a consumer composes its own markers over `Player.SeekSlider`, which already
