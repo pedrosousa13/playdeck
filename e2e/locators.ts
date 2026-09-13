@@ -62,6 +62,12 @@ export const qualityTriggerSelector =
 export const qualityTrigger = (page: Page) =>
   page.locator(qualityTriggerSelector);
 
+export const playbackRateTriggerSelector =
+  '[data-playdeck-part="settings-menu-trigger"][aria-label="Playback rate"]';
+
+export const playbackRateTrigger = (page: Page) =>
+  page.locator(playbackRateTriggerSelector);
+
 export const settingsMenuSelector = '[data-playdeck-part="settings-menu"]';
 
 export const settingsMenu = (page: Page) => page.locator(settingsMenuSelector);
