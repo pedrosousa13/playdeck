@@ -83,8 +83,7 @@ not a capability Playdeck built or configures.
 **Ads and playlists** are out of scope. Both belong to the broadcast shape of a
 player — a single surface that owns an ad break or a queue across items — and
 neither has shipped in this repository. Extension today is React composition,
-not a plugin registry (`docs/comparison/features.md`'s "Plugin system" row,
-again).
+not a plugin registry (`docs/comparison/features.md`'s "Plugin system" row).
 
 ## What is measured
 
