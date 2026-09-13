@@ -36,8 +36,9 @@ export type QualityMenuProps = ComponentPropsWithRef<'div'>;
  * trigger/content; omit them to get the default quality list.
  */
 export const QualityMenu = ({ children, ...props }: QualityMenuProps) => {
-  const { playing, qualities, selectedId, status } = usePlayerState(
+  const { autoStatus, playing, qualities, selectedId, status } = usePlayerState(
     (state) => ({
+      autoStatus: state.capabilities.selectQualityAuto.status,
       playing: state.quality,
       qualities: state.qualities,
       selectedId: state.selectedQualityId,
@@ -64,7 +65,15 @@ export const QualityMenu = ({ children, ...props }: QualityMenuProps) => {
               }}
               value={selectedId ?? ''}
             >
-              <MenuRadioItem value="">{autoLabel(playing)}</MenuRadioItem>
+              {/* Gated on `selectQualityAuto` rather than `selectQuality`
+                  above: a provider can accept `selectQuality` for a real
+                  rung while refusing `selectQuality(null)` -- see the
+                  comment on `PlayerCapabilities.selectQualityAuto`. Showing
+                  this row anyway would put a radio item in the menu that
+                  silently does nothing when chosen. */}
+              {autoStatus === 'available' && (
+                <MenuRadioItem value="">{autoLabel(playing)}</MenuRadioItem>
+              )}
               {qualities.map((quality) => (
                 <MenuRadioItem key={quality.id} value={quality.id}>
                   {qualityLabel(quality)}

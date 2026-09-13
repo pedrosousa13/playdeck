@@ -19,7 +19,7 @@ const meta = {
         component: [
           '`Player.QualityMenu` is a preset assembly over `Player.SettingsMenu` / `Player.MenuRadioGroup` / `Player.MenuRadioItem`, in the same shape as `Player.CaptionsMenu`: it lists `state.qualities` plus an "Auto" row, and renders nothing until `capabilities.selectQuality` resolves `available`.',
           '',
-          '**Auto row** — `state.selectedQualityId === null` means auto. Its own label names the level actually playing (`state.quality`), e.g. "Auto (1080p)", falling back to "Auto" before a level is known.',
+          '**Auto row** — `state.selectedQualityId === null` means auto. Its own label names the level actually playing (`state.quality`), e.g. "Auto (1080p)", falling back to "Auto" before a level is known. The row itself is additionally gated on `capabilities.selectQualityAuto`: a provider can offer real rungs without offering auto (see the **Capabilities matrix** guide\'s `selectQuality` section), and the row is absent rather than inert for one.',
           '',
           '**Selection** — choosing a rung issues `controller.selectQuality(id)`; choosing the auto row issues `controller.selectQuality(null)`.',
           '',
@@ -40,7 +40,7 @@ type Story = StoryObj<typeof meta>;
  */
 export const List: Story = {
   parameters: ready(
-    { selectQuality: available },
+    { selectQuality: available, selectQualityAuto: available },
     { qualities: ladder, quality: ladder[0], selectedQualityId: '720p' }
   ),
   render: () => (
@@ -77,7 +77,7 @@ export const List: Story = {
  */
 export const Auto: Story = {
   parameters: ready(
-    { selectQuality: available },
+    { selectQuality: available, selectQualityAuto: available },
     { qualities: ladder, quality: ladder[0], selectedQualityId: null }
   ),
   render: () => (
@@ -118,6 +118,46 @@ export const Unavailable: Story = {
   play: async ({ canvas }) => {
     expect(
       canvas.queryByRole('button', { name: 'Quality' })
+    ).not.toBeInTheDocument();
+  }
+};
+
+/**
+ * `selectQuality` available, `selectQualityAuto` not -- the shape
+ * `@playdeck/provider-vimeo` reports for a ladder with real rungs and no
+ * `auto` entry (#653). The menu still renders, with every rung; only the
+ * Auto row is absent, rather than present and inert.
+ */
+export const AutoUnavailable: Story = {
+  parameters: ready(
+    { selectQuality: available, selectQualityAuto: unavailable },
+    { qualities: ladder, quality: ladder[0], selectedQualityId: '720p' }
+  ),
+  render: () => (
+    <Player.Viewport
+      style={{
+        width: 640,
+        height: 360,
+        background: '#0b0e13',
+        position: 'relative'
+      }}
+    >
+      <Player.QualityMenu
+        style={{ position: 'absolute', bottom: '0.75rem', right: '0.75rem' }}
+      />
+    </Player.Viewport>
+  ),
+  play: async ({ canvas, userEvent }) => {
+    const trigger = await canvas.findByRole('button', { name: 'Quality' });
+    await userEvent.click(trigger);
+    const rungs = await canvas.findAllByRole('menuitemradio');
+    expect(rungs.map((rung) => rung.textContent)).toEqual([
+      '1080p',
+      '720p',
+      '480p'
+    ]);
+    expect(
+      canvas.queryByRole('menuitemradio', { name: /^Auto/ })
     ).not.toBeInTheDocument();
   }
 };

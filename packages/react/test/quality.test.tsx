@@ -75,11 +75,18 @@ const notReadyAvailability: Availability = {
 };
 const available: Availability = { status: 'available' };
 
-const withSelectQuality = (status: Availability): PlayerCapabilities => ({
+// `autoStatus` defaults to `status`: every existing caller below passes one
+// Availability meaning "quality selection itself", and until the Vimeo-shaped
+// test below, selection and auto have always agreed.
+const withSelectQuality = (
+  status: Availability,
+  autoStatus: Availability = status
+): PlayerCapabilities => ({
   seek: notReadyAvailability,
   setVolume: notReadyAvailability,
   setPlaybackRate: notReadyAvailability,
   selectQuality: status,
+  selectQualityAuto: autoStatus,
   selectTextTrack: notReadyAvailability,
   chapters: notReadyAvailability,
   fullscreen: notReadyAvailability,
@@ -150,6 +157,49 @@ describe('Player.QualityMenu', () => {
     expect(
       container.querySelector('[data-playdeck-part="settings-menu-root"]')
     ).toBe(null);
+  });
+
+  // Demonstrated red (docs/agents/demonstrated-red.md), substitute mutation:
+  // #653's maintainer ruling -- a provider can report `selectQuality`
+  // available while refusing `selectQuality(null)` for auto, the shape
+  // `@playdeck/provider-vimeo` takes for a ladder with no `auto` entry.
+  // Reverted the `autoStatus === 'available'` guard in quality.tsx to `true`
+  // (rendering the Auto row unconditionally, the pre-#653 behaviour) and ran
+  // this file:
+  //
+  //   × renders no Auto row when selectQualityAuto is unavailable, on a
+  //     ladder that still has rungs
+  //
+  //   Test Files  1 failed | 90 passed (91)
+  //        Tests  1 failed | 2302 passed (2303)
+  //
+  // Reverted, all 2303 passed again.
+  test('renders no Auto row when selectQualityAuto is unavailable, on a ladder that still has rungs', () => {
+    const { container, emitState } = renderWithPlayer(<Player.QualityMenu />);
+    emitState({
+      capabilities: withSelectQuality(available, {
+        status: 'unavailable',
+        reason: 'source'
+      }),
+      qualities: [p1080, p720],
+      quality: p1080,
+      selectedQualityId: '1080p'
+    });
+    const trigger = container.querySelector(
+      '[data-playdeck-part="settings-menu-trigger"]'
+    ) as HTMLButtonElement;
+    fireEvent.click(trigger);
+    const items = Array.from(
+      container.querySelectorAll('[role="menuitemradio"]')
+    );
+    // Both rungs render -- proving the menu itself mounted with content, not
+    // merely that "no Auto row" passed vacuously because nothing rendered at
+    // all (docs/agents/demonstrated-red.md's "criterion whose subject is
+    // capability-gated" trap).
+    expect(items.map((item) => item.textContent)).toEqual(['1080p', '720p']);
+    expect(items.some((item) => item.textContent?.startsWith('Auto'))).toBe(
+      false
+    );
   });
 
   test('lists each quality plus Auto as menuitemradio with aria-checked reflecting selection', () => {
