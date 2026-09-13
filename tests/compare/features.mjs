@@ -1390,15 +1390,13 @@ export const axes = [
     label: 'Chapters',
     entries: {
       Playdeck: {
-        status: 'partial',
+        status: 'yes',
         anchor: {
           kind: 'export',
-          module: '@playdeck/core',
-          name: 'deriveChapters'
+          module: '@playdeck/react',
+          name: 'ChaptersMenu'
         },
-        source:
-          "CONTEXT.md, the 'Chapter' entry; packages/core/dist/index.d.ts",
-        note: 'A `Chapter` collection is published on player state; no chapters navigation UI primitive ships.'
+        source: PLAYDECK_REACT_README
       },
       'react-player': {
         status: 'no',

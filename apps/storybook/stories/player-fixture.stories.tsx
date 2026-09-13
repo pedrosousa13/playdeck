@@ -23,6 +23,11 @@ type PlayerFixtureProps = {
   readonly airplay?: 'demo';
   readonly sourceChange?: 'external';
   readonly captionRenderer?: Player.RootProps['captionRenderer'];
+  // Attaches a real `<track kind="chapters">` (`chapters.vtt`), so
+  // `e2e/chapters.spec.ts` has a native fixture to drive `Player.ChaptersMenu`
+  // against, in the same shape `captionRenderer` opts a fixture into a real
+  // `<track kind="captions">` above.
+  readonly chapters?: boolean;
   // The `[startTime, endTime]` window (#214), so a spec can drive a fixture
   // whose playback is confined to something other than the whole media.
   // `e2e/vimeo-url-time-param.spec.ts` needs one to have anything to defend.
@@ -247,13 +252,22 @@ const LiveControls = () => {
   );
 };
 
-const captionTextTracks: Player.MediaProps['textTracks'] = [
+const captionTextTracks: NonNullable<Player.MediaProps['textTracks']> = [
   {
     src: assetUrl('captions-en.vtt'),
     srcLang: 'en',
     label: 'English',
     kind: 'captions',
     default: true
+  }
+];
+
+const chaptersTextTracks: NonNullable<Player.MediaProps['textTracks']> = [
+  {
+    src: assetUrl('chapters.vtt'),
+    srcLang: 'en',
+    label: 'Chapters',
+    kind: 'chapters'
   }
 ];
 
@@ -268,6 +282,7 @@ const PlayerFixture = ({
   airplay,
   sourceChange: sourceChangeInput,
   captionRenderer,
+  chapters,
   startTime,
   endTime,
   vimeoCustomControls,
@@ -325,7 +340,15 @@ const PlayerFixture = ({
   const [source, setSource] = useState(initialSource);
   // Only the captions fixture (a story arg sets `captionRenderer`) attaches a
   // real <track>; every other story keeps the plain <video> it had before.
-  const textTracks = captionRenderer ? captionTextTracks : undefined;
+  // The chapters fixture (`chapters` arg) attaches its own <track> alongside
+  // whichever caption track is already present, rather than replacing it.
+  const textTracks =
+    captionRenderer || chapters
+      ? [
+          ...(captionRenderer ? captionTextTracks : []),
+          ...(chapters ? chaptersTextTracks : [])
+        ]
+      : undefined;
 
   const fixture = (
     <>
@@ -393,6 +416,7 @@ const PlayerFixture = ({
         <Player.CaptionsButton />
         <Player.QualityMenu />
         <Player.PlaybackRateMenu />
+        <Player.ChaptersMenu />
         {/*
           Mounted everywhere on purpose: "AirPlay" contains "Play", so a
           name-based Playwright lookup collides here (#73). It is a partial
@@ -527,6 +551,14 @@ export const NativeMp4: Story = {
 // clip, which leaves the applying case no room to be interesting (#465).
 export const NativeMp4StartTime: Story = {
   args: { source: 'long', startTime: 5 }
+};
+
+// The ten-second clip, with `chapters.vtt` attached -- `e2e/chapters.spec.ts`
+// drives `Player.ChaptersMenu` against this fixture, and needs the longer
+// clip for the same reason `NativeMp4StartTime` above does: three chapters
+// with boundaries at 3s and 6s need a source that reaches past them.
+export const NativeChapters: Story = {
+  args: { source: 'long', chapters: true }
 };
 
 export const CaptionsCustom: Story = {

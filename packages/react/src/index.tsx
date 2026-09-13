@@ -111,6 +111,10 @@ export { PlaybackRateMenu } from './playback-rate.js';
 
 export type { PlaybackRateMenuProps } from './playback-rate.js';
 
+export { ChaptersMenu } from './chapters.js';
+
+export type { ChaptersMenuProps } from './chapters.js';
+
 export {
   MuteButton,
   PlayButton,

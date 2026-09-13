@@ -9,19 +9,20 @@ below reads one capability (or, for `Controls`, several) and appears only when
 that capability resolves `available`; while `unknown` or `unavailable` it
 renders nothing.
 
-| Component                 | Gating capability                                     | Renders when                          |
-| ------------------------- | ----------------------------------------------------- | ------------------------------------- |
-| `Player.PlayButton`       | — (provider presence)                                 | always (not capability-gated)         |
-| `Player.MuteButton`       | `setVolume`                                           | `setVolume` is `available`            |
-| `Player.VolumeSlider`     | `setVolume`                                           | `setVolume` is `available`            |
-| `Player.SeekSlider`       | `seek`                                                | `seek` is `available`                 |
-| `Player.FullscreenButton` | `fullscreen`                                          | `fullscreen` is `available`           |
-| `Player.PipButton`        | `pictureInPicture`                                    | `pictureInPicture` is `available`     |
-| `Player.AirPlayButton`    | `airPlay`                                             | `airPlay` is `available`              |
-| `Player.QualityMenu`      | `selectQuality`                                       | `selectQuality` is `available`        |
-| `Player.PlaybackRateMenu` | `setPlaybackRate`                                     | `setPlaybackRate` is `available`      |
-| `Player.Time`             | — (display)                                           | always                                |
-| `Player.Controls`         | `seek`, `setVolume`, `fullscreen`, `pictureInPicture` | container; children gate individually |
+| Component                 | Gating capability                                     | Renders when                            |
+| ------------------------- | ----------------------------------------------------- | --------------------------------------- |
+| `Player.PlayButton`       | — (provider presence)                                 | always (not capability-gated)           |
+| `Player.MuteButton`       | `setVolume`                                           | `setVolume` is `available`              |
+| `Player.VolumeSlider`     | `setVolume`                                           | `setVolume` is `available`              |
+| `Player.SeekSlider`       | `seek`                                                | `seek` is `available`                   |
+| `Player.FullscreenButton` | `fullscreen`                                          | `fullscreen` is `available`             |
+| `Player.PipButton`        | `pictureInPicture`                                    | `pictureInPicture` is `available`       |
+| `Player.AirPlayButton`    | `airPlay`                                             | `airPlay` is `available`                |
+| `Player.QualityMenu`      | `selectQuality`                                       | `selectQuality` is `available`          |
+| `Player.PlaybackRateMenu` | `setPlaybackRate`                                     | `setPlaybackRate` is `available`        |
+| `Player.ChaptersMenu`     | `chapters`                                            | `chapters` is `available` and non-empty |
+| `Player.Time`             | — (display)                                           | always                                  |
+| `Player.Controls`         | `seek`, `setVolume`, `fullscreen`, `pictureInPicture` | container; children gate individually   |
 
 `Player.QualityMenu`'s Auto row carries a second, narrower gate of its own —
 `selectQualityAuto` — covered in the `selectQuality` section below.
@@ -67,10 +68,14 @@ its `rates` prop) instead of a provider-published one — see the **Playback
 rate** guide. The **Reference example**'s settings menu still composes its own
 playback-rate group by hand over `Player.SettingsMenu`/`Player.MenuRadioGroup`,
 for a consumer who wants it alongside quality under one trigger.
-`chapters` gates no shipped control either: it says
-whether the provider can report the divisions in `PlayerState.chapters` at all,
-and a consumer composes its own markers over `Player.SeekSlider`, which already
-takes children. `customControls` gates no shipped control.
+`chapters` gates `Player.ChaptersMenu` the same way, listing
+`PlayerState.chapters` and marking the one containing `currentTime` — see the
+**Chapters** guide. It says only whether the provider can report the
+divisions in `PlayerState.chapters` at all; `Player.ChaptersMenu` additionally
+renders nothing while that collection is empty. Chapter markers drawn on the
+seek slider itself are out of scope for the shipped parts — a consumer
+composes those over `Player.SeekSlider`, which already takes children.
+`customControls` gates no shipped control.
 
 ## `commandsReady`: when a command will actually land
 

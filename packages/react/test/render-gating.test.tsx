@@ -386,6 +386,13 @@ const PART_TABLE: Record<string, PartEntry> = {
     fields: new Set(['playbackRate', 'capabilities']),
     mount: bare(Player.PlaybackRateMenu)
   },
+  // `chapters` lists the rungs; `currentTime` (via the derived current
+  // chapter, never read raw) marks the active one; `capabilities` gates on
+  // `chapters.status`.
+  ChaptersMenu: {
+    fields: new Set(['chapters', 'currentTime', 'capabilities']),
+    mount: bare(Player.ChaptersMenu)
+  },
   // Reads seven fields through one selector -- the shortcut layer has to know
   // every capability gate a bound key might act through, plus the values a
   // couple of those actions need (`muted`, `volume`, `selectedTextTrackId`,
@@ -717,17 +724,23 @@ const drivenTextTrack = Object.freeze({
   readiness: 'loaded' as const
 });
 
+// Two chapters, both present at baseline, spanning both the baseline and
+// driven `currentTime` (10 and 42 respectively -- see `DRIVEN_VALUE` below):
+// `ChaptersMenu` derives the current chapter from `currentTime`, and driving
+// `currentTime` alone (baseline's own two-chapter list is otherwise
+// untouched by that drive) has to move the derived chapter across the 0/20
+// boundary below for that declaration to prove anything.
 const baselineChapter = Object.freeze({
   id: 'c1',
   title: 'Intro',
   startTime: 0,
-  endTime: 10
+  endTime: 20
 });
 
 const drivenChapter = Object.freeze({
   id: 'c2',
   title: 'Part two',
-  startTime: 10,
+  startTime: 20,
   endTime: null
 });
 
@@ -783,7 +796,10 @@ const BASELINE_PATCH: ProviderStatePatch = {
   capabilities: baselineCapabilities,
   error: null,
   textTracks: [baselineTextTrack],
-  chapters: [baselineChapter],
+  // Both chapters present at baseline -- see the comment above
+  // `baselineChapter`/`drivenChapter` for why a currentTime-only drive
+  // needs both already in the list.
+  chapters: [baselineChapter, drivenChapter],
   selectedTextTrackId: null,
   captionRendering: 'custom',
   providerPosterUrl: null,

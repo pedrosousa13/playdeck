@@ -81,3 +81,9 @@ export const Quality = () => <Player.QualityMenu />;
 // consumer who wants both under one trigger; this is the standalone
 // primitive for a consumer who wants playback rate on its own.
 export const Rate = () => <Player.PlaybackRateMenu />;
+
+// The chapter list, already wired to the player's own chapters and current
+// playback position. Unlike `Quality` and `Rate`, `RateMenu` above has no
+// hand-composed chapters group alongside it -- this is the only way this
+// package exposes chapters navigation.
+export const Chapters = () => <Player.ChaptersMenu />;

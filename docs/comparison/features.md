@@ -50,7 +50,7 @@ Measured 2026-09-13 against `tests/compare`'s pinned installs:
 | Wistia                                              | yes[^91]      | yes[^92]      | no[^93]       | plugin[^94]   | no[^95]      | no[^96]            |
 | Other hosted providers (named)                      | no[^97]       | yes[^98]      | no[^99]       | plugin[^100]  | no[^101]     | yes[^102]          |
 | Audio tracks                                        | no[^103]      | no[^104]      | yes[^105]     | yes[^106]     | yes[^107]    | yes[^108]          |
-| Chapters                                            | partial[^109] | no[^110]      | yes[^111]     | partial[^112] | yes[^113]    | yes[^114]          |
+| Chapters                                            | yes[^109]     | no[^110]      | yes[^111]     | partial[^112] | yes[^113]    | yes[^114]          |
 | Thumbnails / preview on seek                        | no[^115]      | no[^116]      | yes[^117]     | yes[^118]     | plugin[^119] | yes[^120]          |
 | Playlists                                           | no[^121]      | no[^122]      | no[^123]      | no[^124]      | plugin[^125] | no[^126]           |
 | Ads / IMA                                           | no[^127]      | no[^128]      | no[^129]      | no[^130]      | plugin[^131] | no[^132]           |
@@ -281,7 +281,7 @@ Measured 2026-09-13 against `tests/compare`'s pinned installs:
 
 [^108]: **Audio tracks — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react` exports `AudioTrackRadioGroup`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
 
-[^109]: **Chapters — Playdeck**: partial. A `Chapter` collection is published on player state; no chapters navigation UI primitive ships. mechanical check: `@playdeck/core` exports `deriveChapters`. Source: CONTEXT.md, the 'Chapter' entry; packages/core/dist/index.d.ts
+[^109]: **Chapters — Playdeck**: yes. mechanical check: `@playdeck/react` exports `ChaptersMenu`. Source: packages/react/README.md
 
 [^110]: **Chapters — react-player**: no. Searched for `hapter`, which catches both `chapter` and `Chapter`. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `hapter`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 

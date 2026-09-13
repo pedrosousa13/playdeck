@@ -85,6 +85,7 @@ export const GUIDES = [
   { file: 'apps/storybook/stories/Captions.mdx', slug: 'captions' },
   { file: 'apps/storybook/stories/Quality.mdx', slug: 'quality' },
   { file: 'apps/storybook/stories/PlaybackRate.mdx', slug: 'playback-rate' },
+  { file: 'apps/storybook/stories/Chapters.mdx', slug: 'chapters' },
   { file: 'apps/storybook/stories/Theme.mdx', slug: 'theme' }
 ];
 
