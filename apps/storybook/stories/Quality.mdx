@@ -26,6 +26,12 @@ Two fields, and a menu needs both:
   "Auto (1080p)" — the two fields answer different questions, and a menu
   reading only one of them cannot show both.
 
+Whether the Auto row belongs in the menu at all is a separate question from
+either field: `capabilities.selectQualityAuto` says so, independently of
+`capabilities.selectQuality` — a provider can select real rungs without
+honouring `selectQuality(null)` for auto. See the **Capabilities matrix**
+guide's `selectQuality` section for which providers offer it.
+
 ## Which providers publish a ladder
 
 | Provider | `selectQuality`                  | Where the ladder comes from                           |
@@ -54,7 +60,8 @@ already means above.
 A preset assembly over `Player.SettingsMenu` / `Player.MenuRadioGroup` /
 `Player.MenuRadioItem`, in the same shape `Player.CaptionsMenu` takes over the
 same primitives: it renders nothing until `capabilities.selectQuality`
-resolves `available`, lists `qualities` plus the Auto row, marks the active
+resolves `available`, lists `qualities` plus the Auto row where
+`capabilities.selectQualityAuto` also resolves `available`, marks the active
 item from `selectedQualityId`, and issues `selectQuality` when an item is
 chosen.
 

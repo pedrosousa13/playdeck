@@ -22,6 +22,9 @@ renders nothing.
 | `Player.Time`             | — (display)                                           | always                                |
 | `Player.Controls`         | `seek`, `setVolume`, `fullscreen`, `pictureInPicture` | container; children gate individually |
 
+`Player.QualityMenu`'s Auto row carries a second, narrower gate of its own —
+`selectQualityAuto` — covered in the `selectQuality` section below.
+
 `airPlay` reports whether there is somewhere to cast to, resolved in this
 order (#71):
 
@@ -179,6 +182,28 @@ nothing.
 hls.js has an equivalent mode; both are reported as `selectedQualityId: null`
 instead, so a menu has one representation of "let the player choose" whichever
 provider is underneath.
+
+### `selectQualityAuto`: whether that representation is actually on offer
+
+`selectQuality` says whether a provider can select a rung at all; it does not
+say whether `selectQuality(null)` -- auto -- is one of the choices. The two
+came apart in practice: hls.js always honours `null` once it has a ladder
+(`currentLevel = -1` never fails), but Vimeo's `getQualities()` does not
+always carry an `auto` entry, and where it does not, `selectQuality(null)`
+resolves `{ ok: false, reason: 'unsupported' }` against a real ladder that
+otherwise selects fine. `PlayerCapabilities.selectQualityAuto` is the signal
+that tells the two cases apart, and `Player.QualityMenu`'s Auto row is gated
+on it rather than on `selectQuality` (#653) -- a menu built over the older,
+single capability would render a radio item that silently does nothing when
+a viewer chose it.
+
+| Provider | `selectQualityAuto`                                   |
+| -------- | ----------------------------------------------------- |
+| hls.js   | Mirrors `selectQuality` exactly -- see above          |
+| vimeo    | `available` only where the ladder has an `auto` entry |
+| native   | `unavailable`, reason `source` -- no ladder, no auto  |
+| youtube  | `unavailable`, reason `provider`                      |
+| wistia   | `unavailable`, reason `provider`                      |
 
 On Vimeo, the rung's `height` is Vimeo's own name for it, not a measurement:
 the rung it labels `240p` renders at 480×270. `width` and `bitrate` are `null`
