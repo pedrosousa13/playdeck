@@ -34,7 +34,7 @@ Measured 2026-09-13 against `tests/compare`'s pinned installs:
 | --------------------------------------------------- | ------------- | ------------- | ------------- | ------------- | ------------ | ------------------ |
 | Captions / text tracks                              | yes[^1]       | partial[^2]   | yes[^3]       | yes[^4]       | yes[^5]      | yes[^6]            |
 | Quality selection                                   | yes[^7]       | no[^8]        | yes[^9]       | yes[^10]      | partial[^11] | yes[^12]           |
-| Playback rate                                       | partial[^13]  | plugin[^14]   | yes[^15]      | yes[^16]      | yes[^17]     | yes[^18]           |
+| Playback rate                                       | yes[^13]      | plugin[^14]   | yes[^15]      | yes[^16]      | yes[^17]     | yes[^18]           |
 | Picture-in-picture                                  | yes[^19]      | partial[^20]  | yes[^21]      | yes[^22]      | yes[^23]     | yes[^24]           |
 | Fullscreen                                          | yes[^25]      | plugin[^26]   | yes[^27]      | yes[^28]      | yes[^29]     | yes[^30]           |
 | AirPlay                                             | yes[^31]      | no[^32]       | yes[^33]      | yes[^34]      | plugin[^35]  | yes[^36]           |
@@ -89,7 +89,7 @@ Measured 2026-09-13 against `tests/compare`'s pinned installs:
 
 [^12]: **Quality selection — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react` exports `QualityRadioGroup`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
 
-[^13]: **Playback rate — Playdeck**: partial. A `setPlaybackRate` command and capability exist; no dedicated playback-rate button or menu primitive ships. mechanical check: `@playdeck/core`'s `dist/types.d.ts` includes `readonly setPlaybackRate: Availability;`. Source: packages/core/dist/types.d.ts (`PlayerCommand`, `PlayerCapabilities.setPlaybackRate`)
+[^13]: **Playback rate — Playdeck**: yes. mechanical check: `@playdeck/react` exports `PlaybackRateMenu`. Source: packages/react/README.md
 
 [^14]: **Playback rate — react-player**: plugin. A `playbackRate` prop sets the rate (`dist/types.d.ts`); no playback-rate control ships in react-player's own code, and its README's "Custom player controls" section composes `<MediaPlaybackRateButton>` for one. Provider limit, not a status: the same README says the prop is "Only supported by YouTube, Wistia, and file paths". Plugin `media-chrome`: npm `repository` github.com/muxinc/media-chrome, third-party. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `PlaybackRateButton`. Source: react-player 3.4.0, node_modules/react-player/README.md (installed package), its "Custom player controls" section, which composes Media Chrome parts around a `<ReactPlayer slot="media">`
 

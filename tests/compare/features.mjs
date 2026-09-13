@@ -249,16 +249,13 @@ export const axes = [
     label: 'Playback rate',
     entries: {
       Playdeck: {
-        status: 'partial',
+        status: 'yes',
         anchor: {
-          kind: 'types',
-          module: '@playdeck/core',
-          path: 'dist/types.d.ts',
-          includes: 'readonly setPlaybackRate: Availability;'
+          kind: 'export',
+          module: '@playdeck/react',
+          name: 'PlaybackRateMenu'
         },
-        source:
-          'packages/core/dist/types.d.ts (`PlayerCommand`, `PlayerCapabilities.setPlaybackRate`)',
-        note: 'A `setPlaybackRate` command and capability exist; no dedicated playback-rate button or menu primitive ships.'
+        source: PLAYDECK_REACT_README
       },
       'react-player': {
         status: 'plugin',

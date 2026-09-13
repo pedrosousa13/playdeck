@@ -205,6 +205,7 @@ const reachesExport = (chunk, exportName) =>
  * - "captions rendering": `captions.tsx`'s entire export list -- `Captions`,
  *   `CaptionsButton`, `CaptionsMenu`.
  * - "quality selection": `quality.tsx`'s one export, `QualityMenu`.
+ * - "playback rate": `playback-rate.tsx`'s one export, `PlaybackRateMenu`.
  * - "every provider other than native": matched the same way `requiredChunk`
  *   below matches `provider-native` itself, by the package's own directory
  *   appearing in a reachable chunk's `moduleIds`. `requiredChunk` already
@@ -245,7 +246,26 @@ export const PLAY_ONLY_FORBIDDEN_MODULES = [
     // entry keeps the list's own stated convention -- every menu preset
     // named explicitly, the way `CaptionsMenu` already is -- rather than
     // being load-bearing on its own.
-    'QualityMenu'
+    'QualityMenu',
+    // Demonstrated red (docs/agents/demonstrated-red.md), recorded verbatim:
+    // temporarily importing `<Player.PlaybackRateMenu />` into
+    // tests/compare/entries/playdeck-play-only.tsx and running
+    // `node scripts/compare-libraries.mjs --check` produced:
+    //
+    //   Playdeck (play-only)'s reachable chunks reach SettingsMenu, which
+    //   this composition (core + primitives + native provider + one control
+    //   (PlayButton)) does not use.
+    //
+    // Reverting the import returned the check to
+    // "docs/comparison/results.md already matches a fresh run". Honest note,
+    // the same one QualityMenu's own entry above carries: the failure
+    // attributes to `SettingsMenu`, not to this entry -- PlaybackRateMenu is
+    // composed entirely of already-forbidden modules (SettingsMenu,
+    // MenuRadioGroup, MenuRadioItem), so the gate would have caught this
+    // violation with or without `'PlaybackRateMenu'` named here. This entry
+    // keeps the list's own stated convention -- every menu preset named
+    // explicitly -- rather than being load-bearing on its own.
+    'PlaybackRateMenu'
   ].map((name) => ({
     name,
     reachedBy: (/** @type {Chunk} */ chunk) => reachesExport(chunk, name)
