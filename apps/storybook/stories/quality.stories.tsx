@@ -60,7 +60,12 @@ export const List: Story = {
   play: async ({ canvas, userEvent }) => {
     const trigger = await canvas.findByRole('button', { name: 'Quality' });
     await userEvent.click(trigger);
-    const auto = await canvas.findByRole('menuitemradio', { name: 'Auto' });
+    // `quality: ladder[0]` (1080p) is what's playing, so the auto row's
+    // own label names it -- "Auto (1080p)", not plain "Auto" (`autoLabel` in
+    // quality.tsx).
+    const auto = await canvas.findByRole('menuitemradio', {
+      name: 'Auto (1080p)'
+    });
     const p1080 = canvas.getByRole('menuitemradio', { name: '1080p' });
     const p720 = canvas.getByRole('menuitemradio', { name: '720p' });
     const p480 = canvas.getByRole('menuitemradio', { name: '480p' });
