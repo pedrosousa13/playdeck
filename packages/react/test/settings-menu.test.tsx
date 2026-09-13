@@ -217,7 +217,7 @@ describe('SettingsMenu', () => {
     render(<Menu />);
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
     const item = (await screen.findAllByRole('menuitem'))[0];
-    // A `var()` read (#598), not the literal `44px` it used to be -- see
+    // A `var()` read (#622), not the literal `44px` it used to be -- see
     // `controlTargetStyle`'s own comment in `loading-error.tsx`.
     expect(item.style.minWidth).toBe(
       'var(--playdeck-control-min-size, 2.75rem)'

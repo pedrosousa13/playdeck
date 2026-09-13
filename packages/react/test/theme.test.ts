@@ -1188,7 +1188,7 @@ describe('theme.css overlay rules (not shared with docked.css)', () => {
     expect(query).not.toMatch(/data-idle/);
   });
 
-  // The row-two arithmetic (#598): five buttons plus the times overflowed
+  // The row-two arithmetic (#622): five buttons plus the times overflowed
   // 375px onto a third row at the desktop control size. `docked.css` carries
   // its own copy of this test, since the two files share no import.
   test('sizes the control bar for one row below 48rem', () => {
@@ -1230,7 +1230,7 @@ describe('theme.css overlay rules (not shared with docked.css)', () => {
     expect(query).toMatch(/volume-slider'\][^]*?display:\s*none/);
   });
 
-  // `pip-button` joins the volume slider under a coarse pointer (#598): a
+  // `pip-button` joins the volume slider under a coarse pointer (#622): a
   // touchscreen already offers picture-in-picture from its own system
   // chrome, so this is the one button a phone loses nothing by dropping --
   // and dropping it is what lets row two's remaining four buttons plus the
@@ -1251,7 +1251,7 @@ describe('theme.css overlay rules (not shared with docked.css)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// docked.css's own copy of the row-two arithmetic (#598). Not the parameterised
+// docked.css's own copy of the row-two arithmetic (#622). Not the parameterised
 // `describe.each` above: that suite's assertions are shared shape, and this one
 // is a query only this file carries -- `theme.css` was never docked to begin
 // with, so it needs no width-scoped sizing of its own; see this file's own
@@ -1304,7 +1304,7 @@ describe('docked.css phone sizing (not shared with theme.css)', () => {
     );
   });
 
-  // `pip-button` joins the volume slider under a coarse pointer (#598), the
+  // `pip-button` joins the volume slider under a coarse pointer (#622), the
   // same reasoning as `theme.css`'s own copy of this test.
   test('hides pip-button under a coarse pointer, alongside the volume slider', () => {
     const coarseQuery =

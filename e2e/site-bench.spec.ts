@@ -767,7 +767,7 @@ test('after a press, the live stats readout reports a real rendition', async ({
 });
 
 /**
- * The row-two overflow (#598), on the resting `theme` skin: at the desktop
+ * The row-two overflow (#622), on the resting `theme` skin: at the desktop
  * control size, five buttons plus the times overflowed 375px onto a third
  * row. `theme.css`'s "below 48rem" query fixes the arithmetic (2.5rem
  * buttons, no gap, trimmed padding) and hides `pip-button` under a coarse
@@ -779,7 +779,7 @@ test('after a press, the live stats readout reports a real rendition', async ({
  * a context with no touch would leave the volume slider in the row and
  * contradict the maintainer's own report from a real device.
  */
-test.describe('the phone control bar fits one row (#598)', () => {
+test.describe('the phone control bar fits one row (#622)', () => {
   test.use({
     viewport: { width: 360, height: 740 },
     hasTouch: true,

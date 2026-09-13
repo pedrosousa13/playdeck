@@ -2734,7 +2734,7 @@ control bar's idle fade — it fades while playing and returns on a tap or a
 keystroke — turned out to make the _floating_ bar a sound phone layout on
 its own, which removed the one reason a phone needed the bar out of the
 picture at all. `theme.css`'s "below 48rem" query now does sizing only — the
-row-two control-bar arithmetic from #598, a smaller control size and no gap so
+row-two control-bar arithmetic from #622, a smaller control size and no gap so
 five buttons plus the times fit one line — and `--playdeck-color-hairline`
 is no longer one this file reads — `docked.css` still declares it, for a
 reader who chooses that skin. The bench followed: `theme` rests at every

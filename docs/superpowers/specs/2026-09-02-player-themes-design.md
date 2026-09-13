@@ -197,7 +197,7 @@ a hit target would be worse than a taller bar.
 > **2026-09-04: reversed for the desktop-locked 44px claim.** Measured on a
 > real phone at 375px, "accepted rather than treated as a defect" turned out
 > to be the wrong call: five buttons plus the times overflowed onto a third
-> row on ordinary phone widths, not only at 320px (#598). `theme.css`'s
+> row on ordinary phone widths, not only at 320px (#622). `theme.css`'s
 > "below 48rem" query now sizes controls at 2.5rem (still clearing WCAG
 > 2.5.8's 24px floor) and hides `pip-button` under a coarse pointer instead
 > of accepting the wrap; "theme.css makes no attempt to move the bar out of

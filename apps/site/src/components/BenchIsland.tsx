@@ -370,7 +370,7 @@ const ControlBar = ({ fromKeyboardRef }: ControlBarProps) => {
  * library falls back to printing its own English wording for `children` that
  * are nullish, and this control's whole face is the picture behind it.
  *
- * ---- the reveal-only guard on a coarse pointer (2026-09-04, #598 follow-up) -
+ * ---- the reveal-only guard on a coarse pointer (2026-09-04, #622) ------
  *
  * A tap here also wakes the bar: `Viewport`'s idle-reset listener sits on
  * `pointerdown` and this button is inside it, so the same gesture that

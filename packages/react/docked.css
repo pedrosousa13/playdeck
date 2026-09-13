@@ -363,7 +363,7 @@
   }
 
   /* `pip-button` joins the volume slider here for the reason
-   * `theme.css`'s own copy of this rule records at length (#598): a coarse
+   * `theme.css`'s own copy of this rule records at length (#622): a coarse
    * pointer means a touchscreen, and every platform that ships one already
    * puts picture-in-picture in its own system chrome, so the in-bar
    * affordance is the one control a phone loses nothing by dropping -- and
@@ -513,7 +513,7 @@
 
   /* ---- below 48rem --------------------------------------------------------
    * This file docks at every width already, so nothing here moves the bar --
-   * only the row-two overflow (#598) that `theme.css`'s own copy of this
+   * only the row-two overflow (#622) that `theme.css`'s own copy of this
    * query fixes, restated for this file because it shares no import with
    * that one, and, as of 2026-09-04, the same trim to the bar's own height.
    * Same arithmetic, same WCAG 2.5.8 floors; see that file's comments for all
