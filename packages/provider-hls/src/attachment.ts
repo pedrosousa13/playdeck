@@ -228,6 +228,10 @@ export const createHlsAttachment = (
       if (destroyed || hls !== instance) return;
       audioTracks.handlers.onAudioTracksUpdated(instance, data);
     });
+    instance.on(HlsRuntime.Events.AUDIO_TRACK_SWITCHING, () => {
+      if (destroyed || hls !== instance) return;
+      audioTracks.handlers.onAudioTrackSwitching(instance);
+    });
     instance.on(HlsRuntime.Events.CUES_PARSED, (_event, data) => {
       if (destroyed || hls !== instance) return;
       textTracks.handlers.onCuesParsed(data);

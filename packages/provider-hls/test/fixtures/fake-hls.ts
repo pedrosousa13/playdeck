@@ -22,7 +22,8 @@ export class FakeHls implements HlsInstanceLike {
     SUBTITLE_TRACKS_UPDATED: 'hlsSubtitleTracksUpdated',
     SUBTITLE_TRACK_SWITCH: 'hlsSubtitleTrackSwitch',
     CUES_PARSED: 'hlsCuesParsed',
-    AUDIO_TRACKS_UPDATED: 'hlsAudioTracksUpdated'
+    AUDIO_TRACKS_UPDATED: 'hlsAudioTracksUpdated',
+    AUDIO_TRACK_SWITCHING: 'hlsAudioTrackSwitching'
   };
   static readonly ErrorTypes = {
     NETWORK_ERROR: 'networkError',
@@ -55,7 +56,6 @@ export class FakeHls implements HlsInstanceLike {
   swapAudioCodecCalls = 0;
   subtitleTracks: HlsSubtitleTrackLike[] = [];
   audioTracks: HlsAudioTrackLike[] = [];
-  audioTrack = -1;
   config: HlsConfigLike | undefined;
   readonly #listeners = new Map<string, Set<FakeHlsListener>>();
 
@@ -79,6 +79,24 @@ export class FakeHls implements HlsInstanceLike {
   set subtitleTrack(value: number) {
     this.#subtitleTrack = value;
     this.emit(FakeHls.Events.SUBTITLE_TRACK_SWITCH, { id: value });
+  }
+
+  // Mirrors the real hls.js `audioTrack` getter/setter
+  // (`AudioTrackController.setAudioTrack`): switching tracks fires
+  // `AUDIO_TRACK_SWITCHING`, the event that settles a selection -- both an
+  // explicit one and the internal default pick a real engine makes for
+  // itself (`AudioTrackController.switchLevel`), which happens *after*
+  // `AUDIO_TRACKS_UPDATED` has already reached a listener -- see
+  // audio-tracks.ts's header comment.
+  #audioTrack = -1;
+
+  get audioTrack(): number {
+    return this.#audioTrack;
+  }
+
+  set audioTrack(value: number) {
+    this.#audioTrack = value;
+    this.emit(FakeHls.Events.AUDIO_TRACK_SWITCHING, { id: value });
   }
 
   emitSubtitleTracksUpdated = (): void => {

@@ -200,17 +200,43 @@ test('keeps native audio-track state out of the hls.js engine path so hls.js is 
   });
 
   const hls = currentFakeHls();
-  // A real engine resolves its own default-track selection internally before
-  // `AUDIO_TRACKS_UPDATED` reaches a listener; the fake has no such mechanism,
-  // so the index it would have settled on is set directly here.
-  hls.audioTrack = 0;
   discoverHlsAudio(hls, [
     { id: 0, name: 'English', lang: 'en', default: true }
   ]);
+  // A real engine resolves its own default-track selection *after*
+  // `AUDIO_TRACKS_UPDATED` has already reached a listener
+  // (`AudioTrackController.switchLevel` triggers that event, then
+  // conditionally calls `setAudioTrack`) -- see audio-tracks.ts's header
+  // comment -- so it settles here, on the following `AUDIO_TRACK_SWITCHING`.
+  hls.audioTrack = 0;
 
   const afterHls = latest(patches);
   expect(afterHls.audioTracks).toEqual([
     { id: 'hls:0', label: 'English', language: 'en', active: true }
+  ]);
+});
+
+test('reports every track inactive on AUDIO_TRACKS_UPDATED alone, and settles the default on the following AUDIO_TRACK_SWITCHING', async () => {
+  const { patches, hls } = await mountHlsEngineHls();
+
+  discoverHlsAudio(hls, [
+    { id: 0, name: 'English', lang: 'en', default: true },
+    { id: 1, name: 'Spanish', lang: 'es', default: false }
+  ]);
+
+  // `hls.audioTrack` (the getter over `AudioTrackController.trackId`) is
+  // still -1 at this point on a real engine: `switchLevel` triggers
+  // `AUDIO_TRACKS_UPDATED` before it resolves a default track, not after.
+  expect(latest(patches).audioTracks).toEqual([
+    { id: 'hls:0', label: 'English', language: 'en', active: false },
+    { id: 'hls:1', label: 'Spanish', language: 'es', active: false }
+  ]);
+
+  hls.audioTrack = 0;
+
+  expect(latest(patches).audioTracks).toEqual([
+    { id: 'hls:0', label: 'English', language: 'en', active: true },
+    { id: 'hls:1', label: 'Spanish', language: 'es', active: false }
   ]);
 });
 

@@ -33,9 +33,13 @@ export type HlsAudioTracksDeps = {
 // packages/provider-hls/src/text-tracks.ts's manifest-settle-then-list-update
 // shape, minus a cues pipeline -- an audio track carries nothing to window to
 // the current time -- and minus a held "explicitly selected" flag: `active`
-// is read straight off the live `instance.audioTrack` on every rebuild, which
-// hls.js keeps pointed at the still-selected track across a later
-// `AUDIO_TRACKS_UPDATED` the same way it does for `subtitleTrack`. The host
+// is rebuilt from the live `instance.audioTrack` on every rebuild, but that
+// getter is not settled yet when `AUDIO_TRACKS_UPDATED` fires --
+// `AudioTrackController.switchLevel` triggers that event before it resolves
+// a default track, so a rebuild driven by it alone reads every track as
+// inactive. `AUDIO_TRACK_SWITCHING` is what carries the settled selection,
+// for both that internal default pick and an explicit `selectAudioTrack`,
+// mirroring `SUBTITLE_TRACK_SWITCH`'s role for `subtitleTrack`. The host
 // wires `handlers` to the engine's events, guarding staleness itself.
 export type HlsAudioTracks = {
   readonly selectAudioTrack: (id: string) => Promise<CommandResult>;
@@ -55,6 +59,13 @@ export type HlsAudioTracks = {
     readonly onAudioTracksUpdated: (
       instance: Pick<HlsInstanceLike, 'audioTrack' | 'audioTracks'>,
       data: unknown
+    ) => void;
+    // Rebuilds `active` from the now-settled `instance.audioTrack`, for both
+    // hls.js's own default-track pick and an explicit `selectAudioTrack` --
+    // see this file's header comment for why `AUDIO_TRACKS_UPDATED` alone
+    // cannot answer this.
+    readonly onAudioTrackSwitching: (
+      instance: Pick<HlsInstanceLike, 'audioTrack'>
     ) => void;
   };
 };
@@ -79,12 +90,10 @@ export const createHlsAudioTracks = ({
       }
       const index = hlsAudioTrackList.findIndex((track) => track.id === id);
       if (index === -1) return { ok: false, reason: 'unsupported' };
+      // `AUDIO_TRACK_SWITCHING` fires synchronously off this assignment (both
+      // in real hls.js and in the fake), and `onAudioTrackSwitching` is the
+      // sole writer of `active` -- see this file's header comment.
       instance.audioTrack = index;
-      hlsAudioTrackList = hlsAudioTrackList.map((track, trackIndex) => ({
-        ...track,
-        active: trackIndex === index
-      }));
-      emit({ audioTracks: hlsAudioTrackList, ...capabilitiesPatch() });
       return { ok: true };
     },
     selectAudioTrackAvailability: () => selectAudioTrackAvailability,
@@ -127,6 +136,17 @@ export const createHlsAudioTracks = ({
           hlsAudioTrackList.length > 0
             ? { status: 'available' }
             : { status: 'unavailable', reason: 'source' };
+        emit({
+          audioTracks: hlsAudioTrackList,
+          ...capabilitiesPatch()
+        });
+      },
+      onAudioTrackSwitching: (instance) => {
+        const activeIndex = instance.audioTrack;
+        hlsAudioTrackList = hlsAudioTrackList.map((track, index) => ({
+          ...track,
+          active: index === activeIndex
+        }));
         emit({
           audioTracks: hlsAudioTrackList,
           ...capabilitiesPatch()

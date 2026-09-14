@@ -104,6 +104,7 @@ export type HlsConstructorLike = {
     readonly SUBTITLE_TRACK_SWITCH: string;
     readonly CUES_PARSED: string;
     readonly AUDIO_TRACKS_UPDATED: string;
+    readonly AUDIO_TRACK_SWITCHING: string;
   };
   readonly ErrorTypes: {
     readonly NETWORK_ERROR: string;

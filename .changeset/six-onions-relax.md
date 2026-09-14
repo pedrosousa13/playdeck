@@ -26,8 +26,12 @@ list at all; Firefox and Safari do.
 on that engine, settled the same way subtitle-track support is: from the
 manifest on `MANIFEST_PARSED` (which tells a build without the alternate-audio
 controller apart from a source with no alternate-audio renditions at all),
-then from `AUDIO_TRACKS_UPDATED` once the tracks themselves are in hand. On
-native HLS it answers from the media element, through the same seam
+then from `AUDIO_TRACKS_UPDATED` once the tracks themselves are in hand. Each
+entry's `active` flag is settled from hls.js's own `AUDIO_TRACK_SWITCHING`
+rather than `AUDIO_TRACKS_UPDATED` alone: hls.js fires the latter before it
+resolves a default track, so reading `active` off it by itself reported every
+track — including the eventual default — as inactive. On native HLS it
+answers from the media element, through the same seam
 `@playdeck/provider-native` exposes.
 
 `@playdeck/provider-vimeo`, `@playdeck/provider-youtube` and
