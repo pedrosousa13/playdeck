@@ -142,7 +142,11 @@ describe('Player.AudioTrackMenu', () => {
   // for a native adapter that incorrectly reported the capability. Ran:
   //
   //   AssertionError: expected <div …(3)>…(1)</div> to be null // Object.is equality
-  //    ❯ test/audio-tracks.test.tsx:167:7
+  //    ❯ packages/react/test/audio-tracks.test.tsx:161:7
+  //      159|     expect(
+  //      160|       container.querySelector('[data-playdeck-part="settings-menu-root…
+  //      161|     ).toBe(null);
+  //         |       ^
   //
   //   Test Files  1 failed | 26 passed (27)
   //        Tests  1 failed | 669 passed (670)
@@ -193,7 +197,12 @@ describe('Player.AudioTrackMenu', () => {
   // exists to catch) and this file run:
   //
   //   AssertionError: expected [ 'true', 'false' ] to deeply equal [ 'false', 'true' ]
-  //    ❯ test/audio-tracks.test.tsx:203:68
+  //    ❯ packages/react/test/audio-tracks.test.tsx:217:68
+  //      215|       container.querySelectorAll('[role="menuitemradio"]')
+  //      216|     );
+  //      217|     expect(items.map((item) => item.getAttribute('aria-checked'))).toE…
+  //         |                                                                    ^
+  //      218|       'false',
   //
   //   Test Files  1 failed | 26 passed (27)
   //        Tests  1 failed | 669 passed (670)
