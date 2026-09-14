@@ -9,7 +9,7 @@ Every primitive exposes a stable styling/testing contract via data attributes.
 - **`data-playdeck-part`** — the stable name of a part: one named element in the
   rendered DOM (`play-button`, `mute-button`, `volume-slider`, `seek-slider` /
   `seek-slider-input` / `seek-buffered` / `seek-buffered-range` /
-  `seek-progress` / `seek-buffered-description`, `fullscreen-button`, `pip-button`,
+  `seek-progress` / `seek-buffered-description` / `thumbnail`, `fullscreen-button`, `pip-button`,
   `airplay-button`, `time`, `controls`, `poster`, `poster-image`,
   `loading-indicator`, `activation`, `viewport`, `media`, `error` /
   `error-message` / `error-retry`, `notice` / `notice-message`, `captions` /
@@ -119,6 +119,21 @@ Every primitive exposes a stable styling/testing contract via data attributes.
   attribute, because nothing it draws sits over the picture.
   Written straight to the DOM rather than through player state, like the
   aspect-ratio property below, so going idle and coming back re-renders nothing.
+- **`thumbnail`** is `SeekSlider`'s opt-in seek-preview crop, present only
+  while its `thumbnails` prop resolves to a permitted URL. `data-state` is
+  `hidden` or `visible`, mirroring `poster`'s own vocabulary for the same
+  reason: the part stays mounted through every hover start and stop rather
+  than mounting and unmounting with each one, so a theme can transition
+  between the two `data-state`s instead of a hard pop. It reads `visible`
+  only once there is an actual image behind it -- a resolved cue at the
+  previewed time, and that cue's own image URL permitted -- and `hidden` for
+  every other reason there is nothing to show: no hover or focus is active,
+  the WebVTT file has not loaded yet, no cue covers that time, or the cue's
+  image was refused. The previewed time is the pointer's position while a
+  pointer is over the slider, else the input's own current value while it
+  holds keyboard focus, else there is no preview; a pointer active at the
+  same time as focus wins. `aria-hidden="true"`, like `seek-buffered` above
+  it -- decorative geometry, never a live region.
 
 Style and query against these attributes rather than internal class names.
 
