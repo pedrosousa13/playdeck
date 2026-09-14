@@ -11,6 +11,27 @@ const mountedHlsEngine = async (page: Page) => {
   return engine;
 };
 
+// Demonstrated red (docs/agents/demonstrated-red.md), substitute mutation:
+// additive code has no natural unfixed state, so `MenuRadioGroup`'s
+// `onValueChange` in audio-tracks.tsx was replaced with a no-op (dropping
+// the `controller.selectAudioTrack(value)` call), and this test run against
+// it (chromium):
+//
+//   Error: expect(locator).toHaveAttribute(expected) failed
+//   Locator:  getByRole('group').getByRole('menuitemradio', { name: 'Español', exact: true })
+//   Expected: "true"
+//   Received: "false"
+//   Timeout:  5000ms
+//   Call log:
+//     - Expect "toHaveAttribute" with timeout 5000ms
+//     - waiting for getByRole('group').getByRole('menuitemradio', { name: 'Español', exact: true })
+//       14 × locator resolved to <button …aria-checked="false"…>…</button>
+//          - unexpected value "false"
+//
+//   1 failed
+//     [chromium] › e2e/audio-tracks.spec.ts:30:1 › lists both alternate-audio renditions, driven end-to-end on hls.js (8.2s)
+//
+// Reverted, and it passed again (3.2s).
 test('lists both alternate-audio renditions, driven end-to-end on hls.js', async ({
   browserName,
   page
@@ -48,11 +69,16 @@ test('lists both alternate-audio renditions, driven end-to-end on hls.js', async
     .click();
 
   await audioTrackTrigger(page).click();
+  const reopened = page.getByRole('group');
   await expect(
-    page
-      .getByRole('group')
-      .getByRole('menuitemradio', { name: 'Español', exact: true })
+    reopened.getByRole('menuitemradio', { name: 'Español', exact: true })
   ).toHaveAttribute('aria-checked', 'true');
+  // The provider is expected to enforce exclusivity itself (see the comment
+  // above `activeId`, audio-tracks.tsx) -- this is what actually tests it,
+  // rather than only checking the row that was clicked.
+  await expect(
+    reopened.getByRole('menuitemradio', { name: 'English', exact: true })
+  ).toHaveAttribute('aria-checked', 'false');
 });
 
 // Demonstrated red (docs/agents/demonstrated-red.md), substitute mutation:
@@ -65,9 +91,26 @@ test('lists both alternate-audio renditions, driven end-to-end on hls.js', async
 //     - waiting for locator('[data-playdeck-part="settings-menu-trigger"][aria-label="Audio track"]')
 //
 //   1 failed
-//     [chromium] › e2e/audio-tracks.spec.ts:58:1 › opens and selects a track by keyboard, focus returning to the trigger
+//     [chromium] › e2e/audio-tracks.spec.ts:97:1 › opens and selects a track by keyboard, focus returning to the trigger (30.0s)
 //
-// Reverted, and it passed again (7.5s).
+// Reverted, and it passed again (3.2s).
+//
+// That mutation only proves the trigger exists; it says nothing about
+// whether `End` actually moves roving focus, which is what
+// `expect(selectedLabel).toBe('Español')` below exists to catch. Demonstrated
+// separately: `SettingsMenu`'s `case 'End'` handler in settings-menu.tsx
+// changed to focus `items[0]` instead of `items[items.length - 1]` (focus
+// never leaves the first, already-active item), and this test run against
+// it (chromium):
+//
+//   Error: expect(received).toBe(expected) // Object.is equality
+//   Expected: "Español"
+//   Received: "English"
+//
+//   1 failed
+//     [chromium] › e2e/audio-tracks.spec.ts:97:1 › opens and selects a track by keyboard, focus returning to the trigger (3.1s)
+//
+// Reverted, and it passed again.
 test('opens and selects a track by keyboard, focus returning to the trigger', async ({
   browserName,
   page
@@ -96,6 +139,11 @@ test('opens and selects a track by keyboard, focus returning to the trigger', as
   await expect(page.getByRole('menuitemradio')).toHaveCount(2);
   await page.keyboard.press('End');
   const selectedLabel = (await page.locator(':focus').textContent())?.trim();
+  // English renders first and is already active, so without this the test
+  // cannot tell End moving focus from End doing nothing -- unlike
+  // `e2e/quality.spec.ts`'s own keyboard test, there is no Auto row here to
+  // guarantee the last item differs from the first.
+  expect(selectedLabel).toBe('Español');
   await page.keyboard.press('Enter');
 
   // Selecting closes the menu and returns focus to the trigger, the same
@@ -108,23 +156,28 @@ test('opens and selects a track by keyboard, focus returning to the trigger', as
   ).toHaveAttribute('aria-checked', 'true');
 });
 
-// Demonstrated red, substitute mutation (per /review: the natural red
-// baseline -- no <Player.AudioTrackMenu/> composed at all -- passes
-// vacuously, since "renders nothing" is also what an unbuilt feature does;
-// this only discriminates under a mutation that removes the capability
-// gate). Deleted `if (status !== 'available') return null;` from
-// audio-tracks.tsx, so the trigger renders regardless of capability, and ran
-// this test on chromium:
+// Demonstrated red, substitute mutation. The natural red baseline -- no
+// <Player.AudioTrackMenu/> composed at all -- would pass vacuously, since
+// "renders nothing" is also what an unbuilt feature does; this only
+// discriminates under a mutation that removes the capability gate instead.
+// Deleted `if (status !== 'available') return null;` from audio-tracks.tsx,
+// so the trigger renders regardless of capability, and ran this test on
+// chromium:
 //
 //   Error: expect(locator).toHaveCount(expected) failed
 //   Locator:  locator('[data-playdeck-part="settings-menu-trigger"][aria-label="Audio track"]')
 //   Expected: 0
 //   Received: 1
+//   Call log:
+//     - Expect "toHaveCount" with timeout 5000ms
+//     - waiting for locator('[data-playdeck-part="settings-menu-trigger"][aria-label="Audio track"]')
+//       14 × locator resolved to 1 element
+//          - unexpected value "1"
 //
 //   1 failed
-//     [chromium] › e2e/audio-tracks.spec.ts:98:1 › renders nothing on a native MP4 source
+//     [chromium] › e2e/audio-tracks.spec.ts:176:1 › renders nothing on a native MP4 source (7.9s)
 //
-// Reverted, and it passed again.
+// Reverted, and it passed again (2.8s).
 test('renders nothing on a native MP4 source', async ({ page }) => {
   await page.goto(
     '/iframe.html?id=fixtures-playerfixture--native-mp-4&viewMode=story'
