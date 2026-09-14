@@ -22,6 +22,7 @@ export const freezeCapabilities = (
     selectQuality: freezeAvailability(capabilities.selectQuality),
     selectQualityAuto: freezeAvailability(capabilities.selectQualityAuto),
     selectTextTrack: freezeAvailability(capabilities.selectTextTrack),
+    selectAudioTrack: freezeAvailability(capabilities.selectAudioTrack),
     chapters: freezeAvailability(capabilities.chapters),
     fullscreen: freezeAvailability(capabilities.fullscreen),
     pictureInPicture: freezeAvailability(capabilities.pictureInPicture),

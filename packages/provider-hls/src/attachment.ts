@@ -1,6 +1,9 @@
 import type { CommandResult, HlsSource, PlayerError } from '@playdeck/core';
 import type { NativeProviderAdapter } from '@playdeck/provider-native';
-import { hlsBuildSupportsSubtitles } from './adapter-values.js';
+import {
+  hlsBuildSupportsAudioTracks,
+  hlsBuildSupportsSubtitles
+} from './adapter-values.js';
 import type {
   EmitProviderState,
   HlsConstructorLike,
@@ -8,6 +11,7 @@ import type {
   HlsInstanceLike,
   HlsModuleLoader
 } from './adapter-values.js';
+import type { HlsAudioTracks } from './audio-tracks.js';
 import type { HlsErrorRecovery } from './error-recovery.js';
 import type { HlsQualityLevels } from './quality-levels.js';
 import type { HlsTextTracks } from './text-tracks.js';
@@ -17,6 +21,7 @@ export type HlsAttachmentDeps = {
   readonly loadHls: HlsModuleLoader;
   readonly native: Pick<NativeProviderAdapter, 'attach' | 'load' | 'destroy'>;
   readonly textTracks: Pick<HlsTextTracks, 'handlers' | 'destroy'>;
+  readonly audioTracks: Pick<HlsAudioTracks, 'handlers'>;
   readonly qualityLevels: Pick<
     HlsQualityLevels,
     'prepareForStart' | 'refresh' | 'onLevelSwitched'
@@ -69,6 +74,7 @@ export const createHlsAttachment = (
     loadHls,
     native,
     textTracks,
+    audioTracks,
     qualityLevels,
     errorRecovery,
     surfaceFatal,
@@ -194,12 +200,14 @@ export const createHlsAttachment = (
       qualityLevels.onLevelSwitched(instance, data);
     });
     const buildSupportsSubtitles = hlsBuildSupportsSubtitles(HlsRuntime);
+    const buildSupportsAudioTracks = hlsBuildSupportsAudioTracks(HlsRuntime);
     instance.on(HlsRuntime.Events.MANIFEST_PARSED, (_event, data) => {
       if (destroyed || hls !== instance) return;
       // Text tracks before the ladder: the manifest's answer about subtitles is
       // final at this point, while the ladder is still being refreshed, so the
       // settled fact is published before the moving one.
       textTracks.handlers.onManifestParsed(data, buildSupportsSubtitles);
+      audioTracks.handlers.onManifestParsed(data, buildSupportsAudioTracks);
       qualityLevels.refresh(instance);
     });
     instance.on(HlsRuntime.Events.LEVELS_UPDATED, () => {
@@ -215,6 +223,14 @@ export const createHlsAttachment = (
     instance.on(HlsRuntime.Events.SUBTITLE_TRACKS_UPDATED, (_event, data) => {
       if (destroyed || hls !== instance) return;
       textTracks.handlers.onSubtitleTracksUpdated(instance, data);
+    });
+    instance.on(HlsRuntime.Events.AUDIO_TRACKS_UPDATED, (_event, data) => {
+      if (destroyed || hls !== instance) return;
+      audioTracks.handlers.onAudioTracksUpdated(instance, data);
+    });
+    instance.on(HlsRuntime.Events.AUDIO_TRACK_SWITCHING, () => {
+      if (destroyed || hls !== instance) return;
+      audioTracks.handlers.onAudioTrackSwitching(instance);
     });
     instance.on(HlsRuntime.Events.CUES_PARSED, (_event, data) => {
       if (destroyed || hls !== instance) return;

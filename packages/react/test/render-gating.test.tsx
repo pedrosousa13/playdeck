@@ -588,6 +588,7 @@ const DRIVEN_FIELDS = [
   'capabilities',
   'error',
   'textTracks',
+  'audioTracks',
   'chapters',
   'selectedTextTrackId',
   'captionRendering',
@@ -665,6 +666,7 @@ const ALL_PLAYER_STATE_FIELDS: Record<keyof PlayerState, true> = {
   capabilities: true,
   error: true,
   textTracks: true,
+  audioTracks: true,
   chapters: true,
   selectedTextTrackId: true,
   captionRendering: true,
@@ -685,6 +687,7 @@ const baselineCapabilities: PlayerCapabilities = {
   selectQuality: available,
   selectQualityAuto: available,
   selectTextTrack: available,
+  selectAudioTrack: available,
   chapters: available,
   fullscreen: available,
   pictureInPicture: available,
@@ -700,6 +703,7 @@ const drivenCapabilities: PlayerCapabilities = {
   selectQuality: unavailable,
   selectQualityAuto: unavailable,
   selectTextTrack: unavailable,
+  selectAudioTrack: unavailable,
   chapters: unavailable,
   fullscreen: unavailable,
   pictureInPicture: unavailable,
@@ -722,6 +726,20 @@ const drivenTextTrack = Object.freeze({
   language: 'fr',
   kind: 'subtitles' as const,
   readiness: 'loaded' as const
+});
+
+const baselineAudioTrack = Object.freeze({
+  id: 'en',
+  label: 'English',
+  language: 'en',
+  active: true
+});
+
+const drivenAudioTrack = Object.freeze({
+  id: 'fr',
+  label: 'French',
+  language: 'fr',
+  active: true
 });
 
 // Two chapters, both present at baseline, spanning both the baseline and
@@ -796,6 +814,7 @@ const BASELINE_PATCH: ProviderStatePatch = {
   capabilities: baselineCapabilities,
   error: null,
   textTracks: [baselineTextTrack],
+  audioTracks: [baselineAudioTrack],
   // Both chapters present at baseline -- see the comment above
   // `baselineChapter`/`drivenChapter` for why a currentTime-only drive
   // needs both already in the list.
@@ -842,6 +861,7 @@ const DRIVEN_VALUE: {
     message: 'boom'
   },
   textTracks: [drivenTextTrack],
+  audioTracks: [drivenAudioTrack],
   chapters: [drivenChapter],
   selectedTextTrackId: 'en',
   captionRendering: 'native',

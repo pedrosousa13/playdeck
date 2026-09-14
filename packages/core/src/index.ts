@@ -1,4 +1,5 @@
 export type {
+  AudioTrack,
   AutoplayConfigurationOptions,
   AutoplayMode,
   Availability,

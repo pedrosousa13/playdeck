@@ -73,6 +73,9 @@ const fixedCapabilities = {
   // Selection itself is unavailable, so there is no auto mode to offer
   // alongside it either.
   selectQualityAuto: providerUnavailable,
+  // The IFrame Player API documents no audio-track method and no
+  // audio-track event, so this is a verdict rather than an 'unknown'.
+  selectAudioTrack: providerUnavailable,
   // The IFrame Player API documents no chapter method and no chapter event,
   // and the Data API's video resource has no chapter property either. Nothing
   // resolves this later, so it is a verdict rather than an 'unknown' (#182).

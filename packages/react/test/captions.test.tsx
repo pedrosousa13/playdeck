@@ -93,6 +93,7 @@ const withSelectTextTrack = (status: Availability): PlayerCapabilities => ({
   selectQuality: notReadyAvailability,
   selectQualityAuto: notReadyAvailability,
   selectTextTrack: status,
+  selectAudioTrack: notReadyAvailability,
   chapters: notReadyAvailability,
   fullscreen: notReadyAvailability,
   pictureInPicture: notReadyAvailability,

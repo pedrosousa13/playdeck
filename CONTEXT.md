@@ -197,6 +197,25 @@ at all. No provider reports where a chapter ends, so every end is derived: each
 chapter ends where the next begins, and the last where the media does.
 _Avoid_: segment, marker, cue point
 
+**Audio track**:
+One selectable audio rendition, published as an ordered collection whose
+entries carry their own selection (`active`) rather than a sibling
+`selectedId` field on player state, the shape a text track's
+`selectedTextTrackId` and a quality's `selectedQualityId` both use. The split
+follows the underlying surfaces rather than inventing one: hls.js's own
+audio-tracks controller enforces "at most one enabled" on the track itself,
+with no separate selection slot to mirror. The DOM's own `AudioTrackList`
+carries no such guarantee for audio -- unlike `VideoTrackList`, it permits
+more than one track enabled at once -- so the native provider enforces that
+same exclusivity itself on selection, keeping both providers answering from
+the same per-entry shape. The native provider answers from `AudioTrackList`
+where the browser exposes it and reports unavailable (`browser`) where it
+does not; the HLS provider answers from hls.js's own audio tracks on that
+engine and from the media element on native HLS.
+_Avoid_: alternate audio -- HLS's and hls.js's own manifest term for the same
+renditions (`EXT-X-MEDIA:TYPE=AUDIO`); the right word when describing the
+manifest, not this player-state concept
+
 ### Loading
 
 **Activation**:

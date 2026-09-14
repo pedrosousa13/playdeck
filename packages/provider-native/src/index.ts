@@ -11,6 +11,10 @@ import {
   type EmitProviderState
 } from './adapter-values.js';
 import {
+  createNativeAudioTracks,
+  type NativeAudioTracks
+} from './audio-tracks.js';
+import {
   createNativePlayback,
   type NativePlaybackOptions
 } from './playback.js';
@@ -106,6 +110,12 @@ export const createNativeProvider = (
     mediaCapabilities()
   );
 
+  const audioTracks: NativeAudioTracks = createNativeAudioTracks(
+    media,
+    emit,
+    () => mediaCapabilities()
+  );
+
   function mediaCapabilities(): PlayerCapabilities {
     return {
       seek: available,
@@ -120,6 +130,7 @@ export const createNativeProvider = (
       // No ladder means no auto mode to offer either.
       selectQualityAuto: { status: 'unavailable', reason: 'source' },
       selectTextTrack: textTracks.selectTextTrackAvailability(),
+      selectAudioTrack: audioTracks.selectAudioTrackAvailability(),
       chapters: textTracks.chaptersAvailability(),
       fullscreen: presentation.fullscreenAvailability(),
       pictureInPicture: presentation.pictureInPictureAvailability(),
@@ -135,6 +146,7 @@ export const createNativeProvider = (
     playback,
     presentation,
     textTracks,
+    audioTracks,
     clearStateListeners: () => listeners.clear()
   });
 
@@ -164,6 +176,7 @@ export const createNativeProvider = (
     showAirPlayPicker: presentation.showAirPlayPicker,
     retry: playback.retry,
     selectTextTrack: textTracks.selectTextTrack,
-    setCaptionRenderer: textTracks.setCaptionRenderer
+    setCaptionRenderer: textTracks.setCaptionRenderer,
+    selectAudioTrack: audioTracks.selectAudioTrack
   };
 };

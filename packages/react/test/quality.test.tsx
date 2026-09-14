@@ -88,6 +88,7 @@ const withSelectQuality = (
   selectQuality: status,
   selectQualityAuto: autoStatus,
   selectTextTrack: notReadyAvailability,
+  selectAudioTrack: notReadyAvailability,
   chapters: notReadyAvailability,
   fullscreen: notReadyAvailability,
   pictureInPicture: notReadyAvailability,
