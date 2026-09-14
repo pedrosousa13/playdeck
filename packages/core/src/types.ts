@@ -78,10 +78,12 @@ export type TextTrack = {
 // One selectable audio rendition, published as an ordered collection with its
 // own selection carried on each entry rather than in a sibling
 // `selectedAudioTrackId` field, the shape `TextTrack`/`selectedTextTrackId`
-// and `PlayerQuality`/`selectedQualityId` both use. The DOM's own
-// `AudioTrackList` and hls.js's own audio-tracks surface both enforce "at
-// most one enabled" on the track itself, with no separate selection slot to
-// mirror.
+// and `PlayerQuality`/`selectedQualityId` both use. hls.js's own audio-tracks
+// controller enforces "at most one enabled" on the track itself, with no
+// separate selection slot to mirror; the DOM's own `AudioTrackList` carries
+// no such guarantee for audio, so the native provider enforces that same
+// exclusivity itself on selection, keeping both providers answering from the
+// same per-entry shape.
 export type AudioTrack = {
   readonly id: string;
   readonly label: string;

@@ -111,7 +111,7 @@ export type HlsConstructorLike = {
     readonly MEDIA_ERROR: string;
   };
   // Read by `hlsBuildSupportsSubtitles`/`hlsBuildSupportsAudioTracks` alone,
-  // and optional because a build that exposes neither field is treated as
+  // and optional because a build exposing no `DefaultConfig` at all reads as
   // capable rather than as incapable.
   readonly DefaultConfig?: {
     readonly subtitleTrackController?: unknown;

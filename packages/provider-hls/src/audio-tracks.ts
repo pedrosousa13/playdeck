@@ -91,8 +91,10 @@ export const createHlsAudioTracks = ({
       const index = hlsAudioTrackList.findIndex((track) => track.id === id);
       if (index === -1) return { ok: false, reason: 'unsupported' };
       // `AUDIO_TRACK_SWITCHING` fires synchronously off this assignment (both
-      // in real hls.js and in the fake), and `onAudioTrackSwitching` is the
-      // sole writer of `active` -- see this file's header comment.
+      // in real hls.js and in the fake); `onAudioTrackSwitching` rebuilds
+      // `active` from it rather than this method remapping it itself -- see
+      // this file's header comment. `handlers.onAudioTracksUpdated` also
+      // writes `active`, on a full track-list rebuild.
       instance.audioTrack = index;
       return { ok: true };
     },

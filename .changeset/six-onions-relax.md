@@ -11,11 +11,14 @@ could not tell whether a source carried alternate audio, let alone switch
 between renditions. `@playdeck/core` gains `PlayerState.audioTracks`, each
 entry carrying an `id`, a `label`, a `language`, and its own `active` flag —
 unlike a text track or a quality rung, an audio track's selection lives on
-the entry itself rather than in a sibling `selectedId` field, because the
-underlying surfaces already enforce "at most one enabled" on the track and
-leave no separate slot to mirror. `selectAudioTrack(id)` follows the existing
-refusal semantics every other command does, and `capabilities.selectAudioTrack`
-uses the existing `Availability` vocabulary.
+the entry itself rather than in a sibling `selectedId` field: hls.js's own
+audio-tracks controller already enforces "at most one enabled" on the track,
+and `@playdeck/provider-native` enforces that same exclusivity itself for the
+DOM's `AudioTrackList` (which otherwise permits more than one track enabled
+at once), leaving no separate slot to mirror either way.
+`selectAudioTrack(id)` follows the existing refusal semantics every other
+command does, and `capabilities.selectAudioTrack` uses the existing
+`Availability` vocabulary.
 
 `@playdeck/provider-native` answers from the media element's (non-standard,
 browser-dependent) `AudioTrackList` where it is exposed, and reports
