@@ -519,7 +519,7 @@ the global listener.
 
 `SettingsMenu`, `SettingsMenuTrigger`, `SettingsMenuContent`, `MenuItem`,
 `MenuRadioGroup`, `MenuRadioItem`, `CaptionsMenu`, `QualityMenu`,
-`PlaybackRateMenu`, `ChaptersMenu`.
+`PlaybackRateMenu`, `ChaptersMenu`, `AudioTrackMenu`.
 
 `SettingsMenu` and the menu parts are also the building blocks the reference
 example below composes quality and playback rate from by hand, alongside one
@@ -528,7 +528,11 @@ another, for a consumer who wants both under one trigger. `QualityMenu`,
 consumer who wants one on its own, the same way `CaptionsMenu` is for
 captions — covered in [**Quality**](https://playdeck.video/guides/quality/),
 [**Playback rate**](https://playdeck.video/guides/playback-rate/) and
-[**Chapters**](https://playdeck.video/guides/chapters/).
+[**Chapters**](https://playdeck.video/guides/chapters/). `AudioTrackMenu` is
+the same shape for `state.audioTracks`: it lists a rung per published track
+and marks whichever one carries `active: true` — there is no "Auto" row and
+no sibling selection field, since an audio track carries its own selection
+(see the **Audio track** glossary entry in `CONTEXT.md`).
 
 <!-- example:react-menus -->
 
@@ -622,6 +626,12 @@ export const Rate = () => <Player.PlaybackRateMenu />;
 // hand-composed chapters group alongside it -- this is the only way this
 // package exposes chapters navigation.
 export const Chapters = () => <Player.ChaptersMenu />;
+
+// The audio-track list, already wired to the player's own tracks and marking
+// whichever one is active. Unlike `Quality` and `Rate`, `RateMenu` above has
+// no hand-composed audio-track group alongside it -- this is the only way
+// this package exposes audio-track selection.
+export const AudioTracks = () => <Player.AudioTrackMenu />;
 ```
 
 <!-- /example -->

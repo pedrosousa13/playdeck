@@ -115,6 +115,10 @@ export { ChaptersMenu } from './chapters.js';
 
 export type { ChaptersMenuProps } from './chapters.js';
 
+export { AudioTrackMenu } from './audio-tracks.js';
+
+export type { AudioTrackMenuProps } from './audio-tracks.js';
+
 export {
   MuteButton,
   PlayButton,
