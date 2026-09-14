@@ -2,7 +2,8 @@ import type { CSSProperties, ReactElement } from 'react';
 import * as Player from '@playdeck/react';
 import { createPortal } from 'react-dom';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect } from 'storybook/test';
+import { expect, waitFor } from 'storybook/test';
+import { assetUrl } from './asset-url';
 import { available, ready } from './support';
 
 const viewportStyle = {
@@ -400,6 +401,112 @@ export const ActivationIsCentred: Story = {
   }
 };
 
+// Shared by the two thumbnail stories below, the same way `expectControlsFit`
+// above is shared rather than repeated: the fixture and the interaction that
+// reveals it have to stay identical between the two rule pairs, or a change
+// to one story's geometry could silently stop matching the other's.
+//
+// Themed through the meta-level `globals`, like everything above except
+// `ConsumerCssWins`'s own portal escape. `Player/SeekSlider`'s own
+// `WithThumbnails`/`ThumbnailFollowsKeyboardFocus` cover the part's wiring
+// unthemed -- the crop follows the previewed time correctly with no
+// stylesheet at all. What only this file can check is the chrome the two
+// shipped themes add on top: `theme.css`'s and `docked.css`'s own
+// `[data-playdeck-part='thumbnail']` rule pair.
+const renderThumbnailFixture = () => (
+  <Player.Viewport style={{ width: 480, height: 270, position: 'relative' }}>
+    <Player.SeekSlider
+      thumbnails={assetUrl('thumbnails.vtt')}
+      style={{
+        position: 'absolute',
+        bottom: '1rem',
+        left: '5%',
+        width: '90%'
+      }}
+    />
+  </Player.Viewport>
+);
+
+// Hovers the track's centre and waits for the reveal to settle, returning the
+// part for each story's own rule-pair-specific assertions. The part mounts
+// hidden from the first render (nothing has hovered yet), so the rest-state
+// `opacity` is read immediately, with nothing to wait out -- a transition
+// only runs when a property changes while already rendered, not on the value
+// a stylesheet gives it at mount.
+//
+// The reveal is different: `getComputedStyle` mid-transition reads a value
+// between `0` and `1` on either side of the flip, so a bare read once would
+// catch that by luck rather than by waiting for it. `waitFor` polls instead,
+// re-reading until the value actually settles at `1` -- which also covers the
+// WebVTT fetch the hover arms ahead of the CSS transition.
+const revealThumbnail = async ({
+  canvas,
+  canvasElement,
+  userEvent
+}: Parameters<NonNullable<Story['play']>>[0]): Promise<HTMLElement> => {
+  await canvas.findByRole('slider', { name: 'Seek' });
+  const track = canvasElement.querySelector(
+    '[data-playdeck-part="seek-slider"]'
+  ) as HTMLElement;
+  const thumbnail = canvasElement.querySelector(
+    '[data-playdeck-part="thumbnail"]'
+  ) as HTMLElement;
+  await expect(globalThis.getComputedStyle(thumbnail).opacity).toBe('0');
+
+  const rect = track.getBoundingClientRect();
+  await userEvent.pointer({
+    target: track,
+    coords: {
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2
+    }
+  });
+
+  await waitFor(() =>
+    expect(globalThis.getComputedStyle(thumbnail).opacity).toBe('1')
+  );
+  return thumbnail;
+};
+
+/**
+ * `theme.css`'s thumbnail chrome: a translucent surface behind the crop,
+ * rounded to the shared large-radius token -- the same one `error` and the
+ * settings/captions menu popover use, both floating cards over the picture
+ * the way this crop is -- fading in with `data-state` rather than popping.
+ */
+export const ThumbnailFadesIn: Story = {
+  parameters: ready({ seek: available }, { currentTime: 0, duration: 10 }),
+  render: renderThumbnailFixture,
+  play: async (context) => {
+    const thumbnail = await revealThumbnail(context);
+    const styles = globalThis.getComputedStyle(thumbnail);
+    await expect(styles.borderRadius).toBe('8px');
+    await expect(styles.backgroundColor).toBe('rgba(0, 0, 0, 0.72)');
+  }
+};
+
+/**
+ * `docked.css`'s own copy of the rule above, themed through `globals` on the
+ * story itself rather than the meta default -- the same override
+ * `TearsDownWithTheStory` below uses to opt out entirely. Same fade, over
+ * this file's own surface token; what is worth pinning here and not above is
+ * the hairline border: docked's light scheme needs the edge definition
+ * theme.css's dark scrim does not (docked.css's own header comment on the
+ * rule explains why), so its resolved colour is the one thing this story
+ * checks that the themed one above has nothing to check.
+ */
+export const ThumbnailFadesInDocked: Story = {
+  globals: { theme: 'docked' },
+  parameters: ready({ seek: available }, { currentTime: 0, duration: 10 }),
+  render: renderThumbnailFixture,
+  play: async (context) => {
+    const thumbnail = await revealThumbnail(context);
+    const styles = globalThis.getComputedStyle(thumbnail);
+    await expect(styles.borderWidth).toBe('1px');
+    await expect(styles.borderColor).toBe('rgb(217, 217, 214)');
+  }
+};
+
 // Its strength is entirely that ordering: run alone (`-t`, or opened directly
 // in the UI), or with these exports reordered, it passes without proving
 // anything. It is the only test that exercises real DOM teardown, so it stays;
@@ -407,9 +514,11 @@ export const ActivationIsCentred: Story = {
 // `stories/theme.contract.test.ts`, which asserts them structurally.
 
 /**
- * The theme leaves with the story that mounted it. Every story above is themed
- * through the meta-level `globals`; this one opts back out, and runs last, so
- * it renders in a document five themed stories have already used. An unthemed
+ * The theme leaves with the story that mounted it. Every story above is
+ * themed -- most through the meta-level `globals`, `ThumbnailFadesInDocked`
+ * through its own override, the same shape this one's own opt-out below uses
+ * -- and this one opts back out, and runs last, so it renders in a document
+ * seven themed stories have already used. An unthemed
  * control here is the proof that the toolbar decorator's `<style>` was torn
  * down with each of them rather than left behind in the shared preview
  * document — which is the reason the theme is mounted per story at all.

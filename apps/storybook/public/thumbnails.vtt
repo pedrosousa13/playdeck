@@ -1,0 +1,34 @@
+WEBVTT
+
+NOTE
+Fixture for the `thumbnail` part (SeekSlider's `thumbnails` prop). Cues
+divide tracer-10s.mp4's 10 seconds into five equal 2s spans, one per tile of
+thumbnails-sprite.svg's horizontal strip, left to right in time order:
+
+  0:00-0:02 -> tile 0, x=0   (red)
+  0:02-0:04 -> tile 1, x=160 (green)
+  0:04-0:06 -> tile 2, x=320 (blue)
+  0:06-0:08 -> tile 3, x=480 (yellow)
+  0:08-0:10 -> tile 4, x=640 (magenta)
+
+Changing the sprite's tile count, size or order without updating the five
+timestamps and #xywh= fragments below breaks this mapping. The image URL is
+root-absolute rather than routed through stories/asset-url.ts: this file is
+static text with no template mechanism, and root-absolute is exactly what
+that resolver produces at the `/` base path every automated command in
+apps/storybook/README.md runs at.
+
+00:00:00.000 --> 00:00:02.000
+/thumbnails-sprite.svg#xywh=0,0,160,90
+
+00:00:02.000 --> 00:00:04.000
+/thumbnails-sprite.svg#xywh=160,0,160,90
+
+00:00:04.000 --> 00:00:06.000
+/thumbnails-sprite.svg#xywh=320,0,160,90
+
+00:00:06.000 --> 00:00:08.000
+/thumbnails-sprite.svg#xywh=480,0,160,90
+
+00:00:08.000 --> 00:00:10.000
+/thumbnails-sprite.svg#xywh=640,0,160,90

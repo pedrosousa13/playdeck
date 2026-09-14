@@ -511,6 +511,40 @@
     }
   }
 
+  /* ---- thumbnail preview ---------------------------------------------------
+   * Same opt-in gate as theme.css's own copy of this rule -- this part mounts
+   * only once `thumbnails` resolves, so a player that never sets it never
+   * matches here either; see that file for why `opacity` gates the fade
+   * rather than fighting the inline `visibility` toggle.
+   *
+   * The hairline border is this file's own addition, not theme.css's: every
+   * other surface card here (`activation`, `error`, the settings/captions
+   * menu) borders itself against the light default scheme the same way,
+   * where theme.css's dark scrim needs no edge of its own.
+   *
+   * `box-sizing: content-box`, the opposite of the border-box this file
+   * reaches for everywhere else a border meets a stated dimension
+   * (`activation` above, the range-thumb pseudo-elements): there the size is
+   * this file's own and border-box keeps the border from growing past it.
+   * Here `width`/`height` are the primitive's own inline pixels -- the sprite
+   * crop `overflow: hidden` cuts to -- so the border has to sit OUTSIDE that
+   * box instead. A consumer's `border-box` reset would otherwise pull it
+   * inward and clip ~1px off every edge of the image.
+   */
+  :where([data-playdeck-part='thumbnail']) {
+    box-sizing: content-box;
+    border: 1px solid var(--playdeck-color-hairline, #d9d9d6);
+    border-radius: var(--playdeck-radius-large, 0.5rem);
+    background-color: var(--playdeck-color-surface, #f4f4f2);
+    opacity: 0;
+    transition: opacity var(--playdeck-transition-duration, 150ms)
+      var(--playdeck-transition-easing, ease);
+  }
+
+  :where([data-playdeck-part='thumbnail'][data-state='visible']) {
+    opacity: 1;
+  }
+
   /* ---- below 48rem --------------------------------------------------------
    * This file docks at every width already, so nothing here moves the bar --
    * only the row-two overflow (#622) that `theme.css`'s own copy of this
@@ -643,12 +677,14 @@
 
   /* ---- reduced motion -----------------------------------------------------
    * No auto-hide here (docked.css never reads data-idle), so only the volume
-   * reveal fade and the activation opacity fade need collapsing.
+   * reveal fade, the activation opacity fade and the thumbnail preview fade
+   * need collapsing.
    */
   @media (prefers-reduced-motion: reduce) {
     :where(
       [data-playdeck-part='activation'],
-      [data-playdeck-part='volume-slider']
+      [data-playdeck-part='volume-slider'],
+      [data-playdeck-part='thumbnail']
     ) {
       transition-duration: 0.01ms;
     }
@@ -777,6 +813,11 @@
 
     :where([data-playdeck-part='seek-buffered-range']) {
       background-color: var(--playdeck-color-buffered, #ededed);
+    }
+
+    :where([data-playdeck-part='thumbnail']) {
+      border-color: var(--playdeck-color-hairline, #2a2a2d);
+      background-color: var(--playdeck-color-surface, #141416);
     }
 
     :where(

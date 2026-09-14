@@ -1,7 +1,8 @@
 import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, waitFor } from 'storybook/test';
+import { expect, fireEvent, waitFor } from 'storybook/test';
 import { withCss } from '../.storybook/theme';
+import { assetUrl } from './asset-url';
 import { available, notReady, ready } from './support';
 // The stylesheet the Styled story mounts, read as text so the same string is
 // both what renders and what the docs block below prints. `?raw` and not
@@ -36,6 +37,8 @@ const meta = {
           '**Step** — the default is derived from the seek window: `min(1, span / 20)`, so twenty positions on a short clip and the same 1s it has always been on anything 20s or longer. A `step` through `inputProps` overrides it.',
           '',
           '**Capability** — gated by `seek`; renders nothing until `seek` resolves `available`.',
+          '',
+          '**Thumbnails** — a `thumbnails` prop (a WebVTT sprite-cue URL) renders a `data-playdeck-part="thumbnail"` crop above the previewed time: the pointer position while hovering, or the input\'s own value while it holds keyboard focus. It mounts once the URL resolves and stays mounted, toggling `data-state="hidden" | "visible"` rather than popping in and out — see `WithThumbnails` and `ThumbnailFollowsKeyboardFocus` below.',
           '',
           '**Styling** — plain CSS against the parts. The `Styled` story below mounts this file as its own `<style>`. Turning the Theme toolbar toggle on adds `theme.css` underneath, not over: everything here is unlayered, and unlayered CSS beats the `@layer playdeck` the whole theme lives in:',
           '```css',
@@ -273,6 +276,117 @@ export const CapabilityAbsent: Story = {
   parameters: ready({ seek: notReady }, { currentTime: 30, duration: 100 }),
   play: async ({ canvas }) => {
     await expect(canvas.queryByRole('slider')).toBeNull();
+  }
+};
+
+// Shared by both thumbnail stories below. The slider sits near the bottom,
+// like a real control bar, rather than under the top margin the other
+// stories in this file use: the thumbnail renders above it, and 90px of
+// sprite tile needs more headroom than a 2rem margin leaves inside a 270px
+// viewport.
+const renderWithThumbnails = () => (
+  <Player.Viewport
+    style={{
+      width: 480,
+      height: 270,
+      background: '#0b0e13',
+      position: 'relative'
+    }}
+  >
+    <Player.SeekSlider
+      thumbnails={assetUrl('thumbnails.vtt')}
+      style={{
+        position: 'absolute',
+        bottom: '1rem',
+        left: '5%',
+        width: '90%'
+      }}
+    />
+  </Player.Viewport>
+);
+
+/**
+ * The `thumbnails` prop, wired to a fixture WebVTT sprite-cue file
+ * (`thumbnails.vtt`, dividing a 10s clip evenly across the five tiles of
+ * `thumbnails-sprite.svg` — that file's own `NOTE` says which cue is which
+ * tile). The `thumbnail` part mounts hidden, since nothing has hovered yet,
+ * and stays mounted rather than popping in and out as the pointer moves.
+ *
+ * Hovering the track previews the time under the pointer -- here, the
+ * track's centre, 5s into a 10s window, which is `thumbnails.vtt`'s 4-6s
+ * cue: tile 2, blue, at sprite `x=320`. The WebVTT loads lazily on this
+ * first interaction (`thumbnails.ts`'s `useThumbnailCues`), which is why the
+ * reveal is awaited rather than asserted immediately.
+ */
+export const WithThumbnails: Story = {
+  parameters: ready({ seek: available }, { currentTime: 0, duration: 10 }),
+  render: renderWithThumbnails,
+  play: async ({ canvas, canvasElement, userEvent }) => {
+    await canvas.findByRole('slider', { name: 'Seek' });
+    const track = canvasElement.querySelector(
+      '[data-playdeck-part="seek-slider"]'
+    ) as HTMLElement;
+    const thumbnail = canvasElement.querySelector(
+      '[data-playdeck-part="thumbnail"]'
+    ) as HTMLElement;
+    await expect(thumbnail).toHaveAttribute('data-state', 'hidden');
+
+    // `hover()`'s own default position is not the element's centre, so the
+    // centre is set explicitly -- landing on the 4-6s cue depends on it.
+    const rect = track.getBoundingClientRect();
+    await userEvent.pointer({
+      target: track,
+      coords: {
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2
+      }
+    });
+    await waitFor(
+      () => expect(thumbnail).toHaveAttribute('data-state', 'visible'),
+      { timeout: 2_000 }
+    );
+    const img = thumbnail.querySelector('img') as HTMLImageElement;
+    await expect(img).toHaveAttribute('src', assetUrl('thumbnails-sprite.svg'));
+    // The crop offset: `-x`/`-y` of tile 2's region (x=320, y=0).
+    expect(img.style.left).toBe('-320px');
+    expect(img.style.top).toBe('0px');
+
+    // Leaving the track drops the preview without unmounting the part.
+    await userEvent.pointer({ target: canvasElement.ownerDocument.body });
+    await expect(thumbnail).toHaveAttribute('data-state', 'hidden');
+  }
+};
+
+/**
+ * The other route to a preview: keyboard focus, with no pointer active. The
+ * previewed time is the input's own current value rather than a pointer
+ * position, so `currentTime: 3` previews `thumbnails.vtt`'s 2-4s cue: tile
+ * 1, green, at sprite `x=160`.
+ */
+export const ThumbnailFollowsKeyboardFocus: Story = {
+  parameters: ready({ seek: available }, { currentTime: 3, duration: 10 }),
+  render: renderWithThumbnails,
+  play: async ({ canvas, canvasElement, userEvent }) => {
+    const slider = await canvas.findByRole('slider', { name: 'Seek' });
+    const thumbnail = canvasElement.querySelector(
+      '[data-playdeck-part="thumbnail"]'
+    ) as HTMLElement;
+    await expect(thumbnail).toHaveAttribute('data-state', 'hidden');
+
+    await userEvent.tab();
+    await expect(slider).toHaveFocus();
+    await waitFor(
+      () => expect(thumbnail).toHaveAttribute('data-state', 'visible'),
+      { timeout: 2_000 }
+    );
+    const img = thumbnail.querySelector('img') as HTMLImageElement;
+    expect(img.style.left).toBe('-160px');
+
+    // Losing focus drops the preview, the same as the pointer leaving above.
+    // `blur`/`focus` do not bubble, and React listens for the `focusout`/
+    // `focusin` pair that does -- `fireEvent.focusOut` fires that one.
+    fireEvent.focusOut(slider);
+    await expect(thumbnail).toHaveAttribute('data-state', 'hidden');
   }
 };
 
