@@ -49,7 +49,7 @@ Measured 2026-09-14 against `tests/compare`'s pinned installs:
 | Vimeo                                               | yes[^85]      | yes[^86]      | yes[^87]      | plugin[^88]   | plugin[^89]  | yes[^90]           |
 | Wistia                                              | yes[^91]      | yes[^92]      | no[^93]       | plugin[^94]   | no[^95]      | no[^96]            |
 | Other hosted providers (named)                      | no[^97]       | yes[^98]      | no[^99]       | plugin[^100]  | no[^101]     | yes[^102]          |
-| Audio tracks                                        | partial[^103] | no[^104]      | yes[^105]     | yes[^106]     | yes[^107]    | yes[^108]          |
+| Audio tracks                                        | yes[^103]     | no[^104]      | yes[^105]     | yes[^106]     | yes[^107]    | yes[^108]          |
 | Chapters                                            | yes[^109]     | no[^110]      | yes[^111]     | partial[^112] | yes[^113]    | yes[^114]          |
 | Thumbnails / preview on seek                        | no[^115]      | no[^116]      | yes[^117]     | yes[^118]     | plugin[^119] | yes[^120]          |
 | Playlists                                           | no[^121]      | no[^122]      | no[^123]      | no[^124]      | plugin[^125] | no[^126]           |
@@ -269,7 +269,7 @@ Measured 2026-09-14 against `tests/compare`'s pinned installs:
 
 [^102]: **Other hosted providers (named) — Video.js 10 (beta)**: yes. Twitch, TikTok, Spotify, Cloudflare Stream and Mux each ship as their own media component under the `@videojs/react/media/*` subpath. mechanical check: `@videojs/react/media/twitch-video` exports `TwitchVideo`. Source: @videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react and in the five `@videojs/*` packages it depends on (installed packages)
 
-[^103]: **Audio tracks — Playdeck**: partial. Audio-track selection is modeled in `@playdeck/core` and driven by the native and hls.js providers; the YouTube, Vimeo and Wistia embeds report it as provider-unavailable, as an embedded player would under any library here. No dedicated audio-track UI primitive ships. mechanical check: `@playdeck/core`'s `dist/types.d.ts` includes `AudioTrack`. Source: packages/core/dist/types.d.ts (`AudioTrack`, `selectAudioTrack`); packages/provider-native, packages/provider-hls
+[^103]: **Audio tracks — Playdeck**: yes. Provider limit, not a status: the YouTube, Vimeo and Wistia embeds report `selectAudioTrack` as provider-unavailable (packages/provider-youtube, packages/provider-vimeo, packages/provider-wistia), as an embedded player would under any library here. mechanical check: `@playdeck/react` exports `AudioTrackMenu`. Source: packages/react/README.md
 
 [^104]: **Audio tracks — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `AudioTrack`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 

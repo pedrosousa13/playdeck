@@ -87,3 +87,9 @@ export const Rate = () => <Player.PlaybackRateMenu />;
 // hand-composed chapters group alongside it -- this is the only way this
 // package exposes chapters navigation.
 export const Chapters = () => <Player.ChaptersMenu />;
+
+// The audio-track list, already wired to the player's own tracks and marking
+// whichever one is active. Unlike `Quality` and `Rate`, `RateMenu` above has
+// no hand-composed audio-track group alongside it -- this is the only way
+// this package exposes audio-track selection.
+export const AudioTracks = () => <Player.AudioTrackMenu />;

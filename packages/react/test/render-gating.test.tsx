@@ -393,6 +393,17 @@ const PART_TABLE: Record<string, PartEntry> = {
     fields: new Set(['chapters', 'currentTime', 'capabilities']),
     mount: bare(Player.ChaptersMenu)
   },
+  // `audioTracks` lists the rungs and carries each one's own `active`, so
+  // there is no sibling selection field to add (see the comment above
+  // `activeId` in audio-tracks.tsx); `capabilities` gates on
+  // `selectAudioTrack.status`. Declaring the field here only guards against a
+  // later selector widening onto something else -- that `AudioTrackMenu`
+  // actually reads `audioTracks` today is proven by
+  // `test/audio-tracks.test.tsx`, not by this table entry.
+  AudioTrackMenu: {
+    fields: new Set(['audioTracks', 'capabilities']),
+    mount: bare(Player.AudioTrackMenu)
+  },
   // Reads seven fields through one selector -- the shortcut layer has to know
   // every capability gate a bound key might act through, plus the values a
   // couple of those actions need (`muted`, `volume`, `selectedTextTrackId`,

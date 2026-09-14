@@ -74,6 +74,12 @@ export const chaptersTriggerSelector =
 export const chaptersTrigger = (page: Page) =>
   page.locator(chaptersTriggerSelector);
 
+export const audioTrackTriggerSelector =
+  '[data-playdeck-part="settings-menu-trigger"][aria-label="Audio track"]';
+
+export const audioTrackTrigger = (page: Page) =>
+  page.locator(audioTrackTriggerSelector);
+
 export const settingsMenuSelector = '[data-playdeck-part="settings-menu"]';
 
 export const settingsMenu = (page: Page) => page.locator(settingsMenuSelector);

@@ -320,18 +320,29 @@ const PlayerFixture = ({
         // `selectTextTrack` can settle to `source`.
         sourceKey === 'hls-nosubs'
         ? { type: 'hls', src: assetUrl('hls/nosubs.m3u8'), engine: hlsEngine }
-        : sourceKey === 'live'
-          ? { type: 'hls', src: assetUrl('live/index.m3u8'), engine: hlsEngine }
-          : sourceKey === 'long'
-            ? assetUrl('tracer-10s.mp4')
-            : (vimeoSource ??
-              (sourceChange
-                ? 'https://provider.invalid/source-a.mp4'
-                : activationSource === 'external'
-                  ? 'https://provider.invalid/tracer.mp4'
-                  : activationSource === 'youtube'
-                    ? youtubeExampleUrl
-                    : assetUrl('tracer.mp4')));
+        : // Two `EXT-X-MEDIA:TYPE=AUDIO` renditions (#656) -- the only shape
+          // in which `selectAudioTrack` has more than one track to switch
+          // between; `hls/master.m3u8` above carries none.
+          // `e2e/audio-tracks.spec.ts` drives `Player.AudioTrackMenu`
+          // against this fixture.
+          sourceKey === 'hls-audio'
+          ? { type: 'hls', src: assetUrl('hls/audio.m3u8'), engine: hlsEngine }
+          : sourceKey === 'live'
+            ? {
+                type: 'hls',
+                src: assetUrl('live/index.m3u8'),
+                engine: hlsEngine
+              }
+            : sourceKey === 'long'
+              ? assetUrl('tracer-10s.mp4')
+              : (vimeoSource ??
+                (sourceChange
+                  ? 'https://provider.invalid/source-a.mp4'
+                  : activationSource === 'external'
+                    ? 'https://provider.invalid/tracer.mp4'
+                    : activationSource === 'youtube'
+                      ? youtubeExampleUrl
+                      : assetUrl('tracer.mp4')));
 
   const replacementSource = sourceChange
     ? 'https://provider.invalid/source-b.mp4'
@@ -417,6 +428,7 @@ const PlayerFixture = ({
         <Player.QualityMenu />
         <Player.PlaybackRateMenu />
         <Player.ChaptersMenu />
+        <Player.AudioTrackMenu />
         {/*
           Mounted everywhere on purpose: "AirPlay" contains "Play", so a
           name-based Playwright lookup collides here (#73). It is a partial
@@ -469,7 +481,7 @@ const meta: Meta<PlayerFixtureProps> = {
     source: {
       control: 'text',
       description:
-        "'hls' | 'hls-nosubs' | 'live' | 'long' | 'vimeo' | 'vimeo-unlisted' | an https:// URL | undefined (defaults to the native tracer)."
+        "'hls' | 'hls-nosubs' | 'hls-audio' | 'live' | 'long' | 'vimeo' | 'vimeo-unlisted' | an https:// URL | undefined (defaults to the native tracer)."
     },
     engine: {
       control: 'radio',
@@ -582,6 +594,13 @@ export const HlsNoSubtitles: Story = {
 
 export const HlsNative: Story = {
   args: { source: 'hls', engine: 'native' }
+};
+
+// Two alternate-audio renditions (#656) -- e2e/audio-tracks.spec.ts drives
+// Player.AudioTrackMenu against it, the way HlsHlsJs above does for
+// Player.QualityMenu.
+export const HlsAudioTracks: Story = {
+  args: { source: 'hls-audio', engine: 'hls.js' }
 };
 
 export const LiveHlsJs: Story = {
