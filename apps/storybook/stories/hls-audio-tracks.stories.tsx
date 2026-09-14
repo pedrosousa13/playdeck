@@ -16,8 +16,7 @@ import { assetUrl } from './asset-url';
 // `@playdeck/react`. What this fixture drives is a level below that
 // plumbing regardless: hls.js's own alternate-audio surface on a real
 // manifest in a real browser, isolated from whatever a menu built on top of
-// it does with the result -- the same split `HlsBuildFixture`'s own comment
-// draws for the two hls.js builds. `hls/audio.m3u8` (#656) declares two
+// it does with the result. `hls/audio.m3u8` (#656) declares two
 // `EXT-X-MEDIA:TYPE=AUDIO` renditions, English and Spanish, and a button per
 // discovered track calls the adapter's own `selectAudioTrack` so a switch
 // between them is observable end-to-end.

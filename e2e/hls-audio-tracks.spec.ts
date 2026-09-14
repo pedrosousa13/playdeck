@@ -10,8 +10,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 // `@playdeck/react`. What this file drives is a level below that plumbing
 // regardless: hls.js's own alternate-audio discovery and switching on a real
 // manifest, isolated from whatever a menu built on top of it does with the
-// result -- the same split `HlsBuildFixture`'s own comment draws for the two
-// hls.js builds.
+// result.
 const trackByLanguage = (page: Page, language: string): Locator =>
   page.locator(`[data-testid^="audio-track-"][data-language="${language}"]`);
 
