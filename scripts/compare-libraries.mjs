@@ -334,10 +334,12 @@ export const libraries = [
     composition: 'core + native provider, no control parts',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 19.90 KB measured 2026-09-09 (docs/comparison/results.md's "Gzipped
+    // 20.18 KB measured 2026-09-14 (docs/comparison/results.md's "Gzipped
     // (Vite)" column that same day), rounded up to the next 0.25 KB -- see
-    // the `libraries` doc comment above for what raising this means.
-    ceilingKb: 20
+    // the `libraries` doc comment above for what raising this means. The
+    // growth from 19.90 KB is #656's audio-track state, command and
+    // capability added to core.
+    ceilingKb: 20.25
   },
   {
     name: 'Playdeck',
@@ -346,8 +348,10 @@ export const libraries = [
     composition: 'core + primitives + native provider',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 20.56 KB measured 2026-09-09, rounded up to the next 0.25 KB.
-    ceilingKb: 20.75
+    // 20.85 KB measured 2026-09-14, rounded up to the next 0.25 KB. The
+    // growth from 20.56 KB is #656's audio-track state, command and
+    // capability added to core.
+    ceilingKb: 21
   },
   {
     name: 'Playdeck (play-only)',
@@ -357,8 +361,10 @@ export const libraries = [
       'core + primitives + native provider + one control (PlayButton)',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 21.63 KB measured 2026-09-09, rounded up to the next 0.25 KB.
-    ceilingKb: 21.75,
+    // 21.92 KB measured 2026-09-14, rounded up to the next 0.25 KB. The
+    // growth from 21.63 KB is #656's audio-track state, command and
+    // capability added to core.
+    ceilingKb: 22,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
@@ -369,8 +375,10 @@ export const libraries = [
       "core + primitives + native provider + control bar (5 of Media Chrome's 7 controls)",
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 24.28 KB measured 2026-09-09, rounded up to the next 0.25 KB.
-    ceilingKb: 24.5
+    // 24.57 KB measured 2026-09-14, rounded up to the next 0.25 KB. The
+    // growth from 24.28 KB is #656's audio-track state, command and
+    // capability added to core.
+    ceilingKb: 24.75
   },
   {
     name: 'react-player',
