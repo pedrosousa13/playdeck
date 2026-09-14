@@ -10,13 +10,13 @@ import { assetUrl } from './asset-url';
 
 // Mounts the HLS adapter directly, the same choice `HlsBuildFixture`
 // (`hls-build.stories.tsx`) makes and for the same reason: `selectAudioTrack`
-// has no route through `@playdeck/react` yet -- #657 is where the menu part
-// that gives it one ships -- so there is nothing for `Player.Root` to add
-// here. What this drives is hls.js's own alternate-audio surface on a real
-// manifest in a real browser: `hls/audio.m3u8` (#656) declares two
-// `EXT-X-MEDIA:TYPE=AUDIO` renditions, English and Spanish, and a button per
-// discovered track calls the adapter's own `selectAudioTrack` so a switch
-// between them is observable end-to-end.
+// has no route through `@playdeck/react` -- no UI part calls it -- so there
+// is nothing for `Player.Root` to add here. What this drives is hls.js's own
+// alternate-audio surface on a real manifest in a real browser:
+// `hls/audio.m3u8` (#656) declares two `EXT-X-MEDIA:TYPE=AUDIO` renditions,
+// English and Spanish, and a button per discovered track calls the
+// adapter's own `selectAudioTrack` so a switch between them is observable
+// end-to-end.
 const HlsAudioTracksFixture = () => {
   const mediaRef = useRef<HTMLVideoElement>(null);
   const adapterRef = useRef<ProviderAdapter | null>(null);

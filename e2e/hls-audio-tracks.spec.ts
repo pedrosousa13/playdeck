@@ -5,9 +5,9 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 // more than one audio track to switch between; `hls/master.m3u8` carries
 // none. `HlsAudioTracksFixture` (`hls-audio-tracks.stories.tsx`) mounts the
 // hls.js adapter directly rather than `Player.Root`: `selectAudioTrack` has
-// no route through `@playdeck/react` yet, since #657 (the `AudioTrackMenu`)
-// is what gives it one, and this is the level below that plumbing, the same
-// choice `HlsBuildFixture` makes for the same reason (see its own comment).
+// no route through `@playdeck/react` -- no UI part calls it -- so this
+// exercises the level below that plumbing, the same choice `HlsBuildFixture`
+// makes for the same reason (see its own comment).
 const trackByLanguage = (page: Page, language: string): Locator =>
   page.locator(`[data-testid^="audio-track-"][data-language="${language}"]`);
 
