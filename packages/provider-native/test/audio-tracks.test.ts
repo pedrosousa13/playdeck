@@ -137,3 +137,26 @@ test('rediscovers tracks on addtrack/removetrack', async () => {
     { id: 'a2', label: 'Spanish', language: 'es', active: false }
   ]);
 });
+
+test('republishes active on a change event, for a selection made outside selectAudioTrack', async () => {
+  const { provider, patches, trackList } = mountNativeAudio([
+    { label: 'English', language: 'en', id: 'a1', enabled: true },
+    { label: 'Spanish', language: 'es', id: 'a2', enabled: false }
+  ]);
+  await provider.attach();
+  patches.length = 0;
+
+  // Simulates the platform's own UI switching renditions on native HLS in
+  // Safari: `enabled` flips on the track itself, with no `selectAudioTrack`
+  // call and no addtrack/removetrack.
+  const first = trackList[0];
+  const second = trackList[1];
+  if (first) first.enabled = false;
+  if (second) second.enabled = true;
+  trackList.dispatch('change');
+
+  expect(latest(patches).audioTracks).toEqual([
+    { id: 'a1', label: 'English', language: 'en', active: false },
+    { id: 'a2', label: 'Spanish', language: 'es', active: true }
+  ]);
+});

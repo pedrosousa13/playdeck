@@ -109,10 +109,12 @@ export const createNativeAudioTracks = (
       audioTrackList = nativeMedia.audioTracks;
       audioTrackList?.addEventListener('addtrack', onAudioTracksChange);
       audioTrackList?.addEventListener('removetrack', onAudioTracksChange);
+      audioTrackList?.addEventListener('change', onAudioTracksChange);
     },
     destroy: () => {
       audioTrackList?.removeEventListener('addtrack', onAudioTracksChange);
       audioTrackList?.removeEventListener('removetrack', onAudioTracksChange);
+      audioTrackList?.removeEventListener('change', onAudioTracksChange);
       audioTrackList = undefined;
     },
     selectAudioTrackAvailability: () =>
