@@ -206,6 +206,7 @@ const reachesExport = (chunk, exportName) =>
  *   `CaptionsButton`, `CaptionsMenu`.
  * - "quality selection": `quality.tsx`'s one export, `QualityMenu`.
  * - "playback rate": `playback-rate.tsx`'s one export, `PlaybackRateMenu`.
+ * - "audio tracks": `audio-tracks.tsx`'s one export, `AudioTrackMenu`.
  * - "every provider other than native": matched the same way `requiredChunk`
  *   below matches `provider-native` itself, by the package's own directory
  *   appearing in a reachable chunk's `moduleIds`. `requiredChunk` already
@@ -285,7 +286,28 @@ export const PLAY_ONLY_FORBIDDEN_MODULES = [
     // caught this violation with or without `'ChaptersMenu'` named here.
     // This entry keeps the list's own stated convention -- every menu
     // preset named explicitly -- rather than being load-bearing on its own.
-    'ChaptersMenu'
+    'ChaptersMenu',
+    // Demonstrated red (docs/agents/demonstrated-red.md), recorded verbatim:
+    // temporarily importing `<Player.AudioTrackMenu />` into
+    // tests/compare/entries/playdeck-play-only.tsx and running
+    // `node scripts/compare-libraries.mjs --check` (after a fresh
+    // `@playdeck/react` build) produced:
+    //
+    //   Playdeck (play-only)'s reachable chunks reach SettingsMenu, which
+    //   this composition (core + primitives + native provider + one control
+    //   (PlayButton)) does not use.
+    //
+    // Reverting the import returned the check to
+    // "docs/comparison/results.md already matches a fresh run". Honest note,
+    // the same one QualityMenu's, PlaybackRateMenu's and ChaptersMenu's own
+    // entries above carry: the failure attributes to `SettingsMenu`, not to
+    // this entry -- AudioTrackMenu is composed entirely of already-forbidden
+    // modules (SettingsMenu, MenuRadioGroup, MenuRadioItem), so the gate
+    // would have caught this violation with or without `'AudioTrackMenu'`
+    // named here. This entry keeps the list's own stated convention -- every
+    // menu preset named explicitly -- rather than being load-bearing on its
+    // own.
+    'AudioTrackMenu'
   ].map((name) => ({
     name,
     reachedBy: (/** @type {Chunk} */ chunk) => reachesExport(chunk, name)
