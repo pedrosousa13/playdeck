@@ -6,7 +6,7 @@
 
 # React video library comparison: measured figures
 
-Measured 2026-09-14 on Node v24.18.1, Vite 8.1.5, esbuild
+Measured 2026-09-14 on Node v22.23.2, Vite 8.1.5, esbuild
 0.28.1, from `tests/compare`'s pinned installs. React, ReactDOM
 and the JSX runtime are marked external for every library alike and excluded
 from every figure below. "Gzipped (Vite)" and "Gzipped (esbuild)" are each the
