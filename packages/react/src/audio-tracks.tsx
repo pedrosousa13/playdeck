@@ -29,10 +29,16 @@ export const AudioTrackMenu = ({ children, ...props }: AudioTrackMenuProps) => {
   // `selectedAudioTrackId` field to read `MenuRadioGroup`'s `value` from --
   // `AudioTrack.active` carries selection per entry instead (see the comment
   // above `AudioTrack`, types.ts). The active entry's id stands in for it,
-  // falling back to `''` for "no active track", which both providers keep
-  // from actually happening while this capability reads `available` (each
-  // enforces at most, and at least, one active track once it has a list to
-  // report) but which `MenuRadioGroup` still needs some value for.
+  // falling back to `''` for "no active track" -- a state that is reachable,
+  // not merely guarded against. hls.js's `onAudioTracksUpdated`
+  // (provider-hls/src/audio-tracks.ts) can report `available` with every
+  // track still inactive: `AUDIO_TRACKS_UPDATED` fires before
+  // `AudioTrackController.switchLevel` resolves a default, a window that
+  // file's own header comment explains and `onAudioTrackSwitching` closes
+  // moments later. The native provider enforces exclusivity only on
+  // selection too (CONTEXT.md's **Audio track** glossary entry) -- nothing
+  // guarantees one active track at rest on either provider, which is what
+  // `MenuRadioGroup` still needs some value for.
   const activeId = audioTracks.find((track) => track.active)?.id ?? '';
 
   return (
