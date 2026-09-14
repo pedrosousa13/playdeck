@@ -1326,14 +1326,16 @@ export const axes = [
     label: 'Audio tracks',
     entries: {
       Playdeck: {
-        status: 'no',
+        status: 'partial',
         anchor: {
-          kind: 'absent-in-tree',
-          module: ['@playdeck/core', '@playdeck/react'],
-          glob: ['**/*.js', '**/*.d.ts'],
+          kind: 'types',
+          module: '@playdeck/core',
+          path: 'dist/types.d.ts',
           includes: 'AudioTrack'
         },
-        source: PLAYDECK_TREE
+        source:
+          'packages/core/dist/types.d.ts (`AudioTrack`, `selectAudioTrack`); packages/provider-native, packages/provider-hls',
+        note: 'Audio-track selection is modeled in `@playdeck/core` and driven by the native and hls.js providers; the YouTube, Vimeo and Wistia embeds report it as provider-unavailable, as an embedded player would under any library here. No dedicated audio-track UI primitive ships.'
       },
       'react-player': {
         status: 'no',
