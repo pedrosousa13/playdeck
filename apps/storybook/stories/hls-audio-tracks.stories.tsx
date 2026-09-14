@@ -8,15 +8,19 @@ import { createHlsProvider } from '@playdeck/provider-hls';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { assetUrl } from './asset-url';
 
-// Mounts the HLS adapter directly, the same choice `HlsBuildFixture`
-// (`hls-build.stories.tsx`) makes and for the same reason: `selectAudioTrack`
-// has no route through `@playdeck/react` -- no UI part calls it -- so there
-// is nothing for `Player.Root` to add here. What this drives is hls.js's own
-// alternate-audio surface on a real manifest in a real browser:
-// `hls/audio.m3u8` (#656) declares two `EXT-X-MEDIA:TYPE=AUDIO` renditions,
-// English and Spanish, and a button per discovered track calls the
-// adapter's own `selectAudioTrack` so a switch between them is observable
-// end-to-end.
+// Mounts the HLS adapter directly rather than `Player.Root`, the same choice
+// `HlsBuildFixture` (`hls-build.stories.tsx`) makes, and that is now a
+// choice rather than the only route there was: `Player.AudioTrackMenu`
+// (`PlayerFixture`'s `HlsAudioTracks` story, driven by
+// `e2e/audio-tracks.spec.ts`) reaches `selectAudioTrack` through
+// `@playdeck/react`. What this fixture drives is a level below that
+// plumbing regardless: hls.js's own alternate-audio surface on a real
+// manifest in a real browser, isolated from whatever a menu built on top of
+// it does with the result -- the same split `HlsBuildFixture`'s own comment
+// draws for the two hls.js builds. `hls/audio.m3u8` (#656) declares two
+// `EXT-X-MEDIA:TYPE=AUDIO` renditions, English and Spanish, and a button per
+// discovered track calls the adapter's own `selectAudioTrack` so a switch
+// between them is observable end-to-end.
 const HlsAudioTracksFixture = () => {
   const mediaRef = useRef<HTMLVideoElement>(null);
   const adapterRef = useRef<ProviderAdapter | null>(null);
