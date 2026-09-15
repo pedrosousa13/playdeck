@@ -881,10 +881,10 @@ export const axes = [
           kind: 'absent-in-tree',
           module: ['@playdeck/core', '@playdeck/react'],
           glob: ['**/*.js', '**/*.d.ts'],
-          includes: 'dash'
+          includes: 'createDashProvider'
         },
         source: PLAYDECK_TREE,
-        note: '`PlayerSource` is a closed union of `string | VideoFileSource | HlsSource | YouTubeSource | VimeoSource | WistiaSource` (packages/core/dist/types.d.ts); `.out-of-scope/dash.md` records the decision.'
+        note: 'Searched for `createDashProvider` rather than the bare word: `@playdeck/react/browser` bundles React and ReactDOM, whose own SVG attribute table carries `stroke-dasharray`/`stroke-dashoffset`, so the bare word no longer holds vacuously true the way it does for every other library here. Every existing provider exports a `create<Name>Provider` factory (`createHlsProvider`, `createNativeProvider`, `createVimeoProvider`, `createWistiaProvider`, `createYouTubeProvider`); a DASH provider would be the same shape. `PlayerSource` is a closed union of `string | VideoFileSource | HlsSource | YouTubeSource | VimeoSource | WistiaSource` (packages/core/dist/types.d.ts); `.out-of-scope/dash.md` records the decision.'
       },
       'react-player': {
         status: 'yes',
@@ -1980,10 +1980,10 @@ export const axes = [
           kind: 'absent-in-tree',
           module: ['@playdeck/core', '@playdeck/react'],
           glob: ['**/*.js'],
-          includes: '.css'
+          includes: '.css"'
         },
         source: PLAYDECK_TREE,
-        note: 'No shipped JavaScript imports a stylesheet; an unstyled composition still renders and operates.'
+        note: 'Searched for `.css"` -- a quoted import specifier, the shape a real self-import would take in this build\'s output -- rather than the bare extension: `@playdeck/react/browser` bundles ReactDOM, whose own style-property helpers read `element.cssFloat` and `element.cssText`, both of which contain the bare substring. No shipped JavaScript imports a stylesheet; an unstyled composition still renders and operates.'
       },
       'react-player': {
         status: 'no',

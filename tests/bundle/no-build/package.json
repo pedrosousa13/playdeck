@@ -1,0 +1,15 @@
+{
+  "name": "@playdeck/bundle-no-build",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test.mjs"
+  },
+  "dependencies": {
+    "@playdeck/react": "workspace:*"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1"
+  }
+}
