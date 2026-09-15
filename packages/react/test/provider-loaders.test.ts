@@ -415,6 +415,29 @@ test('still resolves a detect return that carries no forbidden scheme, unchanged
   });
 });
 
+// Provider-authored shapes are arbitrary by design, which is the premise the
+// recursive walk above rests on -- a cycle is reachable input, not a
+// hypothetical, so `everyStringPermitted` must decline it the same way it
+// declines a forbidden scheme, rather than recursing until the stack
+// overflows.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): run with the cycle
+// guard reverted, this test throws inside `everyStringPermitted` itself --
+// `RangeError: Maximum call stack size exceeded` -- rather than reaching any
+// `expect` below.
+test('declines a detect return that carries a cyclic reference rather than overflowing the stack', () => {
+  const cyclic: { type: string; self?: unknown } = { type: 'acme' };
+  cyclic.self = cyclic;
+  const detect = vi.fn(() => cyclic);
+
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    acme: { detect, load: vi.fn() }
+  });
+
+  expect(detect).toHaveBeenCalledWith('https://example.com/media/1');
+  expect(result.status).toBe('failure');
+});
+
 // The string/`detect` half of the reserved-name guarantee: a registration
 // keyed by one of the five built-in names never even has its `detect` called,
 // on any URL, whatever it would have returned -- the object-path half of the
@@ -662,4 +685,18 @@ test('accepts no supplied-kind source at all when providers is never opted into'
   // `PlayerSource` union `RootProps['source']` defaults to.
   const invalid: RootProps['source'] = { type: 'acme', videoId: '1' };
   void invalid;
+});
+
+test('a registration keyed by a built-in source kind is a compile error, not a silently inert runtime no-op', () => {
+  type ReservedProviders = {
+    readonly hls: ProviderRegistration<AcmeSource, AcmeOptions>;
+  };
+  // @ts-expect-error `hls` is one of the five built-in kinds `ConsumerProviders`
+  // reserves (`provider-loaders.ts`), the bound `RootProps`'s own type
+  // parameter is declared against -- a registration keyed by one used to
+  // typecheck here, resolve nothing at runtime (`loadProvider` dispatches on
+  // `source.type` before ever consulting `providers`), and report nothing.
+  type Invalid = RootProps<ReservedProviders>;
+  const check: Invalid | undefined = undefined;
+  void check;
 });

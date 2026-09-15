@@ -214,6 +214,40 @@ export type ProviderRegistration<
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see above
 export type PlayerProviders = Record<string, ProviderRegistration<any, any>>;
 
+// The five names a `providers` map cannot register under, read off
+// `PlayerSource`'s own closed union (`@playdeck/core`) rather than repeated
+// here by hand, so a sixth built-in kind added there reserves its own name
+// automatically. `RESERVED_PROVIDER_NAMES` below is the runtime array this
+// package still hardcodes for the same five names -- unlike this type, it
+// does not re-derive from `PlayerSource` and so does not follow a sixth kind
+// on its own.
+export type BuiltInSourceKind = ResolvedPlayerSource['type'];
+
+// `Root`'s own generic bound (`RootProps`, `root.tsx`): every entry of `P`
+// beyond the five built-in kind names. A registration keyed by one of them
+// used to typecheck against plain `PlayerProviders` and resolve nothing at
+// runtime -- `loadProvider`'s five built-in branches dispatch on
+// `source.type` ahead of ever consulting `providers`
+// (`RESERVED_PROVIDER_NAMES` below is the runtime half of the same rule).
+// Intersecting with a `Partial` record of `never` values -- rather than,
+// say, `Omit` -- is what turns a registration under one of these keys into a
+// compile error: a present property must be assignable to `never`, which
+// nothing but `never` itself is, while an absent one satisfies the
+// `Partial` trivially, so a `providers` map that never registers a built-in
+// name typechecks exactly as before.
+//
+// Not folded into `PlayerProviders` itself: that alias also types
+// `loadProvider`'s and `detectSourceWithProviders`'s own `providers`
+// parameter, which this package's runtime defence
+// (`RESERVED_PROVIDER_NAMES` below) is written to handle regardless of how a
+// caller assembled it -- `provider-loaders.test.ts`'s own reserved-name
+// tests construct exactly such a map to prove that defence, and need
+// `PlayerProviders` to still accept it. The compile error belongs at
+// `Root`'s own consumer-facing boundary, not at the internal functions that
+// must keep tolerating a reserved key arriving anyway.
+export type ConsumerProviders = PlayerProviders &
+  Partial<Record<BuiltInSourceKind, never>>;
+
 // The union of every supplied kind's own source shape in `P`, closed over
 // `PlayerSource`'s generic parameter (`@playdeck/core`'s `types.ts`) the same
 // way the five built-in kinds close over the non-generic union. `never` where
@@ -226,23 +260,42 @@ export type PlayerProviders = Record<string, ProviderRegistration<any, any>>;
 // `SuppliedProviderOptions` below -- so it is not the same permissiveness
 // `PlayerProviders` needs; it holds only because `extends` accepts `any` in a
 // position it is not inferring through.
+//
+// `keyof P & string`, not the bare `keyof P` a homomorphic mapped type would
+// ordinarily read off P: TypeScript infers a generic type parameter straight
+// through a mapped type of exactly that bare shape, so a `Root` call passing
+// only `providerOptions` -- no `providers` at all -- could still produce a
+// candidate for `P` from `providerOptions`'s own object shape (a `{ vimeo:
+// {...} }` bag read as though it were naming a supplied provider). Once
+// `PlayerProviders` above reserves the five built-in names, that spurious
+// candidate fails the constraint and every built-in `providerOptions` key
+// resolves to `undefined` in the fallout -- confirmed against this file's own
+// `hls`/`vimeo`/`wistia`/`youtube` test suites and the examples under
+// `examples/`, all breaking the same way. Intersecting with `string` here
+// breaks that special case (the mapped type is no longer read as directly
+// over the naked parameter), so `P` is inferred from an actual `providers`
+// value alone, exactly as before.
 export type SuppliedSource<P extends PlayerProviders> = {
-  [K in keyof P]: P[K] extends ProviderRegistration<
+  [K in keyof P & string]: P[K] extends ProviderRegistration<
     infer Source,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see above
     any
   >
     ? Source
     : never;
-}[keyof P];
+}[keyof P & string];
 
 // The `providerOptions` keys `P` opens up, one per supplied kind, each typed
 // by that registration's own `Options` parameter -- folded into
 // `RootProps.providerOptions` alongside `PlayerProviderOptions`'s four
 // built-in keys (`root.tsx`). `Source`'s own `any` here is `SuppliedSource`'s
-// mirror image, for the same reason.
+// mirror image, for the same reason. `keyof P & string` is `SuppliedSource`'s
+// own reason too, and it costs this mapped type its homomorphism over `P` --
+// `readonly` is written explicitly below rather than left to be inherited
+// from `P`'s own entries, matching `PlayerProviderOptions`'s own readonly
+// built-in keys.
 export type SuppliedProviderOptions<P extends PlayerProviders> = {
-  [K in keyof P]?: P[K] extends ProviderRegistration<
+  readonly [K in keyof P & string]?: P[K] extends ProviderRegistration<
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see above
     any,
     infer Options
@@ -380,15 +433,39 @@ export const loadProvider = async ({
 // here to check a known field against instead; every string, at every depth,
 // is the only rule that cannot be routed around by nesting the dangerous
 // value one level deeper than whatever a shallow check happened to look at.
-const everyStringPermitted = (value: unknown): boolean => {
+//
+// `seen` guards that same arbitrariness against a cyclic object -- a `detect`
+// return is provider-authored, so a self-reference is reachable input rather
+// than a hypothetical this package could assume away. Each object or array
+// entered is recorded before its own values are walked, so meeting it again
+// on the way back down declines rather than recursing forever; a `WeakSet`
+// rather than a plain `Set` so tracking a value for the depth of one call
+// holds no reference to it afterwards. Declining here reaches the same
+// outcome a forbidden scheme does at every call site -- the explicit-object
+// path falls through to the built-in failure, the string path treats it as
+// one registration's decline and keeps walking the rest -- because a cycle is
+// exactly as untrustworthy a shape as a `javascript:` URL, not a reason to
+// throw where every other refusal returns.
+//
+// One `typeof value === 'object'` branch covers an array too, rather than a
+// separate `Array.isArray` branch ahead of it: `Object.values` reads an
+// array's own numeric-index entries in order, the same elements `.every`
+// would have iterated directly, so the two branches walked identically and
+// only ever differed in which call read them off `value`. Adding the cycle
+// guard to both would have meant writing the same two lines twice.
+const everyStringPermitted = (
+  value: unknown,
+  seen: WeakSet<object> = new WeakSet()
+): boolean => {
   if (typeof value === 'string') {
     return isPermittedSourceUrl(value, undefined);
   }
-  if (Array.isArray(value)) {
-    return value.every(everyStringPermitted);
-  }
   if (typeof value === 'object' && value !== null) {
-    return Object.values(value).every(everyStringPermitted);
+    if (seen.has(value)) return false;
+    seen.add(value);
+    return Object.values(value).every((item) =>
+      everyStringPermitted(item, seen)
+    );
   }
   // A number, boolean, null or undefined names no URL, so it needs no check
   // and cannot fail one.

@@ -25,6 +25,7 @@ import {
 } from './provider-loaders.js';
 
 export type {
+  ConsumerProviders,
   PlayerMediaMount,
   PlayerProviderOptions,
   PlayerProviders,

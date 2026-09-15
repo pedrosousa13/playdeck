@@ -21,9 +21,9 @@ import { DefaultPosterContext, type ResponsivePoster } from './poster.js';
 import { detectSourceWithProviders } from './provider-loaders.js';
 import {
   useActivation,
+  type ConsumerProviders,
   type PlayerMediaMount,
   type PlayerProviderOptions,
-  type PlayerProviders,
   type ResolvedProviderOptions,
   type SuppliedProviderOptions,
   type SuppliedSource
@@ -74,7 +74,7 @@ type SourceTransition = {
 // does not hold everywhere, while the mechanism behind each rule -- including
 // why a zero `startTime` is not written -- is owned by
 // `provider-native/src/playback.ts` and is not repeated here.
-export type RootProps<P extends PlayerProviders = Record<string, never>> = {
+export type RootProps<P extends ConsumerProviders = Record<string, never>> = {
   readonly autoplay?: AutoplayMode;
   readonly captionRenderer?: 'custom' | 'native';
   readonly children: ReactNode;
@@ -199,11 +199,15 @@ export type RootProps<P extends PlayerProviders = Record<string, never>> = {
    * whose `detect` accepts the `source` string -- so a supplied kind can
    * never intercept a URL a built-in host already claims. `hls`, `video`,
    * `youtube`, `vimeo` and `wistia` are reserved names: a `providers` entry
-   * keyed by one of them is skipped outright, on both this string path and
-   * the explicit-object path below, before its `detect` is ever called or its
-   * entry is ever looked up -- not only inert once a resolved source of that
-   * `type` reaches this package's own built-in loader, which dispatches on
-   * `type` first regardless of which registration produced it.
+   * keyed by one of them is a compile error, not merely inert at runtime --
+   * `ConsumerProviders` (`provider-loaders.ts`), the bound `P` above is
+   * declared against, is what rejects it. Were that check somehow bypassed,
+   * such an entry would still be skipped outright at runtime, on both this
+   * string path and the explicit-object path below, before its `detect` is
+   * ever called or its entry is ever looked up -- not only inert once a
+   * resolved source of that `type` reaches this package's own built-in
+   * loader, which dispatches on `type` first regardless of which
+   * registration produced it.
    *
    * `source` also accepts an explicit object of a supplied kind directly --
    * `PlayerSource<Extra>` (`@playdeck/core`) is what opens that up, for the
@@ -282,7 +286,7 @@ const takeSuperseded = <Value,>(
   return matched;
 };
 
-export const Root = <P extends PlayerProviders = Record<string, never>>({
+export const Root = <P extends ConsumerProviders = Record<string, never>>({
   autoplay = false,
   captionRenderer,
   children,

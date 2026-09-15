@@ -356,14 +356,19 @@ export const libraries = [
     composition: 'core + native provider, no control parts',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 20.54 KB measured 2026-09-15, rounded up to the next 0.25 KB -- see
-    // the `libraries` doc comment above for what raising this means. The
-    // growth from 20.26 KB is #659's `remotePlayback` capability, the
-    // `showRemotePlaybackPicker` command and `PlayerState.remotePlayback`
-    // added to core, plus the native provider's own Remote Playback API
-    // wiring (`packages/provider-native/src/remote-playback.ts`) this
-    // composition bundles in full even though it reaches no control part.
-    ceilingKb: 20.75
+    // 21249 bytes measured 2026-09-15 -- 20.7509765625 KB, which displays as
+    // "20.75" to `results.md`'s own two decimal places but is genuinely one
+    // byte over that figure, so this rounds up a further 0.25 KB rather than
+    // holding at 20.75 itself (see `compare-libraries.test.mjs`'s own
+    // handling of this exact ambiguity). See the `libraries` doc comment
+    // above for what raising this means. The growth from 20.75 KB (#659's
+    // own committed figure, main's own ceiling before #662's `providers`
+    // prop merged into this branch) is #662's provider seam:
+    // `detectSourceWithProviders`'s allowlist walk over a `detect` return
+    // (`everyStringPermitted`, `provider-loaders.ts`) and the cycle guard
+    // added to it, which every composition below reaches regardless of
+    // which parts it renders.
+    ceilingKb: 21
   },
   {
     name: 'Playdeck',
@@ -372,12 +377,12 @@ export const libraries = [
     composition: 'core + primitives + native provider',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 21.21 KB measured 2026-09-15, rounded up to the next 0.25 KB. The
-    // growth from 20.85 KB is #659's `RemotePlaybackButton` part plus the
-    // `remotePlayback` capability, `showRemotePlaybackPicker` command and
-    // `PlayerState.remotePlayback` it reads, added to core, react and the
-    // native provider.
-    ceilingKb: 21.25
+    // 21949 bytes measured 2026-09-15 -- 21.4345703125 KB, 21.43 KB to two
+    // places, rounded up to the next 0.25 KB. The growth from 21.25 KB
+    // (#659's own committed figure, main's own ceiling before #662's
+    // `providers` prop merged into this branch) is #662's provider seam, the
+    // same reason the "no parts" row above grew.
+    ceilingKb: 21.5
   },
   {
     name: 'Playdeck (play-only)',
@@ -387,12 +392,13 @@ export const libraries = [
       'core + primitives + native provider + one control (PlayButton)',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 22.28 KB measured 2026-09-15, rounded up to the next 0.25 KB. The
-    // growth from 21.92 KB is #659's `remotePlayback` capability,
-    // `showRemotePlaybackPicker` command and `PlayerState.remotePlayback`
-    // added to core, plus the native provider's own Remote Playback API
-    // wiring this composition bundles in full even though `PlayButton` alone
-    // reaches no capability-gated control.
+    // 23039 bytes measured 2026-09-15 -- 22.4990234375 KB, which displays as
+    // "22.50" to `results.md`'s own two decimal places but is genuinely one
+    // byte under that figure, so this holds at 22.5 KB rather than raising a
+    // further 0.25 KB (see `compare-libraries.test.mjs`'s own handling of
+    // this exact ambiguity). #662's provider seam grew this row too -- the
+    // same reason the "no parts" row above grew -- but not quite enough to
+    // need a raise past #659's own committed figure, 22.5 KB.
     ceilingKb: 22.5,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
@@ -404,13 +410,12 @@ export const libraries = [
       "core + primitives + native provider + control bar (5 of Media Chrome's 7 controls)",
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 26.31 KB measured 2026-09-15, rounded up to the next 0.25 KB. The
-    // growth from 26.02 KB is #659's `remotePlayback` capability,
-    // `showRemotePlaybackPicker` command and `PlayerState.remotePlayback`
-    // added to core, plus the native provider's own Remote Playback API
-    // wiring, which this composition bundles in full regardless of which of
-    // the control bar's five parts a consumer actually reaches.
-    ceilingKb: 26.5
+    // 27167 bytes measured 2026-09-15 -- 26.5302734375 KB, 26.53 KB to two
+    // places, rounded up to the next 0.25 KB. The growth from 26.5 KB
+    // (#659's own committed figure, main's own ceiling before #662's
+    // `providers` prop merged into this branch) is #662's provider seam, the
+    // same reason the "no parts" row above grew.
+    ceilingKb: 26.75
   },
   {
     name: 'react-player',

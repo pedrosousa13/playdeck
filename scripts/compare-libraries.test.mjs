@@ -1098,10 +1098,34 @@ test("each Playdeck row's committed ceiling is that row's own results.md figure,
       Number.isFinite(measuredKb),
       `${library.name}'s "Gzipped (Vite)" cell did not parse as a number`
     );
-    assert.equal(
-      library.ceilingKb,
-      roundUpToQuarterKb(measuredKb),
-      `${library.name}'s ceilingKb should be ${measuredKb} KB rounded up to the next 0.25 KB`
+
+    // `results.md`'s own figure is rounded to two decimal places, so a
+    // measured KB that lands exactly on a quarter-KB boundary (ending
+    // `.00`/`.25`/`.50`/`.75`) is ambiguous by construction: the true byte
+    // count behind it can sit fractionally below that boundary (this row's
+    // own committed ceiling needs no raise) or fractionally above it (one
+    // more quarter-KB is required), and `toFixed(2)` cannot tell the two
+    // apart. #662 hit both sides of exactly this in the same run: the
+    // play-only row's true figure, 23039 bytes, is 22.4990234375 KB --
+    // displays "22.50", genuinely under it -- while its no-parts sibling's
+    // true figure, 21249 bytes, is 20.7509765625 KB -- also displays
+    // "20.75", genuinely one byte over it. Off that boundary no such
+    // ambiguity exists: a measured figure and every value within half a
+    // cent of it round up to the same quarter-KB, because a whole cent (the
+    // finest step `results.md`'s own rounding can leave undetermined) is
+    // bigger than half the 25-cent span between quarter-KB steps.
+    const measuredCents = Math.round(measuredKb * 100);
+    const roundedUp = roundUpToQuarterKb(measuredKb);
+    const onQuarterBoundary = measuredCents % 25 === 0;
+    const acceptable = onQuarterBoundary
+      ? [roundedUp, roundedUp + 0.25]
+      : [roundedUp];
+    assert.ok(
+      acceptable.includes(library.ceilingKb),
+      `${library.name}'s ceilingKb should be ${measuredKb} KB rounded up to the next 0.25 KB` +
+        (onQuarterBoundary
+          ? ` -- or one quarter-KB further, since ${measuredKb} KB sits exactly on results.md's own rounding boundary and its true byte count could be a hair above it`
+          : '')
     );
   }
 });
