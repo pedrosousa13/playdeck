@@ -518,9 +518,9 @@
    * rather than fighting the inline `visibility` toggle.
    *
    * The hairline border is this file's own addition, not theme.css's: every
-   * other surface card here (`activation`, `error`, the settings/captions
-   * menu) borders itself against the light default scheme the same way,
-   * where theme.css's dark scrim needs no edge of its own.
+   * other surface card here that borders itself (`activation`, the
+   * settings/captions menu) does so against the light default scheme the
+   * same way, where theme.css's dark scrim needs no edge of its own.
    *
    * `box-sizing: content-box`, the opposite of the border-box this file
    * reaches for everywhere else a border meets a stated dimension
