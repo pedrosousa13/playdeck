@@ -245,8 +245,11 @@ export type PlayerCapabilities = {
   // tells a browser that lacks it ('unavailable' with the `browser` reason)
   // apart from one that has it but sees no receiver right now ('unavailable'
   // with the `provider` reason) -- both publish `PlayerState.remotePlayback:
-  // null`, the same pairing `chapters` and the `chapters` collection already
-  // are. The Cast SDK is a separate, unimplemented route and out of scope here.
+  // null`, the same pairing `providerPoster` and `providerPosterUrl` already
+  // are. `chapters` disambiguates its two cases the same way but does it over
+  // an empty collection rather than a `null`, so this cites the null-valued
+  // pair. The Cast SDK is a separate, unimplemented route and out of scope
+  // here.
   readonly remotePlayback: Availability;
 };
 
