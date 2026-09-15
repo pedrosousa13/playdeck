@@ -6,7 +6,7 @@
 
 # React video library comparison: measured figures
 
-Measured 2026-09-15 on Node v24.18.1, Vite 8.1.5, esbuild
+Measured 2026-09-15 on Node v22.23.2, Vite 8.1.5, esbuild
 0.28.1, from `tests/compare`'s pinned installs. React, ReactDOM
 and the JSX runtime are marked external for every library alike and excluded
 from every figure below. "Gzipped (Vite)" and "Gzipped (esbuild)" are each the
@@ -22,7 +22,7 @@ inputs cannot reach, gzipped the same way -- see
 | Library                | Version        | Composition measured                                                               | Gzipped (Vite) | Gzipped (esbuild) | Delta  | Not counted          |
 | ---------------------- | -------------- | ---------------------------------------------------------------------------------- | -------------- | ----------------- | ------ | -------------------- |
 | Playdeck (no parts)    | 1.1.0          | core + native provider, no control parts                                           | 20.26 KB       | 21.09 KB          | +4.1%  | 7 chunks, 283.54 KB  |
-| Playdeck               | 1.1.0          | core + primitives + native provider                                                | 20.92 KB       | 21.76 KB          | +4.0%  | 7 chunks, 283.52 KB  |
+| Playdeck               | 1.1.0          | core + primitives + native provider                                                | 20.92 KB       | 21.77 KB          | +4.0%  | 7 chunks, 283.52 KB  |
 | Playdeck (play-only)   | 1.1.0          | core + primitives + native provider + one control (PlayButton)                     | 22.00 KB       | 22.90 KB          | +4.1%  | 7 chunks, 283.54 KB  |
 | Playdeck (control bar) | 1.1.0          | core + primitives + native provider + control bar (5 of Media Chrome's 7 controls) | 26.02 KB       | 27.10 KB          | +4.1%  | 7 chunks, 283.54 KB  |
 | react-player           | 3.4.0          | default export, `controls`, html5 fallback player                                  | 2.97 KB        | 2.40 KB           | -19.4% | 14 chunks, 556.09 KB |

@@ -76,15 +76,24 @@ test('surfaces a behind-edge seek within the live window on the hls.js engine', 
   const panel = page.getByTestId('live-panel');
   await expect(panel).toHaveAttribute('data-live-status', 'live');
 
+  // `Player.LiveIndicator`'s own `live` part, driven through the same
+  // transitions as the bench's hand-rolled `live-panel` readout below. Paired
+  // rather than asserted once: a part that always read `at-edge` would still
+  // pass the first check, so the behind-edge assertion further down is what
+  // proves the attribute is derived from real distance, not constant.
+  const live = page.locator('[data-playdeck-part="live"]');
+
   // Once the buffer fills, hls.js parks the position at the live edge.
   await expect(panel).toHaveAttribute('data-live-edge', 'at-edge', {
     timeout: 15_000
   });
+  await expect(live).toHaveAttribute('data-state', 'at-edge');
 
   // Jumping to the oldest available position stays inside the window and reads
   // as behind the live edge.
   await page.getByTestId('live-seek-back').click();
   await expect(panel).toHaveAttribute('data-live-edge', 'behind-edge');
+  await expect(live).toHaveAttribute('data-state', 'behind-edge');
   const time = page.getByTestId('live-time');
   await expect(time).not.toContainText('NaN');
   await expect(time).toContainText('-');
@@ -92,6 +101,25 @@ test('surfaces a behind-edge seek within the live window on the hls.js engine', 
   // Jumping back to the live edge returns to at-edge.
   await page.getByTestId('live-seek-edge').click();
   await expect(panel).toHaveAttribute('data-live-edge', 'at-edge');
+  await expect(live).toHaveAttribute('data-state', 'at-edge');
+});
+
+test('renders no live part for a non-live hls.js source', async ({
+  browserName,
+  page
+}) => {
+  test.skip(browserName !== 'chromium', 'The hls.js flow runs on Chromium.');
+
+  // `HlsHlsJs`, not the live fixture: a VOD playlist through the same hls.js
+  // engine, so this is the engine reporting `state.live` as `null` rather than
+  // simply a story that never mounted the part.
+  await page.goto(
+    '/iframe.html?id=fixtures-playerfixture--hls-hls-js&viewMode=story'
+  );
+  const engine = await mountedHlsEngine(page);
+  await expect(engine).toHaveText('hls.js');
+
+  await expect(page.locator('[data-playdeck-part="live"]')).toHaveCount(0);
 });
 
 // #465: a `startTime` on a live source. The offset is bounded by the media's

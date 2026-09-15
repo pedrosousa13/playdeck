@@ -951,12 +951,11 @@ export const axes = [
         status: 'partial',
         anchor: {
           kind: 'export',
-          module: '@playdeck/core',
-          name: 'deriveLiveState'
+          module: '@playdeck/react',
+          name: 'LiveIndicator'
         },
-        source:
-          'packages/core/dist/index.d.ts (`PlayerLiveState`, `deriveLiveState`)',
-        note: 'Live playback state is modeled and existing controls adapt (an infinite/DVR duration); no dedicated live-indicator UI primitive ships.'
+        source: PLAYDECK_REACT_README,
+        note: '`LiveIndicator` renders a non-interactive live/DVR-edge badge (`data-state` at-edge/behind-edge), derived from `PlayerState.live`; it ships no seek-to-live-edge control of its own (tracked separately).'
       },
       'react-player': {
         status: 'no',

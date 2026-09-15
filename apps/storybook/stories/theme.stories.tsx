@@ -507,6 +507,112 @@ export const ThumbnailFadesInDocked: Story = {
   }
 };
 
+const renderLiveIndicatorFixture = () => (
+  <Player.Viewport style={{ width: 480, height: 270 }}>
+    <Player.LiveIndicator />
+  </Player.Viewport>
+);
+
+/**
+ * `live` shares the button-shaped-control box every other control in `Default`
+ * above gets -- same size, same radius -- but it is permanently `disabled`
+ * (LiveIndicator's own doc comment), so it drops out of the shared `:hover`
+ * and `:active` rules and carries its own `cursor: default` instead of their
+ * `pointer`. The hover check is the point: without the exclusion this control
+ * would pick up the same fill `Default`'s `PlayButton` does on press, which
+ * would tell a viewer it does something it does not.
+ *
+ * Demonstrated red, two mutations against theme.css, run and reverted:
+ *
+ * Removing the `:where([data-playdeck-part='live']) { cursor: default; }`
+ * rule after the shared `:hover`/`:active` blocks (leaving `live` in the
+ * base box list, so the shared rule's own `cursor: pointer` was the only
+ * thing left to answer):
+ *
+ *   expected 'pointer' to be 'default'
+ *    ❯ stories/theme.stories.tsx:534:37
+ *      532|     await expect(styles.height).toBe('44px');
+ *      533|     await expect(styles.borderRadius).toBe('10px');
+ *      534|     await expect(styles.cursor).toBe('default');
+ *   Test Files  1 failed | 26 passed | 5 skipped (32)
+ *        Tests  1 failed | 121 passed (122)
+ *
+ * Reverted, all 122 passed again. Removing `[data-playdeck-part='live']`
+ * from the shared box selector instead (cursor rule left in place):
+ *
+ *   expected '0px' to be '10px'
+ *    ❯ stories/theme.stories.tsx:533:43
+ *      531|     await expect(styles.width).toBe('44px');
+ *      532|     await expect(styles.height).toBe('44px');
+ *      533|     await expect(styles.borderRadius).toBe('10px');
+ *   Test Files  1 failed | 26 passed | 5 skipped (32)
+ *        Tests  1 failed | 121 passed (122)
+ *
+ * `width`/`height` stayed green through that second mutation -- the inline
+ * `controlTargetStyle` floor (`min-width`/`min-height:
+ * var(--playdeck-control-min-size, 2.75rem)`, set directly on the element
+ * regardless of this stylesheet) happens to equal the theme's own 44px box
+ * size on a control with no content wide enough to exceed it, so those two
+ * assertions alone would not have caught this mutation; `borderRadius` and
+ * `cursor` are what actually depend on the theme rule here. Reverted, all
+ * 122 passed again.
+ */
+export const LiveIndicatorAppearance: Story = {
+  parameters: ready({}, { live: { isLive: true, atLiveEdge: true } }),
+  render: renderLiveIndicatorFixture,
+  play: async ({ canvas, userEvent }) => {
+    const live = await canvas.findByRole('button', { name: 'Live' });
+    const styles = globalThis.getComputedStyle(live);
+    await expect(styles.width).toBe('44px');
+    await expect(styles.height).toBe('44px');
+    await expect(styles.borderRadius).toBe('10px');
+    await expect(styles.cursor).toBe('default');
+    await expect(styles.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+
+    await userEvent.hover(live);
+    // Unchanged: the shared `:hover` rule never matches this part.
+    await expect(globalThis.getComputedStyle(live).backgroundColor).toBe(
+      'rgba(0, 0, 0, 0)'
+    );
+  }
+};
+
+/**
+ * `docked.css`'s own copy of the rule above, themed through `globals` on the
+ * story itself -- the same override `ThumbnailFadesInDocked` and
+ * `TearsDownWithTheStory` use. What differs from the themed story above is
+ * the ink token (`--playdeck-color-on-surface, #1c1c1e` here against `#fff`
+ * there); the box shape, the missing hover fill and the `cursor: default`
+ * are the same rule in both files.
+ *
+ * Demonstrated red, docked.css's own copy of the cursor-override mutation
+ * above (the shared box-list mutation is theme.css/docked.css's identical
+ * rule, already proven on the themed story; this one instead confirms
+ * docked.css's copy of the cursor override is load-bearing on its own):
+ *
+ *   expected 'pointer' to be 'default'
+ *    ❯ stories/theme.stories.tsx:560:37
+ *      558|     const live = await canvas.findByRole('button', { name: 'Live' });
+ *      559|     const styles = globalThis.getComputedStyle(live);
+ *      560|     await expect(styles.cursor).toBe('default');
+ *   Test Files  1 failed | 26 passed | 5 skipped (32)
+ *        Tests  1 failed | 121 passed (122)
+ *
+ * Reverted, all 122 passed again.
+ */
+export const LiveIndicatorAppearanceDocked: Story = {
+  globals: { theme: 'docked' },
+  parameters: ready({}, { live: { isLive: true, atLiveEdge: true } }),
+  render: renderLiveIndicatorFixture,
+  play: async ({ canvas }) => {
+    const live = await canvas.findByRole('button', { name: 'Live' });
+    const styles = globalThis.getComputedStyle(live);
+    await expect(styles.cursor).toBe('default');
+    await expect(styles.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    await expect(styles.color).toBe('rgb(28, 28, 30)');
+  }
+};
+
 // Its strength is entirely that ordering: run alone (`-t`, or opened directly
 // in the UI), or with these exports reordered, it passes without proving
 // anything. It is the only test that exercises real DOM teardown, so it stays;
