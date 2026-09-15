@@ -63,6 +63,8 @@ export const Clip = () => (
         <Player.PipButton />
         {/* Renders only where there is somewhere to cast to. */}
         <Player.AirPlayButton />
+        {/* Renders only where a Remote Playback API device is reachable. */}
+        <Player.RemotePlaybackButton />
         <Player.FullscreenButton />
       </Player.Controls>
     </Player.Viewport>
@@ -382,15 +384,21 @@ export const poster = Player.normalizePoster('/poster.jpg');
 ### Controls
 
 `PlayButton`, `MuteButton`, `VolumeSlider`, `SeekSlider`, `Time`,
-`FullscreenButton`, `PipButton`, `AirPlayButton`, `CaptionsButton`, `Controls`.
+`FullscreenButton`, `PipButton`, `AirPlayButton`, `RemotePlaybackButton`,
+`CaptionsButton`, `Controls`.
 
 #### Presentation and casting
 
-`FullscreenButton`, `PipButton` and `AirPlayButton` each read one entry of
-`state.capabilities` — `fullscreen`, `pictureInPicture` and `airPlay` — and
-render only while that entry says `available`. An `unknown` entry renders
-nothing either: a capability still being decided is not a reason to put a
-control on screen and then withdraw it.
+`FullscreenButton`, `PipButton`, `AirPlayButton` and `RemotePlaybackButton`
+each read one entry of `state.capabilities` — `fullscreen`, `pictureInPicture`,
+`airPlay` and `remotePlayback` — and render only while that entry says
+`available`. An `unknown` entry renders nothing either: a capability still
+being decided is not a reason to put a control on screen and then withdraw it.
+
+`RemotePlaybackButton` opens the browser's own Remote Playback picker — the
+standards-based route to Chromecast and other receivers, reached through the
+media element's `remote` object rather than the Cast SDK — and is `available`
+only once that element reports a device actually reachable on the network.
 
 Driving those presentations without the buttons means doing that gate yourself.
 The commands are on `PlayerHandle` and on `usePlayerActions`, as the request and
@@ -398,18 +406,20 @@ exit pairs `requestFullscreen`/`exitFullscreen` and
 `requestPictureInPicture`/`exitPictureInPicture`. The built-in buttons choose
 which half of a pair to send from `state.fullscreen` and
 `state.pictureInPicture`, and that choice is exactly what you take over.
-`showAirPlayPicker` has no exit twin and is not a toggle: it opens the
-platform's own route picker, and which device the viewer picked — or whether
-they picked one at all — is never reported back, which is why `AirPlayButton`
-carries no state of its own.
+`showAirPlayPicker` and `showRemotePlaybackPicker` have no exit twin and are
+not toggles: each opens its platform's own route picker, and which device the
+viewer picked — or whether they picked one at all — is never reported back,
+which is why neither button carries state of its own. `remotePlayback`'s
+connection state is published separately, as `PlayerState.remotePlayback`, for
+a consumer who wants to render it.
 
 Calling one past its gate is answered rather than thrown, and the
 `CommandResult` says which gate it met. `not-ready` is a command that arrived
 before a provider was attached and ready to take it. `unsupported` is the active
 provider having no such command to give: an embed exposes only what its own SDK
-offers, so some wire no picture-in-picture at all, and the AirPlay picker is
-wired only by the adapters that drive a media element directly, and then only
-where that element exposes the picker. `blocked` is a
+offers, so some wire no picture-in-picture at all, and the AirPlay and
+remote-playback pickers are wired only by the adapters that drive a media
+element directly, and then only where that element exposes them. `blocked` is a
 permissions policy or a media-element attribute refusing it, and carries the
 `PlayerError` that names which. So the capability answers whether to offer a
 control, and the result answers what became of a command once it was issued.

@@ -28,7 +28,8 @@ export const freezeCapabilities = (
     pictureInPicture: freezeAvailability(capabilities.pictureInPicture),
     airPlay: freezeAvailability(capabilities.airPlay),
     customControls: freezeAvailability(capabilities.customControls),
-    providerPoster: freezeAvailability(capabilities.providerPoster)
+    providerPoster: freezeAvailability(capabilities.providerPoster),
+    remotePlayback: freezeAvailability(capabilities.remotePlayback)
   });
 
 export const freezeError = (error: PlayerError): PlayerError =>

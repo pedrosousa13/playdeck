@@ -24,6 +24,7 @@ export type {
   PlayerLiveState,
   PlayerProvider,
   PlayerQuality,
+  PlayerRemotePlaybackState,
   PlayerSource,
   PlayerState,
   PreProviderActivation,

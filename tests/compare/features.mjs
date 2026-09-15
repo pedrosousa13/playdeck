@@ -522,15 +522,14 @@ export const axes = [
     label: 'Chromecast / Google Cast',
     entries: {
       Playdeck: {
-        status: 'no',
+        status: 'yes',
         anchor: {
-          kind: 'absent-in-tree',
-          module: ['@playdeck/core', '@playdeck/react'],
-          glob: ['**/*.js', '**/*.d.ts'],
-          includes: 'Cast'
+          kind: 'export',
+          module: '@playdeck/react',
+          name: 'RemotePlaybackButton'
         },
-        source: PLAYDECK_TREE,
-        note: 'No casting command, capability, provider or UI part ships; AirPlay is the only remote-playback route.'
+        source: PLAYDECK_REACT_README,
+        note: "Reached through the standards-based Remote Playback API (the media element's `remote` object, `capabilities.remotePlayback`/`showRemotePlaybackPicker()`), explicitly not the Cast SDK: no sender script, no receiver page. That SDK route remains unshipped and is possible later as an external provider."
       },
       'react-player': {
         status: 'no',

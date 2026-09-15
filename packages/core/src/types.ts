@@ -184,6 +184,15 @@ export type PlayerLiveState = {
   readonly atLiveEdge: boolean;
 } | null;
 
+// The Remote Playback API's own three connection states
+// (`RemotePlaybackState`), plus `null` both while `capabilities.remotePlayback`
+// has not resolved to `available` and once it has settled on `unavailable` --
+// the capability is what tells those two apart, the same pairing
+// `capabilities.providerPoster` and `providerPosterUrl` already are. Once
+// `available`, this reflects the element's own `remote.state` directly.
+export type PlayerRemotePlaybackState =
+  'connecting' | 'connected' | 'disconnected' | null;
+
 export type PlayerProvider = 'native' | 'hls' | 'youtube' | 'vimeo' | 'wistia';
 
 export type HlsEngine = 'native' | 'hls.js';
@@ -232,6 +241,13 @@ export type PlayerCapabilities = {
   // answers `available` immediately -- its still is derivable from the video id
   // alone, no request required.
   readonly providerPoster: Availability;
+  // Whether the element exposes the Remote Playback API at all, which is what
+  // tells a browser that lacks it ('unavailable' with the `browser` reason)
+  // apart from one that has it but sees no receiver right now ('unavailable'
+  // with the `provider` reason) -- both publish `PlayerState.remotePlayback:
+  // null`, the same pairing `chapters` and the `chapters` collection already
+  // are. The Cast SDK is a separate, unimplemented route and out of scope here.
+  readonly remotePlayback: Availability;
 };
 
 // A play command that was turned down, as `PlayerState.refusedPlay` publishes
@@ -288,7 +304,8 @@ export type PlayerCommand =
   | 'exitFullscreen'
   | 'requestPictureInPicture'
   | 'exitPictureInPicture'
-  | 'showAirPlayPicker';
+  | 'showAirPlayPicker'
+  | 'showRemotePlaybackPicker';
 
 // A command turned down because no provider was attached, as
 // `PlayerState.refusedCommand` publishes it. It is the general half of
@@ -439,6 +456,8 @@ export type PlayerState = {
   // the capability is what tells those two apart, the same pairing
   // `capabilities.chapters` and `chapters` already are.
   readonly providerPosterUrl: string | null;
+  // See `PlayerRemotePlaybackState`.
+  readonly remotePlayback: PlayerRemotePlaybackState;
   // Declared by the provider adapter, not derived here: it means a command
   // issued now is accepted *and* will not be undone by a load that has yet to
   // run. Core cannot compute it — the four adapters open their command guards
@@ -608,6 +627,7 @@ export type ProviderAdapter = {
   requestPictureInPicture?: () => Promise<CommandResult>;
   exitPictureInPicture?: () => Promise<CommandResult>;
   showAirPlayPicker?: () => Promise<CommandResult>;
+  showRemotePlaybackPicker?: () => Promise<CommandResult>;
   retry?: () => Promise<CommandResult>;
   subscribeCues?: (listener: (cues: readonly TextCue[]) => void) => () => void;
   // A side channel like `subscribeCues`, and deliberately not `PlayerState`:

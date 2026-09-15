@@ -158,7 +158,8 @@ const initialCapabilities = (): PlayerCapabilities =>
     pictureInPicture: notReady,
     airPlay: notReady,
     customControls: notReady,
-    providerPoster: notReady
+    providerPoster: notReady,
+    remotePlayback: notReady
   });
 
 export const createInitialPlayerState = (): PlayerState =>
@@ -196,7 +197,8 @@ export const createInitialPlayerState = (): PlayerState =>
     selectedTextTrackId: null,
     captionRendering: 'unavailable',
     commandsReady: false,
-    providerPosterUrl: null
+    providerPosterUrl: null,
+    remotePlayback: null
   });
 
 export class PlayerController {
@@ -947,6 +949,8 @@ export class PlayerController {
     this.#command('exitPictureInPicture');
   showAirPlayPicker = (): Promise<CommandResult> =>
     this.#command('showAirPlayPicker');
+  showRemotePlaybackPicker = (): Promise<CommandResult> =>
+    this.#command('showRemotePlaybackPicker');
   retry = (): Promise<CommandResult> => {
     const provider = this.#provider;
     if (!provider?.retry) return this.#command('retry');
@@ -1008,6 +1012,7 @@ export class PlayerController {
       | 'requestPictureInPicture'
       | 'exitPictureInPicture'
       | 'showAirPlayPicker'
+      | 'showRemotePlaybackPicker'
       | 'retry'
     >,
     value?: number | string | null
@@ -1074,6 +1079,7 @@ export class PlayerController {
       | 'requestPictureInPicture'
       | 'exitPictureInPicture'
       | 'showAirPlayPicker'
+      | 'showRemotePlaybackPicker'
       | 'retry'
     >,
     value?: number | string | null

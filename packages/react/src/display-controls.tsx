@@ -140,3 +140,50 @@ export const AirPlayButton = ({
     </button>
   );
 };
+
+export type RemotePlaybackButtonProps = ComponentPropsWithRef<'button'>;
+
+/**
+ * Opens the browser's Remote Playback picker (the standards-based route to
+ * Chromecast and other receivers). Gated on the `remotePlayback` capability,
+ * so it renders nothing until a device is actually available.
+ *
+ * Structured like `AirPlayButton`: **not** a toggle. Which device the user
+ * picked -- or whether they picked one at all -- is never exposed, so there is
+ * no `aria-pressed` and one static label. `PlayerState.remotePlayback` does
+ * carry the connection state once a session starts (`connecting` /
+ * `connected` / `disconnected`), for a consumer who wants to render it, but
+ * this button itself does not.
+ */
+export const RemotePlaybackButton = ({
+  'aria-label': ariaLabel,
+  children,
+  onClick,
+  style,
+  ...props
+}: RemotePlaybackButtonProps) => {
+  const { provider, status } = usePlayerState((state) => ({
+    provider: state.provider,
+    status: state.capabilities.remotePlayback.status
+  }));
+  const { controller } = usePlayer();
+  if (status !== 'available') return null;
+
+  return (
+    <button
+      {...props}
+      aria-label={ariaLabel ?? 'Cast'}
+      data-provider={provider ?? undefined}
+      data-playdeck-part="remote-playback-button"
+      onClick={(event) => {
+        onClick?.(event);
+        if (event.defaultPrevented) return;
+        void controller.showRemotePlaybackPicker();
+      }}
+      style={{ ...controlTargetStyle, ...style }}
+      type="button"
+    >
+      {children ?? 'Cast'}
+    </button>
+  );
+};

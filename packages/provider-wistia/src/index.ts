@@ -121,8 +121,11 @@ export type WistiaProviderAdapter = ProviderAdapter &
 // What this adapter does not drive at all, for either of two reasons. Aurora
 // has a `videoQuality()` coarse setter and a captions API, but neither is wired
 // here, so `selectQuality` and `selectTextTrack` report unavailable rather than
-// staying forever "unknown". `pictureInPicture` and `airPlay` have no surface
-// to wire at all: `PublicApi` declares no member for either.
+// staying forever "unknown". `pictureInPicture`, `airPlay` and
+// `remotePlayback` have no surface to wire at all: `PublicApi` declares no
+// member for any of the three, and playback runs inside Wistia's own
+// `<wistia-player>`, which carries no media element this adapter has a
+// handle to.
 const outOfScope: Availability = { status: 'unavailable', reason: 'provider' };
 
 // Every command this adapter never has a live handle for, no matter which one
@@ -245,6 +248,7 @@ export const createWistiaProvider = (
       fullscreen: available,
       pictureInPicture: outOfScope,
       airPlay: outOfScope,
+      remotePlayback: outOfScope,
       // Chromeless is a plain set of embed attributes, declared in Wistia's own
       // `Attributes` and gated by no account tier.
       customControls: available,

@@ -685,6 +685,7 @@ test('reports the whole capability record it can justify', async () => {
     fullscreen: { status: 'available' },
     pictureInPicture: { status: 'unavailable', reason: 'provider' },
     airPlay: { status: 'unavailable', reason: 'provider' },
+    remotePlayback: { status: 'unavailable', reason: 'provider' },
     customControls: { status: 'available' },
     providerPoster: { status: 'unknown', reason: 'provider-check' }
   });

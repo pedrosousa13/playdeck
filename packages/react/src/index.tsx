@@ -142,13 +142,15 @@ export type {
 export {
   AirPlayButton,
   FullscreenButton,
-  PipButton
+  PipButton,
+  RemotePlaybackButton
 } from './display-controls.js';
 
 export type {
   AirPlayButtonProps,
   FullscreenButtonProps,
-  PipButtonProps
+  PipButtonProps,
+  RemotePlaybackButtonProps
 } from './display-controls.js';
 
 export { Controls } from './controls.js';

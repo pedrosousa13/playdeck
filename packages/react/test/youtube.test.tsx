@@ -463,6 +463,7 @@ test('renders no Playdeck control layer over a ready YouTube embed', async () =>
         fullscreen: { status: 'available' },
         pictureInPicture: { status: 'unavailable', reason: 'provider' },
         airPlay: { status: 'unavailable', reason: 'provider' },
+        remotePlayback: { status: 'unavailable', reason: 'provider' },
         customControls: { status: 'unavailable', reason: 'policy' },
         providerPoster: { status: 'available' }
       }
