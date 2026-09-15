@@ -12,6 +12,8 @@ export const Overlays = () => (
     <Player.ActivationButton aria-label="Play" />
     <Player.LoadingIndicator />
     <Player.Captions />
+    {/* Renders only on a live source -- nothing while `state.live` is null. */}
+    <Player.LiveIndicator />
     <Player.Gestures
       seekOffset={10}
       onSeek={(direction, offset) => console.log(direction, offset)}

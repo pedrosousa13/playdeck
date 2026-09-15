@@ -422,6 +422,7 @@ const PlayerFixture = ({
           <Player.LoadingIndicator />
           <Player.Media textTracks={textTracks} />
           <Player.Captions />
+          <Player.LiveIndicator />
         </Player.Viewport>
         <Player.PlayButton />
         <Player.CaptionsButton />

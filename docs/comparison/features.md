@@ -209,7 +209,7 @@ Measured 2026-09-15 against `tests/compare`'s pinned installs:
 
 [^72]: **DASH — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react/media/dash-video` exports `DashVideo`. Source: @videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react and in the five `@videojs/*` packages it depends on (installed packages)
 
-[^73]: **Live streaming — Playdeck**: partial. Live playback state is modeled and existing controls adapt (an infinite/DVR duration); no dedicated live-indicator UI primitive ships. mechanical check: `@playdeck/core` exports `deriveLiveState`. Source: packages/core/dist/index.d.ts (`PlayerLiveState`, `deriveLiveState`)
+[^73]: **Live streaming — Playdeck**: partial. `LiveIndicator` renders a non-interactive live/DVR-edge badge (`data-state` at-edge/behind-edge), derived from `PlayerState.live`; it ships no seek-to-live-edge control of its own (tracked separately). mechanical check: `@playdeck/react` exports `LiveIndicator`. Source: packages/react/README.md
 
 [^74]: **Live streaming — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `isLive`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 

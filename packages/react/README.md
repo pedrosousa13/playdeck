@@ -325,7 +325,7 @@ also in `@playdeck/core`.
 ### Structure
 
 `Root`, `Viewport`, `Media`, `Poster`, `PosterImage`, `ActivationButton`,
-`LoadingIndicator`, `ErrorDisplay`, `Captions`, `Gestures`.
+`LoadingIndicator`, `ErrorDisplay`, `Captions`, `Gestures`, `LiveIndicator`.
 
 Each overlay renders only when its own state calls for it — nothing is drawn
 disabled:
@@ -347,6 +347,8 @@ export const Overlays = () => (
     <Player.ActivationButton aria-label="Play" />
     <Player.LoadingIndicator />
     <Player.Captions />
+    {/* Renders only on a live source -- nothing while `state.live` is null. */}
+    <Player.LiveIndicator />
     <Player.Gestures
       seekOffset={10}
       onSeek={(direction, offset) => console.log(direction, offset)}
