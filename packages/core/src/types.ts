@@ -182,6 +182,13 @@ export type TimeRange = { readonly start: number; readonly end: number };
 export type PlayerLiveState = {
   readonly isLive: boolean;
   readonly atLiveEdge: boolean;
+  // How far behind the provider's live edge playback is, in whole seconds —
+  // `0` at or ahead of the edge. Quantized to the second deliberately:
+  // `liveStateEqual` is what every adapter consults to decide whether a new
+  // `live` value is worth publishing, and an unrounded float would differ on
+  // essentially every `timeupdate`, republishing `live` many times a second.
+  // Whole seconds is also the resolution `Time` renders at.
+  readonly offsetFromEdge: number;
 } | null;
 
 // The Remote Playback API's own three connection states
@@ -229,6 +236,11 @@ export type PlayerCapabilities = {
   // a source that simply has none (the `source` reason) — both publish an
   // empty `chapters` collection (#182).
   readonly chapters: Availability;
+  // Whether the provider can report a live edge to seek to at all, told apart
+  // the same way `chapters` is: `unavailable` with `provider` means the
+  // provider has no way to answer this for any source, and `unavailable` with
+  // `source` means this particular source is not live.
+  readonly liveEdge: Availability;
   readonly fullscreen: Availability;
   readonly pictureInPicture: Availability;
   readonly airPlay: Availability;
@@ -296,6 +308,7 @@ export type PlayerCommand =
   | 'play'
   | 'pause'
   | 'seek'
+  | 'seekToLiveEdge'
   | 'mute'
   | 'unmute'
   | 'setVolume'
@@ -632,6 +645,7 @@ export type ProviderAdapter = {
   pause?: () => Promise<CommandResult>;
   seekTo?: (time: number) => Promise<CommandResult>;
   seekBy?: (offset: number) => Promise<CommandResult>;
+  seekToLiveEdge?: () => Promise<CommandResult>;
   selectQuality?: (id: string | null) => Promise<CommandResult>;
   mute?: () => Promise<CommandResult>;
   unmute?: () => Promise<CommandResult>;

@@ -154,6 +154,10 @@ export const play = (): Promise<unknown> => controller.play();
   moving `seekable` window, measured against the playhead. Never from the source
   URL. A file with a finite duration reports `null`, and the value is published
   again only when it changes.
+- **`liveEdge`** is `available` once the element is live and its own seekable
+  window has a finite end — the only notion of a live edge a plain media
+  element has, with no target latency of its own. `seekToLiveEdge()` lands on
+  the largest such end.
 - **`commandsReady`** is declared after `media.load()`, because `load()` resets
   `playbackRate` and anything applied earlier would be silently undone.
 - **Chapters** come from a `kind="chapters"` text track. Its mode is moved to

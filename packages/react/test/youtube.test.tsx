@@ -460,6 +460,7 @@ test('renders no Playdeck control layer over a ready YouTube embed', async () =>
         selectTextTrack: { status: 'unavailable', reason: 'source' },
         selectAudioTrack: { status: 'unavailable', reason: 'provider' },
         chapters: { status: 'unavailable', reason: 'provider' },
+        liveEdge: { status: 'unavailable', reason: 'provider' },
         fullscreen: { status: 'available' },
         pictureInPicture: { status: 'unavailable', reason: 'provider' },
         airPlay: { status: 'unavailable', reason: 'provider' },

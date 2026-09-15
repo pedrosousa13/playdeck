@@ -175,6 +175,11 @@ SDK you have installed, not as a contract Playdeck controls.
   all rather than a guess — the field is absent from every patch, not present
   holding `null`. Pinned by "pins the liveness gap" in `test/index.test.ts`
   (#187).
+- **`liveEdge` is `unavailable` / `provider`.** `@vimeo/player@2.30.4` has no
+  live concept anywhere to build one on. This adapter's own `seekable` is
+  synthesised as `[{ start: 0, end: duration }]` (`src/playback.ts`), never
+  sourced from the SDK's own `getSeekable()`, which only underlines that
+  nothing here reads a real seekable window in the first place.
 - **The `[startTime, endTime]` window is this adapter's to enforce.** Vimeo
   carries a start as a `#t=` fragment on the embed url, which only keeps the
   embed from loading at zero — the seek this adapter issues when the player is

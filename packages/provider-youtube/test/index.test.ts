@@ -672,6 +672,7 @@ test('maps player ready onto confirmed state and honest capabilities', async () 
         selectTextTrack: { status: 'unavailable', reason: 'source' },
         selectAudioTrack: { status: 'unavailable', reason: 'provider' },
         chapters: { status: 'unavailable', reason: 'provider' },
+        liveEdge: { status: 'unavailable', reason: 'provider' },
         fullscreen: { status: 'available' },
         pictureInPicture: { status: 'unavailable', reason: 'provider' },
         airPlay: { status: 'unavailable', reason: 'provider' },
@@ -2022,6 +2023,31 @@ test('reports chapters as unavailable for the provider without failing a command
   });
   expect(controller.getState().error).toBeNull();
   expect(await controller.seekTo(10)).toEqual({ ok: true });
+});
+
+// The IFrame Player API's whole surface for this is `getDuration()`,
+// `getCurrentTime()` and `getVideoLoadedFraction()` -- no seekable-range
+// accessor at all -- so there is no live edge this adapter could report,
+// before or after the player is ready.
+test('reports liveEdge as unavailable for the provider, before and after ready', async () => {
+  const controller = new PlayerController();
+  const { fake, provider } = createAdapter();
+  controller.setProvider(provider);
+  await provider.attach();
+  await provider.load();
+
+  expect(controller.getState().capabilities.liveEdge).toEqual({
+    status: 'unavailable',
+    reason: 'provider'
+  });
+
+  fake.players[0]!.fireReady();
+
+  expect(controller.getState().capabilities.liveEdge).toEqual({
+    status: 'unavailable',
+    reason: 'provider'
+  });
+  expect(provider.seekToLiveEdge).toBeUndefined();
 });
 
 // --- subscriber isolation (#233) ---

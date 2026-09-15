@@ -236,6 +236,11 @@ full build otherwise: 53 KB is not worth a caption track your viewers needed.
   chooses and the capability is `unavailable` / `source`.
 - **Live** streams report `isLive` and `atLiveEdge` derived from the seekable
   window, not from a manifest tag.
+- **`liveEdge`** and `seekToLiveEdge` are `available` on the hls.js engine once
+  the source is live, hls.js's own `liveSyncPosition` is finite and the
+  seekable window is wide enough to scrub — `seekToLiveEdge()` lands there,
+  never on the raw seekable end. On the native engine the edge is that raw
+  seekable end, the only notion of it a plain media element has.
 - **Captions** on the hls.js engine come from hls.js, which is the sole owner:
   sidecar `<track>` children discovered by the native subsystem are dropped so
   the two cannot both claim the state.
@@ -266,8 +271,8 @@ export const live = deriveLiveState({
   liveEdge: 3594
 });
 
-// -> { isLive: true, atLiveEdge: true }. `null` means "not live, or not yet
-// known" — a control should not claim either until it is.
+// -> { isLive: true, atLiveEdge: true, offsetFromEdge: 0 }. `null` means "not
+// live, or not yet known" — a control should not claim either until it is.
 export const atEdge = live?.atLiveEdge ?? false;
 ```
 

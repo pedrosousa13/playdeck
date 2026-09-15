@@ -292,6 +292,15 @@ export const createVimeoProvider = (
       // command to.
       selectAudioTrack: { status: 'unavailable', reason: 'provider' },
       chapters: chapters.chaptersAvailability(),
+      // `@vimeo/player` (2.30.4, this package's dependency) has no live
+      // concept anywhere in its type definitions or its shipped
+      // `dist/player.js` -- no method, property or event named for a live
+      // stream -- so there is no surface to build a live edge on. This
+      // adapter's own `seekable` is synthesised as
+      // `[{ start: 0, end: duration }]` (`playback.ts`), never sourced from
+      // the SDK's own `getSeekable()`, which only underlines that nothing
+      // here reads a real seekable window to begin with.
+      liveEdge: { status: 'unavailable', reason: 'provider' },
       fullscreen: available,
       pictureInPicture: presentation.pictureInPictureAvailability(),
       // The SDK exposes remote-playback methods, but this adapter wires no

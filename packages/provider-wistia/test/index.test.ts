@@ -682,6 +682,7 @@ test('reports the whole capability record it can justify', async () => {
     selectTextTrack: { status: 'unavailable', reason: 'provider' },
     selectAudioTrack: { status: 'unavailable', reason: 'provider' },
     chapters: { status: 'unavailable', reason: 'provider' },
+    liveEdge: { status: 'unavailable', reason: 'provider' },
     fullscreen: { status: 'available' },
     pictureInPicture: { status: 'unavailable', reason: 'provider' },
     airPlay: { status: 'unavailable', reason: 'provider' },
@@ -689,6 +690,25 @@ test('reports the whole capability record it can justify', async () => {
     customControls: { status: 'available' },
     providerPoster: { status: 'unknown', reason: 'provider-check' }
   });
+});
+
+// `PublicApi` has `time(seconds)` to seek and `duration()`, which
+// `liveFragment` (`attachment.ts`) already reuses as the moving live edge for
+// the at-edge tolerance -- because Wistia's `PublicApi` exposes no seekable
+// range at all, `duration()` is the closest thing to one, not a value this
+// adapter trusts as an actionable seek target. There is no dedicated live-edge
+// accessor and no seekable-range accessor to derive one from, so this reports
+// the same `outOfScope` verdict as the other surfaces `PublicApi` never grew.
+test('reports liveEdge as unavailable for the provider, with no seekToLiveEdge command', async () => {
+  const { patches, provider } = await setup({
+    fake: { mediaData: { mediaType: 'LiveStream' }, duration: 100 }
+  });
+
+  expect(readyPatch(patches).capabilities?.liveEdge).toEqual({
+    status: 'unavailable',
+    reason: 'provider'
+  });
+  expect(provider.seekToLiveEdge).toBeUndefined();
 });
 
 // --- provider-supplied poster (#556) ---
@@ -1605,14 +1625,16 @@ test('recomputes the at-edge flag as the playhead moves', async () => {
   player.emit(WISTIA_EVENTS.timeUpdate);
   expect(livePatches(result.patches).at(-1)).toEqual({
     isLive: true,
-    atLiveEdge: true
+    atLiveEdge: true,
+    offsetFromEdge: 5
   });
 
   player.handle.currentTime = 80;
   player.emit(WISTIA_EVENTS.timeUpdate);
   expect(livePatches(result.patches).at(-1)).toEqual({
     isLive: true,
-    atLiveEdge: false
+    atLiveEdge: false,
+    offsetFromEdge: 20
   });
 });
 
@@ -1625,10 +1647,12 @@ test('publishes nothing for a live value equal to the last one', async () => {
   player.emit(WISTIA_EVENTS.timeUpdate);
   const published = livePatches(result.patches).length;
 
-  // Both still inside the tolerance, so the value is the one already published.
-  player.handle.currentTime = 96;
+  // Both still inside the tolerance, and both round to the same whole-second
+  // `offsetFromEdge` as the value already published (5), so the value is the
+  // one already published.
+  player.handle.currentTime = 95.2;
   player.emit(WISTIA_EVENTS.timeUpdate);
-  player.handle.currentTime = 97;
+  player.handle.currentTime = 95.4;
   player.emit(WISTIA_EVENTS.timeUpdate);
 
   expect(livePatches(result.patches)).toHaveLength(published);
@@ -1654,7 +1678,8 @@ test('recomputes the at-edge flag while the player is paused', async () => {
 
     expect(livePatches(result.patches).at(-1)).toEqual({
       isLive: true,
-      atLiveEdge: false
+      atLiveEdge: false,
+      offsetFromEdge: 100
     });
   } finally {
     vi.useRealTimers();
@@ -1669,9 +1694,10 @@ test('publishes nothing while paused for a live value equal to the last one', as
     });
     const published = livePatches(result.patches).length;
 
-    // The edge moves, but not far enough to leave the tolerance, so the value
-    // is the one already published and the interval has nothing to say.
-    element(result).handle.durationSeconds = 9;
+    // The edge moves, but not far enough to round to a different whole-second
+    // `offsetFromEdge`, so the value is the one already published and the
+    // interval has nothing to say.
+    element(result).handle.durationSeconds = 5.4;
     await vi.advanceTimersByTimeAsync(LIVE_EDGE_POLL_MS * 4);
 
     expect(livePatches(result.patches)).toHaveLength(published);
@@ -1715,14 +1741,16 @@ test('recomputes only while paused, and picks up again when playback stops', asy
     await vi.advanceTimersByTimeAsync(LIVE_EDGE_POLL_MS * 2);
     expect(livePatches(result.patches).at(-1)).toEqual({
       isLive: true,
-      atLiveEdge: true
+      atLiveEdge: true,
+      offsetFromEdge: 5
     });
 
     player.emit(WISTIA_EVENTS.pause);
     await vi.advanceTimersByTimeAsync(LIVE_EDGE_POLL_MS);
     expect(livePatches(result.patches).at(-1)).toEqual({
       isLive: true,
-      atLiveEdge: false
+      atLiveEdge: false,
+      offsetFromEdge: 100
     });
   } finally {
     vi.useRealTimers();

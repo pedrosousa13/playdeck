@@ -165,6 +165,7 @@ export type NativePlayback = {
   readonly pause: () => Promise<CommandResult>;
   readonly seekTo: (time: number) => Promise<CommandResult>;
   readonly seekBy: (offset: number) => Promise<CommandResult>;
+  readonly seekToLiveEdge: () => Promise<CommandResult>;
   readonly mute: () => Promise<CommandResult>;
   readonly unmute: () => Promise<CommandResult>;
   readonly setVolume: (volume: number) => Promise<CommandResult>;
@@ -547,6 +548,25 @@ export const createNativePlayback = (
         startTime,
         endTime
       );
+      if (target === undefined)
+        return Promise.resolve({ ok: false, reason: 'provider-error' });
+      return seekToBounded(target);
+    },
+    // The largest of the element's own seekable ends -- the only notion of a
+    // live edge a plain media element has, with no target latency of its own
+    // the way hls.js's `liveSyncPosition` is. `liveEdgeAvailability`
+    // (`index.ts`) has already checked this is finite before the controller
+    // ever reaches this method, but a defensive re-check keeps this method
+    // honest on its own rather than trusting a capability snapshot that may
+    // have moved.
+    seekToLiveEdge: () => {
+      let edge = Number.NEGATIVE_INFINITY;
+      for (let index = 0; index < media.seekable.length; index += 1) {
+        edge = Math.max(edge, media.seekable.end(index));
+      }
+      if (!Number.isFinite(edge))
+        return Promise.resolve({ ok: false, reason: 'provider-error' });
+      const target = withinMediaBounds(media, edge, startTime, endTime);
       if (target === undefined)
         return Promise.resolve({ ok: false, reason: 'provider-error' });
       return seekToBounded(target);
