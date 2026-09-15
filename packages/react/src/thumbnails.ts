@@ -138,6 +138,9 @@ export type ThumbnailPreviewImage = {
 export type ThumbnailPreviewResult = {
   readonly previewedTime: number | null;
   readonly thumbnailImage: ThumbnailPreviewImage | null;
+  // The `thumbnail` part's CSS `left`, ready to hand straight to its inline
+  // `style` -- see `thumbnailLeftStyle` below for what it contains and why.
+  readonly thumbnailLeft: string;
   // Arms the load and records the pointer's x within `target`'s box as the
   // previewed fraction. Bound to `pointerenter`/`pointermove` on the slider's
   // own wrapper -- `target` is that wrapper's element, not a ref this hook
@@ -148,6 +151,45 @@ export type ThumbnailPreviewResult = {
   // a pointer is already doing that job.
   readonly onFocus: () => void;
   readonly onPointerLeave: () => void;
+};
+
+// The `thumbnail` part's CSS `left`, as a percentage of `SeekSlider`'s own
+// wrapper -- the same box `previewedTime`'s pointer fraction is already
+// measured against -- clamped so the part, centred on `left` by the caller's
+// `translateX(-50%)`, never sits partly outside that box near either end of
+// the track (`Player.Viewport` sets `overflow: hidden` in
+// viewport-media.tsx, which would otherwise clip it). Constraining `left` to
+// `[halfWidth, 100% - halfWidth]` keeps the whole box inside: CSS `clamp()`
+// resolves identically for the pointer path and the keyboard-focus path,
+// needs no `getBoundingClientRect` call, and can't go stale on resize the
+// way a JS-measured clamp could.
+//
+// Only possible when `regionWidth` is known, i.e. the cue names a region --
+// that is the only source of the box's pixel width (`SeekSlider` also uses
+// it, unclamped, for the part's own `width` style). A region-less cue's box
+// sizes to its natural image width, unknown until the image loads, so it is
+// left unclamped. If the slider is narrower than the thumbnail, `clamp()`'s
+// min exceeds its max and, per spec, resolves to the min -- the preview
+// overflows to the right rather than centring, an accepted degenerate case
+// rather than something worth code of its own.
+//
+// A pure function, not inlined into the JSX: `packages/react/test`'s DOM
+// environment (happy-dom) rejects `clamp()`/`min()` as invalid CSS outright
+// -- `el.style.left = 'clamp(...)'` is silently dropped, leaving whatever
+// the element held before -- so a rendered `style.left` can never be
+// asserted on for this value. Exporting the computation lets it be tested as
+// a plain string instead.
+export const thumbnailLeftStyle = (
+  previewedTime: number | null,
+  min: number,
+  span: number,
+  regionWidth: number | undefined
+): string => {
+  if (previewedTime === null) return '0%';
+  const pct = ((previewedTime - min) / span) * 100;
+  if (regionWidth === undefined) return `${pct}%`;
+  const halfWidth = regionWidth / 2;
+  return `clamp(${halfWidth}px, ${pct}%, calc(100% - ${halfWidth}px))`;
 };
 
 // Derives what a `thumbnail` part should show from `SeekSlider`'s own
@@ -235,6 +277,12 @@ export const useThumbnailPreview = ({
   return {
     previewedTime,
     thumbnailImage,
+    thumbnailLeft: thumbnailLeftStyle(
+      previewedTime,
+      min,
+      span,
+      thumbnailImage?.region?.width
+    ),
     trackPointer,
     onBlur: () => setInputFocused(false),
     onFocus: () => {

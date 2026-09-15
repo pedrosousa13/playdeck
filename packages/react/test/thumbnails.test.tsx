@@ -23,6 +23,7 @@ import {
   type InternalControllerAccess
 } from '../src/internal-controller';
 import * as Player from '../src/index';
+import { thumbnailLeftStyle } from '../src/thumbnails';
 
 const available: Availability = { status: 'available' };
 const notReady: Availability = { status: 'unknown', reason: 'not-ready' };
@@ -420,5 +421,43 @@ describe('SeekSlider thumbnails', () => {
       'https://cdn.example.test/other.vtt',
       expect.anything()
     );
+  });
+});
+
+// A pure-function suite, not a rendered-component one: happy-dom rejects
+// `clamp()`/`min()` as an invalid CSS value outright (`el.style.left =
+// 'clamp(...)'` is silently dropped, leaving whatever the element held
+// before), so a DOM-rendered `style.left` can never be asserted on for this
+// value in this test environment -- see `thumbnailLeftStyle`'s own comment
+// in thumbnails.ts. Asserting the exported function's return value directly
+// is the meaningful check available here; a real browser is what proves the
+// resolved geometry (see the PR description).
+describe('thumbnailLeftStyle', () => {
+  test('centres unclamped mid-track, on a 100-wide window starting at 0', () => {
+    // time 25 of [0, 100), half-width 80 (a 160px region): comfortably clear
+    // of both edges, so clamp()'s middle argument wins.
+    expect(thumbnailLeftStyle(25, 0, 100, 160)).toBe(
+      'clamp(80px, 25%, calc(100% - 80px))'
+    );
+  });
+
+  test('clamps to the near edge at time 0', () => {
+    expect(thumbnailLeftStyle(0, 0, 100, 160)).toBe(
+      'clamp(80px, 0%, calc(100% - 80px))'
+    );
+  });
+
+  test('clamps to the far edge at the window end', () => {
+    expect(thumbnailLeftStyle(100, 0, 100, 160)).toBe(
+      'clamp(80px, 100%, calc(100% - 80px))'
+    );
+  });
+
+  test('stays a plain percentage with no known region width', () => {
+    expect(thumbnailLeftStyle(25, 0, 100, undefined)).toBe('25%');
+  });
+
+  test('is 0% with no active preview, regardless of region width', () => {
+    expect(thumbnailLeftStyle(null, 0, 100, 80)).toBe('0%');
   });
 });

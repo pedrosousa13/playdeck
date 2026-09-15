@@ -587,8 +587,8 @@ export const SeekSlider = ({
     onBlur: onThumbnailBlur,
     onFocus: onThumbnailFocus,
     onPointerLeave: onThumbnailPointerLeave,
-    previewedTime,
     thumbnailImage,
+    thumbnailLeft,
     trackPointer
   } = useThumbnailPreview({
     arm: armThumbnails,
@@ -738,10 +738,7 @@ export const SeekSlider = ({
           style={{
             position: 'absolute',
             bottom: '100%',
-            left:
-              previewedTime === null
-                ? '0%'
-                : `${((previewedTime - min) / span) * 100}%`,
+            left: thumbnailLeft,
             transform: 'translateX(-50%)',
             overflow: 'hidden',
             visibility: thumbnailImage === null ? 'hidden' : 'visible',
