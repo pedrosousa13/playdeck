@@ -1110,10 +1110,12 @@ test("each Playdeck row's committed ceiling is that row's own results.md figure,
     // displays "22.50", genuinely under it -- while its no-parts sibling's
     // true figure, 21249 bytes, is 20.7509765625 KB -- also displays
     // "20.75", genuinely one byte over it. Off that boundary no such
-    // ambiguity exists: a measured figure and every value within half a
-    // cent of it round up to the same quarter-KB, because a whole cent (the
-    // finest step `results.md`'s own rounding can leave undetermined) is
-    // bigger than half the 25-cent span between quarter-KB steps.
+    // ambiguity exists: a displayed figure not itself ending `.00`/`.25`/
+    // `.50`/`.75` is at least a whole cent away from the nearest quarter-KB
+    // multiple, while `toFixed(2)` rounding can move the true value by at
+    // most half a cent from what is displayed -- not far enough to reach a
+    // boundary a whole cent away -- so the true value cannot have crossed a
+    // quarter-KB step and the naive round-up is unambiguous.
     const measuredCents = Math.round(measuredKb * 100);
     const roundedUp = roundUpToQuarterKb(measuredKb);
     const onQuarterBoundary = measuredCents % 25 === 0;

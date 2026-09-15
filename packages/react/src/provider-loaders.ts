@@ -436,16 +436,22 @@ export const loadProvider = async ({
 //
 // `seen` guards that same arbitrariness against a cyclic object -- a `detect`
 // return is provider-authored, so a self-reference is reachable input rather
-// than a hypothetical this package could assume away. Each object or array
-// entered is recorded before its own values are walked, so meeting it again
-// on the way back down declines rather than recursing forever; a `WeakSet`
-// rather than a plain `Set` so tracking a value for the depth of one call
-// holds no reference to it afterwards. Declining here reaches the same
-// outcome a forbidden scheme does at every call site -- the explicit-object
-// path falls through to the built-in failure, the string path treats it as
-// one registration's decline and keeps walking the rest -- because a cycle is
-// exactly as untrustworthy a shape as a `javascript:` URL, not a reason to
-// throw where every other refusal returns.
+// than a hypothetical this package could assume away. Each object or array is
+// recorded before its own values are walked and removed once that walk
+// returns, so `seen` holds exactly the current call's ancestors, not every
+// value visited so far -- meeting one still on the path declines it as a
+// cycle, while the same object reached again through a sibling branch, after
+// its own walk has already finished and removed it, is walked fresh. That is
+// what tells a genuine cycle apart from a diamond -- the same nested object
+// referenced from two branches with no cycle anywhere -- which this must
+// accept rather than decline. A `WeakSet` rather than a plain `Set` so
+// tracking a value for the depth of one call holds no reference to it
+// afterwards. Declining a true cycle reaches the same outcome a forbidden
+// scheme does at every call site -- the explicit-object path falls through to
+// the built-in failure, the string path treats it as one registration's
+// decline and keeps walking the rest -- because a cycle is exactly as
+// untrustworthy a shape as a `javascript:` URL, not a reason to throw where
+// every other refusal returns.
 //
 // One `typeof value === 'object'` branch covers an array too, rather than a
 // separate `Array.isArray` branch ahead of it: `Object.values` reads an
@@ -463,9 +469,13 @@ const everyStringPermitted = (
   if (typeof value === 'object' && value !== null) {
     if (seen.has(value)) return false;
     seen.add(value);
-    return Object.values(value).every((item) =>
-      everyStringPermitted(item, seen)
-    );
+    try {
+      return Object.values(value).every((item) =>
+        everyStringPermitted(item, seen)
+      );
+    } finally {
+      seen.delete(value);
+    }
   }
   // A number, boolean, null or undefined names no URL, so it needs no check
   // and cannot fail one.

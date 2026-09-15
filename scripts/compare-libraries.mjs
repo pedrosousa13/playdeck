@@ -356,18 +356,17 @@ export const libraries = [
     composition: 'core + native provider, no control parts',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 21249 bytes measured 2026-09-15 -- 20.7509765625 KB, which displays as
-    // "20.75" to `results.md`'s own two decimal places but is genuinely one
-    // byte over that figure, so this rounds up a further 0.25 KB rather than
-    // holding at 20.75 itself (see `compare-libraries.test.mjs`'s own
-    // handling of this exact ambiguity). See the `libraries` doc comment
-    // above for what raising this means. The growth from 20.75 KB (#659's
-    // own committed figure, main's own ceiling before #662's `providers`
-    // prop merged into this branch) is #662's provider seam:
+    // 21267 bytes measured 2026-09-15 -- 20.7685546875 KB, 20.77 KB to two
+    // places, rounded up to the next 0.25 KB. See the `libraries` doc
+    // comment above for what raising this means. The growth from 20.75 KB
+    // (#659's own committed figure, main's own ceiling before #662's
+    // `providers` prop merged into this branch) is #662's provider seam:
     // `detectSourceWithProviders`'s allowlist walk over a `detect` return
-    // (`everyStringPermitted`, `provider-loaders.ts`) and the cycle guard
-    // added to it, which every composition below reaches regardless of
-    // which parts it renders.
+    // (`everyStringPermitted`, `provider-loaders.ts`) and its cycle guard,
+    // which every composition below reaches regardless of which parts it
+    // renders -- the guard's own `seen.delete` bookkeeping, needed so it
+    // declines a genuine cycle without also refusing an acyclic diamond,
+    // added a further 18 bytes on top of the figure first measured for it.
     ceilingKb: 21
   },
   {
@@ -377,11 +376,12 @@ export const libraries = [
     composition: 'core + primitives + native provider',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 21949 bytes measured 2026-09-15 -- 21.4345703125 KB, 21.43 KB to two
+    // 21957 bytes measured 2026-09-15 -- 21.4423828125 KB, 21.44 KB to two
     // places, rounded up to the next 0.25 KB. The growth from 21.25 KB
     // (#659's own committed figure, main's own ceiling before #662's
     // `providers` prop merged into this branch) is #662's provider seam, the
-    // same reason the "no parts" row above grew.
+    // same reason the "no parts" row above grew, including the cycle guard's
+    // `seen.delete` bookkeeping described there.
     ceilingKb: 21.5
   },
   {
@@ -392,14 +392,16 @@ export const libraries = [
       'core + primitives + native provider + one control (PlayButton)',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 23039 bytes measured 2026-09-15 -- 22.4990234375 KB, which displays as
-    // "22.50" to `results.md`'s own two decimal places but is genuinely one
-    // byte under that figure, so this holds at 22.5 KB rather than raising a
-    // further 0.25 KB (see `compare-libraries.test.mjs`'s own handling of
-    // this exact ambiguity). #662's provider seam grew this row too -- the
-    // same reason the "no parts" row above grew -- but not quite enough to
-    // need a raise past #659's own committed figure, 22.5 KB.
-    ceilingKb: 22.5,
+    // 23046 bytes measured 2026-09-15 -- 22.505859375 KB, 22.51 KB to two
+    // places, rounded up to the next 0.25 KB. This row previously held at
+    // 22.5 KB (#659's own committed figure): its earlier #662 measurement,
+    // 23039 bytes, was 22.4990234375 KB, genuinely one byte under that
+    // ceiling despite `results.md` displaying both figures as "22.50". The
+    // cycle guard's own `seen.delete` bookkeeping -- described on the "no
+    // parts" row above, needed so it declines a genuine cycle without also
+    // refusing an acyclic diamond -- added 7 bytes, which is enough to cross
+    // that byte-under margin and require this raise.
+    ceilingKb: 22.75,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
@@ -410,11 +412,12 @@ export const libraries = [
       "core + primitives + native provider + control bar (5 of Media Chrome's 7 controls)",
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 27167 bytes measured 2026-09-15 -- 26.5302734375 KB, 26.53 KB to two
+    // 27181 bytes measured 2026-09-15 -- 26.5439453125 KB, 26.54 KB to two
     // places, rounded up to the next 0.25 KB. The growth from 26.5 KB
     // (#659's own committed figure, main's own ceiling before #662's
     // `providers` prop merged into this branch) is #662's provider seam, the
-    // same reason the "no parts" row above grew.
+    // same reason the "no parts" row above grew, including the cycle guard's
+    // `seen.delete` bookkeeping described there.
     ceilingKb: 26.75
   },
   {

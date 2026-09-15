@@ -46,6 +46,7 @@ export {
 export type { PlayerActions, PlayerHandle } from './player-context.js';
 
 export type {
+  ConsumerProviders,
   PlayerLoadingStrategy,
   PlayerMediaMount,
   PlayerPreload,

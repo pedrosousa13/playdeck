@@ -438,6 +438,34 @@ test('declines a detect return that carries a cyclic reference rather than overf
   expect(result.status).toBe('failure');
 });
 
+// A diamond -- the same object referenced from two sibling branches -- has no
+// cycle anywhere: neither branch is the other's ancestor, so walking one
+// after the other is finite and ordinary. `everyStringPermitted`'s guard must
+// tell that apart from a genuine cycle, declining only an object that is its
+// own ancestor on the current path.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): run against the guard
+// as committed (a `WeakSet` that is never emptied as the recursion unwinds),
+// this test fails -- `result.status` is `'failure'`, not `'success'` -- because
+// the second sibling to reach `shared` finds it already in `seen` from the
+// first and declines it, exactly as a true cycle would.
+test('accepts a detect return whose nested object is shared by two sibling branches', () => {
+  const shared = { videoId: 'abc123' };
+  const diamond = { type: 'acme', a: shared, b: shared };
+  const detect = vi.fn(() => diamond);
+
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    acme: { detect, load: vi.fn() }
+  });
+
+  expect(detect).toHaveBeenCalledWith('https://example.com/media/1');
+  expect(result).toEqual({
+    status: 'success',
+    input: 'https://example.com/media/1',
+    source: diamond
+  });
+});
+
 // The string/`detect` half of the reserved-name guarantee: a registration
 // keyed by one of the five built-in names never even has its `detect` called,
 // on any URL, whatever it would have returned -- the object-path half of the

@@ -21,10 +21,10 @@ inputs cannot reach, gzipped the same way -- see
 
 | Library                | Version        | Composition measured                                                               | Gzipped (Vite) | Gzipped (esbuild) | Delta  | Not counted          |
 | ---------------------- | -------------- | ---------------------------------------------------------------------------------- | -------------- | ----------------- | ------ | -------------------- |
-| Playdeck (no parts)    | 1.1.0          | core + native provider, no control parts                                           | 20.75 KB       | 21.63 KB          | +4.2%  | 7 chunks, 283.58 KB  |
-| Playdeck               | 1.1.0          | core + primitives + native provider                                                | 21.43 KB       | 22.31 KB          | +4.1%  | 7 chunks, 283.56 KB  |
-| Playdeck (play-only)   | 1.1.0          | core + primitives + native provider + one control (PlayButton)                     | 22.50 KB       | 23.44 KB          | +4.2%  | 7 chunks, 283.58 KB  |
-| Playdeck (control bar) | 1.1.0          | core + primitives + native provider + control bar (5 of Media Chrome's 7 controls) | 26.53 KB       | 27.63 KB          | +4.1%  | 7 chunks, 283.58 KB  |
+| Playdeck (no parts)    | 1.1.0          | core + native provider, no control parts                                           | 20.77 KB       | 21.63 KB          | +4.2%  | 7 chunks, 283.58 KB  |
+| Playdeck               | 1.1.0          | core + primitives + native provider                                                | 21.44 KB       | 22.31 KB          | +4.1%  | 7 chunks, 283.55 KB  |
+| Playdeck (play-only)   | 1.1.0          | core + primitives + native provider + one control (PlayButton)                     | 22.51 KB       | 23.44 KB          | +4.2%  | 7 chunks, 283.58 KB  |
+| Playdeck (control bar) | 1.1.0          | core + primitives + native provider + control bar (5 of Media Chrome's 7 controls) | 26.54 KB       | 27.64 KB          | +4.1%  | 7 chunks, 283.58 KB  |
 | react-player           | 3.4.0          | default export, `controls`, html5 fallback player                                  | 2.97 KB        | 2.40 KB           | -19.4% | 14 chunks, 556.09 KB |
 | Vidstack               | 1.15.6         | MediaPlayer + MediaProvider + DefaultVideoLayout                                   | 90.04 KB       | 91.83 KB          | +2.0%  | 15 chunks, 22.27 KB  |
 | Media Chrome           | 4.19.2         | MediaController + a 7-button control bar                                           | 41.83 KB       | 43.70 KB          | +4.5%  | 0                    |
