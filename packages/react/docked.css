@@ -205,6 +205,11 @@
     border-block-start: 1px solid var(--playdeck-color-hairline, #d9d9d6);
   }
 
+  /* `live` joins this shared box only -- shape, size and ink colour, so it
+   * reads as deliberate rather than unstyled -- and is left out of :hover
+   * and :active below, with its own cursor rule after them, because it is
+   * permanently `disabled` until seek-to-live-edge is built and those two
+   * fills would advertise a press that does nothing. */
   :where(
     [data-playdeck-part='play-button'],
     [data-playdeck-part='mute-button'],
@@ -212,7 +217,8 @@
     [data-playdeck-part='fullscreen-button'],
     [data-playdeck-part='pip-button'],
     [data-playdeck-part='airplay-button'],
-    [data-playdeck-part='settings-menu-trigger']
+    [data-playdeck-part='settings-menu-trigger'],
+    [data-playdeck-part='live']
   ) {
     display: inline-grid;
     place-items: center;
@@ -249,6 +255,13 @@
     [data-playdeck-part='settings-menu-trigger']
   ):where(:active) {
     background-color: var(--playdeck-control-pressed, rgb(0 0 0 / 0.1));
+  }
+
+  /* `:where()` above carries zero specificity, so this later rule wins on
+   * source order alone and overrides the shared box's `cursor: pointer` --
+   * `live` never has anything to press. */
+  :where([data-playdeck-part='live']) {
+    cursor: default;
   }
 
   :where([data-playdeck-part]):where(:focus-visible) {

@@ -82,20 +82,37 @@ describe('Player.LiveIndicator', () => {
   // is also the render on mount -- a component that always returned null
   // would pass this test too.
   //
-  // Demonstrated red, substitute mutation: the `if (live === null) return
-  // null;` guard removed from live-indicator.tsx. Ran:
+  // CORRECTION: an earlier version of this comment claimed a red run of
+  // "the `if (live === null) return null;` guard removed" that this test
+  // caught alone, with 3 of the other 5 tests still green. That run was never
+  // actually witnessed as described -- reproducing that exact mutation
+  // throws `TypeError: Cannot read properties of null (reading
+  // 'atLiveEdge')` on mount instead, which crashes every test in the file
+  // (6 failed, not "1 failed | 3 passed"), because `live.atLiveEdge` is read
+  // unguarded a few lines below the removed check. No assertion ever ran, so
+  // the previous transcript was fabricated rather than recorded. Caught by a
+  // Standards review that reproduced the mutation and got a different
+  // result -- see docs/agents/demonstrated-red.md's own rule: "I ran it and
+  // it was red" is a claim about a run nobody else witnessed, exactly this
+  // case.
+  //
+  // Demonstrated red, substitute mutation, refined so it isolates this one
+  // behaviour: the early return removed but the property read guarded
+  // (`live?.atLiveEdge` in place of the guard'd `live.atLiveEdge`), so the
+  // only change under test is "renders nothing when not live" -- every other
+  // behaviour stays intact and stays green. Ran:
   //
   //   AssertionError: expected <button aria-label="Live" …(5)></button> to be null // Object.is equality
-  //    ❯ packages/react/test/live-indicator.test.tsx:79:33
-  //      77|   test('renders nothing when live state is null', () => {
-  //      78|     const { container } = renderWithPlayer(<Player.LiveIndicator />);
-  //      79|     expect(livePart(container)).toBe(null);
+  //    ❯ packages/react/test/live-indicator.test.tsx:101:33
+  //      99|   test('renders nothing when live state is null', () => {
+  //     100|     const { container } = renderWithPlayer(<Player.LiveIndicator />);
+  //     101|     expect(livePart(container)).toBe(null);
   //         |                                 ^
   //
   //   Test Files  1 failed (1)
-  //        Tests  1 failed | 3 passed (4)
+  //        Tests  1 failed | 5 passed (6)
   //
-  // Reverted, all 4 passed again.
+  // Reverted, all 6 passed again.
   test('renders nothing when live state is null', () => {
     const { container } = renderWithPlayer(<Player.LiveIndicator />);
     expect(livePart(container)).toBe(null);

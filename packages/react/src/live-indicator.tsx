@@ -15,7 +15,7 @@ export type LiveIndicatorProps = ComponentPropsWithRef<'button'>;
  * reachable states.
  *
  * Structurally a `<button type="button">`, and `disabled`: seeking to the live
- * edge is issue #180's, not built yet, so a press here would do nothing today.
+ * edge is not built yet, so a press here would do nothing today.
  * `disabled` is what keeps it genuinely non-interactive -- out of the tab
  * order, announced unavailable -- rather than `aria-disabled`, which would
  * leave it focusable. That is current behaviour rather than a permanent

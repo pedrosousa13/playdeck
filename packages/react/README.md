@@ -328,7 +328,9 @@ also in `@playdeck/core`.
 `LoadingIndicator`, `ErrorDisplay`, `Captions`, `Gestures`, `LiveIndicator`.
 
 Each overlay renders only when its own state calls for it — nothing is drawn
-disabled:
+disabled, with one exception: `LiveIndicator` renders as a permanently
+disabled button whenever it renders at all, because seeking to the live edge
+is not built yet (see the comment in the example below):
 
 <!-- example:react-overlays -->
 
@@ -336,7 +338,8 @@ disabled:
 import * as Player from '@playdeck/react';
 
 // The overlay layers, in the order they stack inside a Viewport. Each renders
-// only when its own state says it should: no disabled-looking placeholders.
+// only when its own state says it should: no disabled-looking placeholders,
+// with one exception noted below.
 export const Overlays = () => (
   <Player.Viewport>
     <Player.Poster>
@@ -347,7 +350,10 @@ export const Overlays = () => (
     <Player.ActivationButton aria-label="Play" />
     <Player.LoadingIndicator />
     <Player.Captions />
-    {/* Renders only on a live source -- nothing while `state.live` is null. */}
+    {/* Renders only on a live source -- nothing while `state.live` is null.
+        The one exception to "no disabled-looking placeholders" above:
+        whenever it does render, it renders as a disabled button, because
+        seeking to the live edge is not built yet. */}
     <Player.LiveIndicator />
     <Player.Gestures
       seekOffset={10}
