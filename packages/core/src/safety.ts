@@ -24,6 +24,7 @@ export const freezeCapabilities = (
     selectTextTrack: freezeAvailability(capabilities.selectTextTrack),
     selectAudioTrack: freezeAvailability(capabilities.selectAudioTrack),
     chapters: freezeAvailability(capabilities.chapters),
+    liveEdge: freezeAvailability(capabilities.liveEdge),
     fullscreen: freezeAvailability(capabilities.fullscreen),
     pictureInPicture: freezeAvailability(capabilities.pictureInPicture),
     airPlay: freezeAvailability(capabilities.airPlay),

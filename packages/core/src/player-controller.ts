@@ -154,6 +154,7 @@ const initialCapabilities = (): PlayerCapabilities =>
     selectTextTrack: notReady,
     selectAudioTrack: notReady,
     chapters: notReady,
+    liveEdge: notReady,
     fullscreen: notReady,
     pictureInPicture: notReady,
     airPlay: notReady,
@@ -947,6 +948,24 @@ export class PlayerController {
     this.#command('exitPictureInPicture');
   showAirPlayPicker = (): Promise<CommandResult> =>
     this.#command('showAirPlayPicker');
+  // Gated ahead of dispatch, unlike every other command here: the landing
+  // position is the provider's own notion of the edge, with no
+  // controller-computed value to fall back to, so a provider that cannot
+  // answer this must never be asked. `capabilities.liveEdge` is what a
+  // provider uses to say so, and an adapter that has not implemented the
+  // method is refused the same way a provider that says it cannot -- both
+  // read as "cannot do this right now" to a consumer either way.
+  seekToLiveEdge = (): Promise<CommandResult> => {
+    const provider = this.#provider;
+    if (
+      !provider ||
+      this.#state.capabilities.liveEdge.status !== 'available' ||
+      !provider.seekToLiveEdge
+    ) {
+      return Promise.resolve(this.#refuseCommand('seekToLiveEdge', null));
+    }
+    return this.#providerCommand(provider, 'seekToLiveEdge');
+  };
   retry = (): Promise<CommandResult> => {
     const provider = this.#provider;
     if (!provider?.retry) return this.#command('retry');
@@ -1075,6 +1094,7 @@ export class PlayerController {
       | 'exitPictureInPicture'
       | 'showAirPlayPicker'
       | 'retry'
+      | 'seekToLiveEdge'
     >,
     value?: number | string | null
   ): Promise<CommandResult> => {

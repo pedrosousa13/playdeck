@@ -59,8 +59,16 @@ const renderWithPlayer = (ui: ReactNode) => {
   };
 };
 
-const atEdge: PlayerLiveState = { isLive: true, atLiveEdge: true };
-const behindEdge: PlayerLiveState = { isLive: true, atLiveEdge: false };
+const atEdge: PlayerLiveState = {
+  isLive: true,
+  atLiveEdge: true,
+  offsetFromEdge: 0
+};
+const behindEdge: PlayerLiveState = {
+  isLive: true,
+  atLiveEdge: false,
+  offsetFromEdge: 12
+};
 
 const livePart = (container: HTMLElement) =>
   container.querySelector('[data-playdeck-part="live"]');

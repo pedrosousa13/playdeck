@@ -80,6 +80,15 @@ const fixedCapabilities = {
   // and the Data API's video resource has no chapter property either. Nothing
   // resolves this later, so it is a verdict rather than an 'unknown' (#182).
   chapters: providerUnavailable,
+  // `getDuration()`, `getCurrentTime()` and `getVideoLoadedFraction()` are the
+  // IFrame Player API's whole surface here -- no seekable-range accessor at
+  // all, so the start of a DVR window is not expressible and neither is an
+  // edge to seek to. `getDuration()` is not a stand-in for one either: on a
+  // 24/7 DVR stream it answered a fixed value for 150 seconds while the
+  // playhead advanced (measured in the comment above the `PLAYING` branch in
+  // `playback.ts`, and #403), so it is a snapshot rather than a value tracking
+  // the edge.
+  liveEdge: providerUnavailable,
   pictureInPicture: providerUnavailable,
   airPlay: providerUnavailable,
   customControls: policyUnavailable,

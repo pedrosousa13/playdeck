@@ -333,6 +333,49 @@ test('writes no initial position into a live seekable window', async () => {
   expect(media.currentTime).toBe(200);
 });
 
+test('seekToLiveEdge lands on the largest seekable end', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', {
+    configurable: true,
+    value: Number.POSITIVE_INFINITY
+  });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    // Two ranges, deliberately out of order: the target is the largest END
+    // across all of them, not the end of the first or the last.
+    value: createTimeRanges([
+      [300, 400],
+      [100, 200]
+    ])
+  });
+  const { writes } = trackPosition(media, 150);
+  const provider = createNativeProvider(media);
+  await provider.attach();
+
+  await expect(provider.seekToLiveEdge()).resolves.toEqual({ ok: true });
+
+  expect(writes).toEqual([400]);
+});
+
+test('seekToLiveEdge reports provider-error when there is no finite seekable end', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', {
+    configurable: true,
+    value: Number.POSITIVE_INFINITY
+  });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([])
+  });
+  const provider = createNativeProvider(media);
+  await provider.attach();
+
+  await expect(provider.seekToLiveEdge()).resolves.toEqual({
+    ok: false,
+    reason: 'provider-error'
+  });
+});
+
 // Collects the errors a provider publishes. The refusal below is emitted as a
 // bare `{ error }` patch — no `lifecycle`, which is what keeps it a notice —
 // so a test can assert on the errors alone without matching the rest of the
@@ -1418,6 +1461,70 @@ test('reports providerPoster as unavailable immediately -- a media element has n
     capabilities: {
       providerPoster: { status: 'unavailable', reason: 'source' }
     }
+  });
+});
+
+test('reports liveEdge as unavailable for a finite, non-live source', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 60 });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([[0, 60]])
+  });
+  const patches: Array<Record<string, unknown>> = [];
+  const provider = createNativeProvider(media);
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+
+  expect(patches.at(-1)).toMatchObject({
+    capabilities: { liveEdge: { status: 'unavailable', reason: 'source' } }
+  });
+});
+
+test('reports liveEdge as available for a live source with a finite seekable end', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', {
+    configurable: true,
+    value: Number.POSITIVE_INFINITY
+  });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([[100, 200]])
+  });
+  const patches: Array<Record<string, unknown>> = [];
+  const provider = createNativeProvider(media);
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+
+  expect(patches.at(-1)).toMatchObject({
+    capabilities: { liveEdge: { status: 'available' } }
+  });
+});
+
+// A live source with nothing seekable at all -- `media.seekable` reporting no
+// ranges before the element has buffered anything -- has no seekable end to
+// treat as the edge, so this must not read as `available` on the strength of
+// liveness alone.
+test('reports liveEdge as unavailable for a live source with no seekable ranges', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', {
+    configurable: true,
+    value: Number.POSITIVE_INFINITY
+  });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([])
+  });
+  const patches: Array<Record<string, unknown>> = [];
+  const provider = createNativeProvider(media);
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+
+  expect(patches.at(-1)).toMatchObject({
+    capabilities: { liveEdge: { status: 'unavailable', reason: 'source' } }
   });
 });
 

@@ -49,7 +49,10 @@ export const NotLive: Story = {
 
 /** At the live edge. */
 export const AtLiveEdge: Story = {
-  parameters: ready({}, { live: { isLive: true, atLiveEdge: true } }),
+  parameters: ready(
+    {},
+    { live: { isLive: true, atLiveEdge: true, offsetFromEdge: 0 } }
+  ),
   play: async ({ canvas }) => {
     const button = await canvas.findByRole('button', { name: 'Live' });
     await expect(button).toHaveAttribute('data-playdeck-part', 'live');
@@ -60,7 +63,10 @@ export const AtLiveEdge: Story = {
 
 /** Behind the live edge — the viewer has scrubbed back from it. */
 export const BehindLiveEdge: Story = {
-  parameters: ready({}, { live: { isLive: true, atLiveEdge: false } }),
+  parameters: ready(
+    {},
+    { live: { isLive: true, atLiveEdge: false, offsetFromEdge: 12 } }
+  ),
   play: async ({ canvas }) => {
     const button = await canvas.findByRole('button', { name: 'Live' });
     await expect(button).toHaveAttribute('data-state', 'behind-edge');

@@ -111,6 +111,7 @@ test('publishes the frozen airPlay capability patch from the provider', () => {
     selectTextTrack: { status: 'unavailable', reason: 'source' },
     selectAudioTrack: { status: 'unknown', reason: 'provider-check' },
     chapters: { status: 'unavailable', reason: 'source' },
+    liveEdge: { status: 'unavailable', reason: 'source' },
     fullscreen: { status: 'available' },
     pictureInPicture: { status: 'available' },
     airPlay: { status: 'unavailable', reason: 'browser' },

@@ -241,6 +241,14 @@ export const createWistiaProvider = (
       // Wistia's chapters are an inbound embed-option plugin: the embedder
       // supplies the list, and no documented read-back accessor exists (#182).
       chapters: outOfScope,
+      // `PublicApi` has no seekable-range accessor and no dedicated live-edge
+      // member. `attachment.ts`'s `liveFragment` already reuses `duration()`
+      // as the moving edge for the at-edge tolerance, purely because it is the
+      // closest thing available -- not because it is an actionable seek
+      // target this adapter is prepared to land a viewer on. With nothing to
+      // build a real one from, this reports the same verdict as every other
+      // surface `PublicApi` never grew.
+      liveEdge: outOfScope,
       // `PublicApi.requestFullscreen()` / `cancelFullscreen()`.
       fullscreen: available,
       pictureInPicture: outOfScope,

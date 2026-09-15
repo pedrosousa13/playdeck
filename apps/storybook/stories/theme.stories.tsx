@@ -558,7 +558,10 @@ const renderLiveIndicatorFixture = () => (
  * 122 passed again.
  */
 export const LiveIndicatorAppearance: Story = {
-  parameters: ready({}, { live: { isLive: true, atLiveEdge: true } }),
+  parameters: ready(
+    {},
+    { live: { isLive: true, atLiveEdge: true, offsetFromEdge: 0 } }
+  ),
   render: renderLiveIndicatorFixture,
   play: async ({ canvas, userEvent }) => {
     const live = await canvas.findByRole('button', { name: 'Live' });
@@ -602,7 +605,10 @@ export const LiveIndicatorAppearance: Story = {
  */
 export const LiveIndicatorAppearanceDocked: Story = {
   globals: { theme: 'docked' },
-  parameters: ready({}, { live: { isLive: true, atLiveEdge: true } }),
+  parameters: ready(
+    {},
+    { live: { isLive: true, atLiveEdge: true, offsetFromEdge: 0 } }
+  ),
   render: renderLiveIndicatorFixture,
   play: async ({ canvas }) => {
     const live = await canvas.findByRole('button', { name: 'Live' });

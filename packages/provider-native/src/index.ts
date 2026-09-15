@@ -1,13 +1,16 @@
 import type {
+  Availability,
   PlayerCapabilities,
   ProviderAdapter,
   ProviderEvent,
   ProviderStatePatch
 } from '@playdeck/core';
+import { deriveLiveState } from '@playdeck/core';
 import { createNativeAttachment } from './attachment.js';
 import {
   available,
   sourceHasNoPoster,
+  toRanges,
   type EmitProviderState
 } from './adapter-values.js';
 import {
@@ -31,6 +34,7 @@ type NativeCommand =
   | 'pause'
   | 'seekTo'
   | 'seekBy'
+  | 'seekToLiveEdge'
   | 'mute'
   | 'unmute'
   | 'setVolume'
@@ -116,6 +120,30 @@ export const createNativeProvider = (
     () => mediaCapabilities()
   );
 
+  // Available only once the element is live and its own seekable window has a
+  // finite end to offer as one -- a media element has no target latency of
+  // its own the way hls.js's `liveSyncPosition` is, so the seekable end is the
+  // only candidate. Re-derives liveness fresh off `media.duration` rather than
+  // reading a cached value: `deriveLiveState` is the one liveness derivation
+  // in the workspace, and calling it here keeps this answering the same
+  // question the same way every other adapter does, at the cost of computing
+  // it twice per patch alongside `attachment.ts`'s own `live` derivation.
+  const liveEdgeAvailability = (): Availability => {
+    const ranges = toRanges(media.seekable);
+    const live = deriveLiveState({
+      duration: media.duration,
+      seekable: ranges,
+      currentTime: media.currentTime
+    });
+    const edge = ranges.reduce(
+      (end, range) => Math.max(end, range.end),
+      Number.NEGATIVE_INFINITY
+    );
+    return live?.isLive && Number.isFinite(edge)
+      ? available
+      : { status: 'unavailable', reason: 'source' };
+  };
+
   function mediaCapabilities(): PlayerCapabilities {
     return {
       seek: available,
@@ -132,6 +160,7 @@ export const createNativeProvider = (
       selectTextTrack: textTracks.selectTextTrackAvailability(),
       selectAudioTrack: audioTracks.selectAudioTrackAvailability(),
       chapters: textTracks.chaptersAvailability(),
+      liveEdge: liveEdgeAvailability(),
       fullscreen: presentation.fullscreenAvailability(),
       pictureInPicture: presentation.pictureInPictureAvailability(),
       airPlay: presentation.airPlayAvailability(),
@@ -165,6 +194,7 @@ export const createNativeProvider = (
     pause: playback.pause,
     seekTo: playback.seekTo,
     seekBy: playback.seekBy,
+    seekToLiveEdge: playback.seekToLiveEdge,
     mute: playback.mute,
     unmute: playback.unmute,
     setVolume: playback.setVolume,
