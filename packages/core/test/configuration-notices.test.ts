@@ -488,7 +488,11 @@ const REFUSED_URL_MESSAGES: Record<RefusedUrlSurface, string> = {
   'textTracks src':
     'A textTracks src URL was rejected, so that text track was dropped.',
   'mediaSession artwork':
-    'A mediaSession artwork src URL was rejected, so that artwork entry was dropped.'
+    'A mediaSession artwork src URL was rejected, so that artwork entry was dropped.',
+  thumbnails:
+    'The thumbnails URL was rejected, so no seek-preview thumbnails were requested.',
+  'thumbnails cue image':
+    'A thumbnails cue image URL was rejected, so that cue was dropped.'
 };
 
 // The prop the operator has to go and fix is in the message; the value that

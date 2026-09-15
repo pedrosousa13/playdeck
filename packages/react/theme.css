@@ -590,6 +590,34 @@
     }
   }
 
+  /* ---- thumbnail preview ---------------------------------------------------
+   * Opt-in, the same way `poster` is: `SeekSlider` mounts this part only once
+   * its `thumbnails` prop resolves to a permitted URL (Contract.mdx), so a
+   * player that never sets the prop never matches this selector and this rule
+   * paints nothing extra. Position, size and overflow are already set inline
+   * by the primitive (`transport-controls.tsx`), so a bare consumer sees a
+   * correctly cropped preview with no stylesheet at all -- what is left for a
+   * theme is the surface behind the crop and the fade-in.
+   *
+   * `opacity`, not fighting the inline `visibility` toggle: an inline style
+   * beats any stylesheet rule, so nothing here can make the *hidden*
+   * transition smoothly. Going hidden -> visible, though, the inline
+   * `visibility` flips to `visible` at the same instant this rule starts
+   * animating `opacity` from 0, so the reveal itself still fades in rather
+   * than popping.
+   */
+  :where([data-playdeck-part='thumbnail']) {
+    border-radius: var(--playdeck-radius-large, 0.5rem);
+    background-color: var(--playdeck-color-surface, rgb(0 0 0 / 0.72));
+    opacity: 0;
+    transition: opacity var(--playdeck-transition-duration, 150ms)
+      var(--playdeck-transition-easing, ease);
+  }
+
+  :where([data-playdeck-part='thumbnail'][data-state='visible']) {
+    opacity: 1;
+  }
+
   /* ---- volume reveal ------------------------------------------------------
    * The slider is always laid out at its full inline size beside the mute
    * button, so nothing around it moves when it appears: only `opacity` and
@@ -859,10 +887,11 @@
   /* ---- reduced motion ---------------------------------------------------- */
   @media (prefers-reduced-motion: reduce) {
     /* Nonessential movement only: opacity transitions on the control surface,
-     * the activation affordance and the volume reveal. No state change is
-     * conveyed by motion, so nothing is hidden by removing it — the volume
-     * slider still appears and disappears on hover and focus, it just stops
-     * fading into and out of the bar. */
+     * the activation affordance, the volume reveal and the thumbnail preview.
+     * No state change is conveyed by motion, so nothing is hidden by removing
+     * it — the volume slider still appears and disappears on hover and focus,
+     * and the thumbnail still shows a cue where it previously faded one in,
+     * they just stop animating into and out of view. */
     :where(
       [data-playdeck-part='controls'],
       [data-playdeck-part='activation'],
@@ -873,7 +902,8 @@
       [data-playdeck-part='pip-button'],
       [data-playdeck-part='airplay-button'],
       [data-playdeck-part='settings-menu-trigger'],
-      [data-playdeck-part='volume-slider']
+      [data-playdeck-part='volume-slider'],
+      [data-playdeck-part='thumbnail']
     ) {
       transition-duration: 0.01ms;
     }

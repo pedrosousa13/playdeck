@@ -356,12 +356,14 @@ export const libraries = [
     composition: 'core + native provider, no control parts',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 20.18 KB measured 2026-09-14 (docs/comparison/results.md's "Gzipped
+    // 20.26 KB measured 2026-09-15 (docs/comparison/results.md's "Gzipped
     // (Vite)" column that same day), rounded up to the next 0.25 KB -- see
     // the `libraries` doc comment above for what raising this means. The
-    // growth from 19.90 KB is #656's audio-track state, command and
-    // capability added to core.
-    ceilingKb: 20.25
+    // growth from 20.18 KB is #658's thumbnail-preview parsing
+    // (parseThumbnailCues, thumbnailCueAt) and its two refused-URL notices
+    // added to core, which this composition bundles in full even though it
+    // reaches no control part.
+    ceilingKb: 20.5
   },
   {
     name: 'Playdeck',
@@ -397,10 +399,12 @@ export const libraries = [
       "core + primitives + native provider + control bar (5 of Media Chrome's 7 controls)",
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 24.57 KB measured 2026-09-14, rounded up to the next 0.25 KB. The
-    // growth from 24.28 KB is #656's audio-track state, command and
-    // capability added to core.
-    ceilingKb: 24.75
+    // 26.02 KB measured 2026-09-15, rounded up to the next 0.25 KB. The
+    // growth from 24.57 KB is #658's thumbnail-preview feature: this
+    // composition's `Player.SeekSlider` now always imports
+    // `useThumbnailCues`/`useThumbnailPreview` and the `thumbnail` part's
+    // crop rendering, whether or not a consumer sets the `thumbnails` prop.
+    ceilingKb: 26.25
   },
   {
     name: 'react-player',

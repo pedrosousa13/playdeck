@@ -61,8 +61,8 @@ export const autoplayConfigurationError = (): PlayerError =>
     message: 'Muted autoplay conflicts with a controlled unmuted state.'
   });
 
-// One notice per refused surface, written here rather than at the five call
-// sites so no caller can compose one of its own. Each names the prop and says
+// One notice per refused surface, written here rather than at each call site
+// so no caller can compose one of its own. Each names the prop and says
 // what was done instead, the shape of the one notice #318 wrote both halves for
 // ("The host option was rejected, so the default host was used."); the two
 // Wistia notices of that change name the option and the expectation it failed
@@ -74,8 +74,8 @@ export const autoplayConfigurationError = (): PlayerError =>
 // retry would refuse the same value again (#198).
 //
 // Built once and shared rather than per call. A `PlayerError` is frozen and
-// these five carry nothing controller-specific, so one value per surface is
-// enough — and it lets `reportRefusedUrl` decide by identity whether the
+// none of these carry anything controller-specific, so one value per surface
+// is enough — and it lets `reportRefusedUrl` decide by identity whether the
 // published notice actually changed, instead of comparing message text.
 //
 // The array below is the tie-break: the state has one error slot, so several
@@ -85,11 +85,11 @@ export const autoplayConfigurationError = (): PlayerError =>
 // whether the pass is a mount or an update, and a notice that changed wording
 // for that reason would be unreadable to a monitoring system.
 //
-// All five are `'protective'`, without exception and whatever the surface
-// decorates: what each of them reports is the shared allowlist blocking an
-// untrusted URL, which is a security control firing and not a presentation
-// option being ignored. So none of them can be pushed out of the slot by a
-// provider reporting a cosmetic rejection (#368).
+// Every one of these is `'protective'`, without exception and whatever the
+// surface decorates: what each of them reports is the shared allowlist
+// blocking an untrusted URL, which is a security control firing and not a
+// presentation option being ignored. So none of them can be pushed out of
+// the slot by a provider reporting a cosmetic rejection (#368).
 export const REFUSED_URL_NOTICES: Record<RefusedUrlSurface, PlayerError> = {
   'poster src': freezeError({
     category: 'configuration',
@@ -130,6 +130,21 @@ export const REFUSED_URL_NOTICES: Record<RefusedUrlSurface, PlayerError> = {
     severity: 'protective',
     message:
       'A mediaSession artwork src URL was rejected, so that artwork entry was dropped.'
+  }),
+  thumbnails: freezeError({
+    category: 'configuration',
+    fatal: false,
+    recoverable: false,
+    severity: 'protective',
+    message:
+      'The thumbnails URL was rejected, so no seek-preview thumbnails were requested.'
+  }),
+  'thumbnails cue image': freezeError({
+    category: 'configuration',
+    fatal: false,
+    recoverable: false,
+    severity: 'protective',
+    message: 'A thumbnails cue image URL was rejected, so that cue was dropped.'
   })
 };
 
@@ -147,12 +162,20 @@ type RankOf<Surfaces, Each = Surfaces> = [Surfaces] extends [never]
     ? readonly [Each, ...RankOf<Exclude<Surfaces, Each>>]
     : never;
 
+// `thumbnails` and `thumbnails cue image` are appended at the end rather than
+// inserted alongside the surface they are closest in kind to: appending can
+// only ever add a new lowest-priority tie-break, so it cannot change which
+// notice wins for any pair of surfaces that already existed — inserting them
+// higher would have silently reworded what an existing consumer's error
+// already says whenever one of these ties against something above it.
 const REFUSED_URL_SURFACE_RANK = [
   'poster src',
   'poster srcSet',
   'nativePoster',
   'textTracks src',
-  'mediaSession artwork'
+  'mediaSession artwork',
+  'thumbnails',
+  'thumbnails cue image'
 ] as const satisfies RankOf<RefusedUrlSurface>;
 
 // The notice the standing refusal registrations publish, or `undefined` when
