@@ -66,8 +66,10 @@ This is not free. `Root` calls the layered detection this prop adds
 unconditionally, on every `Player.Root`, whether or not a consumer ever sets
 `providers` — so it adds bytes to every composition
 `scripts/compare-libraries.mjs` measures, including the no-parts and play-only
-rows, neither of which ever passes `providers` at all. Landing it raised four
-of that script's committed ceilings to admit the added bytes, each on top of
-whatever `main` had already moved that row to for unrelated reasons (#659):
-the no-parts row to 21.00 KB, the full row to 21.50 KB, the play-only row to
-22.75 KB, and the control-bar row to 26.75 KB.
+rows, neither of which ever passes `providers` at all. Landing it raised three
+of that script's four committed ceilings to admit the added bytes, each on top
+of whatever `main` had already moved that row to for unrelated reasons (#659):
+the no-parts row to 21.00 KB, the full row to 21.50 KB, and the control-bar row
+to 26.75 KB. The play-only row's ceiling was **not** raised: it measures 23039
+bytes, which is 22.4990 KB and so still under the 22.5 KB already committed,
+even though the table prints it as "22.50 KB".
