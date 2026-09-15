@@ -45,9 +45,11 @@ export type PlayerError = {
 };
 
 // The consumer-supplied URL props the shared allowlist governs outside a
-// provider — the five surfaces #320 routed through `isPermittedSourceUrl` and
-// left silent. Named for the prop the consumer wrote, because the prop is what
-// the operator has to go and fix.
+// provider: the five surfaces #320 routed through `isPermittedSourceUrl` and
+// left silent, plus `thumbnails` and `thumbnails cue image`, added when the
+// seek-preview VTT parser gained its own URLs to check. Named for the prop
+// the consumer wrote, because the prop is what the operator has to go and
+// fix.
 //
 // A closed union rather than a `string`, deliberately. `reportRefusedUrl` is
 // reached from React components holding the value that was just refused, and a
@@ -61,7 +63,9 @@ export type RefusedUrlSurface =
   | 'poster srcSet'
   | 'nativePoster'
   | 'textTracks src'
-  | 'mediaSession artwork';
+  | 'mediaSession artwork'
+  | 'thumbnails'
+  | 'thumbnails cue image';
 
 export type TextTrackKind = 'subtitles' | 'captions';
 export type TextTrackReadiness = 'idle' | 'loading' | 'loaded' | 'error';
@@ -73,6 +77,22 @@ export type TextTrack = {
   readonly language: string | null;
   readonly kind: TextTrackKind;
   readonly readiness: TextTrackReadiness;
+};
+
+// One selectable audio rendition, published as an ordered collection with its
+// own selection carried on each entry rather than in a sibling
+// `selectedAudioTrackId` field, the shape `TextTrack`/`selectedTextTrackId`
+// and `PlayerQuality`/`selectedQualityId` both use. hls.js's own audio-tracks
+// controller enforces "at most one enabled" on the track itself, with no
+// separate selection slot to mirror; the DOM's own `AudioTrackList` carries
+// no such guarantee for audio, so the native provider enforces that same
+// exclusivity itself on selection, keeping both providers answering from the
+// same per-entry shape.
+export type AudioTrack = {
+  readonly id: string;
+  readonly label: string;
+  readonly language: string | null;
+  readonly active: boolean;
 };
 
 export type TextCue = {
@@ -164,6 +184,15 @@ export type PlayerLiveState = {
   readonly atLiveEdge: boolean;
 } | null;
 
+// The Remote Playback API's own three connection states
+// (`RemotePlaybackState`), plus `null` both while `capabilities.remotePlayback`
+// has not resolved to `available` and once it has settled on `unavailable` --
+// the capability is what tells those two apart, the same pairing
+// `capabilities.providerPoster` and `providerPosterUrl` already are. Once
+// `available`, this reflects the element's own `remote.state` directly.
+export type PlayerRemotePlaybackState =
+  'connecting' | 'connected' | 'disconnected' | null;
+
 export type PlayerProvider = 'native' | 'hls' | 'youtube' | 'vimeo' | 'wistia';
 
 export type HlsEngine = 'native' | 'hls.js';
@@ -180,7 +209,21 @@ export type PlayerCapabilities = {
   readonly setVolume: Availability;
   readonly setPlaybackRate: Availability;
   readonly selectQuality: Availability;
+  // Whether an automatic-choice item belongs beside the published rungs --
+  // not derivable from `selectQuality` alone, because a provider can accept
+  // `selectQuality` for a real rung while refusing `selectQuality(null)` for
+  // auto. `@playdeck/provider-vimeo` is exactly that: it reports
+  // `selectQuality` available whenever its ladder has rungs, but its own
+  // `getQualities()` list does not always carry an `auto` entry, and
+  // `selectQuality(null)` resolves `unsupported` where it does not
+  // (`quality-levels.ts`'s `adopt`). `@playdeck/provider-hls` never splits
+  // the two: `currentLevel = -1` honours auto whenever hls.js has a ladder
+  // at all. `QualityMenu` gates its Auto row on this rather than on
+  // `selectQuality`, so a provider in the vimeo shape never renders a radio
+  // item that silently does nothing when chosen.
+  readonly selectQualityAuto: Availability;
   readonly selectTextTrack: Availability;
+  readonly selectAudioTrack: Availability;
   // Whether the provider can report chapters at all, which is what tells a
   // provider that cannot ('unavailable' with the `provider` reason) apart from
   // a source that simply has none (the `source` reason) — both publish an
@@ -198,6 +241,16 @@ export type PlayerCapabilities = {
   // answers `available` immediately -- its still is derivable from the video id
   // alone, no request required.
   readonly providerPoster: Availability;
+  // Whether the element exposes the Remote Playback API at all, which is what
+  // tells a browser that lacks it ('unavailable' with the `browser` reason)
+  // apart from one that has it but sees no receiver right now ('unavailable'
+  // with the `provider` reason) -- both publish `PlayerState.remotePlayback:
+  // null`, the same pairing `providerPoster` and `providerPosterUrl` already
+  // are. `chapters` disambiguates its two cases the same way but does it over
+  // an empty collection rather than a `null`, so this cites the null-valued
+  // pair. The Cast SDK is a separate, unimplemented route and out of scope
+  // here.
+  readonly remotePlayback: Availability;
 };
 
 // A play command that was turned down, as `PlayerState.refusedPlay` publishes
@@ -249,11 +302,13 @@ export type PlayerCommand =
   | 'setPlaybackRate'
   | 'selectQuality'
   | 'selectTextTrack'
+  | 'selectAudioTrack'
   | 'requestFullscreen'
   | 'exitFullscreen'
   | 'requestPictureInPicture'
   | 'exitPictureInPicture'
-  | 'showAirPlayPicker';
+  | 'showAirPlayPicker'
+  | 'showRemotePlaybackPicker';
 
 // A command turned down because no provider was attached, as
 // `PlayerState.refusedCommand` publishes it. It is the general half of
@@ -389,6 +444,7 @@ export type PlayerState = {
   readonly capabilities: PlayerCapabilities;
   readonly error: PlayerError | null;
   readonly textTracks: readonly TextTrack[];
+  readonly audioTracks: readonly AudioTrack[];
   // Ordered by ascending `startTime`, and empty both where the provider cannot
   // report chapters and where the source has none — `capabilities.chapters` is
   // what tells those two apart. Never routed through `textTracks`: nothing
@@ -403,6 +459,8 @@ export type PlayerState = {
   // the capability is what tells those two apart, the same pairing
   // `capabilities.chapters` and `chapters` already are.
   readonly providerPosterUrl: string | null;
+  // See `PlayerRemotePlaybackState`.
+  readonly remotePlayback: PlayerRemotePlaybackState;
   // Declared by the provider adapter, not derived here: it means a command
   // issued now is accepted *and* will not be undone by a load that has yet to
   // run. Core cannot compute it — the four adapters open their command guards
@@ -580,11 +638,13 @@ export type ProviderAdapter = {
   setVolume?: (volume: number) => Promise<CommandResult>;
   setPlaybackRate?: (rate: number) => Promise<CommandResult>;
   selectTextTrack?: (track: string | null) => Promise<CommandResult>;
+  selectAudioTrack?: (id: string) => Promise<CommandResult>;
   requestFullscreen?: () => Promise<CommandResult>;
   exitFullscreen?: () => Promise<CommandResult>;
   requestPictureInPicture?: () => Promise<CommandResult>;
   exitPictureInPicture?: () => Promise<CommandResult>;
   showAirPlayPicker?: () => Promise<CommandResult>;
+  showRemotePlaybackPicker?: () => Promise<CommandResult>;
   retry?: () => Promise<CommandResult>;
   subscribeCues?: (listener: (cues: readonly TextCue[]) => void) => () => void;
   // A side channel like `subscribeCues`, and deliberately not `PlayerState`:

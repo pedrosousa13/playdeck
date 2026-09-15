@@ -9,14 +9,14 @@ Every primitive exposes a stable styling/testing contract via data attributes.
 - **`data-playdeck-part`** — the stable name of a part: one named element in the
   rendered DOM (`play-button`, `mute-button`, `volume-slider`, `seek-slider` /
   `seek-slider-input` / `seek-buffered` / `seek-buffered-range` /
-  `seek-progress` / `seek-buffered-description`, `fullscreen-button`, `pip-button`,
-  `airplay-button`, `time`, `controls`, `poster`, `poster-image`,
+  `seek-progress` / `seek-buffered-description` / `thumbnail`, `fullscreen-button`, `pip-button`,
+  `airplay-button`, `remote-playback-button`, `time`, `controls`, `poster`, `poster-image`,
   `loading-indicator`, `activation`, `viewport`, `media`, `error` /
   `error-message` / `error-retry`, `notice` / `notice-message`, `captions` /
   `captions-button` / `captions-announcer` / `caption-cue` / `caption-line`,
   `settings-menu-root` / `settings-menu-trigger` / `settings-menu`,
   `menu-item` / `menu-radio-group` / `menu-radio-item` / `menu-radio-indicator`,
-  `gestures`). A part name is not a primitive's name, and several parts can
+  `gestures`, `live`). A part name is not a primitive's name, and several parts can
   come from one primitive. `ErrorDisplay` renders `error`, and by default
   `error-message` and a recoverable error's `error-retry` inside it. The
   slashes above only group related names — `captions` / `captions-button` /
@@ -69,17 +69,21 @@ Every primitive exposes a stable styling/testing contract via data attributes.
   on that node resets at that moment.
 - **`data-state`** — the part's derived state (e.g. `paused`/`playing`,
   `muted`/`unmuted`, `idle`/`ready`, `loading`/`loaded`/`error`,
-  `global`/`scoped`, `timed`/`untimed` on `time`, the error category on `error`,
-  or the activation state).
+  `global`/`scoped`, `timed`/`untimed` on `time`, `at-edge`/`behind-edge` on
+  `live`, the error category on `error`, or the activation state).
   Absent where the part has no observable state: `airplay-button` opens a
   system picker, and Playdeck does not currently surface an active-route flag, so
   it exposes no `data-state` rather than a value that never changes. That is
   today's behaviour rather than a permanent guarantee — WebKit can report an
-  active wireless route, and Playdeck has deferred plumbing it.
+  active wireless route, and Playdeck has deferred plumbing it. `remote-playback-button`
+  is the same shape: which device the viewer picked is never exposed, so it
+  carries no `data-state` either, even though `PlayerState.remotePlayback`
+  does publish a connection state elsewhere for a consumer who wants it.
 - **`data-provider`** — carries the active provider name, or is absent when
   no provider is attached. By design it appears only on the provider-bound
   control parts (`play-button`, `mute-button`, `volume-slider`,
-  `seek-slider`, `time`, `fullscreen-button`, `pip-button`, `airplay-button`, `controls`,
+  `seek-slider`, `time`, `fullscreen-button`, `pip-button`, `airplay-button`,
+  `remote-playback-button`, `controls`,
   `error`, `captions-button`), not
   on the structural/activation parts (`viewport`, `poster`, `poster-image`,
   `media`, `activation`, `loading-indicator`), which don't read provider
@@ -119,6 +123,33 @@ Every primitive exposes a stable styling/testing contract via data attributes.
   attribute, because nothing it draws sits over the picture.
   Written straight to the DOM rather than through player state, like the
   aspect-ratio property below, so going idle and coming back re-renders nothing.
+- **`thumbnail`** is `SeekSlider`'s opt-in seek-preview crop, present only
+  while its `thumbnails` prop resolves to a permitted URL. `data-state` is
+  `hidden` or `visible`, mirroring `poster`'s own vocabulary for the same
+  reason: the part stays mounted through every hover start and stop rather
+  than mounting and unmounting with each one, so a theme can transition
+  between the two `data-state`s instead of a hard pop. It reads `visible`
+  only once there is an actual image behind it -- a resolved cue at the
+  previewed time, and that cue's own image URL permitted -- and `hidden` for
+  every other reason there is nothing to show: no hover or focus is active,
+  the WebVTT file has not loaded yet, no cue covers that time, or the cue's
+  image was refused. The previewed time is the pointer's position while a
+  pointer is over the slider, else the input's own current value while it
+  holds keyboard focus, else there is no preview; a pointer active at the
+  same time as focus wins. `aria-hidden="true"`, like `seek-buffered` above
+  it -- decorative geometry, never a live region.
+- **`live`** reflects `PlayerState.live` (`PlayerLiveState`). `null` there
+  means the stream is not live or its liveness is not yet known, and
+  `LiveIndicator` renders nothing for it -- there is no third `data-state` for
+  "not live", because `PlayerLiveState` is non-null only when `isLive` is
+  `true`; `isLive: false` is not a value `deriveLiveState` produces. So
+  `data-state` carries only the two reachable values: `at-edge` at the live
+  edge, `behind-edge` once the viewer has fallen behind it. Structurally a
+  `<button type="button">`, and `disabled` -- non-interactive, out of the
+  tab order rather than merely `aria-disabled`, which would leave it
+  focusable for a press that does nothing. That is current behaviour rather
+  than a permanent guarantee: if live-edge seeking is ever wired onto this
+  control, it gains an `onClick` and sheds `disabled`.
 
 Style and query against these attributes rather than internal class names.
 

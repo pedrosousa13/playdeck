@@ -343,11 +343,14 @@ const attachWithoutValidation = async (
       setVolume: playback.setVolumeAvailability(),
       setPlaybackRate: playback.setPlaybackRateAvailability(),
       selectQuality: qualityLevels.selectQualityAvailability(),
+      selectQualityAuto: qualityLevels.selectQualityAutoAvailability(),
       selectTextTrack: textTracks.selectTextTrackAvailability(),
+      selectAudioTrack: { status: 'unavailable', reason: 'provider' },
       chapters: chapters.chaptersAvailability(),
       fullscreen: available,
       pictureInPicture: presentation.pictureInPictureAvailability(),
       airPlay: { status: 'unavailable', reason: 'provider' },
+      remotePlayback: { status: 'unavailable', reason: 'provider' },
       customControls: chromeless.customControlsAvailability(),
       providerPoster: posterAvailability.availability()
     };
@@ -558,6 +561,7 @@ test('emits confirmed ready state from the embedded player', async () => {
     seek: { status: 'available' },
     setVolume: { status: 'available' },
     selectTextTrack: { status: 'available' },
+    selectAudioTrack: { status: 'unavailable', reason: 'provider' },
     fullscreen: { status: 'available' },
     customControls: { status: 'available' },
     selectQuality: { status: 'available' },

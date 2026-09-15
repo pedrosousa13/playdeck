@@ -70,12 +70,21 @@ const fixedCapabilities = {
   // Asking for `tiny` failed exactly like asking for `hd720`, which is what
   // rules out a bandwidth or viewport ceiling rather than a discarded argument.
   selectQuality: providerUnavailable,
+  // Selection itself is unavailable, so there is no auto mode to offer
+  // alongside it either.
+  selectQualityAuto: providerUnavailable,
+  // The IFrame Player API documents no audio-track method and no
+  // audio-track event, so this is a verdict rather than an 'unknown'.
+  selectAudioTrack: providerUnavailable,
   // The IFrame Player API documents no chapter method and no chapter event,
   // and the Data API's video resource has no chapter property either. Nothing
   // resolves this later, so it is a verdict rather than an 'unknown' (#182).
   chapters: providerUnavailable,
   pictureInPicture: providerUnavailable,
   airPlay: providerUnavailable,
+  // The IFrame Player API is an `<iframe>`, not a media element -- there is
+  // no `remote` object for it to expose.
+  remotePlayback: providerUnavailable,
   customControls: policyUnavailable,
   providerPoster: available
 } as const;

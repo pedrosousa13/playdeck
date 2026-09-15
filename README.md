@@ -80,26 +80,26 @@ initial graph.
 Lazy loading is worth stating in bytes rather than in adjectives, because the
 number a reader cares about is the one for the source they are playing, and for
 one of these sources it is large. Gzip, excluding React itself and the optional
-`theme.css` (12.0 KB) and `docked.css` (6.3 KB):
+`theme.css` (12.8 KB) and `docked.css` (7.3 KB):
 
 <!-- bytes:table -->
 
 | Playing                                           | Downloads                                                          | Total        |
 | ------------------------------------------------- | ------------------------------------------------------------------ | ------------ |
-| MP4 or WebM                                       | core 8.0 + primitives 18.5 + native 6.0                            | **32.5 KB**  |
-| HLS on Safari and iOS                             | the above + HLS adapter 5.0                                        | **37.5 KB**  |
-| HLS on Chrome, Edge, Firefox                      | the above + **hls.js 169.2**                                       | **206.7 KB** |
-| HLS on Chrome, Edge, Firefox, with `hls.js/light` | core + primitives + native + HLS adapter 37.5 + hls.js light 113.0 | **150.5 KB** |
-| YouTube                                           | core 8.0 + primitives 18.5 + adapter 6.2                           | **32.7 KB**  |
-| Vimeo                                             | core 8.0 + primitives 18.5 + adapter 8.2 + `@vimeo/player` 8.5     | **43.2 KB**  |
-| Wistia                                            | core 8.0 + primitives 18.5 + adapter 5.8                           | **32.3 KB**  |
+| MP4 or WebM                                       | core 8.7 + primitives 20.0 + native 6.5                            | **35.2 KB**  |
+| HLS on Safari and iOS                             | the above + HLS adapter 5.3                                        | **40.5 KB**  |
+| HLS on Chrome, Edge, Firefox                      | the above + **hls.js 169.2**                                       | **209.7 KB** |
+| HLS on Chrome, Edge, Firefox, with `hls.js/light` | core + primitives + native + HLS adapter 40.5 + hls.js light 113.0 | **153.5 KB** |
+| YouTube                                           | core 8.7 + primitives 20.0 + adapter 6.2                           | **34.9 KB**  |
+| Vimeo                                             | core 8.7 + primitives 20.0 + adapter 8.3 + `@vimeo/player` 8.5     | **45.5 KB**  |
+| Wistia                                            | core 8.7 + primitives 20.0 + adapter 5.9                           | **34.6 KB**  |
 
 <!-- /bytes -->
 
 **hls.js is the whole story here, and it is not ours.** Adaptive streaming needs
 manifest parsing, MSE buffer management, ABR heuristics, MPEG-TS to fMP4
 transmuxing and CEA-608/708 extraction; hls.js's own smallest build is 113.0 KB,
-and Playdeck's HLS adapter over it is 5.0. What lazy loading buys is not a
+and Playdeck's HLS adapter over it is 5.3. What lazy loading buys is not a
 smaller hls.js. It is that the other four rows never download one, and that
 Safari and iOS do not either, because they play HLS natively and hls.js is never
 fetched there.
@@ -122,7 +122,7 @@ change that moves a bundle cannot leave a stale number in them.
 
 Every Playdeck package in this table is measured by `pnpm test:budgets` on each
 CI run, against a reference figure it prints but never enforces: core weighs in
-at 8.0 KB, the primitives at 18.5 KB, `theme.css` at 2.3 KB and `docked.css` at
+at 8.7 KB, the primitives at 20.0 KB, `theme.css` at 2.4 KB and `docked.css` at
 2.6 KB — the two stylesheets measured on their CSS rules with the comments
 stripped, because both ship as authored and measuring the whole file would
 really be measuring their prose. None of the four can ever fail a build over it;

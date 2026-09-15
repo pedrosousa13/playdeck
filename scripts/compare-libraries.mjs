@@ -204,6 +204,9 @@ const reachesExport = (chunk, exportName) =>
  *   legitimately.
  * - "captions rendering": `captions.tsx`'s entire export list -- `Captions`,
  *   `CaptionsButton`, `CaptionsMenu`.
+ * - "quality selection": `quality.tsx`'s one export, `QualityMenu`.
+ * - "playback rate": `playback-rate.tsx`'s one export, `PlaybackRateMenu`.
+ * - "audio tracks": `audio-tracks.tsx`'s one export, `AudioTrackMenu`.
  * - "every provider other than native": matched the same way `requiredChunk`
  *   below matches `provider-native` itself, by the package's own directory
  *   appearing in a reachable chunk's `moduleIds`. `requiredChunk` already
@@ -225,7 +228,86 @@ export const PLAY_ONLY_FORBIDDEN_MODULES = [
     'SeekSlider',
     'Captions',
     'CaptionsButton',
-    'CaptionsMenu'
+    'CaptionsMenu',
+    // Demonstrated red (docs/agents/demonstrated-red.md), recorded verbatim:
+    // temporarily importing `<Player.QualityMenu />` into
+    // tests/compare/entries/playdeck-play-only.tsx and running
+    // `node scripts/compare-libraries.mjs --check` produced:
+    //
+    //   Playdeck (play-only)'s reachable chunks reach SettingsMenu, which
+    //   this composition (core + primitives + native provider + one control
+    //   (PlayButton)) does not use.
+    //
+    // Reverting the import returned the check to
+    // "docs/comparison/results.md already matches a fresh run". Honest note:
+    // the failure attributes to `SettingsMenu`, not to this entry --
+    // QualityMenu is composed entirely of already-forbidden modules
+    // (SettingsMenu, MenuRadioGroup, MenuRadioItem), so the gate would have
+    // caught this violation with or without `'QualityMenu'` named here. This
+    // entry keeps the list's own stated convention -- every menu preset
+    // named explicitly, the way `CaptionsMenu` already is -- rather than
+    // being load-bearing on its own.
+    'QualityMenu',
+    // Demonstrated red (docs/agents/demonstrated-red.md), recorded verbatim:
+    // temporarily importing `<Player.PlaybackRateMenu />` into
+    // tests/compare/entries/playdeck-play-only.tsx and running
+    // `node scripts/compare-libraries.mjs --check` produced:
+    //
+    //   Playdeck (play-only)'s reachable chunks reach SettingsMenu, which
+    //   this composition (core + primitives + native provider + one control
+    //   (PlayButton)) does not use.
+    //
+    // Reverting the import returned the check to
+    // "docs/comparison/results.md already matches a fresh run". Honest note,
+    // the same one QualityMenu's own entry above carries: the failure
+    // attributes to `SettingsMenu`, not to this entry -- PlaybackRateMenu is
+    // composed entirely of already-forbidden modules (SettingsMenu,
+    // MenuRadioGroup, MenuRadioItem), so the gate would have caught this
+    // violation with or without `'PlaybackRateMenu'` named here. This entry
+    // keeps the list's own stated convention -- every menu preset named
+    // explicitly -- rather than being load-bearing on its own.
+    'PlaybackRateMenu',
+    // Demonstrated red (docs/agents/demonstrated-red.md), recorded verbatim:
+    // temporarily importing `<Player.ChaptersMenu />` into
+    // tests/compare/entries/playdeck-play-only.tsx and running
+    // `node scripts/compare-libraries.mjs --check` (after a fresh
+    // `@playdeck/react` build, which this check bundles from) produced:
+    //
+    //   Playdeck (play-only)'s reachable chunks reach SettingsMenu, which
+    //   this composition (core + primitives + native provider + one control
+    //   (PlayButton)) does not use.
+    //
+    // Reverting the import returned the check to
+    // "docs/comparison/results.md already matches a fresh run". Honest note,
+    // the same one QualityMenu's and PlaybackRateMenu's own entries above
+    // carry: the failure attributes to `SettingsMenu`, not to this entry --
+    // ChaptersMenu is composed entirely of already-forbidden modules
+    // (SettingsMenu, MenuRadioGroup, MenuRadioItem), so the gate would have
+    // caught this violation with or without `'ChaptersMenu'` named here.
+    // This entry keeps the list's own stated convention -- every menu
+    // preset named explicitly -- rather than being load-bearing on its own.
+    'ChaptersMenu',
+    // Demonstrated red (docs/agents/demonstrated-red.md), recorded verbatim:
+    // temporarily importing `<Player.AudioTrackMenu />` into
+    // tests/compare/entries/playdeck-play-only.tsx and running
+    // `node scripts/compare-libraries.mjs --check` (after a fresh
+    // `@playdeck/react` build) produced:
+    //
+    //   Playdeck (play-only)'s reachable chunks reach SettingsMenu, which
+    //   this composition (core + primitives + native provider + one control
+    //   (PlayButton)) does not use.
+    //
+    // Reverting the import returned the check to
+    // "docs/comparison/results.md already matches a fresh run". Honest note,
+    // the same one QualityMenu's, PlaybackRateMenu's and ChaptersMenu's own
+    // entries above carry: the failure attributes to `SettingsMenu`, not to
+    // this entry -- AudioTrackMenu is composed entirely of already-forbidden
+    // modules (SettingsMenu, MenuRadioGroup, MenuRadioItem), so the gate
+    // would have caught this violation with or without `'AudioTrackMenu'`
+    // named here. This entry keeps the list's own stated convention -- every
+    // menu preset named explicitly -- rather than being load-bearing on its
+    // own.
+    'AudioTrackMenu'
   ].map((name) => ({
     name,
     reachedBy: (/** @type {Chunk} */ chunk) => reachesExport(chunk, name)
@@ -274,16 +356,14 @@ export const libraries = [
     composition: 'core + native provider, no control parts',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // Raised from 20 KB (previously measured 19.90 KB) to cover the
-    // explicit-object path `detectSourceWithProviders` gained for a supplied
-    // provider kind: every composition below reaches
-    // `provider-loaders.ts` regardless of which parts it renders, so the
-    // added validation logic (`everyStringPermitted` and its recursive
-    // check) lands in this row's own gzip figure too, not only the
-    // play-only row's. 20.09 KB measured 2026-09-12, rounded up to the next
-    // 0.25 KB -- see the `libraries` doc comment above for what raising this
-    // means.
-    ceilingKb: 20.25
+    // 20.54 KB measured 2026-09-15, rounded up to the next 0.25 KB -- see
+    // the `libraries` doc comment above for what raising this means. The
+    // growth from 20.26 KB is #659's `remotePlayback` capability, the
+    // `showRemotePlaybackPicker` command and `PlayerState.remotePlayback`
+    // added to core, plus the native provider's own Remote Playback API
+    // wiring (`packages/provider-native/src/remote-playback.ts`) this
+    // composition bundles in full even though it reaches no control part.
+    ceilingKb: 20.75
   },
   {
     name: 'Playdeck',
@@ -292,12 +372,12 @@ export const libraries = [
     composition: 'core + primitives + native provider',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // Raised from 20.75 KB (previously measured 20.56 KB): the `providers`
-    // prop's reserved-name guard and its validation of a `detect` return
-    // (`detectSourceWithProviders`, `provider-loaders.ts`) reach this
-    // composition the same as every other one below. 20.77 KB measured
-    // 2026-09-12, rounded up to the next 0.25 KB.
-    ceilingKb: 21
+    // 21.21 KB measured 2026-09-15, rounded up to the next 0.25 KB. The
+    // growth from 20.85 KB is #659's `RemotePlaybackButton` part plus the
+    // `remotePlayback` capability, `showRemotePlaybackPicker` command and
+    // `PlayerState.remotePlayback` it reads, added to core, react and the
+    // native provider.
+    ceilingKb: 21.25
   },
   {
     name: 'Playdeck (play-only)',
@@ -307,13 +387,13 @@ export const libraries = [
       'core + primitives + native provider + one control (PlayButton)',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // Raised from 21.75 KB (previously measured 21.63 KB) for the same
-    // reason as the "no parts" row above: the explicit-object path
-    // `detectSourceWithProviders` gained for a supplied provider kind
-    // adds validation logic every composition reaches, this row
-    // included. 21.83 KB measured 2026-09-12, rounded up to the next 0.25
-    // KB.
-    ceilingKb: 22,
+    // 22.28 KB measured 2026-09-15, rounded up to the next 0.25 KB. The
+    // growth from 21.92 KB is #659's `remotePlayback` capability,
+    // `showRemotePlaybackPicker` command and `PlayerState.remotePlayback`
+    // added to core, plus the native provider's own Remote Playback API
+    // wiring this composition bundles in full even though `PlayButton` alone
+    // reaches no capability-gated control.
+    ceilingKb: 22.5,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
@@ -324,8 +404,13 @@ export const libraries = [
       "core + primitives + native provider + control bar (5 of Media Chrome's 7 controls)",
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 24.28 KB measured 2026-09-09, rounded up to the next 0.25 KB.
-    ceilingKb: 24.5
+    // 26.31 KB measured 2026-09-15, rounded up to the next 0.25 KB. The
+    // growth from 26.02 KB is #659's `remotePlayback` capability,
+    // `showRemotePlaybackPicker` command and `PlayerState.remotePlayback`
+    // added to core, plus the native provider's own Remote Playback API
+    // wiring, which this composition bundles in full regardless of which of
+    // the control bar's five parts a consumer actually reaches.
+    ceilingKb: 26.5
   },
   {
     name: 'react-player',

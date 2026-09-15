@@ -103,6 +103,13 @@ export type HlsQualityLevels = {
   // The `selectQuality` facet of the host's capabilities on the hls.js
   // engine.
   readonly selectQualityAvailability: () => Availability;
+  // The `selectQualityAuto` facet, on the hls.js engine. Mirrors
+  // `selectQualityAvailability` exactly rather than tracking its own state:
+  // `selectQuality`'s own `id === null` branch sets `instance.currentLevel =
+  // -1` unconditionally, with no ladder-shaped precondition the way Vimeo's
+  // `auto` ladder entry is, so auto is offered whenever selection is and
+  // withheld whenever it is not.
+  readonly selectQualityAutoAvailability: () => Availability;
 };
 
 export const createHlsQualityLevels = ({
@@ -239,6 +246,7 @@ export const createHlsQualityLevels = ({
         reason: 'provider-check'
       };
     },
-    selectQualityAvailability: () => selectQualityAvailability
+    selectQualityAvailability: () => selectQualityAvailability,
+    selectQualityAutoAvailability: () => selectQualityAvailability
   };
 };

@@ -456,11 +456,14 @@ test('renders no Playdeck control layer over a ready YouTube embed', async () =>
         setVolume: { status: 'available' },
         setPlaybackRate: { status: 'available' },
         selectQuality: { status: 'unavailable', reason: 'provider' },
+        selectQualityAuto: { status: 'unavailable', reason: 'provider' },
         selectTextTrack: { status: 'unavailable', reason: 'source' },
+        selectAudioTrack: { status: 'unavailable', reason: 'provider' },
         chapters: { status: 'unavailable', reason: 'provider' },
         fullscreen: { status: 'available' },
         pictureInPicture: { status: 'unavailable', reason: 'provider' },
         airPlay: { status: 'unavailable', reason: 'provider' },
+        remotePlayback: { status: 'unavailable', reason: 'provider' },
         customControls: { status: 'unavailable', reason: 'policy' },
         providerPoster: { status: 'available' }
       }

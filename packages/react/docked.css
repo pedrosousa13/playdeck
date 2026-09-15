@@ -205,6 +205,11 @@
     border-block-start: 1px solid var(--playdeck-color-hairline, #d9d9d6);
   }
 
+  /* `live` joins this shared box only -- shape, size and ink colour, so it
+   * reads as deliberate rather than unstyled -- and is left out of :hover
+   * and :active below, with its own cursor rule after them, because it is
+   * permanently `disabled` until seek-to-live-edge is built and those two
+   * fills would advertise a press that does nothing. */
   :where(
     [data-playdeck-part='play-button'],
     [data-playdeck-part='mute-button'],
@@ -212,7 +217,8 @@
     [data-playdeck-part='fullscreen-button'],
     [data-playdeck-part='pip-button'],
     [data-playdeck-part='airplay-button'],
-    [data-playdeck-part='settings-menu-trigger']
+    [data-playdeck-part='settings-menu-trigger'],
+    [data-playdeck-part='live']
   ) {
     display: inline-grid;
     place-items: center;
@@ -249,6 +255,13 @@
     [data-playdeck-part='settings-menu-trigger']
   ):where(:active) {
     background-color: var(--playdeck-control-pressed, rgb(0 0 0 / 0.1));
+  }
+
+  /* `:where()` above carries zero specificity, so this later rule wins on
+   * source order alone and overrides the shared box's `cursor: pointer` --
+   * `live` never has anything to press. */
+  :where([data-playdeck-part='live']) {
+    cursor: default;
   }
 
   :where([data-playdeck-part]):where(:focus-visible) {
@@ -327,9 +340,22 @@
     cursor: pointer;
   }
 
+  /* The hidden rest state is scoped to the adjacent-sibling combinator, not
+   * the bare slider: `pointer-events: none` takes an element out of hit
+   * testing, so a slider with no mute button beside it could never match its
+   * own `:hover` branch and would be invisible and pointer-unreachable at once.
+   * `inline-size` stays on the bare selector below because a standalone
+   * slider still needs its width -- only the hidden/reveal behaviour is
+   * conditional on the sibling. See `theme.css`'s own copy of this rule for
+   * the rest of the rationale; it is not repeated here. */
   @media (pointer: fine) {
     :where([data-playdeck-part='volume-slider']) {
       inline-size: 5rem;
+    }
+
+    :where(
+      [data-playdeck-part='mute-button'] + [data-playdeck-part='volume-slider']
+    ) {
       opacity: 0;
       pointer-events: none;
       transition: opacity var(--playdeck-transition-duration, 150ms)
@@ -350,7 +376,7 @@
   }
 
   /* `pip-button` joins the volume slider here for the reason
-   * `theme.css`'s own copy of this rule records at length (#598): a coarse
+   * `theme.css`'s own copy of this rule records at length (#622): a coarse
    * pointer means a touchscreen, and every platform that ships one already
    * puts picture-in-picture in its own system chrome, so the in-bar
    * affordance is the one control a phone loses nothing by dropping -- and
@@ -498,9 +524,43 @@
     }
   }
 
+  /* ---- thumbnail preview ---------------------------------------------------
+   * Same opt-in gate as theme.css's own copy of this rule -- this part mounts
+   * only once `thumbnails` resolves, so a player that never sets it never
+   * matches here either; see that file for why `opacity` gates the fade
+   * rather than fighting the inline `visibility` toggle.
+   *
+   * The hairline border is this file's own addition, not theme.css's: every
+   * other surface card here that borders itself (`activation`, the
+   * settings/captions menu) does so against the light default scheme the
+   * same way, where theme.css's dark scrim needs no edge of its own.
+   *
+   * `box-sizing: content-box`, the opposite of the border-box this file
+   * reaches for everywhere else a border meets a stated dimension
+   * (`activation` above, the range-thumb pseudo-elements): there the size is
+   * this file's own and border-box keeps the border from growing past it.
+   * Here `width`/`height` are the primitive's own inline pixels -- the sprite
+   * crop `overflow: hidden` cuts to -- so the border has to sit OUTSIDE that
+   * box instead. A consumer's `border-box` reset would otherwise pull it
+   * inward and clip ~1px off every edge of the image.
+   */
+  :where([data-playdeck-part='thumbnail']) {
+    box-sizing: content-box;
+    border: 1px solid var(--playdeck-color-hairline, #d9d9d6);
+    border-radius: var(--playdeck-radius-large, 0.5rem);
+    background-color: var(--playdeck-color-surface, #f4f4f2);
+    opacity: 0;
+    transition: opacity var(--playdeck-transition-duration, 150ms)
+      var(--playdeck-transition-easing, ease);
+  }
+
+  :where([data-playdeck-part='thumbnail'][data-state='visible']) {
+    opacity: 1;
+  }
+
   /* ---- below 48rem --------------------------------------------------------
    * This file docks at every width already, so nothing here moves the bar --
-   * only the row-two overflow (#598) that `theme.css`'s own copy of this
+   * only the row-two overflow (#622) that `theme.css`'s own copy of this
    * query fixes, restated for this file because it shares no import with
    * that one, and, as of 2026-09-04, the same trim to the bar's own height.
    * Same arithmetic, same WCAG 2.5.8 floors; see that file's comments for all
@@ -630,12 +690,14 @@
 
   /* ---- reduced motion -----------------------------------------------------
    * No auto-hide here (docked.css never reads data-idle), so only the volume
-   * reveal fade and the activation opacity fade need collapsing.
+   * reveal fade, the activation opacity fade and the thumbnail preview fade
+   * need collapsing.
    */
   @media (prefers-reduced-motion: reduce) {
     :where(
       [data-playdeck-part='activation'],
-      [data-playdeck-part='volume-slider']
+      [data-playdeck-part='volume-slider'],
+      [data-playdeck-part='thumbnail']
     ) {
       transition-duration: 0.01ms;
     }
@@ -764,6 +826,11 @@
 
     :where([data-playdeck-part='seek-buffered-range']) {
       background-color: var(--playdeck-color-buffered, #ededed);
+    }
+
+    :where([data-playdeck-part='thumbnail']) {
+      border-color: var(--playdeck-color-hairline, #2a2a2d);
+      background-color: var(--playdeck-color-surface, #141416);
     }
 
     :where(

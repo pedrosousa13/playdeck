@@ -152,7 +152,9 @@ const atHome = crumbs.length === 0;
 // listed below, so they simply match nothing.
 const path = Astro.url.pathname;
 const section = (
-  path.startsWith(homeUrl) ? path.slice(homeUrl.length) : path.replace(/^\//, '')
+  path.startsWith(homeUrl)
+    ? path.slice(homeUrl.length)
+    : path.replace(/^\//, '')
 ).split('/')[0];
 
 const destinations = [
@@ -171,78 +173,72 @@ const destinations = [
   class="flex items-center gap-[var(--space-3)] [border-block-end:var(--line-width)_solid_var(--color-border)] [padding-block:var(--space-2)] [padding-inline:var(--space-5)]"
   data-pagefind-ignore
 >
-  {
-    /* The shrinkable group. `min-w-0` is what lets it clip instead of forcing
-     * the row wider — a flex item's default minimum width is its content
-     * size, not zero, so without this the trail would push everything after
-     * it off the row rather than truncate. Kept even on `/`, where nothing
-     * renders inside it, so the nav and the tools group keep the same
-     * position whether or not a trail is present. */
-  }
+  {/* The shrinkable group. `min-w-0` is what lets it clip instead of forcing
+   * the row wider — a flex item's default minimum width is its content
+   * size, not zero, so without this the trail would push everything after
+   * it off the row rather than truncate. Kept even on `/`, where nothing
+   * renders inside it, so the nav and the tools group keep the same
+   * position whether or not a trail is present. */}
   <div class="flex min-w-0 items-baseline overflow-hidden">
-    {
-      !atHome && (
-        <nav class="min-w-0 [font-size:var(--text-sm)]" aria-label="Breadcrumb">
-          <ol class="m-0 flex min-w-0 list-none [gap:var(--space-2)] p-0">
-            <li class="flex-none">
-              <a
-                class="[font-size:var(--text-md)] font-semibold text-foreground no-underline [letter-spacing:var(--tracking-tight)] hover:text-primary active:text-muted-foreground"
-                href={homeUrl}
-              >
-                Playdeck
-              </a>
+    {!atHome && (
+      <nav class="min-w-0 [font-size:var(--text-sm)]" aria-label="Breadcrumb">
+        <ol class="m-0 flex min-w-0 list-none [gap:var(--space-2)] p-0">
+          <li class="flex-none">
+            <a
+              class="[font-size:var(--text-md)] font-semibold text-foreground no-underline [letter-spacing:var(--tracking-tight)] hover:text-primary active:text-muted-foreground"
+              href={homeUrl}
+            >
+              Playdeck
+            </a>
+          </li>
+          {crumbs.map(({ label, href }) => (
+            <li class="crumb min-w-0 flex-none overflow-hidden text-ellipsis whitespace-nowrap text-muted-foreground last:flex-auto last:font-semibold last:text-foreground">
+              {href === undefined ? (
+                <span>{label}</span>
+              ) : (
+                <a
+                  class="text-muted-foreground no-underline hover:text-primary active:text-muted-foreground"
+                  href={href}
+                >
+                  {label}
+                </a>
+              )}
             </li>
-            {crumbs.map(({ label, href }) => (
-              <li class="crumb min-w-0 flex-none overflow-hidden text-ellipsis whitespace-nowrap text-muted-foreground last:flex-auto last:font-semibold last:text-foreground">
-                {href === undefined ? (
-                  <span>{label}</span>
-                ) : (
-                  <a
-                    class="text-muted-foreground no-underline hover:text-primary active:text-muted-foreground"
-                    href={href}
-                  >
-                    {label}
-                  </a>
-                )}
-              </li>
-            ))}
-          </ol>
-        </nav>
-      )
-    }
+          ))}
+        </ol>
+      </nav>
+    )}
   </div>
 
-  {
-    /* Beside the wordmark, not spread across the row: `shrink-0` and no grow,
-     * so it sits directly after the trail's box with only the header's own
-     * `gap` between them.
-     *
-     * On `/` there is no wordmark and no trail to sit beside (see the
-     * doc comment at the top of this file for why) — an empty box, this nav,
-     * then a wide gap to the tools at the far end read as an unfinished row
-     * rather than a composed one. `atHome` gives this nav the same `ms-auto`
-     * the tools group below carries, so the two travel together as one
-     * cluster at the row's end instead of standing at opposite corners of it;
-     * the wordmark and thesis directly under the hero carry the brand this
-     * row would otherwise be asked to.
-     *
-     * Three renderings of the same list rather than one disclosure: an
-     * inline `<ul>`, shown from 40rem up; `SiteNavSheet`'s trigger plus
-     * sheet, shown below it once a script has mounted; and a `<noscript>`
-     * list drawn from the same `destinations`, for a reader below that width
-     * with no script to mount the sheet with (#591 — that reader used to have
-     * no header navigation at all, Guides among the losses). The invariant is
-     * not "one list, hidden below 40rem" — it is that exactly one set of
-     * links is visible inside this landmark at every width, with or without
-     * a script, which is what lets `e2e/site-nav.spec.ts` count them without
-     * knowing either. `min-[40rem]:hidden` on both the sheet's trigger and
-     * the noscript list is what keeps the inline list the only one on screen
-     * from 40rem up; below it, the sheet's own content does not exist in the
-     * DOM until opened, and the noscript list exists only when no script
-     * runs to hide it and mount the sheet in its place — with one, the
-     * browser parses everything inside `<noscript>` as inert text rather
-     * than markup, so it contributes no `<a>` elements at all. */
-  }
+  {/* Beside the wordmark, not spread across the row: `shrink-0` and no grow,
+   * so it sits directly after the trail's box with only the header's own
+   * `gap` between them.
+   *
+   * On `/` there is no wordmark and no trail to sit beside (see the
+   * doc comment at the top of this file for why) — an empty box, this nav,
+   * then a wide gap to the tools at the far end read as an unfinished row
+   * rather than a composed one. `atHome` gives this nav the same `ms-auto`
+   * the tools group below carries, so the two travel together as one
+   * cluster at the row's end instead of standing at opposite corners of it;
+   * the wordmark and thesis directly under the hero carry the brand this
+   * row would otherwise be asked to.
+   *
+   * Three renderings of the same list rather than one disclosure: an
+   * inline `<ul>`, shown from 40rem up; `SiteNavSheet`'s trigger plus
+   * sheet, shown below it once a script has mounted; and a `<noscript>`
+   * list drawn from the same `destinations`, for a reader below that width
+   * with no script to mount the sheet with (#591 — that reader used to have
+   * no header navigation at all, Guides among the losses). The invariant is
+   * not "one list, hidden below 40rem" — it is that exactly one set of
+   * links is visible inside this landmark at every width, with or without
+   * a script, which is what lets `e2e/site-nav.spec.ts` count them without
+   * knowing either. `min-[40rem]:hidden` on both the sheet's trigger and
+   * the noscript list is what keeps the inline list the only one on screen
+   * from 40rem up; below it, the sheet's own content does not exist in the
+   * DOM until opened, and the noscript list exists only when no script
+   * runs to hide it and mount the sheet in its place — with one, the
+   * browser parses everything inside `<noscript>` as inert text rather
+   * than markup, so it contributes no `<a>` elements at all. */}
   <nav
     class={cn('shrink-0 [font-size:var(--text-sm)]', atHome && 'ms-auto')}
     aria-label="Site"
@@ -264,18 +260,16 @@ const destinations = [
       ))}
     </ul>
     <SiteNavSheet client:only="react" destinations={destinations} />
-    {
-      /* The fallback for a reader with no script: `SiteNavSheet` is
-       * `client:only="react"`, so without a script it renders nothing to the
-       * page at all, and a `<noscript>` written inside that component would
-       * never reach the page either — a `client:only` island emits no server
-       * HTML to carry it. So this has to live here, in the component that
-       * does render server-side, mapping the same `destinations` the two
-       * renderings above already use rather than a second hand-written list.
-       * `min-[40rem]:hidden` matches the sheet trigger's own class, so above
-       * that width this list stays off screen and the inline `<ul>` above is
-       * the only one visible. */
-    }
+    {/* The fallback for a reader with no script: `SiteNavSheet` is
+     * `client:only="react"`, so without a script it renders nothing to the
+     * page at all, and a `<noscript>` written inside that component would
+     * never reach the page either — a `client:only` island emits no server
+     * HTML to carry it. So this has to live here, in the component that
+     * does render server-side, mapping the same `destinations` the two
+     * renderings above already use rather than a second hand-written list.
+     * `min-[40rem]:hidden` matches the sheet trigger's own class, so above
+     * that width this list stays off screen and the inline `<ul>` above is
+     * the only one visible. */}
     <noscript>
       <ul class="m-0 flex list-none flex-col [gap:var(--space-1)] p-0 min-[40rem]:hidden">
         {destinations.map(({ label, href, current }) => (
@@ -296,20 +290,18 @@ const destinations = [
     </noscript>
   </nav>
 
-  {
-    /* Search and the switch travel together at the far end of the row, and
-     * neither shrinks. `ms-auto` pushes the group to the end of the flex
-     * container by consuming the remaining free space as margin, which is
-     * what keeps the trail and the nav hugging the left edge instead of being
-     * spread apart by a growing flex item between them.
-     *
-     * Only carried here when the nav above is not already carrying it: two
-     * flex items each claiming `margin-inline-start: auto` do not let the
-     * first absorb all the free space and leave the second with none, they
-     * split it, which on `/` reopened the exact gap `atHome` on the nav
-     * above was written to close. So this group takes the auto margin only
-     * when the nav does not. */
-  }
+  {/* Search and the switch travel together at the far end of the row, and
+   * neither shrinks. `ms-auto` pushes the group to the end of the flex
+   * container by consuming the remaining free space as margin, which is
+   * what keeps the trail and the nav hugging the left edge instead of being
+   * spread apart by a growing flex item between them.
+   *
+   * Only carried here when the nav above is not already carrying it: two
+   * flex items each claiming `margin-inline-start: auto` do not let the
+   * first absorb all the free space and leave the second with none, they
+   * split it, which on `/` reopened the exact gap `atHome` on the nav
+   * above was written to close. So this group takes the auto margin only
+   * when the nav does not. */}
   <div
     class={cn(
       'flex shrink-0 items-center gap-[var(--space-3)]',

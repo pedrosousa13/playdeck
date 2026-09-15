@@ -150,13 +150,16 @@ const initialCapabilities = (): PlayerCapabilities =>
     setVolume: notReady,
     setPlaybackRate: notReady,
     selectQuality: notReady,
+    selectQualityAuto: notReady,
     selectTextTrack: notReady,
+    selectAudioTrack: notReady,
     chapters: notReady,
     fullscreen: notReady,
     pictureInPicture: notReady,
     airPlay: notReady,
     customControls: notReady,
-    providerPoster: notReady
+    providerPoster: notReady,
+    remotePlayback: notReady
   });
 
 export const createInitialPlayerState = (): PlayerState =>
@@ -189,11 +192,13 @@ export const createInitialPlayerState = (): PlayerState =>
     capabilities: initialCapabilities(),
     error: null,
     textTracks: Object.freeze([]),
+    audioTracks: Object.freeze([]),
     chapters: Object.freeze([]),
     selectedTextTrackId: null,
     captionRendering: 'unavailable',
     commandsReady: false,
-    providerPosterUrl: null
+    providerPosterUrl: null,
+    remotePlayback: null
   });
 
 export class PlayerController {
@@ -932,6 +937,8 @@ export class PlayerController {
     this.#command('setPlaybackRate', rate);
   selectTextTrack = (track: string | null): Promise<CommandResult> =>
     this.#command('selectTextTrack', track);
+  selectAudioTrack = (id: string): Promise<CommandResult> =>
+    this.#command('selectAudioTrack', id);
   requestFullscreen = (): Promise<CommandResult> =>
     this.#command('requestFullscreen');
   exitFullscreen = (): Promise<CommandResult> =>
@@ -942,6 +949,8 @@ export class PlayerController {
     this.#command('exitPictureInPicture');
   showAirPlayPicker = (): Promise<CommandResult> =>
     this.#command('showAirPlayPicker');
+  showRemotePlaybackPicker = (): Promise<CommandResult> =>
+    this.#command('showRemotePlaybackPicker');
   retry = (): Promise<CommandResult> => {
     const provider = this.#provider;
     if (!provider?.retry) return this.#command('retry');
@@ -997,11 +1006,13 @@ export class PlayerController {
       | 'setVolume'
       | 'setPlaybackRate'
       | 'selectTextTrack'
+      | 'selectAudioTrack'
       | 'requestFullscreen'
       | 'exitFullscreen'
       | 'requestPictureInPicture'
       | 'exitPictureInPicture'
       | 'showAirPlayPicker'
+      | 'showRemotePlaybackPicker'
       | 'retry'
     >,
     value?: number | string | null
@@ -1062,11 +1073,13 @@ export class PlayerController {
       | 'setVolume'
       | 'setPlaybackRate'
       | 'selectTextTrack'
+      | 'selectAudioTrack'
       | 'requestFullscreen'
       | 'exitFullscreen'
       | 'requestPictureInPicture'
       | 'exitPictureInPicture'
       | 'showAirPlayPicker'
+      | 'showRemotePlaybackPicker'
       | 'retry'
     >,
     value?: number | string | null

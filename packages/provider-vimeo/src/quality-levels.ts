@@ -99,6 +99,14 @@ export type VimeoQualityLevels = {
   };
   // The `selectQuality` facet of the host's capabilities.
   readonly selectQualityAvailability: () => Availability;
+  // The `selectQualityAuto` facet: whether the ladder read at the last
+  // `adopt` carried an `auto` entry, not merely whether it had rungs. An
+  // embed can publish real rungs with no `auto` among them -- `selectQuality`
+  // resolves `available` for such a ladder, but `selectQuality(null)`
+  // resolves `unsupported` against it (see `refuses auto when the ladder
+  // carries no auto entry`), so a menu gating its Auto row on `selectQuality`
+  // alone would offer a row that silently does nothing.
+  readonly selectQualityAutoAvailability: () => Availability;
 };
 
 export const createVimeoQualityLevels = ({
@@ -108,6 +116,7 @@ export const createVimeoQualityLevels = ({
   let qualities: ReadonlyArray<VimeoSdkQuality> = [];
   let selectedQualityId: string | null = null;
   let selectQualityAvailability: Availability = providerCheck;
+  let selectQualityAutoAvailability: Availability = providerCheck;
 
   return {
     // Resolved against the list the player published before the SDK is called:
@@ -140,6 +149,13 @@ export const createVimeoQualityLevels = ({
         rungs.length > 0
           ? available
           : { status: 'unavailable', reason: 'source' };
+      // Available only where the ladder itself carries an `auto` entry --
+      // `rungs.length > 0` alone is what `selectQuality` gates on, and is not
+      // enough here: a ladder can have real rungs and no `auto` among them.
+      selectQualityAutoAvailability =
+        rungs.length > 0 && qualities.some((quality) => !isVimeoRung(quality))
+          ? available
+          : { status: 'unavailable', reason: 'source' };
       return { qualities: rungs, selectedQualityId };
     },
     handlers: {
@@ -157,6 +173,7 @@ export const createVimeoQualityLevels = ({
         emit({ selectedQualityId: next });
       }
     },
-    selectQualityAvailability: () => selectQualityAvailability
+    selectQualityAvailability: () => selectQualityAvailability,
+    selectQualityAutoAvailability: () => selectQualityAutoAvailability
   };
 };

@@ -23,6 +23,11 @@ type PlayerFixtureProps = {
   readonly airplay?: 'demo';
   readonly sourceChange?: 'external';
   readonly captionRenderer?: Player.RootProps['captionRenderer'];
+  // Attaches a real `<track kind="chapters">` (`chapters.vtt`), so
+  // `e2e/chapters.spec.ts` has a native fixture to drive `Player.ChaptersMenu`
+  // against, in the same shape `captionRenderer` opts a fixture into a real
+  // `<track kind="captions">` above.
+  readonly chapters?: boolean;
   // The `[startTime, endTime]` window (#214), so a spec can drive a fixture
   // whose playback is confined to something other than the whole media.
   // `e2e/vimeo-url-time-param.spec.ts` needs one to have anything to defend.
@@ -247,13 +252,22 @@ const LiveControls = () => {
   );
 };
 
-const captionTextTracks: Player.MediaProps['textTracks'] = [
+const captionTextTracks: NonNullable<Player.MediaProps['textTracks']> = [
   {
     src: assetUrl('captions-en.vtt'),
     srcLang: 'en',
     label: 'English',
     kind: 'captions',
     default: true
+  }
+];
+
+const chaptersTextTracks: NonNullable<Player.MediaProps['textTracks']> = [
+  {
+    src: assetUrl('chapters.vtt'),
+    srcLang: 'en',
+    label: 'Chapters',
+    kind: 'chapters'
   }
 ];
 
@@ -268,6 +282,7 @@ const PlayerFixture = ({
   airplay,
   sourceChange: sourceChangeInput,
   captionRenderer,
+  chapters,
   startTime,
   endTime,
   vimeoCustomControls,
@@ -305,18 +320,29 @@ const PlayerFixture = ({
         // `selectTextTrack` can settle to `source`.
         sourceKey === 'hls-nosubs'
         ? { type: 'hls', src: assetUrl('hls/nosubs.m3u8'), engine: hlsEngine }
-        : sourceKey === 'live'
-          ? { type: 'hls', src: assetUrl('live/index.m3u8'), engine: hlsEngine }
-          : sourceKey === 'long'
-            ? assetUrl('tracer-10s.mp4')
-            : (vimeoSource ??
-              (sourceChange
-                ? 'https://provider.invalid/source-a.mp4'
-                : activationSource === 'external'
-                  ? 'https://provider.invalid/tracer.mp4'
-                  : activationSource === 'youtube'
-                    ? youtubeExampleUrl
-                    : assetUrl('tracer.mp4')));
+        : // Two `EXT-X-MEDIA:TYPE=AUDIO` renditions (#656) -- the only shape
+          // in which `selectAudioTrack` has more than one track to switch
+          // between; `hls/master.m3u8` above carries none.
+          // `e2e/audio-tracks.spec.ts` drives `Player.AudioTrackMenu`
+          // against this fixture.
+          sourceKey === 'hls-audio'
+          ? { type: 'hls', src: assetUrl('hls/audio.m3u8'), engine: hlsEngine }
+          : sourceKey === 'live'
+            ? {
+                type: 'hls',
+                src: assetUrl('live/index.m3u8'),
+                engine: hlsEngine
+              }
+            : sourceKey === 'long'
+              ? assetUrl('tracer-10s.mp4')
+              : (vimeoSource ??
+                (sourceChange
+                  ? 'https://provider.invalid/source-a.mp4'
+                  : activationSource === 'external'
+                    ? 'https://provider.invalid/tracer.mp4'
+                    : activationSource === 'youtube'
+                      ? youtubeExampleUrl
+                      : assetUrl('tracer.mp4')));
 
   const replacementSource = sourceChange
     ? 'https://provider.invalid/source-b.mp4'
@@ -325,7 +351,15 @@ const PlayerFixture = ({
   const [source, setSource] = useState(initialSource);
   // Only the captions fixture (a story arg sets `captionRenderer`) attaches a
   // real <track>; every other story keeps the plain <video> it had before.
-  const textTracks = captionRenderer ? captionTextTracks : undefined;
+  // The chapters fixture (`chapters` arg) attaches its own <track> alongside
+  // whichever caption track is already present, rather than replacing it.
+  const textTracks =
+    captionRenderer || chapters
+      ? [
+          ...(captionRenderer ? captionTextTracks : []),
+          ...(chapters ? chaptersTextTracks : [])
+        ]
+      : undefined;
 
   const fixture = (
     <>
@@ -388,9 +422,14 @@ const PlayerFixture = ({
           <Player.LoadingIndicator />
           <Player.Media textTracks={textTracks} />
           <Player.Captions />
+          <Player.LiveIndicator />
         </Player.Viewport>
         <Player.PlayButton />
         <Player.CaptionsButton />
+        <Player.QualityMenu />
+        <Player.PlaybackRateMenu />
+        <Player.ChaptersMenu />
+        <Player.AudioTrackMenu />
         {/*
           Mounted everywhere on purpose: "AirPlay" contains "Play", so a
           name-based Playwright lookup collides here (#73). It is a partial
@@ -443,7 +482,7 @@ const meta: Meta<PlayerFixtureProps> = {
     source: {
       control: 'text',
       description:
-        "'hls' | 'hls-nosubs' | 'live' | 'long' | 'vimeo' | 'vimeo-unlisted' | an https:// URL | undefined (defaults to the native tracer)."
+        "'hls' | 'hls-nosubs' | 'hls-audio' | 'live' | 'long' | 'vimeo' | 'vimeo-unlisted' | an https:// URL | undefined (defaults to the native tracer)."
     },
     engine: {
       control: 'radio',
@@ -527,6 +566,14 @@ export const NativeMp4StartTime: Story = {
   args: { source: 'long', startTime: 5 }
 };
 
+// The ten-second clip, with `chapters.vtt` attached -- `e2e/chapters.spec.ts`
+// drives `Player.ChaptersMenu` against this fixture, and needs the longer
+// clip for the same reason `NativeMp4StartTime` above does: three chapters
+// with boundaries at 3s and 6s need a source that reaches past them.
+export const NativeChapters: Story = {
+  args: { source: 'long', chapters: true }
+};
+
 export const CaptionsCustom: Story = {
   args: { captionRenderer: 'custom' }
 };
@@ -548,6 +595,13 @@ export const HlsNoSubtitles: Story = {
 
 export const HlsNative: Story = {
   args: { source: 'hls', engine: 'native' }
+};
+
+// Two alternate-audio renditions (#656) -- e2e/audio-tracks.spec.ts drives
+// Player.AudioTrackMenu against it, the way HlsHlsJs above does for
+// Player.QualityMenu.
+export const HlsAudioTracks: Story = {
+  args: { source: 'hls-audio', engine: 'hls.js' }
 };
 
 export const LiveHlsJs: Story = {

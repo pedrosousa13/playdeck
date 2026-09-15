@@ -12,8 +12,10 @@ import {
   toRanges,
   type EmitProviderState
 } from './adapter-values.js';
+import type { NativeAudioTracks } from './audio-tracks.js';
 import type { NativePlayback } from './playback.js';
 import type { NativePresentation } from './presentation.js';
+import type { NativeRemotePlayback } from './remote-playback.js';
 import type { NativeTextTracks } from './text-tracks.js';
 
 export type NativeAttachmentDeps = {
@@ -26,8 +28,16 @@ export type NativeAttachmentDeps = {
     'applyInitialPosition' | 'cancelPendingReplay' | 'handlers'
   >;
   readonly presentation: Pick<NativePresentation, 'handlers'>;
+  readonly remotePlayback: Pick<
+    NativeRemotePlayback,
+    'attachListeners' | 'destroy'
+  >;
   readonly textTracks: Pick<
     NativeTextTracks,
+    'attachListeners' | 'discover' | 'destroy'
+  >;
+  readonly audioTracks: Pick<
+    NativeAudioTracks,
     'attachListeners' | 'discover' | 'destroy'
   >;
   // Drops the host's provider-state subscribers on destroy.
@@ -55,7 +65,9 @@ export const createNativeAttachment = (
     getCapabilities,
     playback,
     presentation,
+    remotePlayback,
     textTracks,
+    audioTracks,
     clearStateListeners
   }: NativeAttachmentDeps
 ): NativeAttachment => {
@@ -400,6 +412,9 @@ export const createNativeAttachment = (
       addListeners();
       textTracks.attachListeners();
       textTracks.discover();
+      audioTracks.attachListeners();
+      audioTracks.discover();
+      remotePlayback.attachListeners();
       emitMediaState();
     },
     load: () => {
@@ -421,6 +436,8 @@ export const createNativeAttachment = (
       playback.cancelPendingReplay();
       if (attached) removeListeners();
       textTracks.destroy();
+      audioTracks.destroy();
+      remotePlayback.destroy();
       if (!media.paused) {
         try {
           media.pause();

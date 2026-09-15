@@ -1115,6 +1115,7 @@ test('hands back only the declared PlayerHandle surface through the ref', () => 
     'requestPictureInPicture',
     'exitPictureInPicture',
     'showAirPlayPicker',
+    'showRemotePlaybackPicker',
     'retry',
     'whenReady'
   ];

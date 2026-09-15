@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 /**
  * The site's three theme states, and the one of them a media query alone gets
@@ -22,6 +22,13 @@ import { expect, test, type Page } from '@playwright/test';
  * The site is served by the second `webServer` entry in `playwright.config.ts`.
  * The storybook one owns `baseURL`, so this address is written out rather than
  * navigated to as a path.
+ *
+ * The switch itself is also pinned here, not only the colours it drives: its
+ * trigger carries both a Tooltip and a DropdownMenu, and the tooltip must
+ * never render while the menu is open (#642). WebKit cannot launch on the
+ * authoring machine (two missing system libraries), so every red recorded
+ * below is chromium and firefox only; CI's WebKit run is what covers the
+ * third engine.
  */
 const SITE = 'http://127.0.0.1:4322';
 
@@ -153,6 +160,165 @@ test('a code block follows an explicit choice in both directions', async ({
 
   await choose(page, 'Dark');
   await expect(code).toHaveCSS('color', DARK_CODE);
+});
+
+/**
+ * The DOM element radix-ui@1.6.7 paints for an open tooltip, matched by a CSS
+ * role selector rather than fetched through `getByRole('tooltip')`: with the
+ * menu open, Radix marks everything outside it `aria-hidden`, which
+ * `getByRole` respects and a plain CSS selector does not. Measured (chromium,
+ * 2026-09-12): a tooltip left open behind an open menu has `domCount: 1`,
+ * `display: block`, and a 109x28 box painted over the first menu item, while
+ * `getByRole('tooltip')` counts 0 — a role query here would pass against the
+ * unfixed component.
+ */
+const tooltipLocator = (page: Page) => page.locator('[role="tooltip"]');
+
+/**
+ * Asserts the first menu item, not something layered over it, is what a
+ * pointer at that item's own centre would reach. The absence of a tooltip
+ * element is the cause; this is the consequence the reader actually meets,
+ * and it stays true whatever a future overlay is built from.
+ *
+ * Demonstrated red (docs/agents/demonstrated-red.md): in both tests above,
+ * the `toHaveCount(0)` assertion aborts the test before this one runs, so
+ * `expect(hit).toBe(true)` below was checked on its own — with
+ * `toHaveCount` temporarily removed from the pointer test, against
+ * `origin/main`'s component, measured 2026-09-12: it failed on both
+ * chromium and firefox, `expect(received).toBe(expected) // Object.is
+ * equality / Expected: true / Received: false`.
+ */
+const expectItemTakesThePointer = async (item: Locator): Promise<void> => {
+  const box = (await item.boundingBox())!;
+  // `element.contains(hit)`, not `hit.closest(...)`: a `closest` match would
+  // pass for *any* menu item, while this has to prove *this* item was
+  // reached — the same distinction `e2e/menu-placement.spec.ts`'s
+  // `placementOf` draws with the identical call.
+  const hit = await item.evaluate(
+    (element, { x, y }) => {
+      const el = document.elementFromPoint(x, y);
+      return el !== null && element.contains(el);
+    },
+    { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  );
+  expect(hit).toBe(true);
+};
+
+test('the tooltip never renders while the menu is open, opened by keyboard', async ({
+  page
+}) => {
+  // The trigger carries both a Tooltip and a DropdownMenu through nested
+  // `asChild`, and nothing coupled their open states — a tooltip that
+  // (re)opened while the menu was open rendered over the first item and
+  // took its click (#642).
+  //
+  // Demonstrated red, measured on 2026-09-12 (chromium): this keyboard path
+  // passes against the unfixed component, because Radix's own focus
+  // management moves focus into the menu and closes the tooltip on the way.
+  // So it carries a substitute mutation instead, per
+  // `docs/agents/demonstrated-red.md`: with the gate removed and the
+  // tooltip forced open (`open={true}` in `ThemeToggleIsland.tsx`),
+  // `toHaveCount(0)` fails — `expect(locator).toHaveCount(expected) failed /
+  // Expected: 0 / Received: 1`. `expectItemTakesThePointer` still passes
+  // under that same mutation: `elementFromPoint` at the item's centre still
+  // returns the `menuitemradio`, because the forced-open tooltip does not
+  // cover it here. The hit-test assertion's own red comes from the pointer
+  // test below instead.
+  //
+  // The pointer path below has a real red and needs no substitute: against
+  // the component as it stands on `origin/main`, it fails on both chromium
+  // and firefox with the same `Expected: 0 / Received: 1`.
+  await page.goto(SITE);
+  const trigger = page.locator('[data-theme-toggle]');
+  const tooltip = tooltipLocator(page);
+  const item = page.getByRole('menuitemradio', { name: 'Light', exact: true });
+
+  // Baseline, menu closed: hover still opens the tooltip exactly as before.
+  await trigger.hover();
+  await expect(tooltip).toBeVisible();
+  await page.mouse.move(0, 0);
+
+  // Focus opens the tooltip exactly as hover does — still unchanged, menu
+  // still closed — and `ArrowDown` then opens the dropdown directly, without
+  // ever moving the pointer.
+  await trigger.focus();
+  await expect(tooltip).toBeVisible();
+  await page.keyboard.press('ArrowDown');
+  await expect(item).toBeVisible();
+  // Measured (chromium, 2026-09-12): immediately after `ArrowDown`,
+  // `[role="tooltip"]` briefly reads count 1 — a `data-state="closed"` node
+  // still exit-animating, not one still open. `toHaveCount(0)` passes only
+  // because it polls until the animation finishes, not because the node was
+  // never there. It never intercepts either way: `elementFromPoint` at the
+  // item's centre already returns the `menuitemradio` while that node is
+  // still in the DOM, so the intent holds throughout.
+  await expect(tooltip).toHaveCount(0);
+  await expectItemTakesThePointer(item);
+});
+
+test('the tooltip never renders while the menu is open, opened by pointer', async ({
+  page
+}) => {
+  // A tooltip open request that is still pending survives `pointerdown`,
+  // and the trigger's own DropdownMenu half needs nothing past
+  // `pointerdown` to open the menu — no `click` follows here to cancel the
+  // pending tooltip, which is why the sequence below stops one short of a
+  // click. A plain `trigger.click()` cannot exercise this: Radix's own
+  // trigger closes the tooltip on its own `click` unconditionally, and that
+  // only ever cancels a request that has already committed.
+  //
+  // `page.mouse.move` + `page.mouse.down()` (real input, no `up`) cannot
+  // reach that pending state, checked directly rather than assumed: each is
+  // its own round trip to the browser, and radix-ui@1.6.7's `TooltipTrigger`
+  // schedules its open via a bare `window.setTimeout(handleOpen, 0)`
+  // (`delayDuration` is 0 here), which fires in the gap between the two
+  // calls. Measured (chromium and firefox, 2026-09-12, against
+  // `origin/main`'s component): reading `[role="tooltip"]`'s `data-state`
+  // right before `mouse.down()` already shows `"delayed-open"` — the request
+  // has committed — so the trigger's own `onPointerDown` (which closes only
+  // an *open* tooltip) closes it correctly on both engines, and the bug
+  // never reproduces. Dispatching the same events by hand, synchronously,
+  // keeps `pointerdown` inside the request's still-pending window instead.
+  await page.goto(SITE);
+  const trigger = page.locator('[data-theme-toggle]');
+  const tooltip = tooltipLocator(page);
+  const item = page.getByRole('menuitemradio', { name: 'Light', exact: true });
+  // The island is `client:only="react"` (see `ThemeToggleIsland.tsx`'s own
+  // header) and is not on the page until it hydrates.
+  await trigger.waitFor({ state: 'visible' });
+
+  await page.evaluate(() => {
+    const el = document.querySelector(
+      '[data-theme-toggle]'
+    ) as HTMLElement | null;
+    if (!el) throw new Error('theme toggle trigger not found');
+    const rect = el.getBoundingClientRect();
+    const opts: PointerEventInit = {
+      bubbles: true,
+      cancelable: true,
+      clientX: rect.x + rect.width / 2,
+      clientY: rect.y + rect.height / 2,
+      pointerId: 1,
+      isPrimary: true,
+      button: 0
+    };
+    el.dispatchEvent(new PointerEvent('pointerover', opts));
+    el.dispatchEvent(new PointerEvent('pointerenter', opts));
+    el.dispatchEvent(new PointerEvent('pointermove', opts));
+    el.dispatchEvent(new PointerEvent('pointerdown', opts));
+    el.dispatchEvent(new PointerEvent('pointerup', opts));
+  });
+  await expect(item).toBeVisible();
+  // The tooltip's own open timer is scheduled via radix-ui@1.6.7's
+  // `window.setTimeout(handleOpen, delayDuration)`, and this file's
+  // `TooltipProvider` sets `delayDuration` to 0 — one macrotask is all it
+  // needs to settle. 100ms is far more than that macrotask costs; it is a
+  // margin against CI scheduling jitter, not a measured requirement, and
+  // gives a real reopen every chance it would have before asserting it
+  // never rendered.
+  await page.waitForTimeout(100);
+  await expect(tooltip).toHaveCount(0);
+  await expectItemTakesThePointer(item);
 });
 
 test('the choice holds on a document page as well as on the argument page', async ({

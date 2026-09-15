@@ -11,6 +11,10 @@
       "types": "./dist/capture-rethrows.d.ts",
       "default": "./src/capture-rethrows.ts"
     },
+    "./fake-audio-tracks": {
+      "types": "./dist/fake-audio-tracks.d.ts",
+      "default": "./src/fake-audio-tracks.ts"
+    },
     "./fake-text-tracks": {
       "types": "./dist/fake-text-tracks.d.ts",
       "default": "./src/fake-text-tracks.ts"

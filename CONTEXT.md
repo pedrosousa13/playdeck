@@ -99,11 +99,12 @@ _Avoid_: capability state, capability status, support level
 **Refused surface**:
 The name of one consumer-supplied URL prop the shared allowlist can refuse
 outside a provider, published as the closed union `RefusedUrlSurface`:
-`poster src`, `poster srcSet`, `nativePoster`, `textTracks src` and
-`mediaSession artwork`. A surface names the prop an operator has to go and fix
-and never the value that was refused, so a Notice built from one carries no
-consumer text at all. It is a prop name, not a component instance: several
-instances can refuse the same surface at once.
+`poster src`, `poster srcSet`, `nativePoster`, `textTracks src`,
+`mediaSession artwork`, `thumbnails` and `thumbnails cue image`. A surface
+names the prop an operator has to go and fix and never the value that was
+refused, so a Notice built from one carries no consumer text at all. It is a
+prop name, not a component instance: several instances can refuse the same
+surface at once.
 _Avoid_: field, key, call site
 
 **Refused source**:
@@ -196,6 +197,35 @@ player state beside a capability that says whether the provider can report any
 at all. No provider reports where a chapter ends, so every end is derived: each
 chapter ends where the next begins, and the last where the media does.
 _Avoid_: segment, marker, cue point
+
+**Audio track**:
+One selectable audio rendition, published as an ordered collection whose
+entries carry their own selection (`active`) rather than a sibling
+`selectedId` field on player state, the shape a text track's
+`selectedTextTrackId` and a quality's `selectedQualityId` both use. The split
+follows the underlying surfaces rather than inventing one: hls.js's own
+audio-tracks controller enforces "at most one enabled" on the track itself,
+with no separate selection slot to mirror. The DOM's own `AudioTrackList`
+carries no such guarantee for audio -- unlike `VideoTrackList`, it permits
+more than one track enabled at once -- so the native provider enforces that
+same exclusivity itself on selection, keeping both providers answering from
+the same per-entry shape. The native provider answers from `AudioTrackList`
+where the browser exposes it and reports unavailable (`browser`) where it
+does not; the HLS provider answers from hls.js's own audio tracks on that
+engine and from the media element on native HLS.
+_Avoid_: alternate audio -- HLS's and hls.js's own manifest term for the same
+renditions (`EXT-X-MEDIA:TYPE=AUDIO`); the right word when describing the
+manifest, not this player-state concept
+
+**Thumbnail cue**:
+One entry of the WebVTT sprite-cue file `SeekSlider`'s `thumbnails` prop
+names: a time span, an image URL, and an optional `region` in sprite
+pixels -- parsed from the payload's `#xywh=` fragment -- cropping one frame
+out of a shared sprite sheet rather than each cue naming its own image.
+Parsed and held by the primitive itself rather than published on player
+state the way a Chapter or an Audio track is: nothing about it depends on a
+provider.
+_Avoid_: sprite frame, thumbnail track, preview image
 
 ### Loading
 

@@ -1,4 +1,5 @@
 export type {
+  AudioTrack,
   AutoplayConfigurationOptions,
   AutoplayMode,
   Availability,
@@ -23,6 +24,7 @@ export type {
   PlayerLiveState,
   PlayerProvider,
   PlayerQuality,
+  PlayerRemotePlaybackState,
   PlayerSource,
   PlayerState,
   PreProviderActivation,
@@ -57,6 +59,10 @@ export type { ChapterInput } from './chapters.js';
 export { deriveLiveState, liveStateEqual } from './live-state.js';
 
 export type { LiveDerivationInput } from './live-state.js';
+
+export { parseThumbnailCues, thumbnailCueAt } from './thumbnails.js';
+
+export type { ThumbnailCue, ThumbnailRegion } from './thumbnails.js';
 
 // Public because every provider package fans out to its own subscribers and
 // owes them the same isolation the controller gives its own (#233).

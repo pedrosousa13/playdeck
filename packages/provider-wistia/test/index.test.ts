@@ -678,11 +678,14 @@ test('reports the whole capability record it can justify', async () => {
     setVolume: { status: 'available' },
     setPlaybackRate: { status: 'available' },
     selectQuality: { status: 'unavailable', reason: 'provider' },
+    selectQualityAuto: { status: 'unavailable', reason: 'provider' },
     selectTextTrack: { status: 'unavailable', reason: 'provider' },
+    selectAudioTrack: { status: 'unavailable', reason: 'provider' },
     chapters: { status: 'unavailable', reason: 'provider' },
     fullscreen: { status: 'available' },
     pictureInPicture: { status: 'unavailable', reason: 'provider' },
     airPlay: { status: 'unavailable', reason: 'provider' },
+    remotePlayback: { status: 'unavailable', reason: 'provider' },
     customControls: { status: 'available' },
     providerPoster: { status: 'unknown', reason: 'provider-check' }
   });

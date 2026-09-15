@@ -11,10 +11,15 @@ import {
   type EmitProviderState
 } from './adapter-values.js';
 import {
+  createNativeAudioTracks,
+  type NativeAudioTracks
+} from './audio-tracks.js';
+import {
   createNativePlayback,
   type NativePlaybackOptions
 } from './playback.js';
 import { createNativePresentation } from './presentation.js';
+import { createNativeRemotePlayback } from './remote-playback.js';
 import {
   createNativeTextTracks,
   type NativeTextTracks
@@ -36,6 +41,7 @@ type NativeCommand =
   | 'requestPictureInPicture'
   | 'exitPictureInPicture'
   | 'showAirPlayPicker'
+  | 'showRemotePlaybackPicker'
   | 'retry';
 
 export type NativeProviderAdapter = ProviderAdapter &
@@ -102,8 +108,19 @@ export const createNativeProvider = (
     getCapabilities: () => mediaCapabilities()
   });
 
+  const remotePlayback = createNativeRemotePlayback(media, {
+    emit,
+    getCapabilities: () => mediaCapabilities()
+  });
+
   const textTracks: NativeTextTracks = createNativeTextTracks(media, emit, () =>
     mediaCapabilities()
+  );
+
+  const audioTracks: NativeAudioTracks = createNativeAudioTracks(
+    media,
+    emit,
+    () => mediaCapabilities()
   );
 
   function mediaCapabilities(): PlayerCapabilities {
@@ -117,13 +134,17 @@ export const createNativeProvider = (
       // consumer gating a quality menu on it waited on a verdict that never
       // arrived.
       selectQuality: { status: 'unavailable', reason: 'source' },
+      // No ladder means no auto mode to offer either.
+      selectQualityAuto: { status: 'unavailable', reason: 'source' },
       selectTextTrack: textTracks.selectTextTrackAvailability(),
+      selectAudioTrack: audioTracks.selectAudioTrackAvailability(),
       chapters: textTracks.chaptersAvailability(),
       fullscreen: presentation.fullscreenAvailability(),
       pictureInPicture: presentation.pictureInPictureAvailability(),
       airPlay: presentation.airPlayAvailability(),
       customControls: available,
-      providerPoster: sourceHasNoPoster
+      providerPoster: sourceHasNoPoster,
+      remotePlayback: remotePlayback.remotePlaybackAvailability()
     };
   }
 
@@ -132,7 +153,9 @@ export const createNativeProvider = (
     getCapabilities: mediaCapabilities,
     playback,
     presentation,
+    remotePlayback,
     textTracks,
+    audioTracks,
     clearStateListeners: () => listeners.clear()
   });
 
@@ -160,8 +183,10 @@ export const createNativeProvider = (
     requestPictureInPicture: presentation.requestPictureInPicture,
     exitPictureInPicture: presentation.exitPictureInPicture,
     showAirPlayPicker: presentation.showAirPlayPicker,
+    showRemotePlaybackPicker: remotePlayback.showRemotePlaybackPicker,
     retry: playback.retry,
     selectTextTrack: textTracks.selectTextTrack,
-    setCaptionRenderer: textTracks.setCaptionRenderer
+    setCaptionRenderer: textTracks.setCaptionRenderer,
+    selectAudioTrack: audioTracks.selectAudioTrack
   };
 };

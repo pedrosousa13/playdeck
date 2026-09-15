@@ -65,6 +65,7 @@ export type PlayerHandle = Pick<
   | 'requestPictureInPicture'
   | 'exitPictureInPicture'
   | 'showAirPlayPicker'
+  | 'showRemotePlaybackPicker'
   | 'retry'
   | 'whenReady'
 > &
@@ -262,6 +263,7 @@ export const collectPlayerActions = (
   requestPictureInPicture: controller.requestPictureInPicture,
   exitPictureInPicture: controller.exitPictureInPicture,
   showAirPlayPicker: controller.showAirPlayPicker,
+  showRemotePlaybackPicker: controller.showRemotePlaybackPicker,
   retry: controller.retry,
   whenReady: controller.whenReady
 });

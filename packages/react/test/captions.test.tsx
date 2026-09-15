@@ -91,11 +91,14 @@ const withSelectTextTrack = (status: Availability): PlayerCapabilities => ({
   setVolume: notReadyAvailability,
   setPlaybackRate: notReadyAvailability,
   selectQuality: notReadyAvailability,
+  selectQualityAuto: notReadyAvailability,
   selectTextTrack: status,
+  selectAudioTrack: notReadyAvailability,
   chapters: notReadyAvailability,
   fullscreen: notReadyAvailability,
   pictureInPicture: notReadyAvailability,
   airPlay: notReadyAvailability,
+  remotePlayback: notReadyAvailability,
   customControls: notReadyAvailability,
   providerPoster: notReadyAvailability
 });

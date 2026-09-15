@@ -185,16 +185,13 @@ export const axes = [
     label: 'Quality selection',
     entries: {
       Playdeck: {
-        status: 'partial',
+        status: 'yes',
         anchor: {
-          kind: 'types',
-          module: '@playdeck/core',
-          path: 'dist/types.d.ts',
-          includes: 'readonly selectQuality: Availability;'
+          kind: 'export',
+          module: '@playdeck/react',
+          name: 'QualityMenu'
         },
-        source:
-          'packages/core/dist/types.d.ts (`PlayerCommand`, `PlayerCapabilities.selectQuality`)',
-        note: 'A `selectQuality` command and `PlayerQuality`/`qualities` state exist; no dedicated quality button or menu primitive ships, a consumer composes one from `SettingsMenu`.'
+        source: PLAYDECK_REACT_README
       },
       'react-player': {
         status: 'no',
@@ -252,16 +249,13 @@ export const axes = [
     label: 'Playback rate',
     entries: {
       Playdeck: {
-        status: 'partial',
+        status: 'yes',
         anchor: {
-          kind: 'types',
-          module: '@playdeck/core',
-          path: 'dist/types.d.ts',
-          includes: 'readonly setPlaybackRate: Availability;'
+          kind: 'export',
+          module: '@playdeck/react',
+          name: 'PlaybackRateMenu'
         },
-        source:
-          'packages/core/dist/types.d.ts (`PlayerCommand`, `PlayerCapabilities.setPlaybackRate`)',
-        note: 'A `setPlaybackRate` command and capability exist; no dedicated playback-rate button or menu primitive ships.'
+        source: PLAYDECK_REACT_README
       },
       'react-player': {
         status: 'plugin',
@@ -528,15 +522,14 @@ export const axes = [
     label: 'Chromecast / Google Cast',
     entries: {
       Playdeck: {
-        status: 'no',
+        status: 'yes',
         anchor: {
-          kind: 'absent-in-tree',
-          module: ['@playdeck/core', '@playdeck/react'],
-          glob: ['**/*.js', '**/*.d.ts'],
-          includes: 'Cast'
+          kind: 'export',
+          module: '@playdeck/react',
+          name: 'RemotePlaybackButton'
         },
-        source: PLAYDECK_TREE,
-        note: 'No casting command, capability, provider or UI part ships; AirPlay is the only remote-playback route.'
+        source: PLAYDECK_REACT_README,
+        note: "Reached through the standards-based Remote Playback API (the media element's `remote` object, `capabilities.remotePlayback`/`showRemotePlaybackPicker()`), explicitly not the Cast SDK: no sender script, no receiver page. That SDK route remains unshipped and is possible later as an external provider."
       },
       'react-player': {
         status: 'no',
@@ -957,12 +950,11 @@ export const axes = [
         status: 'partial',
         anchor: {
           kind: 'export',
-          module: '@playdeck/core',
-          name: 'deriveLiveState'
+          module: '@playdeck/react',
+          name: 'LiveIndicator'
         },
-        source:
-          'packages/core/dist/index.d.ts (`PlayerLiveState`, `deriveLiveState`)',
-        note: 'Live playback state is modeled and existing controls adapt (an infinite/DVR duration); no dedicated live-indicator UI primitive ships.'
+        source: PLAYDECK_REACT_README,
+        note: '`LiveIndicator` renders a non-interactive live/DVR-edge badge (`data-state` at-edge/behind-edge), derived from `PlayerState.live`; it ships no seek-to-live-edge control of its own (tracked separately).'
       },
       'react-player': {
         status: 'no',
@@ -1332,14 +1324,14 @@ export const axes = [
     label: 'Audio tracks',
     entries: {
       Playdeck: {
-        status: 'no',
+        status: 'yes',
         anchor: {
-          kind: 'absent-in-tree',
-          module: ['@playdeck/core', '@playdeck/react'],
-          glob: ['**/*.js', '**/*.d.ts'],
-          includes: 'AudioTrack'
+          kind: 'export',
+          module: '@playdeck/react',
+          name: 'AudioTrackMenu'
         },
-        source: PLAYDECK_TREE
+        source: PLAYDECK_REACT_README,
+        note: 'Provider limit, not a status: the YouTube, Vimeo and Wistia embeds report `selectAudioTrack` as provider-unavailable (packages/provider-youtube, packages/provider-vimeo, packages/provider-wistia), as an embedded player would under any library here.'
       },
       'react-player': {
         status: 'no',
@@ -1396,15 +1388,13 @@ export const axes = [
     label: 'Chapters',
     entries: {
       Playdeck: {
-        status: 'partial',
+        status: 'yes',
         anchor: {
           kind: 'export',
-          module: '@playdeck/core',
-          name: 'deriveChapters'
+          module: '@playdeck/react',
+          name: 'ChaptersMenu'
         },
-        source:
-          "CONTEXT.md, the 'Chapter' entry; packages/core/dist/index.d.ts",
-        note: 'A `Chapter` collection is published on player state; no chapters navigation UI primitive ships.'
+        source: PLAYDECK_REACT_README
       },
       'react-player': {
         status: 'no',
@@ -1464,14 +1454,14 @@ export const axes = [
     label: 'Thumbnails / preview on seek',
     entries: {
       Playdeck: {
-        status: 'no',
+        status: 'yes',
         anchor: {
-          kind: 'absent-in-tree',
-          module: ['@playdeck/core', '@playdeck/react'],
-          glob: ['**/*.js', '**/*.d.ts'],
-          includes: 'thumbnails'
+          kind: 'file',
+          module: '@playdeck/react',
+          path: 'dist/index.js',
+          includes: '"data-playdeck-part": "thumbnail"'
         },
-        source: PLAYDECK_TREE
+        source: PLAYDECK_REACT_README
       },
       'react-player': {
         status: 'no',

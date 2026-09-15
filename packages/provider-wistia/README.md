@@ -259,6 +259,9 @@ origins list and what a page's CSP has to allow.
 - **`pictureInPicture` is `unavailable` / `provider`.** Wistia's `PublicApi`
   declares no picture-in-picture member at all.
 - **`airPlay` is `unavailable` / `provider`.** No command surface is wired.
+- **`remotePlayback` is `unavailable` / `provider`.** Playback runs inside
+  `<wistia-player>`, which carries no media element for the Remote Playback
+  API to expose.
 - **`customControls` is `available`.** Chromeless playback is a plain set of
   embed attributes, declared in Wistia's own `Attributes` type and gated by no
   account tier — unlike Vimeo, where it needs a paid plan.

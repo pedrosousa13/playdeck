@@ -1,0 +1,60 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title="Overview/PlaybackRate" />
+
+# Playback rate
+
+Playdeck exposes the current rate as `PlayerState.playbackRate` and one
+command to change it, `setPlaybackRate`. Not every provider can honour a
+rate change: `capabilities.setPlaybackRate` says so per source, and
+`Player.PlaybackRateMenu` renders nothing until it resolves `available`.
+
+## The state
+
+One field: **`playbackRate`**, the number the provider is currently playing
+at (`1` at normal speed). A menu marks its active rung by comparing this
+value against the rung's own rate.
+
+## Choosing a rate
+
+Two ways, both driving the same command: `controller.setPlaybackRate(rate)`
+directly, or `Player.PlaybackRateMenu`, which wires a rate ladder up for you.
+
+## `Player.PlaybackRateMenu`
+
+A preset assembly over `Player.SettingsMenu` / `Player.MenuRadioGroup` /
+`Player.MenuRadioItem`, in the same shape `Player.QualityMenu` takes over the
+same primitives: it renders nothing until `capabilities.setPlaybackRate`
+resolves `available`, lists a rate ladder, marks the active rung from
+`playbackRate`, and issues `setPlaybackRate` when a rung is chosen.
+
+**The rate list** defaults to `[0.5, 1, 1.5, 2]`, the same ladder the
+composed-example guide's `RateMenu` hand-lists for the identical case. Pass
+`rates` to offer a different set — any array of numbers, printed as
+`{rate}×`.
+
+It renders no `data-playdeck-part` of its own — every attribute a reader can
+style or query comes from the primitives it composes
+(`settings-menu-trigger`, `settings-menu`, `menu-radio-group`,
+`menu-radio-item`), the same **Contract** the other menu parts publish
+through.
+
+Pass children to fully customize the trigger/content; omit them for the
+default rate list.
+
+## Accessibility
+
+The trigger carries `aria-label="Playback rate"`, overridable the same way
+any other primitive's default label is — pass your own `aria-label` (or
+replace the trigger's children entirely). Each rung is `role="menuitemradio"`
+with `aria-checked` reflecting the current rate. Keyboard operation — Tab to
+the trigger, Enter or Space to open it, arrow keys to move roving focus among
+the rungs, Enter or Space to choose one, Escape to close — comes from
+`SettingsMenu`, the same primitive every other menu in this package composes,
+rather than anything `PlaybackRateMenu` implements itself.
+
+## Out of scope
+
+A standalone playback-rate button, outside a menu, does not exist.
+`setPlaybackRate` is exposed only through `Player.PlaybackRateMenu` and the
+menu primitives it is built from.

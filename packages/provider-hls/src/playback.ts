@@ -18,7 +18,8 @@ type HlsDelegatedCommand =
   | 'exitFullscreen'
   | 'requestPictureInPicture'
   | 'exitPictureInPicture'
-  | 'showAirPlayPicker';
+  | 'showAirPlayPicker'
+  | 'showRemotePlaybackPicker';
 
 export type HlsPlaybackDeps = {
   readonly isDestroyed: () => boolean;
@@ -54,6 +55,7 @@ export const createHlsPlayback = (
     requestPictureInPicture: native.requestPictureInPicture,
     exitPictureInPicture: native.exitPictureInPicture,
     showAirPlayPicker: native.showAirPlayPicker,
+    showRemotePlaybackPicker: native.showRemotePlaybackPicker,
     retry: async (): Promise<CommandResult> => {
       if (isDestroyed()) return { ok: false, reason: 'not-ready' };
       if (!engine) {

@@ -43,7 +43,12 @@ export type MediaProps = Omit<
     readonly src: string;
     readonly srcLang: string;
     readonly label: string;
-    readonly kind?: 'captions' | 'subtitles';
+    // `'chapters'` added alongside the two caption kinds so a consumer (and
+    // this repo's own e2e fixture, `e2e/chapters.spec.ts`) can mount a real
+    // `<track kind="chapters">` through this prop -- `provider-native`'s
+    // chapter discovery (`isChapterTrackKind`, `text-tracks.ts`) reads the
+    // native `<track>` element directly and never goes through this type.
+    readonly kind?: 'captions' | 'subtitles' | 'chapters';
     readonly default?: boolean;
   }>;
 };

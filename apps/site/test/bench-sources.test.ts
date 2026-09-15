@@ -1,8 +1,13 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   benchSources,
   readySources,
-  resolvePlayerSource
+  resolvePlayerSource,
+  defaultBenchSource,
+  POSTER_SIZES
 } from '../src/bench-sources';
 import type { PlayerProvider } from '@playdeck/core';
 
@@ -14,6 +19,62 @@ import type { PlayerProvider } from '@playdeck/core';
 // `BenchProvider` type is what enforces that this list stays exactly the
 // other four.
 const BENCH_PROVIDERS: PlayerProvider[] = ['hls', 'youtube', 'vimeo', 'wistia'];
+
+// `POSTER_SIZES` hand-mirrors `.page`'s CSS in `index.astro` -- see that
+// constant's own comment in `bench-sources.ts` for the reasoning -- so a
+// hand-typed expectation here would go on passing the day either one drifts.
+// This reads `.page`'s rule and the token its inline padding names straight
+// out of the source files instead, so the expectation below is derived from
+// the same CSS the page actually ships rather than retyped from it.
+const here = dirname(fileURLToPath(import.meta.url));
+const pageSource = readFileSync(join(here, '../src/pages/index.astro'), 'utf8');
+const tokensSource = readFileSync(
+  join(here, '../src/styles/tokens.css'),
+  'utf8'
+);
+
+const pageRule = /\.page\s*\{([^}]*)\}/.exec(pageSource)?.[1];
+if (pageRule === undefined) {
+  throw new Error(
+    "bench-sources.test.ts: could not find index.astro's `.page` rule."
+  );
+}
+
+const ceiling = /max-inline-size:\s*([^;]+);/.exec(pageRule)?.[1]?.trim();
+if (ceiling === undefined) {
+  throw new Error('bench-sources.test.ts: `.page` has no `max-inline-size`.');
+}
+
+// The three-value `padding` shorthand's middle value is what applies to both
+// inline sides -- see `bench-sources.ts`'s own comment on `POSTER_SIZES` for
+// why that is the value this derivation doubles.
+const paddingValues = /padding:\s*([^;]+);/
+  .exec(pageRule)?.[1]
+  ?.trim()
+  .split(/\s+/);
+if (paddingValues?.length !== 3) {
+  throw new Error(
+    `bench-sources.test.ts: \`.page\`'s padding is not the three-value shorthand this derivation expects (got ${JSON.stringify(paddingValues)}).`
+  );
+}
+
+const inlinePaddingVar = /var\((--[\w-]+)\)/.exec(paddingValues[1])?.[1];
+if (inlinePaddingVar === undefined) {
+  throw new Error(
+    "bench-sources.test.ts: could not read `.page`'s inline padding token."
+  );
+}
+
+const inlinePaddingRem = Number(
+  new RegExp(`${inlinePaddingVar}:\\s*([\\d.]+)rem;`).exec(tokensSource)?.[1]
+);
+if (Number.isNaN(inlinePaddingRem)) {
+  throw new Error(
+    `bench-sources.test.ts: could not read ${inlinePaddingVar} from tokens.css.`
+  );
+}
+
+const inlinePaddingTotal = `${inlinePaddingRem * 2}rem`;
 
 describe('benchSources', () => {
   it('has exactly one entry per bench provider, and no extras', () => {
@@ -31,6 +92,25 @@ describe('benchSources', () => {
   it('lists hls first, which is what makes it the switch’s default', () => {
     expect(benchSources[0]?.provider).toBe('hls');
     expect(readySources[0]?.provider).toBe('hls');
+  });
+
+  // `Bench.astro` and `index.astro` both need the switch's resting position
+  // -- the no-JavaScript fallback and the document-head poster preload both
+  // name it (#611) -- through `defaultBenchSource`, the guarded helper both
+  // files actually call. Pinned against the literal `benchSources[0]`/
+  // `readySources[0]` already establish elsewhere, rather than against
+  // `readySources[0]` itself: `.find(ready)` and `.filter(ready)[0]` agree
+  // for any array, so comparing one to the other can never fail on its own
+  // -- only a real assertion against the switch's actual default exercises
+  // `defaultBenchSource`'s own implementation.
+  it("resolves defaultBenchSource() to hls, the switch's actual default", () => {
+    expect(defaultBenchSource().provider).toBe('hls');
+  });
+
+  it("derives POSTER_SIZES from index.astro's .page rule and tokens.css's inline-padding token", () => {
+    expect(POSTER_SIZES).toBe(
+      `(min-width: ${ceiling}) calc(${ceiling} - ${inlinePaddingTotal}), calc(100vw - ${inlinePaddingTotal})`
+    );
   });
 
   it('never lets a ready entry produce a placeholder URL', () => {

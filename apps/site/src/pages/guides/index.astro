@@ -58,23 +58,19 @@ const rows = await Promise.all(
     </p>
     <Sweep form="accent" />
 
-    {
-      /* A list and not a grid of cards, for the reason
-       * `src/pages/reference/index.astro` gives: cards of identical size are
-       * the shape a container reaches for when nothing has been decided about
-       * the contents, and they cost a reader the one thing an index is for. */
-    }
+    {/* A list and not a grid of cards, for the reason
+     * `src/pages/reference/index.astro` gives: cards of identical size are
+     * the shape a container reaches for when nothing has been decided about
+     * the contents, and they cost a reader the one thing an index is for. */}
     <ul class="guides">
-      {
-        rows.map((guide) => (
-          <li class="guide">
-            <h2 class="guide__name">
-              <a href={guideUrl(guide.slug)}>{guide.title}</a>
-            </h2>
-            <p class="guide__sections">{guide.sections.join(' · ')}</p>
-          </li>
-        ))
-      }
+      {rows.map((guide) => (
+        <li class="guide">
+          <h2 class="guide__name">
+            <a href={guideUrl(guide.slug)}>{guide.title}</a>
+          </h2>
+          <p class="guide__sections">{guide.sections.join(' · ')}</p>
+        </li>
+      ))}
     </ul>
   </main>
 </Base>

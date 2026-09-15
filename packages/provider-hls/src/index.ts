@@ -22,6 +22,7 @@ import {
   type HlsModuleLoader
 } from './adapter-values.js';
 import { createHlsAttachment } from './attachment.js';
+import { createHlsAudioTracks } from './audio-tracks.js';
 import {
   createHlsErrorRecovery,
   HLS_JS_ELEMENT_ERROR_TIMEOUT_MS
@@ -31,6 +32,7 @@ import { createHlsQualityLevels } from './quality-levels.js';
 import { createHlsTextTracks } from './text-tracks.js';
 
 export type {
+  HlsAudioTrackLike,
   HlsBuild,
   HlsConfigLike,
   HlsConstructorLike,
@@ -148,6 +150,20 @@ const withoutCaptionState = (patch: ProviderStatePatch): ProviderStatePatch => {
   return rest;
 };
 
+// The native adapter's own audio-track subsystem reads `media.audioTracks`,
+// the browser's own view of the element -- a different concern from hls.js's
+// manifest-level alternate-audio renditions on the hls.js engine, the same
+// collision `withoutCaptionState` above keeps out of `textTracks`.
+// (`selectAudioTrack` needs no stripping -- `decorateCapabilities` already
+// replaces it with the hls.js availability on this engine.)
+const withoutAudioTrackState = (
+  patch: ProviderStatePatch
+): ProviderStatePatch => {
+  const rest = { ...patch };
+  delete rest.audioTracks;
+  return rest;
+};
+
 // The native adapter derives liveness too, from the raw element duration and
 // the seekable window alone. This adapter's own derivation adds the hls.js live
 // flag and `liveSyncPosition`, so it is the authority on both engines — and
@@ -209,10 +225,21 @@ export const createHlsProvider = (
         engine === 'native'
           ? { status: 'unavailable', reason: 'provider' }
           : qualityLevels.selectQualityAvailability(),
+      // Same engine split as `selectQuality` above: the native engine has no
+      // selection surface at all, hls.js's has auto built in whenever it has
+      // one (see the comment on `selectQualityAutoAvailability`).
+      selectQualityAuto:
+        engine === 'native'
+          ? { status: 'unavailable', reason: 'provider' }
+          : qualityLevels.selectQualityAutoAvailability(),
       selectTextTrack:
         engine === 'hls.js'
           ? textTracks.selectTextTrackAvailability()
-          : capabilities.selectTextTrack
+          : capabilities.selectTextTrack,
+      selectAudioTrack:
+        engine === 'hls.js'
+          ? audioTracks.selectAudioTrackAvailability()
+          : capabilities.selectAudioTrack
     };
     return liveSeekMeaningful
       ? withQuality
@@ -227,6 +254,13 @@ export const createHlsProvider = (
       : {};
 
   const textTracks = createHlsTextTracks(media, {
+    emit,
+    isDestroyed: () => attachment.isDestroyed(),
+    getInstance: () => attachment.getInstance(),
+    capabilitiesPatch
+  });
+
+  const audioTracks = createHlsAudioTracks({
     emit,
     isDestroyed: () => attachment.isDestroyed(),
     getInstance: () => attachment.getInstance(),
@@ -354,7 +388,11 @@ export const createHlsProvider = (
     }
     if (patch.capabilities) lastCapabilities = patch.capabilities;
     const merged = syncLive(
-      withoutLiveState(engine === 'hls.js' ? withoutCaptionState(patch) : patch)
+      withoutLiveState(
+        engine === 'hls.js'
+          ? withoutAudioTrackState(withoutCaptionState(patch))
+          : patch
+      )
     );
     // A native patch whose only field was stripped leaves nothing to say —
     // unless it carried an event, which is state-independent.
@@ -393,6 +431,7 @@ export const createHlsProvider = (
     loadHls,
     native,
     textTracks,
+    audioTracks,
     qualityLevels,
     errorRecovery,
     surfaceFatal,
@@ -414,6 +453,7 @@ export const createHlsProvider = (
       liveState = null;
       liveSeekMeaningful = true;
       textTracks.reset();
+      audioTracks.reset();
     },
     startHlsJs: attachment.startHlsJs
   });
@@ -440,6 +480,7 @@ export const createHlsProvider = (
     requestPictureInPicture: playback.requestPictureInPicture,
     exitPictureInPicture: playback.exitPictureInPicture,
     showAirPlayPicker: playback.showAirPlayPicker,
+    showRemotePlaybackPicker: playback.showRemotePlaybackPicker,
     // Ungated, unlike `subscribeCues` below: the intrinsic size is read off
     // the <video> element, which both engines play into and whose
     // `loadedmetadata`/`resize` listeners `native.attach()` installs on either
@@ -458,7 +499,8 @@ export const createHlsProvider = (
       ? {
           selectTextTrack: native.selectTextTrack,
           subscribeCues: native.subscribeCues,
-          setCaptionRenderer: native.setCaptionRenderer
+          setCaptionRenderer: native.setCaptionRenderer,
+          selectAudioTrack: native.selectAudioTrack
         }
       : {}),
     retry: playback.retry,
@@ -467,7 +509,8 @@ export const createHlsProvider = (
           selectQuality: qualityLevels.selectQuality,
           selectTextTrack: textTracks.selectTextTrack,
           subscribeCues: textTracks.subscribeCues,
-          setCaptionRenderer: textTracks.setCaptionRenderer
+          setCaptionRenderer: textTracks.setCaptionRenderer,
+          selectAudioTrack: audioTracks.selectAudioTrack
         }
       : {})
   };

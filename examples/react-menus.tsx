@@ -69,3 +69,27 @@ export const RateMenu = () => {
 
 // The caption track list, already wired to the player's own tracks.
 export const Captions = () => <Player.CaptionsMenu />;
+
+// The quality ladder, already wired to the player's own qualities. `RateMenu`
+// above still composes a quality group by hand alongside playback rate, for
+// a consumer who wants both under one trigger; this is the standalone
+// primitive for a consumer who wants quality on its own.
+export const Quality = () => <Player.QualityMenu />;
+
+// The rate ladder, already wired to the player's own playbackRate. `RateMenu`
+// above still composes a rate group by hand alongside quality, for a
+// consumer who wants both under one trigger; this is the standalone
+// primitive for a consumer who wants playback rate on its own.
+export const Rate = () => <Player.PlaybackRateMenu />;
+
+// The chapter list, already wired to the player's own chapters and current
+// playback position. Unlike `Quality` and `Rate`, `RateMenu` above has no
+// hand-composed chapters group alongside it -- this is the only way this
+// package exposes chapters navigation.
+export const Chapters = () => <Player.ChaptersMenu />;
+
+// The audio-track list, already wired to the player's own tracks and marking
+// whichever one is active. Unlike `Quality` and `Rate`, `RateMenu` above has
+// no hand-composed audio-track group alongside it -- this is the only way
+// this package exposes audio-track selection.
+export const AudioTracks = () => <Player.AudioTrackMenu />;

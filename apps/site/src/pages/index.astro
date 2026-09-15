@@ -4,6 +4,7 @@ import SiteHeader from '../components/SiteHeader.astro';
 import Bench from '../components/Bench.astro';
 import FeatureCards from '../components/FeatureCards.astro';
 import { measureBundles } from '../../../../scripts/bundle-budgets.mjs';
+import { defaultBenchSource, POSTER_SIZES } from '../bench-sources';
 
 /**
  * The landing page, as one instrument.
@@ -88,6 +89,18 @@ if (youtube === undefined) {
 }
 
 const install = 'pnpm add @playdeck/react';
+
+/*
+ * The bench's poster, resolved here rather than read back out of `<Bench />`:
+ * an Astro component renders its own markup and cannot hand a value up to an
+ * ancestor's `<head>`, so the one document-head resource this page needs is
+ * computed from `bench-sources.ts` directly, the same module `Bench.astro`
+ * itself reads for the identical fact (see that module's own comment on
+ * `defaultBenchSource` for why a second reader of it is an established
+ * pattern here rather than a new duplication).
+ */
+const base = import.meta.env.BASE_URL;
+const preloadPoster = defaultBenchSource().poster(base);
 ---
 
 <Base
@@ -95,6 +108,28 @@ const install = 'pnpm add @playdeck/react';
   documentation={false}
   stance="argument"
 >
+  <Fragment slot="head">
+    {/* Makes the bench's poster -- the page's LCP element -- discoverable
+     * to the preload scanner before `BenchIsland.tsx`'s `client:only`
+     * island has hydrated (the fix for #611). `imagesrcset`/`imagesizes`
+     * have to name exactly what the island's `Player.PosterImage` and the
+     * `<noscript>` fallback in `Bench.astro` both resolve to for this same
+     * position, or this fetches a second variant instead of replacing the
+     * one they already ask for: `href` and `imagesrcset` both come from
+     * `preloadPoster`, the same `entry.poster(base)` call both of those
+     * consumers make, and `imagesizes` is `POSTER_SIZES`,
+     * `bench-sources.ts`'s one exported `sizes` string. `fetchpriority`,
+     * not `loading`: a preload has no lazy/eager state of its own to set. */}
+    <link
+      rel="preload"
+      as="image"
+      href={preloadPoster.src}
+      imagesrcset={preloadPoster.srcSet}
+      imagesizes={POSTER_SIZES}
+      fetchpriority="high"
+    />
+  </Fragment>
+
   <SiteHeader documentation={false} />
 
   <main class="page">
@@ -106,18 +141,15 @@ const install = 'pnpm add @playdeck/react';
       // page flash before this attribute lands.
       document.documentElement.setAttribute('data-entered', '');
     </script>
-
     <section class="thesis">
-      {
-        /* Exactly `Playdeck`, and it cannot become anything else.
-         * `scripts/check-deploy-artifact.mjs` identifies the site's root
-         * document by a heading with that accessible name, and
-         * `e2e/site-nav.spec.ts` asserts there is exactly one.
-         *
-         * It sets small, because it names the document rather than arguing.
-         * The display rung goes to the sentence under it — `DESIGN.md`'s Type
-         * section carries that amendment and its reasoning. */
-      }
+      {/* Exactly `Playdeck`, and it cannot become anything else.
+       * `scripts/check-deploy-artifact.mjs` identifies the site's root
+       * document by a heading with that accessible name, and
+       * `e2e/site-nav.spec.ts` asserts there is exactly one.
+       *
+       * It sets small, because it names the document rather than arguing.
+       * The display rung goes to the sentence under it — `DESIGN.md`'s Type
+       * section carries that amendment and its reasoning. */}
       <h1 class="thesis__name">Playdeck</h1>
       <p class="thesis__display">
         A video player you compose, not one you configure.
@@ -128,25 +160,31 @@ const install = 'pnpm add @playdeck/react';
         drive all five.
       </p>
 
-      {
-        /* The install command and the Start link, one left-aligned row under
-         * the lede (2026-09-03): both are the call to action, so both sit at
-         * the same edge the sentence above them reads from rather than the
-         * pill floating centred against a left-aligned page. The install
-         * group keeps its four `data-install*` attributes and the script
-         * below unchanged, so `e2e/site-landing.spec.ts`'s copy tests hold
-         * whichever section the markup lives in. */
-      }
+      {/* The install command and the Start link, one left-aligned row under
+       * the lede (2026-09-03): both are the call to action, so both sit at
+       * the same edge the sentence above them reads from rather than the
+       * pill floating centred against a left-aligned page. The install
+       * group keeps its four `data-install*` attributes and the script
+       * below unchanged, so `e2e/site-landing.spec.ts`'s copy tests hold
+       * whichever section the markup lives in. */}
       <div class="thesis__actions">
         <div class="install" data-install>
-          <code class="install__command" data-install-command>{install}</code>
+          <code class="install__command" data-install-command>
+            {install}
+          </code>
           <button class="install__copy" type="button" hidden data-install-copy>
             Copy
           </button>
-          <span class="u-visually-hidden" role="status" data-install-status></span>
+          <span
+            class="u-visually-hidden"
+            role="status"
+            data-install-status
+          ></span>
         </div>
 
-        <a class="thesis__start" href={startUrl}>Start &rarr;</a>
+        <a class="thesis__start" href={startUrl}>
+          Start &rarr;
+        </a>
       </div>
     </section>
 
@@ -154,22 +192,22 @@ const install = 'pnpm add @playdeck/react';
 
     <FeatureCards />
 
-    {
-      /* The close: one measured line, the same primary Start button the hero
-       * carries, and the ways onward. The install command no longer repeats
-       * here (2026-09-03) -- it is the hero's alone now, so `data-install*`
-       * exists exactly once on the page. A reader who leaves before this has
-       * already had the whole argument, which is the test every part of this
-       * page has to pass, so the close takes no treatment of its own. */
-    }
+    {/* The close: one measured line, the same primary Start button the hero
+     * carries, and the ways onward. The install command no longer repeats
+     * here (2026-09-03) -- it is the hero's alone now, so `data-install*`
+     * exists exactly once on the page. A reader who leaves before this has
+     * already had the whole argument, which is the test every part of this
+     * page has to pass, so the close takes no treatment of its own. */}
     <section class="close">
       <p class="close__measured">
         {primitives.size.toFixed(0)} kB gzipped, the whole of what
-        `@playdeck/react` ships. Adding YouTube costs {youtube.size.toFixed(0)} kB.
-        0 requests to a provider before play.
+        `@playdeck/react` ships. Adding YouTube costs {youtube.size.toFixed(0)}{' '}
+        kB. 0 requests to a provider before play.
       </p>
 
-      <a class="thesis__start" href={startUrl}>Start &rarr;</a>
+      <a class="thesis__start" href={startUrl}>
+        Start &rarr;
+      </a>
 
       <p class="close__links">
         <a href={referenceUrl}>Reference &rarr;</a>
@@ -188,9 +226,13 @@ const install = 'pnpm add @playdeck/react';
    */
   const COPIED_MS = 2000;
 
-  for (const group of document.querySelectorAll<HTMLElement>('[data-install]')) {
+  for (const group of document.querySelectorAll<HTMLElement>(
+    '[data-install]'
+  )) {
     const command = group.querySelector<HTMLElement>('[data-install-command]');
-    const button = group.querySelector<HTMLButtonElement>('[data-install-copy]');
+    const button = group.querySelector<HTMLButtonElement>(
+      '[data-install-copy]'
+    );
     const status = group.querySelector<HTMLElement>('[data-install-status]');
     if (command === null || button === null || status === null) continue;
 
@@ -229,6 +271,11 @@ const install = 'pnpm add @playdeck/react';
 </script>
 
 <style>
+  /* `max-inline-size` and the inline half of `padding` below are duplicated
+   * in `bench-sources.ts`'s `POSTER_SIZES`, and the two have to stay
+   * identical for the reason given there: change either value here without
+   * updating that constant and the bench poster's `sizes` silently stops
+   * matching the box it actually renders in. */
   .page {
     max-inline-size: 72rem;
     margin-inline: auto;
@@ -315,12 +362,20 @@ const install = 'pnpm add @playdeck/react';
 
   .thesis__start:hover {
     color: var(--color-surface);
-    background-color: color-mix(in srgb, var(--color-accent) 88%, var(--color-ink));
+    background-color: color-mix(
+      in srgb,
+      var(--color-accent) 88%,
+      var(--color-ink)
+    );
   }
 
   .thesis__start:active {
     color: var(--color-surface);
-    background-color: color-mix(in srgb, var(--color-accent) 76%, var(--color-ink));
+    background-color: color-mix(
+      in srgb,
+      var(--color-accent) 76%,
+      var(--color-ink)
+    );
   }
 
   /* ---- entrance -------------------------------------------------------

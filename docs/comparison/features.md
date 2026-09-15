@@ -27,18 +27,18 @@ under any of these libraries -- so that limit is written in the footnote
 instead, for every column alike. `docs/comparison/method.md`'s "Features"
 section has the full rule.
 
-Measured 2026-09-12 against `tests/compare`'s pinned installs:
+Measured 2026-09-15 against `tests/compare`'s pinned installs:
 `Playdeck` 1.1.0, `react-player` 3.4.0, `Vidstack` 1.15.6, `Media Chrome` 4.19.2, `Video.js` 8.24.0, `Video.js 10 (beta)` 10.0.0-beta.32.
 
 | Axis                                                | Playdeck      | react-player  | Vidstack      | Media Chrome  | Video.js     | Video.js 10 (beta) |
 | --------------------------------------------------- | ------------- | ------------- | ------------- | ------------- | ------------ | ------------------ |
 | Captions / text tracks                              | yes[^1]       | partial[^2]   | yes[^3]       | yes[^4]       | yes[^5]      | yes[^6]            |
-| Quality selection                                   | partial[^7]   | no[^8]        | yes[^9]       | yes[^10]      | partial[^11] | yes[^12]           |
-| Playback rate                                       | partial[^13]  | plugin[^14]   | yes[^15]      | yes[^16]      | yes[^17]     | yes[^18]           |
+| Quality selection                                   | yes[^7]       | no[^8]        | yes[^9]       | yes[^10]      | partial[^11] | yes[^12]           |
+| Playback rate                                       | yes[^13]      | plugin[^14]   | yes[^15]      | yes[^16]      | yes[^17]     | yes[^18]           |
 | Picture-in-picture                                  | yes[^19]      | partial[^20]  | yes[^21]      | yes[^22]      | yes[^23]     | yes[^24]           |
 | Fullscreen                                          | yes[^25]      | plugin[^26]   | yes[^27]      | yes[^28]      | yes[^29]     | yes[^30]           |
 | AirPlay                                             | yes[^31]      | no[^32]       | yes[^33]      | yes[^34]      | plugin[^35]  | yes[^36]           |
-| Chromecast / Google Cast                            | no[^37]       | no[^38]       | yes[^39]      | yes[^40]      | plugin[^41]  | yes[^42]           |
+| Chromecast / Google Cast                            | yes[^37]      | no[^38]       | yes[^39]      | yes[^40]      | plugin[^41]  | yes[^42]           |
 | Keyboard operation                                  | yes[^43]      | plugin[^44]   | yes[^45]      | yes[^46]      | yes[^47]     | yes[^48]           |
 | Screen-reader labelling                             | yes[^49]      | partial[^50]  | yes[^51]      | yes[^52]      | yes[^53]     | yes[^54]           |
 | DRM / EME                                           | no[^55]       | no[^56]       | no[^57]       | no[^58]       | plugin[^59]  | yes[^60]           |
@@ -48,14 +48,14 @@ Measured 2026-09-12 against `tests/compare`'s pinned installs:
 | YouTube                                             | yes[^79]      | yes[^80]      | yes[^81]      | plugin[^82]   | plugin[^83]  | yes[^84]           |
 | Vimeo                                               | yes[^85]      | yes[^86]      | yes[^87]      | plugin[^88]   | plugin[^89]  | yes[^90]           |
 | Wistia                                              | yes[^91]      | yes[^92]      | no[^93]       | plugin[^94]   | no[^95]      | no[^96]            |
-| Other hosted providers (named)                      | partial[^97]  | yes[^98]      | no[^99]       | plugin[^100]  | no[^101]     | yes[^102]          |
-| Audio tracks                                        | no[^103]      | no[^104]      | yes[^105]     | yes[^106]     | yes[^107]    | yes[^108]          |
-| Chapters                                            | partial[^109] | no[^110]      | yes[^111]     | partial[^112] | yes[^113]    | yes[^114]          |
-| Thumbnails / preview on seek                        | no[^115]      | no[^116]      | yes[^117]     | yes[^118]     | plugin[^119] | yes[^120]          |
+| Other hosted providers (named)                      | no[^97]       | yes[^98]      | no[^99]       | plugin[^100]  | no[^101]     | yes[^102]          |
+| Audio tracks                                        | yes[^103]     | no[^104]      | yes[^105]     | yes[^106]     | yes[^107]    | yes[^108]          |
+| Chapters                                            | yes[^109]     | no[^110]      | yes[^111]     | partial[^112] | yes[^113]    | yes[^114]          |
+| Thumbnails / preview on seek                        | yes[^115]     | no[^116]      | yes[^117]     | yes[^118]     | plugin[^119] | yes[^120]          |
 | Playlists                                           | no[^121]      | no[^122]      | no[^123]      | no[^124]      | plugin[^125] | no[^126]           |
 | Ads / IMA                                           | no[^127]      | no[^128]      | no[^129]      | no[^130]      | plugin[^131] | no[^132]           |
 | Analytics hooks                                     | no[^133]      | no[^134]      | no[^135]      | no[^136]      | plugin[^137] | yes[^138]          |
-| Plugin system                                       | partial[^139] | yes[^140]     | no[^141]      | no[^142]      | yes[^143]    | no[^144]           |
+| Plugin system                                       | no[^139]      | yes[^140]     | no[^141]      | no[^142]      | yes[^143]    | no[^144]           |
 | Shipped skin / theme                                | yes[^145]     | no[^146]      | yes[^147]     | no[^148]      | yes[^149]    | yes[^150]          |
 | Headless, independently composable parts            | yes[^151]     | no[^152]      | yes[^153]     | yes[^154]     | no[^155]     | yes[^156]          |
 | Requires an external stylesheet for usable controls | no[^157]      | no[^158]      | yes[^159]     | no[^160]      | yes[^161]    | yes[^162]          |
@@ -77,7 +77,7 @@ Measured 2026-09-12 against `tests/compare`'s pinned installs:
 
 [^6]: **Captions / text tracks — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react` exports `CaptionsButton`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
 
-[^7]: **Quality selection — Playdeck**: partial. A `selectQuality` command and `PlayerQuality`/`qualities` state exist; no dedicated quality button or menu primitive ships, a consumer composes one from `SettingsMenu`. mechanical check: `@playdeck/core`'s `dist/types.d.ts` includes `readonly selectQuality: Availability;`. Source: packages/core/dist/types.d.ts (`PlayerCommand`, `PlayerCapabilities.selectQuality`)
+[^7]: **Quality selection — Playdeck**: yes. mechanical check: `@playdeck/react` exports `QualityMenu`. Source: packages/react/README.md
 
 [^8]: **Quality selection — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `Quality`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 
@@ -89,7 +89,7 @@ Measured 2026-09-12 against `tests/compare`'s pinned installs:
 
 [^12]: **Quality selection — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react` exports `QualityRadioGroup`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
 
-[^13]: **Playback rate — Playdeck**: partial. A `setPlaybackRate` command and capability exist; no dedicated playback-rate button or menu primitive ships. mechanical check: `@playdeck/core`'s `dist/types.d.ts` includes `readonly setPlaybackRate: Availability;`. Source: packages/core/dist/types.d.ts (`PlayerCommand`, `PlayerCapabilities.setPlaybackRate`)
+[^13]: **Playback rate — Playdeck**: yes. mechanical check: `@playdeck/react` exports `PlaybackRateMenu`. Source: packages/react/README.md
 
 [^14]: **Playback rate — react-player**: plugin. A `playbackRate` prop sets the rate (`dist/types.d.ts`); no playback-rate control ships in react-player's own code, and its README's "Custom player controls" section composes `<MediaPlaybackRateButton>` for one. Provider limit, not a status: the same README says the prop is "Only supported by YouTube, Wistia, and file paths". Plugin `media-chrome`: npm `repository` github.com/muxinc/media-chrome, third-party. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `PlaybackRateButton`. Source: react-player 3.4.0, node_modules/react-player/README.md (installed package), its "Custom player controls" section, which composes Media Chrome parts around a `<ReactPlayer slot="media">`
 
@@ -137,7 +137,7 @@ Measured 2026-09-12 against `tests/compare`'s pinned installs:
 
 [^36]: **AirPlay — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react` exports `AirPlayButton`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
 
-[^37]: **Chromecast / Google Cast — Playdeck**: no. No casting command, capability, provider or UI part ships; AirPlay is the only remote-playback route. mechanical check: no file of `@playdeck/core` and `@playdeck/react` matching `**/*.js` or `**/*.d.ts` contains `Cast`. Source: packages/core and packages/react, every `.js` and `.d.ts` file each ships under `dist/` after `pnpm build`
+[^37]: **Chromecast / Google Cast — Playdeck**: yes. Reached through the standards-based Remote Playback API (the media element's `remote` object, `capabilities.remotePlayback`/`showRemotePlaybackPicker()`), explicitly not the Cast SDK: no sender script, no receiver page. That SDK route remains unshipped and is possible later as an external provider. mechanical check: `@playdeck/react` exports `RemotePlaybackButton`. Source: packages/react/README.md
 
 [^38]: **Chromecast / Google Cast — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `Cast`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 
@@ -209,7 +209,7 @@ Measured 2026-09-12 against `tests/compare`'s pinned installs:
 
 [^72]: **DASH — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react/media/dash-video` exports `DashVideo`. Source: @videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react and in the five `@videojs/*` packages it depends on (installed packages)
 
-[^73]: **Live streaming — Playdeck**: partial. Live playback state is modeled and existing controls adapt (an infinite/DVR duration); no dedicated live-indicator UI primitive ships. mechanical check: `@playdeck/core` exports `deriveLiveState`. Source: packages/core/dist/index.d.ts (`PlayerLiveState`, `deriveLiveState`)
+[^73]: **Live streaming — Playdeck**: partial. `LiveIndicator` renders a non-interactive live/DVR-edge badge (`data-state` at-edge/behind-edge), derived from `PlayerState.live`; it ships no seek-to-live-edge control of its own (tracked separately). mechanical check: `@playdeck/react` exports `LiveIndicator`. Source: packages/react/README.md
 
 [^74]: **Live streaming — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `isLive`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 
@@ -257,7 +257,7 @@ Measured 2026-09-12 against `tests/compare`'s pinned installs:
 
 [^96]: **Wistia — Video.js 10 (beta)**: no. mechanical check: no file of `@videojs/react` and `@videojs/core` and `@videojs/media` and `@videojs/spf` and `@videojs/store` and `@videojs/utils` matching `**/*.js` or `**/*.d.ts` contains `istia`. Source: @videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react and in the five `@videojs/*` packages it depends on (installed packages)
 
-[^97]: **Other hosted providers (named) — Playdeck**: partial. No named hosted platform ships in the box, but `Player.Root`'s `providers` prop lets a consumer register one of their own: a `detect`/`load` pair keyed by the source-kind name, tried once the five built-in kinds fail to detect a URL. Shipping an actual Twitch/Mux/etc. adapter through it is left to the consumer or a separate package. mechanical check: `@playdeck/react`'s `dist/root.d.ts` includes `readonly providers?: P;`. Source: packages/react/dist/root.d.ts (`RootProps.providers`)
+[^97]: **Other hosted providers (named) — Playdeck**: no. `PlayerSource` is a closed union of exactly five source kinds (packages/core/dist/types.d.ts), so no further hosted platform can be passed. mechanical check: no file of `@playdeck/core` and `@playdeck/react` matching `**/*.js` or `**/*.d.ts` contains `Twitch`. Source: packages/core and packages/react, every `.js` and `.d.ts` file each ships under `dist/` after `pnpm build`
 
 [^98]: **Other hosted providers (named) — react-player**: yes. Mux, Twitch, TikTok and Spotify each have their own `Config` key and a lazy-loaded provider. mechanical check: `react-player`'s `dist/types.d.ts` includes `mux?: Record<string, unknown>;`. Source: react-player 3.4.0, node_modules/react-player/dist/types.d.ts (installed package)
 
@@ -269,7 +269,7 @@ Measured 2026-09-12 against `tests/compare`'s pinned installs:
 
 [^102]: **Other hosted providers (named) — Video.js 10 (beta)**: yes. Twitch, TikTok, Spotify, Cloudflare Stream and Mux each ship as their own media component under the `@videojs/react/media/*` subpath. mechanical check: `@videojs/react/media/twitch-video` exports `TwitchVideo`. Source: @videojs/react 10.0.0-beta.32, every `.js` and `.d.ts` file in node_modules/@videojs/react and in the five `@videojs/*` packages it depends on (installed packages)
 
-[^103]: **Audio tracks — Playdeck**: no. mechanical check: no file of `@playdeck/core` and `@playdeck/react` matching `**/*.js` or `**/*.d.ts` contains `AudioTrack`. Source: packages/core and packages/react, every `.js` and `.d.ts` file each ships under `dist/` after `pnpm build`
+[^103]: **Audio tracks — Playdeck**: yes. Provider limit, not a status: the YouTube, Vimeo and Wistia embeds report `selectAudioTrack` as provider-unavailable (packages/provider-youtube, packages/provider-vimeo, packages/provider-wistia), as an embedded player would under any library here. mechanical check: `@playdeck/react` exports `AudioTrackMenu`. Source: packages/react/README.md
 
 [^104]: **Audio tracks — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `AudioTrack`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 
@@ -281,7 +281,7 @@ Measured 2026-09-12 against `tests/compare`'s pinned installs:
 
 [^108]: **Audio tracks — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react` exports `AudioTrackRadioGroup`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
 
-[^109]: **Chapters — Playdeck**: partial. A `Chapter` collection is published on player state; no chapters navigation UI primitive ships. mechanical check: `@playdeck/core` exports `deriveChapters`. Source: CONTEXT.md, the 'Chapter' entry; packages/core/dist/index.d.ts
+[^109]: **Chapters — Playdeck**: yes. mechanical check: `@playdeck/react` exports `ChaptersMenu`. Source: packages/react/README.md
 
 [^110]: **Chapters — react-player**: no. Searched for `hapter`, which catches both `chapter` and `Chapter`. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `hapter`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 
@@ -293,7 +293,7 @@ Measured 2026-09-12 against `tests/compare`'s pinned installs:
 
 [^114]: **Chapters — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react`'s `dist/dev/index.d.ts` includes `TimeSliderChapters`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
 
-[^115]: **Thumbnails / preview on seek — Playdeck**: no. mechanical check: no file of `@playdeck/core` and `@playdeck/react` matching `**/*.js` or `**/*.d.ts` contains `thumbnails`. Source: packages/core and packages/react, every `.js` and `.d.ts` file each ships under `dist/` after `pnpm build`
+[^115]: **Thumbnails / preview on seek — Playdeck**: yes. mechanical check: `@playdeck/react`'s `dist/index.js` includes `"data-playdeck-part": "thumbnail"`. Source: packages/react/README.md
 
 [^116]: **Thumbnails / preview on seek — react-player**: no. The `light` prop is a static startup poster fetched through oEmbed (`thumbnail_url` in `dist/Preview.js`), not a hover/scrub seek preview. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `thumbnails`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 
@@ -341,7 +341,7 @@ Measured 2026-09-12 against `tests/compare`'s pinned installs:
 
 [^138]: **Analytics hooks — Video.js 10 (beta)**: yes. A `MuxData` component ships in the package; it reports to Mux Data, and no other analytics vendor has a component here. mechanical check: `@videojs/react/media/mux-data` exports `MuxData`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/docs (the package ships its own documentation) (`concepts/mux-data.md`)
 
-[^139]: **Plugin system — Playdeck**: partial. Extensibility is still mostly React composition (compose primitives, pass props/render props), not a registry a plugin calls into -- with one seam: `Player.Root`'s `providers` prop lets a consumer register a `detect`/`load` pair for a source kind this package does not ship a loader for. No hook over commands or events exists yet. mechanical check: `@playdeck/react`'s `dist/root.d.ts` includes `readonly providers?: P;`. Source: packages/react/dist/root.d.ts (`RootProps.providers`)
+[^139]: **Plugin system — Playdeck**: no. Extensibility is React composition (compose primitives, pass props/render props), not a plugin registry. mechanical check: no file of `@playdeck/core` and `@playdeck/react` matching `**/*.js` or `**/*.d.ts` contains `registerPlugin`. Source: packages/core and packages/react, every `.js` and `.d.ts` file each ships under `dist/` after `pnpm build`
 
 [^140]: **Plugin system — react-player**: yes. `ReactPlayer.addCustomPlayer` and `removeCustomPlayers` are assigned in the shipped code and typed in `dist/index.d.ts`; they register and drop a custom player implementation. mechanical check: `react-player`'s `dist/ReactPlayer.js` includes `ReactPlayer.addCustomPlayer =`. Source: react-player 3.4.0, node_modules/react-player/dist/ReactPlayer.js and README.md (installed package), the `addCustomPlayer` / `removeCustomPlayers` lines
 

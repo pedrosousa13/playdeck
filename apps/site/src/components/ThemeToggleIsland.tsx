@@ -62,6 +62,18 @@ export default function ThemeToggleIsland() {
   // body executes — there is no server-rendered guess to flash past.
   const [choice, setChoice] = useState<Choice>(readChoice);
 
+  // The Tooltip and the DropdownMenu share one trigger through nested
+  // `asChild`, and radix-ui@1.6.7 does not coordinate a tooltip with a
+  // sibling menu on the same element: the tooltip's own hover/focus state
+  // machine has no idea the menu exists, and can (re)open while the menu is
+  // on screen, rendering over the first item and taking its click (reported
+  // as #642). `menuOpen` makes the menu controlled so the tooltip's `open`
+  // can be forced closed while the menu is open — the same idiom
+  // `RailDisclosure.tsx`'s `open={columned ? true : undefined}` uses to
+  // override one Radix open state: `undefined` leaves the tooltip's own
+  // hover/focus handling exactly as uncontrolled as it was before.
+  const [menuOpen, setMenuOpen] = useState(false);
+
   const apply = (next: Choice) => {
     const root = document.documentElement;
     if (next === 'system') {
@@ -88,8 +100,8 @@ export default function ThemeToggleIsland() {
 
   return (
     <TooltipProvider>
-      <DropdownMenu>
-        <Tooltip>
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+        <Tooltip open={menuOpen ? false : undefined}>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
               <Button

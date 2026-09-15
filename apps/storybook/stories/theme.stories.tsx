@@ -2,7 +2,8 @@ import type { CSSProperties, ReactElement } from 'react';
 import * as Player from '@playdeck/react';
 import { createPortal } from 'react-dom';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect } from 'storybook/test';
+import { expect, waitFor } from 'storybook/test';
+import { assetUrl } from './asset-url';
 import { available, ready } from './support';
 
 const viewportStyle = {
@@ -400,6 +401,218 @@ export const ActivationIsCentred: Story = {
   }
 };
 
+// Shared by the two thumbnail stories below, the same way `expectControlsFit`
+// above is shared rather than repeated: the fixture and the interaction that
+// reveals it have to stay identical between the two rule pairs, or a change
+// to one story's geometry could silently stop matching the other's.
+//
+// Themed through the meta-level `globals`, like everything above except
+// `ConsumerCssWins`'s own portal escape. `Player/SeekSlider`'s own
+// `WithThumbnails`/`ThumbnailFollowsKeyboardFocus` cover the part's wiring
+// unthemed -- the crop follows the previewed time correctly with no
+// stylesheet at all. What only this file can check is the chrome the two
+// shipped themes add on top: `theme.css`'s and `docked.css`'s own
+// `[data-playdeck-part='thumbnail']` rule pair.
+const renderThumbnailFixture = () => (
+  <Player.Viewport style={{ width: 480, height: 270, position: 'relative' }}>
+    <Player.SeekSlider
+      thumbnails={assetUrl('thumbnails.vtt')}
+      style={{
+        position: 'absolute',
+        bottom: '1rem',
+        left: '5%',
+        width: '90%'
+      }}
+    />
+  </Player.Viewport>
+);
+
+// Hovers the track's centre and waits for the reveal to settle, returning the
+// part for each story's own rule-pair-specific assertions. The part mounts
+// hidden from the first render (nothing has hovered yet), so the rest-state
+// `opacity` is read immediately, with nothing to wait out -- a transition
+// only runs when a property changes while already rendered, not on the value
+// a stylesheet gives it at mount.
+//
+// The reveal is different: `getComputedStyle` mid-transition reads a value
+// between `0` and `1` on either side of the flip, so a bare read once would
+// catch that by luck rather than by waiting for it. `waitFor` polls instead,
+// re-reading until the value actually settles at `1` -- which also covers the
+// WebVTT fetch the hover arms ahead of the CSS transition.
+const revealThumbnail = async ({
+  canvas,
+  canvasElement,
+  userEvent
+}: Parameters<NonNullable<Story['play']>>[0]): Promise<HTMLElement> => {
+  await canvas.findByRole('slider', { name: 'Seek' });
+  const track = canvasElement.querySelector(
+    '[data-playdeck-part="seek-slider"]'
+  ) as HTMLElement;
+  const thumbnail = canvasElement.querySelector(
+    '[data-playdeck-part="thumbnail"]'
+  ) as HTMLElement;
+  await expect(globalThis.getComputedStyle(thumbnail).opacity).toBe('0');
+
+  const rect = track.getBoundingClientRect();
+  await userEvent.pointer({
+    target: track,
+    coords: {
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2
+    }
+  });
+
+  await waitFor(() =>
+    expect(globalThis.getComputedStyle(thumbnail).opacity).toBe('1')
+  );
+  return thumbnail;
+};
+
+/**
+ * `theme.css`'s thumbnail chrome: a translucent surface behind the crop,
+ * rounded to the shared large-radius token -- the same one `error` and the
+ * settings/captions menu popover use, both floating cards over the picture
+ * the way this crop is -- fading in with `data-state` rather than popping.
+ */
+export const ThumbnailFadesIn: Story = {
+  parameters: ready({ seek: available }, { currentTime: 0, duration: 10 }),
+  render: renderThumbnailFixture,
+  play: async (context) => {
+    const thumbnail = await revealThumbnail(context);
+    const styles = globalThis.getComputedStyle(thumbnail);
+    await expect(styles.borderRadius).toBe('8px');
+    await expect(styles.backgroundColor).toBe('rgba(0, 0, 0, 0.72)');
+  }
+};
+
+/**
+ * `docked.css`'s own copy of the rule above, themed through `globals` on the
+ * story itself rather than the meta default -- the same override
+ * `TearsDownWithTheStory` below uses to opt out entirely. Same fade, over
+ * this file's own surface token; what is worth pinning here and not above is
+ * the hairline border: docked's light scheme needs the edge definition
+ * theme.css's dark scrim does not (docked.css's own header comment on the
+ * rule explains why), so its resolved colour is the one thing this story
+ * checks that the themed one above has nothing to check.
+ */
+export const ThumbnailFadesInDocked: Story = {
+  globals: { theme: 'docked' },
+  parameters: ready({ seek: available }, { currentTime: 0, duration: 10 }),
+  render: renderThumbnailFixture,
+  play: async (context) => {
+    const thumbnail = await revealThumbnail(context);
+    const styles = globalThis.getComputedStyle(thumbnail);
+    await expect(styles.borderWidth).toBe('1px');
+    await expect(styles.borderColor).toBe('rgb(217, 217, 214)');
+  }
+};
+
+const renderLiveIndicatorFixture = () => (
+  <Player.Viewport style={{ width: 480, height: 270 }}>
+    <Player.LiveIndicator />
+  </Player.Viewport>
+);
+
+/**
+ * `live` shares the button-shaped-control box every other control in `Default`
+ * above gets -- same size, same radius -- but it is permanently `disabled`
+ * (LiveIndicator's own doc comment), so it drops out of the shared `:hover`
+ * and `:active` rules and carries its own `cursor: default` instead of their
+ * `pointer`. The hover check is the point: without the exclusion this control
+ * would pick up the same fill `Default`'s `PlayButton` does on press, which
+ * would tell a viewer it does something it does not.
+ *
+ * Demonstrated red, two mutations against theme.css, run and reverted:
+ *
+ * Removing the `:where([data-playdeck-part='live']) { cursor: default; }`
+ * rule after the shared `:hover`/`:active` blocks (leaving `live` in the
+ * base box list, so the shared rule's own `cursor: pointer` was the only
+ * thing left to answer):
+ *
+ *   expected 'pointer' to be 'default'
+ *    ❯ stories/theme.stories.tsx:534:37
+ *      532|     await expect(styles.height).toBe('44px');
+ *      533|     await expect(styles.borderRadius).toBe('10px');
+ *      534|     await expect(styles.cursor).toBe('default');
+ *   Test Files  1 failed | 26 passed | 5 skipped (32)
+ *        Tests  1 failed | 121 passed (122)
+ *
+ * Reverted, all 122 passed again. Removing `[data-playdeck-part='live']`
+ * from the shared box selector instead (cursor rule left in place):
+ *
+ *   expected '0px' to be '10px'
+ *    ❯ stories/theme.stories.tsx:533:43
+ *      531|     await expect(styles.width).toBe('44px');
+ *      532|     await expect(styles.height).toBe('44px');
+ *      533|     await expect(styles.borderRadius).toBe('10px');
+ *   Test Files  1 failed | 26 passed | 5 skipped (32)
+ *        Tests  1 failed | 121 passed (122)
+ *
+ * `width`/`height` stayed green through that second mutation -- the inline
+ * `controlTargetStyle` floor (`min-width`/`min-height:
+ * var(--playdeck-control-min-size, 2.75rem)`, set directly on the element
+ * regardless of this stylesheet) happens to equal the theme's own 44px box
+ * size on a control with no content wide enough to exceed it, so those two
+ * assertions alone would not have caught this mutation; `borderRadius` and
+ * `cursor` are what actually depend on the theme rule here. Reverted, all
+ * 122 passed again.
+ */
+export const LiveIndicatorAppearance: Story = {
+  parameters: ready({}, { live: { isLive: true, atLiveEdge: true } }),
+  render: renderLiveIndicatorFixture,
+  play: async ({ canvas, userEvent }) => {
+    const live = await canvas.findByRole('button', { name: 'Live' });
+    const styles = globalThis.getComputedStyle(live);
+    await expect(styles.width).toBe('44px');
+    await expect(styles.height).toBe('44px');
+    await expect(styles.borderRadius).toBe('10px');
+    await expect(styles.cursor).toBe('default');
+    await expect(styles.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+
+    await userEvent.hover(live);
+    // Unchanged: the shared `:hover` rule never matches this part.
+    await expect(globalThis.getComputedStyle(live).backgroundColor).toBe(
+      'rgba(0, 0, 0, 0)'
+    );
+  }
+};
+
+/**
+ * `docked.css`'s own copy of the rule above, themed through `globals` on the
+ * story itself -- the same override `ThumbnailFadesInDocked` and
+ * `TearsDownWithTheStory` use. What differs from the themed story above is
+ * the ink token (`--playdeck-color-on-surface, #1c1c1e` here against `#fff`
+ * there); the box shape, the missing hover fill and the `cursor: default`
+ * are the same rule in both files.
+ *
+ * Demonstrated red, docked.css's own copy of the cursor-override mutation
+ * above (the shared box-list mutation is theme.css/docked.css's identical
+ * rule, already proven on the themed story; this one instead confirms
+ * docked.css's copy of the cursor override is load-bearing on its own):
+ *
+ *   expected 'pointer' to be 'default'
+ *    ❯ stories/theme.stories.tsx:560:37
+ *      558|     const live = await canvas.findByRole('button', { name: 'Live' });
+ *      559|     const styles = globalThis.getComputedStyle(live);
+ *      560|     await expect(styles.cursor).toBe('default');
+ *   Test Files  1 failed | 26 passed | 5 skipped (32)
+ *        Tests  1 failed | 121 passed (122)
+ *
+ * Reverted, all 122 passed again.
+ */
+export const LiveIndicatorAppearanceDocked: Story = {
+  globals: { theme: 'docked' },
+  parameters: ready({}, { live: { isLive: true, atLiveEdge: true } }),
+  render: renderLiveIndicatorFixture,
+  play: async ({ canvas }) => {
+    const live = await canvas.findByRole('button', { name: 'Live' });
+    const styles = globalThis.getComputedStyle(live);
+    await expect(styles.cursor).toBe('default');
+    await expect(styles.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    await expect(styles.color).toBe('rgb(28, 28, 30)');
+  }
+};
+
 // Its strength is entirely that ordering: run alone (`-t`, or opened directly
 // in the UI), or with these exports reordered, it passes without proving
 // anything. It is the only test that exercises real DOM teardown, so it stays;
@@ -407,9 +620,11 @@ export const ActivationIsCentred: Story = {
 // `stories/theme.contract.test.ts`, which asserts them structurally.
 
 /**
- * The theme leaves with the story that mounted it. Every story above is themed
- * through the meta-level `globals`; this one opts back out, and runs last, so
- * it renders in a document five themed stories have already used. An unthemed
+ * The theme leaves with the story that mounted it. Every story above is
+ * themed -- most through the meta-level `globals`, `ThumbnailFadesInDocked`
+ * through its own override, the same shape this one's own opt-out below uses
+ * -- and this one opts back out, and runs last, so it renders in a document
+ * seven themed stories have already used. An unthemed
  * control here is the proof that the toolbar decorator's `<style>` was torn
  * down with each of them rather than left behind in the shared preview
  * document — which is the reason the theme is mounted per story at all.

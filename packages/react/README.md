@@ -25,8 +25,11 @@ directive; server code can call `detectSource` and the rest of that surface
 without a boundary at all.
 
 The guides at [playdeck.video/guides](https://playdeck.video/guides/) carry the
-full styling contract ([**Contract**](https://playdeck.video/guides/contract/))
-and the caption guidance ([**Captions**](https://playdeck.video/guides/captions/)).
+full styling contract ([**Contract**](https://playdeck.video/guides/contract/)),
+the caption guidance ([**Captions**](https://playdeck.video/guides/captions/)),
+the quality-selection guidance ([**Quality**](https://playdeck.video/guides/quality/)),
+the playback-rate guidance ([**Playback rate**](https://playdeck.video/guides/playback-rate/))
+and the chapters guidance ([**Chapters**](https://playdeck.video/guides/chapters/)).
 Every primitive below is also staged, running, in this repository's Storybook
 workbench, which is a development tool rather than a published surface.
 
@@ -60,6 +63,8 @@ export const Clip = () => (
         <Player.PipButton />
         {/* Renders only where there is somewhere to cast to. */}
         <Player.AirPlayButton />
+        {/* Renders only where a Remote Playback API device is reachable. */}
+        <Player.RemotePlaybackButton />
         <Player.FullscreenButton />
       </Player.Controls>
     </Player.Viewport>
@@ -322,10 +327,12 @@ also in `@playdeck/core`.
 ### Structure
 
 `Root`, `Viewport`, `Media`, `Poster`, `PosterImage`, `ActivationButton`,
-`LoadingIndicator`, `ErrorDisplay`, `Captions`, `Gestures`.
+`LoadingIndicator`, `ErrorDisplay`, `Captions`, `Gestures`, `LiveIndicator`.
 
 Each overlay renders only when its own state calls for it — nothing is drawn
-disabled:
+disabled, with one exception: `LiveIndicator` renders as a permanently
+disabled button whenever it renders at all, because seeking to the live edge
+is not built yet (see the comment in the example below):
 
 <!-- example:react-overlays -->
 
@@ -333,7 +340,8 @@ disabled:
 import * as Player from '@playdeck/react';
 
 // The overlay layers, in the order they stack inside a Viewport. Each renders
-// only when its own state says it should: no disabled-looking placeholders.
+// only when its own state says it should: no disabled-looking placeholders,
+// with one exception noted below.
 export const Overlays = () => (
   <Player.Viewport>
     <Player.Poster>
@@ -344,6 +352,11 @@ export const Overlays = () => (
     <Player.ActivationButton aria-label="Play" />
     <Player.LoadingIndicator />
     <Player.Captions />
+    {/* Renders only on a live source -- nothing while `state.live` is null.
+        The one exception to "no disabled-looking placeholders" above:
+        whenever it does render, it renders as a disabled button, because
+        seeking to the live edge is not built yet. */}
+    <Player.LiveIndicator />
     <Player.Gestures
       seekOffset={10}
       onSeek={(direction, offset) => console.log(direction, offset)}
@@ -371,15 +384,21 @@ export const poster = Player.normalizePoster('/poster.jpg');
 ### Controls
 
 `PlayButton`, `MuteButton`, `VolumeSlider`, `SeekSlider`, `Time`,
-`FullscreenButton`, `PipButton`, `AirPlayButton`, `CaptionsButton`, `Controls`.
+`FullscreenButton`, `PipButton`, `AirPlayButton`, `RemotePlaybackButton`,
+`CaptionsButton`, `Controls`.
 
 #### Presentation and casting
 
-`FullscreenButton`, `PipButton` and `AirPlayButton` each read one entry of
-`state.capabilities` — `fullscreen`, `pictureInPicture` and `airPlay` — and
-render only while that entry says `available`. An `unknown` entry renders
-nothing either: a capability still being decided is not a reason to put a
-control on screen and then withdraw it.
+`FullscreenButton`, `PipButton`, `AirPlayButton` and `RemotePlaybackButton`
+each read one entry of `state.capabilities` — `fullscreen`, `pictureInPicture`,
+`airPlay` and `remotePlayback` — and render only while that entry says
+`available`. An `unknown` entry renders nothing either: a capability still
+being decided is not a reason to put a control on screen and then withdraw it.
+
+`RemotePlaybackButton` opens the browser's own Remote Playback picker — the
+standards-based route to Chromecast and other receivers, reached through the
+media element's `remote` object rather than the Cast SDK — and is `available`
+only once that element reports a device actually reachable on the network.
 
 Driving those presentations without the buttons means doing that gate yourself.
 The commands are on `PlayerHandle` and on `usePlayerActions`, as the request and
@@ -387,18 +406,20 @@ exit pairs `requestFullscreen`/`exitFullscreen` and
 `requestPictureInPicture`/`exitPictureInPicture`. The built-in buttons choose
 which half of a pair to send from `state.fullscreen` and
 `state.pictureInPicture`, and that choice is exactly what you take over.
-`showAirPlayPicker` has no exit twin and is not a toggle: it opens the
-platform's own route picker, and which device the viewer picked — or whether
-they picked one at all — is never reported back, which is why `AirPlayButton`
-carries no state of its own.
+`showAirPlayPicker` and `showRemotePlaybackPicker` have no exit twin and are
+not toggles: each opens its platform's own route picker, and which device the
+viewer picked — or whether they picked one at all — is never reported back,
+which is why neither button carries state of its own. `remotePlayback`'s
+connection state is published separately, as `PlayerState.remotePlayback`, for
+a consumer who wants to render it.
 
 Calling one past its gate is answered rather than thrown, and the
 `CommandResult` says which gate it met. `not-ready` is a command that arrived
 before a provider was attached and ready to take it. `unsupported` is the active
 provider having no such command to give: an embed exposes only what its own SDK
-offers, so some wire no picture-in-picture at all, and the AirPlay picker is
-wired only by the adapters that drive a media element directly, and then only
-where that element exposes the picker. `blocked` is a
+offers, so some wire no picture-in-picture at all, and the AirPlay and
+remote-playback pickers are wired only by the adapters that drive a media
+element directly, and then only where that element exposes them. `blocked` is a
 permissions policy or a media-element attribute refusing it, and carries the
 `PlayerError` that names which. So the capability answers whether to offer a
 control, and the result answers what became of a command once it was issued.
@@ -444,6 +465,20 @@ built-in `"Seek"`. Playdeck keeps ownership of the controlled attributes —
 cannot be overridden. An `onChange` you pass is chained after the seek rather
 than replacing it, and an `aria-describedby` you pass is composed with the
 buffered-progress description rather than replacing it.
+
+`thumbnails` takes the URL of a WebVTT file whose cues carry an image URL with
+a `#xywh=` sprite-region fragment — the convention Vidstack, Media Chrome and
+Video.js all read, so an existing sprite-generation pipeline needs no change.
+The file is fetched once, lazily, on the first hover or the first keyboard
+focus of the input — never at mount — and, once loaded, `SeekSlider` renders a
+`thumbnail` part cropped to the cue for the pointer or focus position, above
+the track. Without the prop, nothing extra renders. Every cue's image URL
+passes through the same allowlist every other URL in the player does; a
+refused `thumbnails` URL or a refused cue image publishes the same
+[A URL prop the allowlist refused](https://github.com/pedrosousa13/playdeck/blob/main/packages/core/README.md#a-url-prop-the-allowlist-refused)
+notice `mediaMetadata`'s artwork does. The part's name and its `data-state`
+values are documented in the
+[**Contract**](https://playdeck.video/guides/contract/) guide.
 
 `Time` takes a `type` of `current` (the default), `duration` or `remaining`.
 `remaining` counts down from the duration and carries a leading minus for as
@@ -515,11 +550,21 @@ the global listener.
 ### Menus
 
 `SettingsMenu`, `SettingsMenuTrigger`, `SettingsMenuContent`, `MenuItem`,
-`MenuRadioGroup`, `MenuRadioItem`, `CaptionsMenu`.
+`MenuRadioGroup`, `MenuRadioItem`, `CaptionsMenu`, `QualityMenu`,
+`PlaybackRateMenu`, `ChaptersMenu`, `AudioTrackMenu`.
 
-`SettingsMenu` and the menu parts are the building blocks for playback-rate and
-quality menus, which have no dedicated primitive — the reference example
-composes both from these.
+`SettingsMenu` and the menu parts are also the building blocks the reference
+example below composes quality and playback rate from by hand, alongside one
+another, for a consumer who wants both under one trigger. `QualityMenu`,
+`PlaybackRateMenu` and `ChaptersMenu` are the standalone primitives for a
+consumer who wants one on its own, the same way `CaptionsMenu` is for
+captions — covered in [**Quality**](https://playdeck.video/guides/quality/),
+[**Playback rate**](https://playdeck.video/guides/playback-rate/) and
+[**Chapters**](https://playdeck.video/guides/chapters/). `AudioTrackMenu` is
+the same shape for `state.audioTracks`: it lists a rung per published track
+and marks whichever one carries `active: true` — there is no "Auto" row and
+no sibling selection field, since an audio track carries its own selection
+(see the **Audio track** glossary entry in `CONTEXT.md`).
 
 <!-- example:react-menus -->
 
@@ -595,6 +640,30 @@ export const RateMenu = () => {
 
 // The caption track list, already wired to the player's own tracks.
 export const Captions = () => <Player.CaptionsMenu />;
+
+// The quality ladder, already wired to the player's own qualities. `RateMenu`
+// above still composes a quality group by hand alongside playback rate, for
+// a consumer who wants both under one trigger; this is the standalone
+// primitive for a consumer who wants quality on its own.
+export const Quality = () => <Player.QualityMenu />;
+
+// The rate ladder, already wired to the player's own playbackRate. `RateMenu`
+// above still composes a rate group by hand alongside quality, for a
+// consumer who wants both under one trigger; this is the standalone
+// primitive for a consumer who wants playback rate on its own.
+export const Rate = () => <Player.PlaybackRateMenu />;
+
+// The chapter list, already wired to the player's own chapters and current
+// playback position. Unlike `Quality` and `Rate`, `RateMenu` above has no
+// hand-composed chapters group alongside it -- this is the only way this
+// package exposes chapters navigation.
+export const Chapters = () => <Player.ChaptersMenu />;
+
+// The audio-track list, already wired to the player's own tracks and marking
+// whichever one is active. Unlike `Quality` and `Rate`, `RateMenu` above has
+// no hand-composed audio-track group alongside it -- this is the only way
+// this package exposes audio-track selection.
+export const AudioTracks = () => <Player.AudioTrackMenu />;
 ```
 
 <!-- /example -->

@@ -1,4 +1,5 @@
 import type { PlayerProvider, TimeRange } from '@playdeck/core';
+import { formatTime } from './format-time.js';
 import {
   controlTargetStyle,
   useLoadingPresentation,
@@ -9,7 +10,13 @@ import {
   requestAnswered,
   ECHO_DEADLINE_MS
 } from './optimistic-request.js';
-import { usePlayer, usePlayerState } from './player-context.js';
+import { permittedUrl } from './permitted-url.js';
+import {
+  usePlayer,
+  usePlayerState,
+  useRefusedUrlReport
+} from './player-context.js';
+import { useThumbnailCues, useThumbnailPreview } from './thumbnails.js';
 import {
   useEffect,
   useId,
@@ -18,17 +25,6 @@ import {
   type ComponentPropsWithRef,
   type Ref
 } from 'react';
-
-const formatTime = (totalSeconds: number): string => {
-  const clamped = Math.max(0, Math.floor(totalSeconds));
-  const hours = Math.floor(clamped / 3600);
-  const minutes = Math.floor((clamped % 3600) / 60);
-  const seconds = clamped % 60;
-  const pad = (value: number): string => String(value).padStart(2, '0');
-  return hours > 0
-    ? `${hours}:${pad(minutes)}:${pad(seconds)}`
-    : `${minutes}:${pad(seconds)}`;
-};
 
 // How many digits sit after the point, including the ones `String` hides in
 // exponent form (it switches to it below 1e-6).
@@ -257,6 +253,17 @@ export type SeekSliderProps = ComponentPropsWithRef<'div'> & {
   // consumer onChange is chained after the seek, and a consumer
   // aria-describedby is composed with the buffered description, not replaced.
   readonly inputProps?: ComponentPropsWithRef<'input'>;
+  // The URL of a WebVTT sprite-cue file (`packages/core`'s `parseThumbnailCues`
+  // format): with it set, the slider renders a `thumbnail` part showing the
+  // cue image and region for the previewed time -- the pointer's position
+  // while hovering, or the input's own value while it holds keyboard focus
+  // and no pointer is active. The file loads lazily, on the first such
+  // interaction, never at mount (`thumbnails.ts`'s `useThumbnailCues`). Goes
+  // through the same source allowlist as every other URL prop in this
+  // package; a refused URL renders no thumbnail and reports the `'thumbnails'`
+  // surface, and a refused cue image reports `'thumbnails cue image'` and
+  // drops only that cue.
+  readonly thumbnails?: string;
 };
 
 // The scrubbable range: [0, duration] for VOD, or the seekable window extent
@@ -492,7 +499,7 @@ const useSeekPreview = (
 };
 
 // The wrapper's and the input's own floor, below. A `var()` read rather than
-// the literal `44` they both used to carry, the same move #598 made for every
+// the literal `44` they both used to carry, the same move #622 made for every
 // button-shaped control's own target (`controlTargetStyle` in
 // `loading-error.tsx`): an inline style beats any stylesheet, so a fixed
 // number here would leave a theme's "below 48rem" query with nothing to
@@ -525,8 +532,10 @@ export const SeekSlider = ({
   children,
   inputProps,
   style,
+  thumbnails,
   ...props
 }: SeekSliderProps) => {
+  const { controller } = usePlayer();
   const { buffered, currentTime, duration, provider, seekable, status } =
     usePlayerState((state) => ({
       buffered: state.buffered,
@@ -554,11 +563,45 @@ export const SeekSlider = ({
     provider,
     seekEchoTolerance(grid)
   );
+  // The allowlisted `thumbnails` URL, resolved unconditionally (like every
+  // other consumer URL prop in this package) so the hooks below it -- and the
+  // capability gate right after -- see a stable call order regardless of
+  // `status`. A refused URL reports the `'thumbnails'` surface and is never
+  // handed to `useThumbnailCues`, so nothing is fetched for it.
+  const resolvedThumbnails = permittedUrl(thumbnails);
+  useRefusedUrlReport(
+    controller,
+    'thumbnails',
+    thumbnails !== undefined && resolvedThumbnails === undefined
+  );
+  const { arm: armThumbnails, cues: thumbnailCues } =
+    useThumbnailCues(resolvedThumbnails);
+  // A held preview is clamped like media time is: the window it was asked
+  // against can have moved on before the seek was answered. Computed above
+  // the capability gate, unlike every other render-only value below it,
+  // because `useThumbnailPreview`'s own refusal report needs it and has to
+  // run before the gate too, to keep this hook's call order stable across
+  // every value `status` takes.
+  const value = window ? snapToStep(preview ?? currentTime, min, max, grid) : 0;
+  const {
+    onBlur: onThumbnailBlur,
+    onFocus: onThumbnailFocus,
+    onPointerLeave: onThumbnailPointerLeave,
+    thumbnailImage,
+    thumbnailLeft,
+    trackPointer
+  } = useThumbnailPreview({
+    arm: armThumbnails,
+    controller,
+    cues: thumbnailCues,
+    hasWindow: window !== null,
+    min,
+    resolvedThumbnails,
+    span,
+    value
+  });
   if (status !== 'available') return null;
   const hasDuration = typeof duration === 'number' && duration > 0;
-  // A held preview is clamped like media time is: the window it was asked
-  // against can have moved on before the seek was answered.
-  const value = window ? snapToStep(preview ?? currentTime, min, max, grid) : 0;
   // The geometry below is `aria-hidden`, so this description is the extent's
   // only route to assistive technology (#189) — read on demand, never a live
   // region, because `buffered` moves many times a second.
@@ -578,6 +621,18 @@ export const SeekSlider = ({
       data-provider={provider ?? undefined}
       data-playdeck-part="seek-slider"
       data-state={window ? 'ready' : 'idle'}
+      onPointerEnter={(event) => {
+        trackPointer(event.clientX, event.currentTarget);
+        props.onPointerEnter?.(event);
+      }}
+      onPointerLeave={(event) => {
+        onThumbnailPointerLeave();
+        props.onPointerLeave?.(event);
+      }}
+      onPointerMove={(event) => {
+        trackPointer(event.clientX, event.currentTarget);
+        props.onPointerMove?.(event);
+      }}
       style={{
         position: 'relative',
         minHeight: SEEK_SLIDER_MIN_BLOCK_SIZE,
@@ -638,10 +693,18 @@ export const SeekSlider = ({
         data-playdeck-part="seek-slider-input"
         max={max}
         min={min}
+        onBlur={(event) => {
+          onThumbnailBlur();
+          inputProps?.onBlur?.(event);
+        }}
         onChange={(event) => {
           const next = Number(event.currentTarget.value);
           if (window && Number.isFinite(next)) seek(next);
           inputProps?.onChange?.(event);
+        }}
+        onFocus={(event) => {
+          onThumbnailFocus();
+          inputProps?.onFocus?.(event);
         }}
         style={{
           width: '100%',
@@ -659,6 +722,46 @@ export const SeekSlider = ({
         >
           {share}% loaded
         </span>
+      )}
+      {/* Mounted whenever `thumbnails` resolves to a permitted URL, whether or
+          not a preview is showing right now -- like `Poster`, so a theme can
+          transition between `data-state`s instead of the part popping in and
+          out of the DOM on every hover start and stop. Decorative geometry,
+          exactly like `seek-buffered` above: `aria-hidden`, and never a live
+          region, because a hovered preview would otherwise announce on every
+          pointer move. */}
+      {resolvedThumbnails === undefined ? null : (
+        <div
+          aria-hidden="true"
+          data-playdeck-part="thumbnail"
+          data-state={thumbnailImage === null ? 'hidden' : 'visible'}
+          style={{
+            position: 'absolute',
+            bottom: '100%',
+            left: thumbnailLeft,
+            transform: 'translateX(-50%)',
+            overflow: 'hidden',
+            visibility: thumbnailImage === null ? 'hidden' : 'visible',
+            width: thumbnailImage?.region?.width,
+            height: thumbnailImage?.region?.height
+          }}
+        >
+          {thumbnailImage === null ? null : (
+            <img
+              alt=""
+              src={thumbnailImage.url}
+              style={
+                thumbnailImage.region
+                  ? {
+                      position: 'absolute',
+                      left: -thumbnailImage.region.x,
+                      top: -thumbnailImage.region.y
+                    }
+                  : undefined
+              }
+            />
+          )}
+        </div>
       )}
       {children}
     </div>

@@ -56,6 +56,30 @@ export const captionsTriggerSelector =
 export const captionsTrigger = (page: Page) =>
   page.locator(captionsTriggerSelector);
 
+export const qualityTriggerSelector =
+  '[data-playdeck-part="settings-menu-trigger"][aria-label="Quality"]';
+
+export const qualityTrigger = (page: Page) =>
+  page.locator(qualityTriggerSelector);
+
+export const playbackRateTriggerSelector =
+  '[data-playdeck-part="settings-menu-trigger"][aria-label="Playback rate"]';
+
+export const playbackRateTrigger = (page: Page) =>
+  page.locator(playbackRateTriggerSelector);
+
+export const chaptersTriggerSelector =
+  '[data-playdeck-part="settings-menu-trigger"][aria-label="Chapters"]';
+
+export const chaptersTrigger = (page: Page) =>
+  page.locator(chaptersTriggerSelector);
+
+export const audioTrackTriggerSelector =
+  '[data-playdeck-part="settings-menu-trigger"][aria-label="Audio track"]';
+
+export const audioTrackTrigger = (page: Page) =>
+  page.locator(audioTrackTriggerSelector);
+
 export const settingsMenuSelector = '[data-playdeck-part="settings-menu"]';
 
 export const settingsMenu = (page: Page) => page.locator(settingsMenuSelector);
