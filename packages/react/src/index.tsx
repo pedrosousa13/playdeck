@@ -119,6 +119,10 @@ export { AudioTrackMenu } from './audio-tracks.js';
 
 export type { AudioTrackMenuProps } from './audio-tracks.js';
 
+export { LiveIndicator } from './live-indicator.js';
+
+export type { LiveIndicatorProps } from './live-indicator.js';
+
 export {
   MuteButton,
   PlayButton,

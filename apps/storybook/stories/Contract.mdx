@@ -16,7 +16,7 @@ Every primitive exposes a stable styling/testing contract via data attributes.
   `captions-button` / `captions-announcer` / `caption-cue` / `caption-line`,
   `settings-menu-root` / `settings-menu-trigger` / `settings-menu`,
   `menu-item` / `menu-radio-group` / `menu-radio-item` / `menu-radio-indicator`,
-  `gestures`). A part name is not a primitive's name, and several parts can
+  `gestures`, `live`). A part name is not a primitive's name, and several parts can
   come from one primitive. `ErrorDisplay` renders `error`, and by default
   `error-message` and a recoverable error's `error-retry` inside it. The
   slashes above only group related names — `captions` / `captions-button` /
@@ -69,8 +69,8 @@ Every primitive exposes a stable styling/testing contract via data attributes.
   on that node resets at that moment.
 - **`data-state`** — the part's derived state (e.g. `paused`/`playing`,
   `muted`/`unmuted`, `idle`/`ready`, `loading`/`loaded`/`error`,
-  `global`/`scoped`, `timed`/`untimed` on `time`, the error category on `error`,
-  or the activation state).
+  `global`/`scoped`, `timed`/`untimed` on `time`, `at-edge`/`behind-edge` on
+  `live`, the error category on `error`, or the activation state).
   Absent where the part has no observable state: `airplay-button` opens a
   system picker, and Playdeck does not currently surface an active-route flag, so
   it exposes no `data-state` rather than a value that never changes. That is
@@ -134,6 +134,18 @@ Every primitive exposes a stable styling/testing contract via data attributes.
   holds keyboard focus, else there is no preview; a pointer active at the
   same time as focus wins. `aria-hidden="true"`, like `seek-buffered` above
   it -- decorative geometry, never a live region.
+- **`live`** reflects `PlayerState.live` (`PlayerLiveState`). `null` there
+  means the stream is not live or its liveness is not yet known, and
+  `LiveIndicator` renders nothing for it -- there is no third `data-state` for
+  "not live", because `PlayerLiveState` is non-null only when `isLive` is
+  `true`; `isLive: false` is not a value `deriveLiveState` produces. So
+  `data-state` carries only the two reachable values: `at-edge` at the live
+  edge, `behind-edge` once the viewer has fallen behind it. Structurally a
+  `<button type="button">`, and `disabled` -- non-interactive, out of the
+  tab order rather than merely `aria-disabled`, which would leave it
+  focusable for a press that does nothing. That is current behaviour rather
+  than a permanent guarantee: if live-edge seeking is ever wired onto this
+  control, it gains an `onClick` and sheds `disabled`.
 
 Style and query against these attributes rather than internal class names.
 

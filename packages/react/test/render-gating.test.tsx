@@ -404,6 +404,14 @@ const PART_TABLE: Record<string, PartEntry> = {
     fields: new Set(['audioTracks', 'capabilities']),
     mount: bare(Player.AudioTrackMenu)
   },
+  // `live` alone -- no capability gate, since it renders/withholds off
+  // `state.live` itself rather than a `PlayerCapabilities` field. That it
+  // actually reads only `live` is proven by `test/live-indicator.test.tsx`,
+  // not by this table entry.
+  LiveIndicator: {
+    fields: new Set(['live']),
+    mount: bare(Player.LiveIndicator)
+  },
   // Reads seven fields through one selector -- the shortcut layer has to know
   // every capability gate a bound key might act through, plus the values a
   // couple of those actions need (`muted`, `volume`, `selectedTextTrackId`,
