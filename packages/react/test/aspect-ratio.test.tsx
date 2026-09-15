@@ -23,7 +23,13 @@ import * as Player from '../src/index';
 import { loadProvider } from '../src/provider-loaders';
 import { createFakeProvider } from './fixtures/fake-provider';
 
-vi.mock('../src/provider-loaders', () => ({
+// `detectSourceWithProviders` is spread in from the real module rather than
+// stubbed: `root.tsx` calls it unconditionally to resolve `detectedSource`,
+// and every fixture here passes no `providers` prop, so the real
+// implementation is exactly `detectSource` under a different name for this
+// suite's purposes -- only `loadProvider` is what these tests replace.
+vi.mock('../src/provider-loaders', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/provider-loaders')>()),
   loadProvider: vi.fn()
 }));
 

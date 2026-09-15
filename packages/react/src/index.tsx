@@ -46,10 +46,17 @@ export {
 export type { PlayerActions, PlayerHandle } from './player-context.js';
 
 export type {
+  ConsumerProviders,
   PlayerLoadingStrategy,
   PlayerMediaMount,
   PlayerPreload,
-  PlayerProviderOptions
+  PlayerProviderOptions,
+  PlayerProviders,
+  ProviderAdapterFactory,
+  ProviderRegistration,
+  SuppliedProviderOptions,
+  SuppliedProviderSource,
+  SuppliedSource
 } from './use-activation.js';
 
 // The bag `PlayerProviderOptions.wistia` holds, so a caller can name the type

@@ -45,6 +45,7 @@ test('Root accepts exactly the props it accepted as an intersection', () => {
     | 'poster'
     | 'preload'
     | 'providerOptions'
+    | 'providers'
     | 'ref'
     | 'source'
     | 'startTime'

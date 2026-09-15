@@ -119,6 +119,7 @@ const SHARED_SECTIONS = [
   'The `source` prop',
   'Shared rules for a source string',
   'Explicit source objects',
+  'Supplying your own provider',
   'What a refusal reads like'
 ];
 

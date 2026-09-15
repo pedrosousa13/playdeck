@@ -16,6 +16,7 @@
   "devDependencies": {
     "@playdeck/core": "workspace:*",
     "@playdeck/provider-hls": "workspace:*",
+    "@playdeck/provider-native": "workspace:*",
     "@storybook/addon-a11y": "10.5.3",
     "@storybook/addon-docs": "10.5.3",
     "@storybook/addon-vitest": "10.5.3",

@@ -27,9 +27,14 @@ import {
 } from '../src/internal-controller';
 import * as Player from '../src/index';
 
-vi.mock('../src/provider-loaders', async () => {
+vi.mock('../src/provider-loaders', async (importOriginal) => {
   const { createNativeProvider } = await import('@playdeck/provider-native');
   return {
+    // `detectSourceWithProviders` is spread in from the real module: `root.tsx`
+    // calls it unconditionally to resolve `detectedSource`, and none of this
+    // file's fixtures pass a `providers` prop, so the real implementation is
+    // exactly `detectSource` under a different name for this suite's purposes.
+    ...(await importOriginal<typeof import('../src/provider-loaders')>()),
     // Keep legacy provider assertions synchronous; activation.test.tsx covers
     // the real Promise boundary and the loader's real async contract directly.
     loadProvider: ({
