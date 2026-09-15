@@ -93,7 +93,8 @@ const untagged: ReadonlyArray<
   ['exitFullscreen', (c) => c.exitFullscreen()],
   ['requestPictureInPicture', (c) => c.requestPictureInPicture()],
   ['exitPictureInPicture', (c) => c.exitPictureInPicture()],
-  ['showAirPlayPicker', (c) => c.showAirPlayPicker()]
+  ['showAirPlayPicker', (c) => c.showAirPlayPicker()],
+  ['showRemotePlaybackPicker', (c) => c.showRemotePlaybackPicker()]
 ];
 
 test.each(untagged)(

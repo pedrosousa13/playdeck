@@ -15,6 +15,7 @@ import {
 import type { NativeAudioTracks } from './audio-tracks.js';
 import type { NativePlayback } from './playback.js';
 import type { NativePresentation } from './presentation.js';
+import type { NativeRemotePlayback } from './remote-playback.js';
 import type { NativeTextTracks } from './text-tracks.js';
 
 export type NativeAttachmentDeps = {
@@ -27,6 +28,10 @@ export type NativeAttachmentDeps = {
     'applyInitialPosition' | 'cancelPendingReplay' | 'handlers'
   >;
   readonly presentation: Pick<NativePresentation, 'handlers'>;
+  readonly remotePlayback: Pick<
+    NativeRemotePlayback,
+    'attachListeners' | 'destroy'
+  >;
   readonly textTracks: Pick<
     NativeTextTracks,
     'attachListeners' | 'discover' | 'destroy'
@@ -60,6 +65,7 @@ export const createNativeAttachment = (
     getCapabilities,
     playback,
     presentation,
+    remotePlayback,
     textTracks,
     audioTracks,
     clearStateListeners
@@ -408,6 +414,7 @@ export const createNativeAttachment = (
       textTracks.discover();
       audioTracks.attachListeners();
       audioTracks.discover();
+      remotePlayback.attachListeners();
       emitMediaState();
     },
     load: () => {
@@ -430,6 +437,7 @@ export const createNativeAttachment = (
       if (attached) removeListeners();
       textTracks.destroy();
       audioTracks.destroy();
+      remotePlayback.destroy();
       if (!media.paused) {
         try {
           media.pause();

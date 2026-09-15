@@ -480,6 +480,7 @@ export const createHlsProvider = (
     requestPictureInPicture: playback.requestPictureInPicture,
     exitPictureInPicture: playback.exitPictureInPicture,
     showAirPlayPicker: playback.showAirPlayPicker,
+    showRemotePlaybackPicker: playback.showRemotePlaybackPicker,
     // Ungated, unlike `subscribeCues` below: the intrinsic size is read off
     // the <video> element, which both engines play into and whose
     // `loadedmetadata`/`resize` listeners `native.attach()` installs on either

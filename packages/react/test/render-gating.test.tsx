@@ -67,6 +67,7 @@ const createMockAdapter = () => {
     requestPictureInPicture: vi.fn(ok),
     exitPictureInPicture: vi.fn(ok),
     showAirPlayPicker: vi.fn(ok),
+    showRemotePlaybackPicker: vi.fn(ok),
     selectTextTrack: vi.fn(ok)
   };
   const adapter: ProviderAdapter = {
@@ -333,6 +334,10 @@ const PART_TABLE: Record<string, PartEntry> = {
   AirPlayButton: {
     fields: new Set(['provider', 'capabilities']),
     mount: bare(Player.AirPlayButton)
+  },
+  RemotePlaybackButton: {
+    fields: new Set(['provider', 'capabilities']),
+    mount: bare(Player.RemotePlaybackButton)
   },
   ActivationButton: {
     fields: new Set(['activation', 'error']),
@@ -612,6 +617,7 @@ const DRIVEN_FIELDS = [
   'selectedTextTrackId',
   'captionRendering',
   'providerPosterUrl',
+  'remotePlayback',
   'commandsReady'
 ] as const satisfies readonly (keyof PlayerState)[];
 
@@ -690,6 +696,7 @@ const ALL_PLAYER_STATE_FIELDS: Record<keyof PlayerState, true> = {
   selectedTextTrackId: true,
   captionRendering: true,
   providerPosterUrl: true,
+  remotePlayback: true,
   commandsReady: true
 };
 
@@ -712,7 +719,8 @@ const baselineCapabilities: PlayerCapabilities = {
   pictureInPicture: available,
   airPlay: available,
   customControls: available,
-  providerPoster: available
+  providerPoster: available,
+  remotePlayback: available
 };
 
 const drivenCapabilities: PlayerCapabilities = {
@@ -728,7 +736,8 @@ const drivenCapabilities: PlayerCapabilities = {
   pictureInPicture: unavailable,
   airPlay: unavailable,
   customControls: unavailable,
-  providerPoster: unavailable
+  providerPoster: unavailable,
+  remotePlayback: unavailable
 };
 
 const baselineTextTrack = Object.freeze({
@@ -841,6 +850,7 @@ const BASELINE_PATCH: ProviderStatePatch = {
   selectedTextTrackId: null,
   captionRendering: 'custom',
   providerPosterUrl: null,
+  remotePlayback: null,
   commandsReady: true
 };
 
@@ -885,6 +895,7 @@ const DRIVEN_VALUE: {
   selectedTextTrackId: 'en',
   captionRendering: 'native',
   providerPosterUrl: 'https://example.test/poster.jpg',
+  remotePlayback: 'connecting',
   commandsReady: false
 };
 

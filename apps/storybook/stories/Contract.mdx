@@ -10,7 +10,7 @@ Every primitive exposes a stable styling/testing contract via data attributes.
   rendered DOM (`play-button`, `mute-button`, `volume-slider`, `seek-slider` /
   `seek-slider-input` / `seek-buffered` / `seek-buffered-range` /
   `seek-progress` / `seek-buffered-description` / `thumbnail`, `fullscreen-button`, `pip-button`,
-  `airplay-button`, `time`, `controls`, `poster`, `poster-image`,
+  `airplay-button`, `remote-playback-button`, `time`, `controls`, `poster`, `poster-image`,
   `loading-indicator`, `activation`, `viewport`, `media`, `error` /
   `error-message` / `error-retry`, `notice` / `notice-message`, `captions` /
   `captions-button` / `captions-announcer` / `caption-cue` / `caption-line`,
@@ -75,11 +75,15 @@ Every primitive exposes a stable styling/testing contract via data attributes.
   system picker, and Playdeck does not currently surface an active-route flag, so
   it exposes no `data-state` rather than a value that never changes. That is
   today's behaviour rather than a permanent guarantee — WebKit can report an
-  active wireless route, and Playdeck has deferred plumbing it.
+  active wireless route, and Playdeck has deferred plumbing it. `remote-playback-button`
+  is the same shape: which device the viewer picked is never exposed, so it
+  carries no `data-state` either, even though `PlayerState.remotePlayback`
+  does publish a connection state elsewhere for a consumer who wants it.
 - **`data-provider`** — carries the active provider name, or is absent when
   no provider is attached. By design it appears only on the provider-bound
   control parts (`play-button`, `mute-button`, `volume-slider`,
-  `seek-slider`, `time`, `fullscreen-button`, `pip-button`, `airplay-button`, `controls`,
+  `seek-slider`, `time`, `fullscreen-button`, `pip-button`, `airplay-button`,
+  `remote-playback-button`, `controls`,
   `error`, `captions-button`), not
   on the structural/activation parts (`viewport`, `poster`, `poster-image`,
   `media`, `activation`, `loading-indicator`), which don't read provider

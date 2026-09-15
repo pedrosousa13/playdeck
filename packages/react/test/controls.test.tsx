@@ -47,6 +47,7 @@ const createMockAdapter = () => {
     requestPictureInPicture: vi.fn(ok),
     exitPictureInPicture: vi.fn(ok),
     showAirPlayPicker: vi.fn(ok),
+    showRemotePlaybackPicker: vi.fn(ok),
     selectTextTrack: vi.fn(ok)
   };
   const adapter: ProviderAdapter = {
@@ -110,7 +111,8 @@ const allNotReady = (): PlayerCapabilities => ({
   pictureInPicture: notReady,
   airPlay: notReady,
   customControls: notReady,
-  providerPoster: notReady
+  providerPoster: notReady,
+  remotePlayback: notReady
 });
 
 const capabilities = (
@@ -2295,6 +2297,111 @@ describe('AirPlayButton', () => {
     expect(
       attr(screen.getByRole('button', { name: 'AirPlay' }), 'aria-label')
     ).toBe('AirPlay');
+  });
+});
+
+describe('RemotePlaybackButton', () => {
+  test('stays absent until the capability resolves', () => {
+    const { emit } = renderWithPlayer(
+      <Player.RemotePlaybackButton />,
+      capabilities({ remotePlayback: notReady })
+    );
+    expect(screen.queryByRole('button')).toBeNull();
+    emit(capabilities({ remotePlayback: available }));
+    expect(screen.getByRole('button', { name: 'Cast' })).toBeDefined();
+  });
+
+  test('renders nothing when remote playback is unavailable', () => {
+    renderWithPlayer(
+      <Player.RemotePlaybackButton />,
+      capabilities({ remotePlayback: unavailable })
+    );
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  test('opens the picker and carries the part/provider contract', () => {
+    const { spies } = renderWithPlayer(
+      <Player.RemotePlaybackButton />,
+      capabilities({ remotePlayback: available })
+    );
+    const button = screen.getByRole('button', { name: 'Cast' });
+    expect(attr(button, 'data-playdeck-part')).toBe('remote-playback-button');
+    expect(attr(button, 'data-provider')).toBe('native');
+    fireEvent.click(button);
+    expect(spies.showRemotePlaybackPicker).toHaveBeenCalledTimes(1);
+  });
+
+  // Structured like AirPlayButton: which device the user picked, or whether
+  // they picked one at all, is never exposed through this control, so there
+  // is no invented state attribute here either.
+  test('is not a toggle: no aria-pressed, one static label', () => {
+    const { emit } = renderWithPlayer(
+      <Player.RemotePlaybackButton />,
+      capabilities({ remotePlayback: available })
+    );
+    const button = screen.getByRole('button', { name: 'Cast' });
+    expect(attr(button, 'aria-pressed')).toBeNull();
+    expect(attr(button, 'data-state')).toBeNull();
+    fireEvent.click(button);
+    emit({ playback: 'playing' });
+    expect(
+      screen.getByRole('button', { name: 'Cast' }).getAttribute('aria-label')
+    ).toBe('Cast');
+  });
+
+  test('passes className, style and ref through, with a 44px target', () => {
+    const ref = createRef<HTMLButtonElement>();
+    renderWithPlayer(
+      <Player.RemotePlaybackButton
+        className="c"
+        ref={ref}
+        style={{ color: 'red' }}
+      />,
+      capabilities({ remotePlayback: available })
+    );
+    const button = screen.getByRole('button', { name: 'Cast' });
+    expect(ref.current).toBe(button);
+    expect(button.classList.contains('c')).toBe(true);
+    expect(button.style.color).toBe('red');
+    expect(button.style.minWidth).toBe(
+      'var(--playdeck-control-min-size, 2.75rem)'
+    );
+    expect(button.style.minHeight).toBe(
+      'var(--playdeck-control-min-size, 2.75rem)'
+    );
+    // A bare <button> inside a form submits it.
+    expect(button.getAttribute('type')).toBe('button');
+  });
+
+  test('a consumer onClick that prevents default suppresses the picker', () => {
+    const { spies } = renderWithPlayer(
+      <Player.RemotePlaybackButton
+        onClick={(event) => {
+          event.preventDefault();
+        }}
+      />,
+      capabilities({ remotePlayback: available })
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Cast' }));
+    expect(spies.showRemotePlaybackPicker).not.toHaveBeenCalled();
+  });
+
+  test('honours a consumer aria-label', () => {
+    renderWithPlayer(
+      <Player.RemotePlaybackButton aria-label="Transmitir" />,
+      capabilities({ remotePlayback: available })
+    );
+    expect(screen.getByRole('button', { name: 'Transmitir' })).toBeDefined();
+  });
+
+  test('names itself Cast when no consumer label is given', () => {
+    renderWithPlayer(
+      <Player.RemotePlaybackButton />,
+      capabilities({ remotePlayback: available })
+    );
+    expect(
+      attr(screen.getByRole('button', { name: 'Cast' }), 'aria-label')
+    ).toBe('Cast');
   });
 });
 

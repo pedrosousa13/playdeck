@@ -152,7 +152,8 @@ test('publishes frozen presentation capability patches from the provider', () =>
     pictureInPicture: { status: 'unavailable', reason: 'browser' },
     airPlay: { status: 'unknown', reason: 'provider-check' },
     customControls: { status: 'available' },
-    providerPoster: { status: 'available' }
+    providerPoster: { status: 'available' },
+    remotePlayback: { status: 'unknown', reason: 'provider-check' }
   };
 
   emit({ capabilities });

@@ -350,6 +350,7 @@ const attachWithoutValidation = async (
       fullscreen: available,
       pictureInPicture: presentation.pictureInPictureAvailability(),
       airPlay: { status: 'unavailable', reason: 'provider' },
+      remotePlayback: { status: 'unavailable', reason: 'provider' },
       customControls: chromeless.customControlsAvailability(),
       providerPoster: posterAvailability.availability()
     };

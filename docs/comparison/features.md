@@ -38,7 +38,7 @@ Measured 2026-09-15 against `tests/compare`'s pinned installs:
 | Picture-in-picture                                  | yes[^19]      | partial[^20]  | yes[^21]      | yes[^22]      | yes[^23]     | yes[^24]           |
 | Fullscreen                                          | yes[^25]      | plugin[^26]   | yes[^27]      | yes[^28]      | yes[^29]     | yes[^30]           |
 | AirPlay                                             | yes[^31]      | no[^32]       | yes[^33]      | yes[^34]      | plugin[^35]  | yes[^36]           |
-| Chromecast / Google Cast                            | no[^37]       | no[^38]       | yes[^39]      | yes[^40]      | plugin[^41]  | yes[^42]           |
+| Chromecast / Google Cast                            | yes[^37]      | no[^38]       | yes[^39]      | yes[^40]      | plugin[^41]  | yes[^42]           |
 | Keyboard operation                                  | yes[^43]      | plugin[^44]   | yes[^45]      | yes[^46]      | yes[^47]     | yes[^48]           |
 | Screen-reader labelling                             | yes[^49]      | partial[^50]  | yes[^51]      | yes[^52]      | yes[^53]     | yes[^54]           |
 | DRM / EME                                           | no[^55]       | no[^56]       | no[^57]       | no[^58]       | plugin[^59]  | yes[^60]           |
@@ -137,7 +137,7 @@ Measured 2026-09-15 against `tests/compare`'s pinned installs:
 
 [^36]: **AirPlay — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react` exports `AirPlayButton`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
 
-[^37]: **Chromecast / Google Cast — Playdeck**: no. No casting command, capability, provider or UI part ships; AirPlay is the only remote-playback route. mechanical check: no file of `@playdeck/core` and `@playdeck/react` matching `**/*.js` or `**/*.d.ts` contains `Cast`. Source: packages/core and packages/react, every `.js` and `.d.ts` file each ships under `dist/` after `pnpm build`
+[^37]: **Chromecast / Google Cast — Playdeck**: yes. Reached through the standards-based Remote Playback API (the media element's `remote` object, `capabilities.remotePlayback`/`showRemotePlaybackPicker()`), explicitly not the Cast SDK: no sender script, no receiver page. That SDK route remains unshipped and is possible later as an external provider. mechanical check: `@playdeck/react` exports `RemotePlaybackButton`. Source: packages/react/README.md
 
 [^38]: **Chromecast / Google Cast — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `Cast`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 

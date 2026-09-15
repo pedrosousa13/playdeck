@@ -356,14 +356,14 @@ export const libraries = [
     composition: 'core + native provider, no control parts',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 20.26 KB measured 2026-09-15 (docs/comparison/results.md's "Gzipped
-    // (Vite)" column that same day), rounded up to the next 0.25 KB -- see
+    // 20.54 KB measured 2026-09-15, rounded up to the next 0.25 KB -- see
     // the `libraries` doc comment above for what raising this means. The
-    // growth from 20.18 KB is #658's thumbnail-preview parsing
-    // (parseThumbnailCues, thumbnailCueAt) and its two refused-URL notices
-    // added to core, which this composition bundles in full even though it
-    // reaches no control part.
-    ceilingKb: 20.5
+    // growth from 20.26 KB is #659's `remotePlayback` capability, the
+    // `showRemotePlaybackPicker` command and `PlayerState.remotePlayback`
+    // added to core, plus the native provider's own Remote Playback API
+    // wiring (`packages/provider-native/src/remote-playback.ts`) this
+    // composition bundles in full even though it reaches no control part.
+    ceilingKb: 20.75
   },
   {
     name: 'Playdeck',
@@ -372,10 +372,12 @@ export const libraries = [
     composition: 'core + primitives + native provider',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 20.85 KB measured 2026-09-14, rounded up to the next 0.25 KB. The
-    // growth from 20.56 KB is #656's audio-track state, command and
-    // capability added to core.
-    ceilingKb: 21
+    // 21.21 KB measured 2026-09-15, rounded up to the next 0.25 KB. The
+    // growth from 20.85 KB is #659's `RemotePlaybackButton` part plus the
+    // `remotePlayback` capability, `showRemotePlaybackPicker` command and
+    // `PlayerState.remotePlayback` it reads, added to core, react and the
+    // native provider.
+    ceilingKb: 21.25
   },
   {
     name: 'Playdeck (play-only)',
@@ -385,10 +387,13 @@ export const libraries = [
       'core + primitives + native provider + one control (PlayButton)',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 21.92 KB measured 2026-09-14, rounded up to the next 0.25 KB. The
-    // growth from 21.63 KB is #656's audio-track state, command and
-    // capability added to core.
-    ceilingKb: 22,
+    // 22.28 KB measured 2026-09-15, rounded up to the next 0.25 KB. The
+    // growth from 21.92 KB is #659's `remotePlayback` capability,
+    // `showRemotePlaybackPicker` command and `PlayerState.remotePlayback`
+    // added to core, plus the native provider's own Remote Playback API
+    // wiring this composition bundles in full even though `PlayButton` alone
+    // reaches no capability-gated control.
+    ceilingKb: 22.5,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
@@ -399,12 +404,13 @@ export const libraries = [
       "core + primitives + native provider + control bar (5 of Media Chrome's 7 controls)",
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 26.02 KB measured 2026-09-15, rounded up to the next 0.25 KB. The
-    // growth from 24.57 KB is #658's thumbnail-preview feature: this
-    // composition's `Player.SeekSlider` now always imports
-    // `useThumbnailCues`/`useThumbnailPreview` and the `thumbnail` part's
-    // crop rendering, whether or not a consumer sets the `thumbnails` prop.
-    ceilingKb: 26.25
+    // 26.31 KB measured 2026-09-15, rounded up to the next 0.25 KB. The
+    // growth from 26.02 KB is #659's `remotePlayback` capability,
+    // `showRemotePlaybackPicker` command and `PlayerState.remotePlayback`
+    // added to core, plus the native provider's own Remote Playback API
+    // wiring, which this composition bundles in full regardless of which of
+    // the control bar's five parts a consumer actually reaches.
+    ceilingKb: 26.5
   },
   {
     name: 'react-player',

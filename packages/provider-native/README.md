@@ -139,6 +139,15 @@ export const play = (): Promise<unknown> => controller.play();
 - **`airPlay`** follows WebKit's `webkitplaybacktargetavailabilitychanged`, so
   it means "there is a receiver to cast to", not "this browser has the picker
   API". It goes back to `unavailable` when the route disappears.
+- **`remotePlayback`** follows the standards-based Remote Playback API's own
+  `remote.watchAvailability()` the same way `airPlay` follows WebKit's event:
+  `unavailable`/`browser` where the element has no `remote` object at all,
+  `unavailable`/`provider` where it does but no device is currently reachable,
+  and `available` only once one is. `PlayerState.remotePlayback` then reflects
+  `remote.state` (`connecting`/`connected`/`disconnected`) for as long as the
+  capability stays `available`, and is `null` otherwise. This is the route
+  `showRemotePlaybackPicker()` (`remote.prompt()`) reaches Chromecast through —
+  distinct from the separate, unimplemented Cast SDK.
 - **Captions** are Playdeck's to draw by default (`captionRendering: 'custom'`);
   `setCaptionRenderer('native')` hands them back to the browser's own renderer.
 - **`live`** comes from the element's own signals: an endless `duration` and the

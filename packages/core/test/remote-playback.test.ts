@@ -26,41 +26,43 @@ const createProvider = (
   };
 };
 
-test('showAirPlayPicker reports not-ready before a provider is installed', async () => {
+test('showRemotePlaybackPicker reports not-ready before a provider is installed', async () => {
   const controller = new PlayerController();
 
-  await expect(controller.showAirPlayPicker()).resolves.toEqual({
+  await expect(controller.showRemotePlaybackPicker()).resolves.toEqual({
     ok: false,
     reason: 'not-ready'
   });
 });
 
-test('showAirPlayPicker reports unsupported when the provider lacks it', async () => {
+test('showRemotePlaybackPicker reports unsupported when the provider lacks it', async () => {
   const controller = new PlayerController();
   controller.setProvider(createProvider().provider);
 
-  await expect(controller.showAirPlayPicker()).resolves.toEqual({
+  await expect(controller.showRemotePlaybackPicker()).resolves.toEqual({
     ok: false,
     reason: 'unsupported'
   });
 });
 
-test('showAirPlayPicker forwards a confirmed provider result', async () => {
+test('showRemotePlaybackPicker forwards a confirmed provider result', async () => {
   const controller = new PlayerController();
   controller.setProvider(
     createProvider({
-      showAirPlayPicker: () => Promise.resolve({ ok: true })
+      showRemotePlaybackPicker: () => Promise.resolve({ ok: true })
     }).provider
   );
 
-  await expect(controller.showAirPlayPicker()).resolves.toEqual({ ok: true });
+  await expect(controller.showRemotePlaybackPicker()).resolves.toEqual({
+    ok: true
+  });
 });
 
-test('showAirPlayPicker surfaces a blocked policy result instead of throwing', async () => {
+test('showRemotePlaybackPicker surfaces a blocked policy result instead of throwing', async () => {
   const controller = new PlayerController();
   controller.setProvider(
     createProvider({
-      showAirPlayPicker: () =>
+      showRemotePlaybackPicker: () =>
         Promise.resolve({
           ok: false,
           reason: 'blocked',
@@ -68,37 +70,40 @@ test('showAirPlayPicker surfaces a blocked policy result instead of throwing', a
             category: 'policy',
             fatal: false,
             recoverable: true,
-            message: 'AirPlay requires a user gesture.'
+            message: 'Remote playback requires a user gesture.'
           }
         })
     }).provider
   );
 
-  await expect(controller.showAirPlayPicker()).resolves.toMatchObject({
+  await expect(controller.showRemotePlaybackPicker()).resolves.toMatchObject({
     ok: false,
     reason: 'blocked',
-    error: { category: 'policy', message: 'AirPlay requires a user gesture.' }
+    error: {
+      category: 'policy',
+      message: 'Remote playback requires a user gesture.'
+    }
   });
 });
 
-test('showAirPlayPicker contains a thrown provider command as a typed error', async () => {
+test('showRemotePlaybackPicker contains a thrown provider command as a typed error', async () => {
   const controller = new PlayerController();
   controller.setProvider(
     createProvider({
-      showAirPlayPicker: () => {
-        throw new Error('picker failed');
+      showRemotePlaybackPicker: () => {
+        throw new Error('prompt failed');
       }
     }).provider
   );
 
-  await expect(controller.showAirPlayPicker()).resolves.toMatchObject({
+  await expect(controller.showRemotePlaybackPicker()).resolves.toMatchObject({
     ok: false,
     reason: 'provider-error',
-    error: { category: 'provider', message: 'picker failed' }
+    error: { category: 'provider', message: 'prompt failed' }
   });
 });
 
-test('publishes the frozen airPlay capability patch from the provider', () => {
+test('publishes the frozen remotePlayback capability patch from the provider', () => {
   const controller = new PlayerController();
   const { emit, provider } = createProvider();
   controller.setProvider(provider);
@@ -122,9 +127,19 @@ test('publishes the frozen airPlay capability patch from the provider', () => {
   emit({ capabilities });
 
   const published = controller.getState().capabilities;
-  expect(published.airPlay).toEqual({
+  expect(published.remotePlayback).toEqual({
     status: 'unavailable',
     reason: 'browser'
   });
-  expect(Object.isFrozen(published.airPlay)).toBe(true);
+  expect(Object.isFrozen(published.remotePlayback)).toBe(true);
+});
+
+test('publishes PlayerState.remotePlayback from a plain provider patch', () => {
+  const controller = new PlayerController();
+  const { emit, provider } = createProvider();
+  controller.setProvider(provider);
+
+  emit({ remotePlayback: 'connecting' });
+
+  expect(controller.getState().remotePlayback).toBe('connecting');
 });

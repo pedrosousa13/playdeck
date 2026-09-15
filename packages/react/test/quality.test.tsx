@@ -93,6 +93,7 @@ const withSelectQuality = (
   fullscreen: notReadyAvailability,
   pictureInPicture: notReadyAvailability,
   airPlay: notReadyAvailability,
+  remotePlayback: notReadyAvailability,
   customControls: notReadyAvailability,
   providerPoster: notReadyAvailability
 });

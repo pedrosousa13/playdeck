@@ -298,6 +298,10 @@ export const createVimeoProvider = (
       // command surface for them yet, so they are unavailable through Playdeck
       // rather than forever "unknown".
       airPlay: { status: 'unavailable', reason: 'provider' },
+      // Playback runs inside Vimeo's own `<iframe>`, which carries no media
+      // element this adapter has a handle to -- there is no `remote` object
+      // for the Remote Playback API to expose.
+      remotePlayback: { status: 'unavailable', reason: 'provider' },
       customControls: chromeless.customControlsAvailability(),
       providerPoster: posterAvailability.availability()
     };

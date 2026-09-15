@@ -1125,6 +1125,51 @@ test('exposes the AirPlay picker through the wrapper on the native engine', asyn
   expect(showPicker).toHaveBeenCalledOnce();
 });
 
+test('exposes the remote-playback picker through the wrapper on the native engine', async () => {
+  const { media, patches, provider } = createHarness(stubNativeHlsSupport);
+  let availabilityCallback: ((available: boolean) => void) | undefined;
+  const prompt = vi.fn(() => Promise.resolve());
+  Object.defineProperty(media, 'remote', {
+    configurable: true,
+    value: {
+      state: 'disconnected',
+      watchAvailability: vi.fn((callback: (available: boolean) => void) => {
+        availabilityCallback = callback;
+        return Promise.resolve(1);
+      }),
+      cancelWatchAvailability: vi.fn(() => Promise.resolve()),
+      prompt,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn()
+    }
+  });
+
+  await provider.attach();
+  await provider.load();
+
+  // `createNativeProvider` is delegated to, so HLS inherits the same
+  // no-device-yet gating: filtered because `load()` also emits the
+  // standalone `commandsReady` declaration (#69), which would otherwise be
+  // the newest patch.
+  expect(
+    patches.filter((patch) => 'capabilities' in patch).at(-1)
+  ).toMatchObject({
+    capabilities: {
+      remotePlayback: { status: 'unavailable', reason: 'provider' }
+    }
+  });
+
+  availabilityCallback?.(true);
+
+  expect(patches.at(-1)).toMatchObject({
+    capabilities: { remotePlayback: { status: 'available' } }
+  });
+  await expect(provider.showRemotePlaybackPicker?.()).resolves.toEqual({
+    ok: true
+  });
+  expect(prompt).toHaveBeenCalledOnce();
+});
+
 test('exposes fullscreen through the wrapper', async () => {
   const { media, patches, provider } = createHarness(stubMseOnlySupport);
   const requestFullscreen = vi.fn().mockResolvedValue(undefined);

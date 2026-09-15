@@ -82,6 +82,9 @@ const fixedCapabilities = {
   chapters: providerUnavailable,
   pictureInPicture: providerUnavailable,
   airPlay: providerUnavailable,
+  // The IFrame Player API is an `<iframe>`, not a media element -- there is
+  // no `remote` object for it to expose.
+  remotePlayback: providerUnavailable,
   customControls: policyUnavailable,
   providerPoster: available
 } as const;
