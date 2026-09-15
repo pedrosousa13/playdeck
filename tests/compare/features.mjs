@@ -1456,14 +1456,14 @@ export const axes = [
     label: 'Thumbnails / preview on seek',
     entries: {
       Playdeck: {
-        status: 'no',
+        status: 'yes',
         anchor: {
-          kind: 'absent-in-tree',
-          module: ['@playdeck/core', '@playdeck/react'],
-          glob: ['**/*.js', '**/*.d.ts'],
-          includes: 'thumbnails'
+          kind: 'file',
+          module: '@playdeck/react',
+          path: 'dist/index.js',
+          includes: '"data-playdeck-part": "thumbnail"'
         },
-        source: PLAYDECK_TREE
+        source: PLAYDECK_REACT_README
       },
       'react-player': {
         status: 'no',

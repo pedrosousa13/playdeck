@@ -27,7 +27,7 @@ under any of these libraries -- so that limit is written in the footnote
 instead, for every column alike. `docs/comparison/method.md`'s "Features"
 section has the full rule.
 
-Measured 2026-09-14 against `tests/compare`'s pinned installs:
+Measured 2026-09-15 against `tests/compare`'s pinned installs:
 `Playdeck` 1.1.0, `react-player` 3.4.0, `Vidstack` 1.15.6, `Media Chrome` 4.19.2, `Video.js` 8.24.0, `Video.js 10 (beta)` 10.0.0-beta.32.
 
 | Axis                                                | Playdeck      | react-player  | Vidstack      | Media Chrome  | Video.js     | Video.js 10 (beta) |
@@ -51,7 +51,7 @@ Measured 2026-09-14 against `tests/compare`'s pinned installs:
 | Other hosted providers (named)                      | no[^97]       | yes[^98]      | no[^99]       | plugin[^100]  | no[^101]     | yes[^102]          |
 | Audio tracks                                        | yes[^103]     | no[^104]      | yes[^105]     | yes[^106]     | yes[^107]    | yes[^108]          |
 | Chapters                                            | yes[^109]     | no[^110]      | yes[^111]     | partial[^112] | yes[^113]    | yes[^114]          |
-| Thumbnails / preview on seek                        | no[^115]      | no[^116]      | yes[^117]     | yes[^118]     | plugin[^119] | yes[^120]          |
+| Thumbnails / preview on seek                        | yes[^115]     | no[^116]      | yes[^117]     | yes[^118]     | plugin[^119] | yes[^120]          |
 | Playlists                                           | no[^121]      | no[^122]      | no[^123]      | no[^124]      | plugin[^125] | no[^126]           |
 | Ads / IMA                                           | no[^127]      | no[^128]      | no[^129]      | no[^130]      | plugin[^131] | no[^132]           |
 | Analytics hooks                                     | no[^133]      | no[^134]      | no[^135]      | no[^136]      | plugin[^137] | yes[^138]          |
@@ -293,7 +293,7 @@ Measured 2026-09-14 against `tests/compare`'s pinned installs:
 
 [^114]: **Chapters — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react`'s `dist/dev/index.d.ts` includes `TimeSliderChapters`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
 
-[^115]: **Thumbnails / preview on seek — Playdeck**: no. mechanical check: no file of `@playdeck/core` and `@playdeck/react` matching `**/*.js` or `**/*.d.ts` contains `thumbnails`. Source: packages/core and packages/react, every `.js` and `.d.ts` file each ships under `dist/` after `pnpm build`
+[^115]: **Thumbnails / preview on seek — Playdeck**: yes. mechanical check: `@playdeck/react`'s `dist/index.js` includes `"data-playdeck-part": "thumbnail"`. Source: packages/react/README.md
 
 [^116]: **Thumbnails / preview on seek — react-player**: no. The `light` prop is a static startup poster fetched through oEmbed (`thumbnail_url` in `dist/Preview.js`), not a hover/scrub seek preview. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `thumbnails`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 

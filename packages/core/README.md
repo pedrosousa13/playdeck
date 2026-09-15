@@ -111,6 +111,8 @@ out when a command will land; `activation` is not a substitute for either.
 | `isVimeoVideoId`             | Whether a value is a well-formed Vimeo video id — what `createVimeoProvider` validates a direct call with.     |
 | `isVimeoHash`                | Whether a value is a well-formed Vimeo privacy hash — what `createVimeoProvider` validates a direct call with. |
 | `isWistiaMediaId`            | Whether a value is a well-formed Wistia media id — what `createWistiaProvider` validates a direct call with.   |
+| `parseThumbnailCues`         | Parses a seek-preview WebVTT file into its ordered, sprite-region-resolved cues.                               |
+| `thumbnailCueAt`             | The cue covering a given time, matched half-open, or `null`.                                                   |
 
 ### Types
 
@@ -120,7 +122,7 @@ State and contract: `PlayerState`, `PlayerCapabilities`, `Availability`,
 `TextTrackReadiness`, `TextCue`, `CaptionRendering`, `Chapter`, `ChapterInput`,
 `PlayerLiveState`, `PlayerError`, `PlayerErrorCategory`, `PlayerErrorSeverity`,
 `RefusedPlay`, `PlayerCommand`, `RefusedCommand`, `RefusedUrlSurface`,
-`PreProviderActivation`.
+`PreProviderActivation`, `ThumbnailCue`, `ThumbnailRegion`.
 
 Events: `PlayerEvent`, `PlayerEventType`, `PlayerEventDetailMap`,
 `PlayerEventFor`, `PlayerEventOrigin`.
@@ -682,6 +684,60 @@ export const closed = !chaptersEqual(
   chapters,
   deriveChapters([{ id: 'ch1', title: 'Introduction', startTime: 0 }], null)
 );
+```
+
+<!-- /example -->
+
+## Thumbnail preview
+
+`parseThumbnailCues` reads the seek-preview flavour of WebVTT Vidstack, Media
+Chrome and Video.js all read the same way: each cue's payload is an image URL,
+optionally carrying a `#xywh=` (or `#xywh=pixel:...`) sprite-region fragment.
+A recognised fragment is resolved to a `ThumbnailRegion` in sprite pixels and
+stripped from the published `url`; an unrecognised one — including
+`#xywh=percent:...`, since nothing here knows the sprite's natural size to
+turn a percentage into pixels — is left on the URL, with `region: null`. A
+file that does not start `WEBVTT`, or a block this parser does not recognise
+as a cue, contributes no cue rather than throwing.
+
+`thumbnailCueAt` finds the cue covering a given time, matched half-open —
+`[startTime, endTime)` — so a boundary belongs to the cue it starts, not the
+one it ends. Playdeck publishes the parser and draws none of it itself:
+`@playdeck/react`'s `SeekSlider` is the one consumer, loading and parsing a
+`thumbnails` URL lazily and rendering the active cue's region as its
+`thumbnail` part.
+
+<!-- example:core-thumbnails -->
+
+```ts
+import { parseThumbnailCues, thumbnailCueAt } from '@playdeck/core';
+
+// The seek-preview flavour of WebVTT Vidstack, Media Chrome and Video.js all
+// read: each cue's payload is an image URL, optionally carrying a `#xywh=`
+// sprite-region fragment.
+const vtt = [
+  'WEBVTT',
+  '',
+  '00:00:00.000 --> 00:00:05.000',
+  'sprite.jpg#xywh=0,0,160,90',
+  '',
+  '00:00:05.000 --> 00:00:10.000',
+  'sprite.jpg#xywh=160,0,160,90'
+].join('\n');
+
+export const cues = parseThumbnailCues(vtt);
+
+// -> { x: 0, y: 0, width: 160, height: 90 } — the fragment resolved to sprite
+// pixels, not left as a CSS background-position, and stripped from `url`.
+export const firstRegion = cues[0]?.region;
+
+// Cues are matched half-open, `[startTime, endTime)`: 3 lands on the first
+// tile, and 5 — the boundary between the two — already lands on the second.
+export const atThree = thumbnailCueAt(cues, 3);
+export const atFive = thumbnailCueAt(cues, 5);
+
+// A time past every cue matches nothing.
+export const none = thumbnailCueAt(cues, 99); // null
 ```
 
 <!-- /example -->

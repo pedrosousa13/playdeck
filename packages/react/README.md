@@ -448,6 +448,20 @@ cannot be overridden. An `onChange` you pass is chained after the seek rather
 than replacing it, and an `aria-describedby` you pass is composed with the
 buffered-progress description rather than replacing it.
 
+`thumbnails` takes the URL of a WebVTT file whose cues carry an image URL with
+a `#xywh=` sprite-region fragment — the convention Vidstack, Media Chrome and
+Video.js all read, so an existing sprite-generation pipeline needs no change.
+The file is fetched once, lazily, on the first hover or the first keyboard
+focus of the input — never at mount — and, once loaded, `SeekSlider` renders a
+`thumbnail` part cropped to the cue for the pointer or focus position, above
+the track. Without the prop, nothing extra renders. Every cue's image URL
+passes through the same allowlist every other URL in the player does; a
+refused `thumbnails` URL or a refused cue image publishes the same
+[A URL prop the allowlist refused](https://github.com/pedrosousa13/playdeck/blob/main/packages/core/README.md#a-url-prop-the-allowlist-refused)
+notice `mediaMetadata`'s artwork does. The part's name and its `data-state`
+values are documented in the
+[**Contract**](https://playdeck.video/guides/contract/) guide.
+
 `Time` takes a `type` of `current` (the default), `duration` or `remaining`.
 `remaining` counts down from the duration and carries a leading minus for as
 long as any remainder is left — `-1:23`, and still `-0:00` through the last
