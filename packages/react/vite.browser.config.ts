@@ -1,0 +1,75 @@
+import { defineConfig } from 'vite';
+
+// Every provider package's own `dist/index.js`, plus `@playdeck/core` (which
+// every provider and the entry itself import), gets a chunk name derived from
+// its own package directory rather than a content hash. A hash exists to let a
+// long-lived URL swap in new bytes without a stale cache; this build has no
+// such URL, since npm and any CDN mirroring it version the whole package at
+// once. A predictable name is also what lets scripts/bundle-budgets.mjs name a
+// chunk instead of matching a hash that changes on every build.
+const PACKAGE_CHUNK = /packages\/([\w-]+)\/dist\/index\.js$/;
+
+export default defineConfig({
+  // The no-build entry ships as the final artifact a browser runs, not source
+  // for another bundler to finish -- so unlike the default `.` build, which
+  // leaves `react` external and lets the consumer's own bundler decide,
+  // `process.env.NODE_ENV` has to be resolved here. Left unresolved, Rollup
+  // cannot tell which half of React's own `if (process.env.NODE_ENV ===
+  // 'production')` branch is dead, and ships both.
+  define: {
+    'process.env.NODE_ENV': JSON.stringify('production')
+  },
+  build: {
+    lib: { entry: 'src/browser.ts', formats: ['es'], fileName: 'browser' },
+    // A map for this file would inline or reference source for everything
+    // bundled into it, React and ReactDOM included, and ran well past a
+    // megabyte -- large enough that `scripts/verify-packaging.mjs` reading it
+    // back out of the packed tarball overran `execFileSync`'s output buffer
+    // and failed the build outright. The default `.` entry's own map stays
+    // small because React is external there; this is the one build in the
+    // package where that stops being true.
+    sourcemap: false,
+    // tsc -b emits declarations into dist incrementally; letting Vite empty
+    // the directory on every build makes it silently drop them once tsc's
+    // build cache decides there is nothing left to re-emit.
+    emptyOutDir: false,
+    rollupOptions: {
+      // Only the native provider ships in this bundle -- HLS, YouTube, Vimeo
+      // and Wistia stay external, exactly as they are for the default entry,
+      // rather than pulled in and code-split the way native is. A build a
+      // consumer loads with one `<script>` tag has no bundler to resolve those
+      // bare specifiers from, so a source that needs one of them fails at the
+      // point of use with an unresolved dynamic import; that is the honest
+      // shape of the tradeoff, documented in the README, rather than a gap to
+      // paper over.
+      //
+      // The alternative -- carrying every provider, the way the entry point
+      // itself is bundled -- was tried first and reverted: hls.js and
+      // `@vimeo/player` would ship inside `@playdeck/react`'s own tarball,
+      // which every consumer downloads whether or not they load this entry.
+      // That is the exact thing issue #448's brief warned against: "a bundle
+      // that pulls every provider would misrepresent the library's size to
+      // exactly the audience this entry exists for."
+      external: [
+        '@playdeck/provider-hls',
+        '@playdeck/provider-vimeo',
+        '@playdeck/provider-wistia',
+        '@playdeck/provider-youtube'
+      ],
+      output: {
+        chunkFileNames: (chunkInfo) => {
+          // `@playdeck/core` is the one dependency shared between the entry
+          // and every provider, so Rollup factors it into its own chunk with
+          // no facade module of its own -- `facadeModuleId` is only set for a
+          // chunk that IS an entry or a dynamic import's own root. Its single
+          // module id stands in for the facade in that one case.
+          const id =
+            chunkInfo.facadeModuleId ??
+            (chunkInfo.moduleIds.length === 1 ? chunkInfo.moduleIds[0] : null);
+          const match = id?.match(PACKAGE_CHUNK);
+          return match ? `${match[1]}.js` : 'assets/[name]-[hash].js';
+        }
+      }
+    }
+  }
+});

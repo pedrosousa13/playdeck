@@ -169,6 +169,40 @@ export const targets = [
     budget: 18
   },
   {
+    // The no-build entry: a consumer loads this one file with a
+    // plain `<script type="module">`, so unlike the row above it, React,
+    // ReactDOM and the JSX runtime are bundled in rather than left external --
+    // there is no script-tag-loadable React 19 for an external copy to be.
+    // `vite.browser.config.ts` leaves only the native provider in this build
+    // at all, and even that one stays behind the same dynamic `import()` the
+    // default entry uses, so this file never requests it until a source needs
+    // it -- proven in tests/bundle/no-build/test.mjs, the same way
+    // tests/bundle/native-only/test.mjs proves it for the default entry. HLS,
+    // YouTube, Vimeo and Wistia are not merely lazy here, unlike the rows
+    // below: they are not in this artifact at all.
+    //
+    // 100 KB gzip, set a little above the 84.78 KB this measured at when the
+    // entry was added -- enough headroom for React or a primitive to grow
+    // without every commit re-litigating the figure, tight enough that a
+    // second copy of something already in the graph has to be argued for.
+    name: '@playdeck/react/browser',
+    path: 'packages/react/dist/browser.js',
+    budget: 100
+  },
+  {
+    // `@playdeck/core` is the one dependency both this entry and every
+    // provider adapter import, so `vite.browser.config.ts` leaves it to
+    // Rollup's own chunk-splitting rather than duplicating it into each --
+    // which puts it in a second file a consumer downloads alongside the one
+    // above, on every load rather than lazily. Budgeted at the same 10 KB as
+    // the plain @playdeck/core row, because it is the same source built the
+    // same way; the built bytes differ slightly because the two builds resolve
+    // different sibling chunks.
+    name: '@playdeck/react/browser (shared @playdeck/core chunk)',
+    path: 'packages/react/dist/core.js',
+    budget: 10
+  },
+  {
     // Shipped as-is rather than built: it is plain CSS, and the primitives
     // never import it, which is what keeps the headless chain CSS-free. That
     // decision is also why the figure below is on a subset. Because the file
