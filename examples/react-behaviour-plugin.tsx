@@ -1,4 +1,4 @@
-import type { PlayerEventOrigin } from '@playdeck/core';
+import type { PlaybackState, PlayerEventOrigin } from '@playdeck/core';
 import * as Player from '@playdeck/react';
 import { useEffect, useRef } from 'react';
 
@@ -61,28 +61,46 @@ export const AnalyticsEvents = ({ onEvent }: AnalyticsEventsProps) => {
     latestOnEvent.current = onEvent;
   });
 
-  // A player starts paused, so the very first render already reads
-  // `playback: 'paused'` with nothing to have transitioned from. This flag is
-  // the only other thing this component keeps between renders, and it is not
-  // player state either: it answers one question the player itself does not
-  // publish -- "has a real transition been observed yet".
-  const observedFirstPlayback = useRef(false);
+  // Compared against the last value actually observed, not skipped by count:
+  // `createInitialPlayerState` (`@playdeck/core`) starts every player at
+  // `'paused'`, so that is the baseline held here rather than whatever
+  // `playback` happens to read on this component's own first render.
+  // Skipping the first effect run unconditionally would instead treat a
+  // plugin mounted after playback already moved -- autoplay resolving before
+  // it mounts, or the plugin itself toggled on later into an
+  // already-playing tree -- as nothing having transitioned, losing that
+  // transition rather than reading it.
+  const lastPlayback = useRef<PlaybackState>('paused');
   useEffect(() => {
-    if (!observedFirstPlayback.current) {
-      observedFirstPlayback.current = true;
-      return;
-    }
-    latestOnEvent.current({ type: PLAYBACK_EVENTS[playback] });
+    if (playback !== lastPlayback.current)
+      latestOnEvent.current({ type: PLAYBACK_EVENTS[playback] });
+    lastPlayback.current = playback;
   }, [playback]);
 
+  // A second seek beginning while one is already in flight emits nothing
+  // here: `PlayerController` keeps the origin the first seek started with
+  // rather than relabelling it for a patch that re-reports `seeking`
+  // (`packages/core/src/player-controller.ts`, the comment above
+  // `seekOrigin`'s assignment in `#applyPatch`), so neither `seeking` nor
+  // `seekOrigin` changes for the second seek and this effect never reruns
+  // for it. A scrub drag reading as one seek is the accepted shape of that
+  // limitation; nothing here works around it.
   useEffect(() => {
     if (seeking && seekOrigin)
       latestOnEvent.current({ type: 'seek', origin: seekOrigin });
   }, [seeking, seekOrigin]);
 
+  // Gated on `lifecycle` actually transitioning into `'error'`, not on
+  // `error` changing: `freezeError` (`packages/core/src/safety.ts`) freezes
+  // a new object per patch, so a provider re-reporting the same fatal error
+  // while `lifecycle` stays `'error'` -- a retry hitting the same failure,
+  // carrying its own fresh `cause` -- would otherwise read as a second
+  // transition and emit again.
+  const lastLifecycle = useRef<typeof lifecycle>('idle');
   useEffect(() => {
-    if (lifecycle === 'error' && error)
+    if (lifecycle === 'error' && lastLifecycle.current !== 'error' && error)
       latestOnEvent.current({ type: 'error', message: error.message });
+    lastLifecycle.current = lifecycle;
   }, [lifecycle, error]);
 
   return null;

@@ -5,10 +5,10 @@ import { Meta } from '@storybook/addon-docs/blocks';
 # Behaviour plugins
 
 A behaviour plugin is a component mounted inside `Player.Root` that observes
-player state and issues commands, built from nothing but the two hooks every
-other consumer already has: `usePlayerState` and `usePlayerActions`. There is
-no new library code behind the name — it is a convention, not a component
-this package ships.
+player state and, where it needs to react, issues commands — built from
+nothing but the two hooks every other consumer already has: `usePlayerState`
+and `usePlayerActions`. There is no new library code behind the name — it is
+a convention, not a component this package ships.
 
 **It renders nothing, and it must never hold the player's state itself.** The
 player stays the single owner of what it is doing; a behaviour plugin only
@@ -21,13 +21,20 @@ answer.
 ## The example
 
 `examples/react-behaviour-plugin.tsx` proves the pattern with an analytics
-mapper: it watches five kinds of transition and turns each into one discrete
-event, delivered through a callback prop rather than to any sink of its own.
+mapper: it watches five kinds of transition and delivers each one it observes
+as an event, through a callback prop rather than to any sink of its own — with
+one limitation, noted beside the code below, where a second seek starting
+while the first is still in flight emits nothing.
+
+This example only observes. Mapping a transition to an analytics event issues
+no command of its own, so it never calls `usePlayerActions` — issuing
+commands is something a behaviour plugin may do, not something every one
+does, and this one does not.
 
 {/* example:react-behaviour-plugin */}
 
 ```tsx
-import type { PlayerEventOrigin } from '@playdeck/core';
+import type { PlaybackState, PlayerEventOrigin } from '@playdeck/core';
 import * as Player from '@playdeck/react';
 import { useEffect, useRef } from 'react';
 
@@ -90,28 +97,46 @@ export const AnalyticsEvents = ({ onEvent }: AnalyticsEventsProps) => {
     latestOnEvent.current = onEvent;
   });
 
-  // A player starts paused, so the very first render already reads
-  // `playback: 'paused'` with nothing to have transitioned from. This flag is
-  // the only other thing this component keeps between renders, and it is not
-  // player state either: it answers one question the player itself does not
-  // publish -- "has a real transition been observed yet".
-  const observedFirstPlayback = useRef(false);
+  // Compared against the last value actually observed, not skipped by count:
+  // `createInitialPlayerState` (`@playdeck/core`) starts every player at
+  // `'paused'`, so that is the baseline held here rather than whatever
+  // `playback` happens to read on this component's own first render.
+  // Skipping the first effect run unconditionally would instead treat a
+  // plugin mounted after playback already moved -- autoplay resolving before
+  // it mounts, or the plugin itself toggled on later into an
+  // already-playing tree -- as nothing having transitioned, losing that
+  // transition rather than reading it.
+  const lastPlayback = useRef<PlaybackState>('paused');
   useEffect(() => {
-    if (!observedFirstPlayback.current) {
-      observedFirstPlayback.current = true;
-      return;
-    }
-    latestOnEvent.current({ type: PLAYBACK_EVENTS[playback] });
+    if (playback !== lastPlayback.current)
+      latestOnEvent.current({ type: PLAYBACK_EVENTS[playback] });
+    lastPlayback.current = playback;
   }, [playback]);
 
+  // A second seek beginning while one is already in flight emits nothing
+  // here: `PlayerController` keeps the origin the first seek started with
+  // rather than relabelling it for a patch that re-reports `seeking`
+  // (`packages/core/src/player-controller.ts`, the comment above
+  // `seekOrigin`'s assignment in `#applyPatch`), so neither `seeking` nor
+  // `seekOrigin` changes for the second seek and this effect never reruns
+  // for it. A scrub drag reading as one seek is the accepted shape of that
+  // limitation; nothing here works around it.
   useEffect(() => {
     if (seeking && seekOrigin)
       latestOnEvent.current({ type: 'seek', origin: seekOrigin });
   }, [seeking, seekOrigin]);
 
+  // Gated on `lifecycle` actually transitioning into `'error'`, not on
+  // `error` changing: `freezeError` (`packages/core/src/safety.ts`) freezes
+  // a new object per patch, so a provider re-reporting the same fatal error
+  // while `lifecycle` stays `'error'` -- a retry hitting the same failure,
+  // carrying its own fresh `cause` -- would otherwise read as a second
+  // transition and emit again.
+  const lastLifecycle = useRef<typeof lifecycle>('idle');
   useEffect(() => {
-    if (lifecycle === 'error' && error)
+    if (lifecycle === 'error' && lastLifecycle.current !== 'error' && error)
       latestOnEvent.current({ type: 'error', message: error.message });
+    lastLifecycle.current = lifecycle;
   }, [lifecycle, error]);
 
   return null;
@@ -128,7 +153,11 @@ guessed at:
 - **`seek`** — `seeking` moving to `true`, carrying the `seekOrigin` it
   started with. `PlayerState.seekOrigin`'s own comment is what this reads: it
   is set only while a seek is in flight (`null` otherwise), so reading it
-  here is exactly the origin that seek began with.
+  here is exactly the origin that seek began with. A second seek starting
+  before the first settles emits nothing — `PlayerController` keeps the
+  origin the first seek started with rather than relabelling it, so neither
+  field changes for the second one. A scrub drag reading as one seek is the
+  accepted shape of that limitation.
 - **`error`** — `lifecycle` moving to `'error'`, carrying the `PlayerError`
   it moved with. A **Notice** — a rejected prop, a fallback taken — also
   fills `PlayerState.error`, but CONTEXT.md's own **Notice** entry is

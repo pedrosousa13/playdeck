@@ -89,21 +89,34 @@ const createScriptableAdapter = () => {
  * component must derive every emitted event from the player state that
  * changed, never from a prop reference changing, and a harness that kept
  * `onEvent` stable could not tell the two apart.
+ *
+ * `mountImmediately: false` holds `AnalyticsEvents` out of the tree until
+ * `mountAnalyticsEvents()` is called, so a test can drive the player to a
+ * given state first and only then mount a fresh instance into it — the way a
+ * plugin toggled on after the fact, rather than present from `Root`'s own
+ * first render, would see whatever the player already is.
  */
-const stageAnalyticsEvents = (): {
+const stageAnalyticsEvents = (
+  options: { readonly mountImmediately?: boolean } = {}
+): {
   readonly emit: (patch: ProviderStatePatch, event?: ProviderEvent) => void;
   readonly controller: PlayerController;
   readonly events: () => readonly BehaviourPluginEvent[];
+  readonly mountAnalyticsEvents: () => void;
 } => {
+  const { mountImmediately = true } = options;
   const staged: {
     emit?: (patch: ProviderStatePatch, event?: ProviderEvent) => void;
     controller?: PlayerController;
     events?: readonly BehaviourPluginEvent[];
+    setMounted?: (mounted: boolean) => void;
   } = {};
   const Harness = () => {
     const ref = useRef<PlayerHandle>(null);
     const [events, setEvents] = useState<readonly BehaviourPluginEvent[]>([]);
+    const [mounted, setMounted] = useState(mountImmediately);
     staged.events = events;
+    staged.setMounted = setMounted;
     useEffect(() => {
       const controller = (
         ref.current as unknown as Record<symbol, PlayerController> | null
@@ -116,9 +129,11 @@ const stageAnalyticsEvents = (): {
       return () => controller.setProvider(undefined);
     }, []);
     return createElement(Root, {
-      children: createElement(AnalyticsEvents, {
-        onEvent: (event) => setEvents((prior) => [...prior, event])
-      }),
+      children: mounted
+        ? createElement(AnalyticsEvents, {
+            onEvent: (event) => setEvents((prior) => [...prior, event])
+          })
+        : null,
       loading: 'interaction',
       ref,
       source
@@ -130,7 +145,8 @@ const stageAnalyticsEvents = (): {
     get controller() {
       return staged.controller!;
     },
-    events: () => staged.events!
+    events: () => staged.events!,
+    mountAnalyticsEvents: () => staged.setMounted!(true)
   };
 };
 
@@ -182,6 +198,77 @@ describe('AnalyticsEvents (react-behaviour-plugin example)', () => {
       { type: 'pause' },
       { type: 'seek', origin: 'user' },
       { type: 'ended' },
+      {
+        type: 'error',
+        message: 'The media element could not load the source.'
+      }
+    ] satisfies BehaviourPluginEvent[]);
+  });
+
+  it('reports a play transition when mounted after playback already moved to "playing"', async () => {
+    const { emit, mountAnalyticsEvents, events } = stageAnalyticsEvents({
+      mountImmediately: false
+    });
+
+    // Drives the player into 'playing' before AnalyticsEvents is ever part
+    // of the tree -- a fresh instance's own first render already reads
+    // 'playing', with no 'paused' render of its own to have transitioned
+    // from.
+    await act(async () => {
+      emit({ lifecycle: 'ready', activation: 'ready', playback: 'playing' });
+    });
+    await act(async () => {
+      mountAnalyticsEvents();
+    });
+
+    expect(events()).toEqual([
+      { type: 'play' }
+    ] satisfies BehaviourPluginEvent[]);
+  });
+
+  it('does not fire a second error event when the same fatal error is re-reported while lifecycle stays "error"', async () => {
+    const { emit, events } = stageAnalyticsEvents();
+
+    await act(async () => {
+      emit({ lifecycle: 'ready', activation: 'ready', playback: 'paused' });
+    });
+    await act(async () => {
+      emit({
+        lifecycle: 'error',
+        activation: 'error',
+        error: {
+          category: 'network',
+          fatal: true,
+          recoverable: true,
+          message: 'The media element could not load the source.',
+          cause: new Error('native failure, attempt 1')
+        }
+      });
+    });
+    // A provider re-reporting the same fatal error while `lifecycle` stays
+    // 'error' -- a retry that hits the same failure, say -- carries its own
+    // fresh `cause` each attempt (the native error it wraps), so the two
+    // reports are not shallow-equal and `usePlayerState`'s memoization
+    // (`packages/react/src/player-context.ts`) does not collapse them: this
+    // is the field that actually reaches `AnalyticsEvents` as a changed
+    // `error` reference, not `freezeError` alone -- a byte-identical
+    // re-report never leaves `usePlayerState`, whose `selectionsEqual` reuses
+    // the prior value for one.
+    await act(async () => {
+      emit({
+        lifecycle: 'error',
+        activation: 'error',
+        error: {
+          category: 'network',
+          fatal: true,
+          recoverable: true,
+          message: 'The media element could not load the source.',
+          cause: new Error('native failure, attempt 2')
+        }
+      });
+    });
+
+    expect(events()).toEqual([
       {
         type: 'error',
         message: 'The media element could not load the source.'

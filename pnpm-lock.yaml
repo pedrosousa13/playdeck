@@ -76,6 +76,9 @@ importers:
       publint:
         specifier: 0.3.22
         version: 0.3.22
+      react:
+        specifier: 19.2.8
+        version: 19.2.8
       turbo:
         specifier: 2.10.6
         version: 2.10.6
