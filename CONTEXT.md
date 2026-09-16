@@ -227,6 +227,24 @@ state the way a Chapter or an Audio track is: nothing about it depends on a
 provider.
 _Avoid_: sprite frame, thumbnail track, preview image
 
+**Behaviour plugin**:
+A convention, not a component this package ships: a component mounted inside
+`Player.Root` that observes player state through `usePlayerState` and, where
+it needs to react, issues commands through `usePlayerActions`. Observing
+alone is a complete instance of the convention — nothing requires a given
+plugin to call both hooks. It renders nothing and holds no player state of
+its own: the player stays the single owner of what it is doing, and a plugin
+that needs a value twice reads `usePlayerState` again rather than caching what
+it last read.
+
+Distinct from a **Supplied provider**, and the distinction is what each one
+drives. A supplied provider is a new source kind, registered through
+`Player.Root`'s `providers` prop, that becomes the one active
+`ProviderAdapter` the player itself drives. A behaviour plugin drives nothing
+— it is composed as an ordinary sibling in the tree, reacting to whichever
+provider is already active, and never becomes the player's provider.
+_Avoid_: plugin, observer
+
 ### Loading
 
 **Activation**:

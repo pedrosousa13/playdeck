@@ -80,7 +80,10 @@ export default defineConfig({
     include: [
       'packages/**/*.test.{ts,tsx}',
       'apps/site/test/**/*.test.{ts,tsx}',
-      'apps/storybook/stories/**/*.contract.test.ts',
+      // `.tsx` alongside `.ts`: `react-behaviour-plugin.contract.test.tsx`
+      // renders `Player.Root` and needs JSX, which a `.ts`-only glob would
+      // have silently left out of every run of `pnpm test`.
+      'apps/storybook/stories/**/*.contract.test.{ts,tsx}',
       // Lives beside the module it tests (e2e/background-image-scan.ts): a
       // project that *imports* from another project needs that project to
       // emit declarations, and the `e2e` project deliberately does not
