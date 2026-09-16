@@ -302,6 +302,7 @@ const docs = [
   'docs/third-party-requests.md',
   'apps/storybook/stories/CapabilitiesMatrix.mdx',
   'apps/storybook/stories/Contract.mdx',
+  'apps/storybook/stories/BehaviourPlugins.mdx',
   'apps/storybook/stories/Theme.mdx'
 ];
 

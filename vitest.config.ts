@@ -68,6 +68,22 @@ export default defineConfig({
         replacement: fileURLToPath(
           new URL('./packages/provider-wistia/src/index.ts', import.meta.url)
         )
+      },
+      // Bare specifier resolution walks up from the *importing* file's own
+      // directory, the same fact `apps/storybook/tsconfig.json` documents for
+      // types. `examples/` has no `node_modules` of its own and its parent is
+      // the workspace root, which carries no direct `react` dependency — every
+      // package that needs it gets its own pnpm-linked copy instead — so a test
+      // that imports a file under `examples/` (first done by
+      // `react-behaviour-plugin.contract.test.tsx`) fails to resolve `react` at
+      // all without this. Pointed at `packages/react`'s own linked copy, the
+      // same 19.2.8 every package here pins, so this is not a second React
+      // instance.
+      {
+        find: 'react',
+        replacement: fileURLToPath(
+          new URL('./packages/react/node_modules/react', import.meta.url)
+        )
       }
     ]
   },
@@ -80,7 +96,10 @@ export default defineConfig({
     include: [
       'packages/**/*.test.{ts,tsx}',
       'apps/site/test/**/*.test.{ts,tsx}',
-      'apps/storybook/stories/**/*.contract.test.ts',
+      // `.tsx` alongside `.ts`: `react-behaviour-plugin.contract.test.tsx`
+      // renders `Player.Root` and needs JSX, which a `.ts`-only glob would
+      // have silently left out of every run of `pnpm test`.
+      'apps/storybook/stories/**/*.contract.test.{ts,tsx}',
       // Lives beside the module it tests (e2e/background-image-scan.ts): a
       // project that *imports* from another project needs that project to
       // emit declarations, and the `e2e` project deliberately does not

@@ -57,6 +57,7 @@
     "../../examples/archetype-streaming-service.tsx",
     "../../examples/archetype-course-platform.tsx",
     "../../examples/provider-setup-file-adapter.tsx",
+    "../../examples/react-behaviour-plugin.tsx",
     // `seek-slider-order.contract.test.ts` imports `BenchIsland.tsx` (via the
     // `@/*` mapping above), and project references can't stand in for the
     // rest of that module's transitive `@/...` imports here the way they do
