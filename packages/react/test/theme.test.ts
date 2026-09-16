@@ -11,6 +11,10 @@ import { describe, expect, test } from 'vitest';
 // only mean anything side by side if the formula behind them is literally the
 // same one.
 import { contrast, over, parseColor } from './contrast';
+import {
+  tokenDefault as tokenDefaultIn,
+  withoutPhoneDockingBlock
+} from './token-default';
 
 /**
  * One stylesheet the file-shaped suite below runs against, with the inventory
@@ -645,67 +649,17 @@ describe('theme contract', () => {
 // not a typical case. Widening the target to a worst-case video ground is a
 // deliberate, recorded simplification of #190, not an oversight here.
 
-/**
- * The default a token is read with, taken from the shipped file rather than
- * restated here. That is the point: editing a default without editing the
- * ratios below has to fail, or this check drifts away from what ships.
- *
- * Every `var()` read of a token has to agree on its fallback -- the backdrop is
- * read by two rules -- so disagreement is itself a failure, and so is a token
- * this file only declares, since a declaration would beat a consumer's
- * inherited value and there would be no `var(name, default)` to find.
- */
-/**
- * `withoutComments` with the `@media (max-width: 48rem)` block's contents
- * removed. Nothing in that block gives a token a second, phone-only
- * fallback today -- the docking layout that once did was reversed on
- * 2026-09-04 once the idle fade made the floating bar a sound phone layout
- * on its own; see that block's own header comment. `tokenDefault` still
- * excludes it defensively rather than folding the exclusion away: a future
- * phone-only override would otherwise make this throw for the wrong reason
- * -- a second fallback found, rather than the cross-file disagreement this
- * scan exists to catch.
- */
-const withoutPhoneDockingBlock = (() => {
-  const query = /@media\s*\(\s*max-width:\s*48rem\s*\)/.exec(withoutComments);
-  if (query === null) return withoutComments;
-  const start = query.index;
-  let depth = 0;
-  let end = withoutComments.indexOf('{', start);
-  for (; end < withoutComments.length; end++) {
-    if (withoutComments[end] === '{') depth++;
-    else if (withoutComments[end] === '}' && --depth === 0) break;
-  }
-  return withoutComments.slice(0, start) + withoutComments.slice(end + 1);
-})();
+// `tokenDefault` and `withoutPhoneDockingBlock` are shared with
+// tokens.contract.test.ts, which builds the same kind of default off a wider
+// corpus -- see `./token-default.ts` for what each does and why. Every
+// `var()` read of a token has to agree on its fallback -- the backdrop is
+// read by two rules -- so disagreement is itself a failure, and so is a token
+// this file only declares, since a declaration would beat a consumer's
+// inherited value and there would be no `var(name, default)` to find.
+const preparedThemeSource = withoutPhoneDockingBlock(withoutComments);
 
-const tokenDefault = (name: string): string => {
-  const reads = new RegExp(`var\\(\\s*${name}\\s*,\\s*`, 'g');
-  const defaults = new Set<string>();
-  for (
-    let read = reads.exec(withoutPhoneDockingBlock);
-    read !== null;
-    read = reads.exec(withoutPhoneDockingBlock)
-  ) {
-    // Scan to the `)` that closes this `var()`, so a nested `rgb(...)` in the
-    // fallback position is taken whole.
-    const start = read.index + read[0].length;
-    let depth = 1;
-    let end = start;
-    for (; end < withoutPhoneDockingBlock.length && depth > 0; end++) {
-      if (withoutPhoneDockingBlock[end] === '(') depth++;
-      else if (withoutPhoneDockingBlock[end] === ')') depth--;
-    }
-    defaults.add(withoutPhoneDockingBlock.slice(start, end - 1).trim());
-  }
-  if (defaults.size !== 1)
-    throw new Error(
-      `${name}: expected one fallback default in theme.css, found ${
-        defaults.size === 0 ? 'none' : [...defaults].join(' / ')
-      }`
-    );
-  return [...defaults][0];
-};
+const tokenDefault = (name: string): string =>
+  tokenDefaultIn(preparedThemeSource, name, 'theme.css');
 
 describe('slider non-text contrast', () => {
   const backdrop = parseColor(tokenDefault('--playdeck-color-backdrop'));
