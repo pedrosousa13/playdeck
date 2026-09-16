@@ -1,5 +1,11 @@
 # Structural CSS ships inline, not as a stylesheet
 
+_Superseded in part by
+[ADR-0008](0008-the-token-table-lives-in-the-readme.md), which moved the
+token table's canonical copy to `packages/react/README.md`. What still holds
+is the three-entry boundary below and calling a token "documented in the
+token table" at all — only the table's own address changes._
+
 Playdeck could ship the geometry its primitives need — `position`, `inset`,
 `z-index`, the media element filling its viewport — as a small `base.css`
 alongside the optional `theme.css`, the way most component libraries do. We set

@@ -13,6 +13,17 @@
  * reason -- a second fallback found, rather than the cross-file disagreement
  * it exists to catch. A source with no such block (any non-CSS text included)
  * is returned unchanged.
+ *
+ * `theme.css` carries a second `@media (max-width: 48rem)` block further down
+ * (the settings/captions menu's phone sheet), which this function's "first"
+ * leaves in place. It needs no matching exclusion: every `var(--playdeck-*, ...)`
+ * read inside it repeats a fallback already used elsewhere in the file (the
+ * `--playdeck-radius-large`/`--playdeck-space-2` reads there match the base
+ * rules'), and its one size override -- `min-block-size: 2.75rem` on
+ * `menu-item`/`menu-radio-item` -- sets that property directly rather than
+ * through `var()`. `tokenDefault`'s `var(--playdeck-NAME, ...)` regex does not
+ * see either kind of declaration, stripped or not, so this block cannot be
+ * the source of the "wrong reason" throw the first block is excluded against.
  */
 export const withoutPhoneDockingBlock = (source: string): string => {
   const query = /@media\s*\(\s*max-width:\s*48rem\s*\)/.exec(source);

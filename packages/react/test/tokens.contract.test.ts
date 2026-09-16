@@ -36,10 +36,11 @@ const reactDir = fileURLToPath(new URL('..', import.meta.url));
 const stripCssComments = (source: string): string =>
   source.replace(/\/\*[\s\S]*?\*\//g, '');
 
-// `//` only outside a `:` (so `https://` in a string is left alone) -- cheap
-// and sufficient here because nothing this scan needs to see sits after a
-// `//` inside a string in these files, verified by the token list this
-// produces matching a manual read of every file it touches.
+// `//` only where it is not immediately preceded by `:`, so `https://` inside
+// a string is left alone. A heuristic, not a full comment parser: it would
+// miss a real `//` comment written directly after a `:` with nothing between
+// them (`label:// note`), a shape this scan does not check for and accepts as
+// a gap rather than parsing JS/TSX properly.
 const stripJsComments = (source: string): string =>
   source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 
@@ -102,18 +103,57 @@ const cssRules = (
   return rules;
 };
 
-const addCssReads = (reads: TokenReads, source: string): void => {
+type SkippedCssRead = {
+  readonly selector: string;
+  readonly tokens: readonly string[];
+};
+
+/**
+ * A rule read at least one `--playdeck-*` token but its selector named no
+ * `data-playdeck-part`, so `addCssReads` had nothing to attribute the read
+ * to and could not add it to `reads`. Pushed to `skipped` rather than
+ * dropped: a rule in this shape is exactly the silent staleness this test
+ * exists to prevent (a token nothing requires to be documented, because
+ * nothing ever counted it as read), so a caller is expected to fail loudly
+ * on a non-empty list rather than let it pass unseen.
+ */
+const addCssReads = (
+  reads: TokenReads,
+  source: string,
+  skipped: SkippedCssRead[]
+): void => {
   for (const { selector, body } of cssRules(stripCssComments(source))) {
     const parts = new Set(
       [...selector.matchAll(partAttrSingle)].map(([, part]) => part)
     );
     if (parts.size === 0 && universalPartAttr.test(selector)) parts.add('*');
-    if (parts.size === 0) continue;
+    if (parts.size === 0) {
+      const tokens = [...body.matchAll(tokenRead)].map(([, token]) => token);
+      if (tokens.length > 0) skipped.push({ selector, tokens });
+      continue;
+    }
     for (const [, token] of body.matchAll(tokenRead)) {
       for (const part of parts) addRead(reads, token, part);
     }
   }
 };
+
+describe('addCssReads surfaces a rule that reads a token but names no part', () => {
+  it('records the rule rather than silently dropping it', () => {
+    const skipped: SkippedCssRead[] = [];
+    addCssReads(
+      new Map(),
+      ':where(.not-a-part) { color: var(--playdeck-color-on-surface, #fff); }',
+      skipped
+    );
+    expect(skipped).toEqual([
+      {
+        selector: ':where(.not-a-part)',
+        tokens: ['--playdeck-color-on-surface']
+      }
+    ]);
+  });
+});
 
 /**
  * `const NAME = { ... }` and `const NAME = '...'` style objects/constants
@@ -124,9 +164,10 @@ const addCssReads = (reads: TokenReads, source: string): void => {
  * whose declaration is a `{ ... }` object or a same-statement value up to its
  * first `;` is captured -- a destructuring `const { a, b } = x` never matches
  * `const\s+IDENT`, and an arrow function whose body reads a token would be
- * over-captured by the same up-to-`;` rule, but no source file in this
- * package has one: every token-reading const here is an object or a plain
- * string.
+ * over-captured by the same up-to-`;` rule and misattributed to whichever
+ * part(s) use its name. This scan does not detect that shape or warn about
+ * it; it is built only for the object- and string-const shapes this
+ * package's primitives use to hold inline styles.
  */
 const styleConsts = (text: string): Map<string, Set<string>> => {
   const consts = new Map<string, Set<string>>();
@@ -249,8 +290,9 @@ const srcTexts = new Map<string, string>(
 );
 
 const actualReads: TokenReads = new Map();
-addCssReads(actualReads, themeSource);
-addCssReads(actualReads, dockedSource);
+const skippedCssReads: SkippedCssRead[] = [];
+addCssReads(actualReads, themeSource, skippedCssReads);
+addCssReads(actualReads, dockedSource, skippedCssReads);
 addTsxReads(actualReads, srcTexts);
 
 // ---------------------------------------------------------------------------
@@ -312,6 +354,13 @@ describe('the token table in packages/react/README.md is the whole contract', ()
       documented.size,
       "No rows were read out of the README's ## Theming table -- the table or its heading changed shape, which says nothing about the contract."
     ).toBeGreaterThan(0);
+  });
+
+  it('names no theme.css/docked.css rule that reads a token but attributes it to no part', () => {
+    expect(
+      skippedCssReads,
+      'A rule read one of these tokens but its selector named no data-playdeck-part, so addCssReads had nothing to attribute the read to and this contract cannot require the token to be documented. Give the rule a part-bearing selector, or fold the exemption into this test by name.'
+    ).toEqual([]);
   });
 
   it('the README documents every token the stylesheets and primitives read', () => {
@@ -384,6 +433,31 @@ const DEFAULT_CHECK_EXCLUDED = new Set([
   '--playdeck-radius',
   '--playdeck-color-hairline'
 ]);
+
+// A `continue` inside the loop below leaves nothing in the test report naming
+// these two tokens or why the Default check skips them -- so each gets its
+// own assertion here rather than only the prose above.
+describe('DEFAULT_CHECK_EXCLUDED names exactly the tokens the Default check cannot run for', () => {
+  it('excludes exactly --playdeck-radius and --playdeck-color-hairline', () => {
+    expect([...DEFAULT_CHECK_EXCLUDED].sort()).toEqual([
+      '--playdeck-color-hairline',
+      '--playdeck-radius'
+    ]);
+  });
+
+  it("--playdeck-radius is excluded because theme.css's own rules disagree with each other on its fallback", () => {
+    expect(() =>
+      tokenDefault(defaultCorpus, '--playdeck-radius', 'theme.css + src')
+    ).toThrow();
+  });
+
+  it('--playdeck-color-hairline is excluded because docked.css gives it two real defaults', () => {
+    const dockedCorpus = stripCssComments(dockedSource);
+    expect(() =>
+      tokenDefault(dockedCorpus, '--playdeck-color-hairline', 'docked.css')
+    ).toThrow();
+  });
+});
 
 // theme.css only, not docked.css: docked.css intentionally gives most colour
 // tokens a second default (light in the cascade's normal position, dark

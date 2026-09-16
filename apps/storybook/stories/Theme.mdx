@@ -93,6 +93,9 @@ it either way.
 ## Tokens
 
 Everything worth changing is a custom property, read as `var(--name, default)`.
+The file declares none of them bar the two activation tokens noted below, which
+is deliberate: a declaration — even on the player element — would beat a value
+you set on an ancestor, because a declaration always wins over inheritance.
 Reading with fallbacks means you can set tokens **anywhere above the player**,
 or on the player itself, and they take effect. It also means nothing leaks into
 the surrounding document.
