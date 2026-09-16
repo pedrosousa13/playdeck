@@ -572,6 +572,25 @@ A CSS custom property a primitive reads inline with a fallback, so a consumer
 can change a value from a stylesheet without importing one.
 _Avoid_: variable, custom property
 
+**Token contract**:
+The versioned, checked table of every `--playdeck-*` token's name, role,
+default and reading parts, in `packages/react/README.md`'s `## Theming`
+section. `test/tokens.contract.test.ts` derives both sides from source —
+`theme.css`, `docked.css` and every primitive in `packages/react/src` — and
+fails on a token missing from the table, a row nothing reads, or a Parts
+column that disagrees with the rules (ADR-0008). Not `theme.css`'s own header
+comment, an older, shorter list nothing checks against either side.
+_Avoid_: token table, theme docs
+
+**Starter theme**:
+`examples/css-starter-theme.css`, a minimal stylesheet a consumer copies
+rather than builds from the token contract by hand — a handful of tokens set
+on the `viewport` part, layered after `theme.css` rather than replacing it.
+Documented in `Theme.mdx`'s own **Starter theme** section and mounted live by
+a story in `theme.stories.tsx`, the same convention every other
+`examples/css-*.css` fixture follows.
+_Avoid_: theme starter, boilerplate theme
+
 **Output**:
 Something the library states about itself for a consumer's CSS or tests to
 read — a part name, a `data-state`, or a measurement written as a CSS custom

@@ -1,0 +1,18 @@
+/* A minimal starter theme: copy this file and change the values that matter
+   to you, or drop it as-is. It does not replace @playdeck/react/theme.css --
+   import that first, the same way you always do, then this file after it. It
+   only overrides a handful of its tokens, set on the viewport part, the
+   ancestor every other part inherits a token from unless something closer
+   overrides it.
+
+   Every name below is a documented token: see the token contract in this
+   package's own README for the full list, each one's default, and which
+   parts read it. */
+
+[data-playdeck-part='viewport'] {
+  --playdeck-color-accent: #7c3aed;
+  --playdeck-color-accent-tint: #c4b5fd;
+  --playdeck-radius: 0.25rem;
+  --playdeck-radius-large: 0.5rem;
+  --playdeck-control-size: 3rem;
+}

@@ -3,8 +3,15 @@ import * as Player from '@playdeck/react';
 import { createPortal } from 'react-dom';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, waitFor } from 'storybook/test';
+import { withCss } from '../.storybook/theme';
 import { assetUrl } from './asset-url';
 import { available, ready } from './support';
+// The file `Theme.mdx`'s **Starter theme** section prints, read as text so
+// `StarterTheme` below mounts the same string -- the convention every other
+// `examples/css-*.css` fixture follows (see play-button.stories.tsx), and the
+// one place this file is ever parsed by a real browser rather than only
+// compared byte-for-byte against the fence that quotes it.
+import starterThemeCss from '../../../examples/css-starter-theme.css?raw';
 
 const viewportStyle = {
   position: 'relative' as const,
@@ -324,6 +331,34 @@ export const ControlSizeFloorHolds: Story = {
     await expect(styles.height).toBe('44px');
     // Tokens that do not fight a locked guarantee still apply.
     await expect(styles.borderRadius).toBe('0px');
+  }
+};
+
+/**
+ * `examples/css-starter-theme.css`, layered after the bundled theme the same
+ * way its own header comment tells a reader to: import `theme.css` first,
+ * then this file, and only a handful of its tokens move. Mounted with
+ * `withCss` rather than the meta-level `globals`, so it stacks on top of the
+ * theme this file already pins on for every other story here -- and, unlike
+ * the fence `Theme.mdx` prints, is actually parsed by a browser.
+ */
+export const StarterTheme: Story = {
+  decorators: [withCss(starterThemeCss)],
+  play: async ({ canvas }) => {
+    const play = await canvas.findByRole('button', { name: 'Play' });
+    const styles = globalThis.getComputedStyle(play);
+    // `--playdeck-control-size: 3rem`, not the theme's own 44px.
+    await expect(styles.width).toBe('48px');
+    await expect(styles.height).toBe('48px');
+    // `--playdeck-radius: 0.25rem`, overriding whichever of the theme's own
+    // two `--playdeck-radius` fallbacks a button-shaped control would
+    // otherwise have read.
+    await expect(styles.borderRadius).toBe('4px');
+
+    const controls = await canvas.findByRole('group', {
+      name: 'Video player controls'
+    });
+    await expectControlsFit(controls);
   }
 };
 
