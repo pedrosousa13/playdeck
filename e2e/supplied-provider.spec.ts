@@ -67,6 +67,16 @@ test('plays, pauses, and ends a supplied-kind source through Player.Root', async
   await expect(media(page)).toHaveJSProperty('tagName', 'DIV');
   await expect(media(page).locator('video')).toHaveCount(1);
 
+  // `detectExampleFile` reads the clip id off the story's source string
+  // (`https://files.example/clips/tracer` -> `tracer`) and the factory
+  // writes it onto the mounted `<video>` as `dataset.exampleFileClipId` --
+  // this confirms the round trip the comment beside that write claims a
+  // reader or a test can check.
+  await expect(media(page).locator('video')).toHaveAttribute(
+    'data-example-file-clip-id',
+    'tracer'
+  );
+
   await play.click();
   await expect(play).toHaveAttribute('data-state', 'playing');
 

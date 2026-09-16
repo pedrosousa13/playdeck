@@ -478,9 +478,11 @@ of the plumbing above changes to admit it. `clipId` only has to survive the
 round trip from `detect` back out to the factory: which file actually plays
 is `providerOptions`' own `src`, the same way `PlayerProviderOptions.hls`'s
 `build` carries a per-provider choice no source string could. Every
-capability this adapter does not implement is reported `unavailable` with the
-`provider` reason, honestly, rather than left for a consumer to discover by
-calling a command that silently does nothing.
+capability this adapter does not implement is reported `unavailable` --
+`provider` for what the adapter itself leaves out, `source` for
+`providerPoster`, since a raw file carries no poster to read -- rather than
+left for a consumer to discover by calling a command that silently does
+nothing.
 
 <!-- example:provider-setup-file-adapter -->
 
@@ -490,6 +492,7 @@ import type {
   Availability,
   CommandResult,
   PlayerCapabilities,
+  PlayerErrorCategory,
   PlayerProvider,
   ProviderAdapter,
   ProviderStatePatch
@@ -539,9 +542,15 @@ export const detectExampleFile = (
 // `provider` reason rather than left off `PlayerCapabilities` -- there is no
 // way to leave a field off that type, and there would be no honesty in
 // picking a reason that named the source or the browser for a limit that is
-// this adapter's own. `available` is reserved for the handful of capabilities
-// below actually backed by a command.
-const unimplemented: Availability = { status: 'unavailable', reason: 'provider' };
+// this adapter's own. `available` is reserved for a capability this
+// adapter's own behaviour makes true outright rather than one any command
+// backs -- see `customControls` below, true because nothing about this
+// adapter's own behaviour competes with it, not because a command
+// implements it.
+const unimplemented: Availability = {
+  status: 'unavailable',
+  reason: 'provider'
+};
 
 const capabilities: PlayerCapabilities = {
   seek: unimplemented,
@@ -607,9 +616,7 @@ export const createExampleFileAdapter: ProviderAdapterFactory<
   video.append(sourceElement);
   mount.append(video);
 
-  const listeners = new Set<
-    (patch: ProviderStatePatch) => void
-  >();
+  const listeners = new Set<(patch: ProviderStatePatch) => void>();
   const emit = (patch: ProviderStatePatch): void => {
     listeners.forEach((listener) => notifySafely(listener, patch));
   };
@@ -627,16 +634,55 @@ export const createExampleFileAdapter: ProviderAdapterFactory<
   const onPlaying = (): void => emit({ playback: 'playing' });
   const onPause = (): void => emit({ playback: 'paused' });
   const onEnded = (): void => emit({ playback: 'ended' });
+  // Without this, a 404 or a decode failure leaves the player at
+  // `lifecycle: 'loading'` forever -- the element fires no other event to
+  // move it -- with no `PlayerState.error` for a consumer to read. Mirrors
+  // `@playdeck/provider-native`'s own `mediaError`: `MediaError.code` names
+  // which of the four DOM categories applies, `network` recoverable and the
+  // rest not, since only a network failure stands a chance of succeeding on
+  // a retry.
+  const onError = (): void => {
+    const code = video.error?.code;
+    const category: PlayerErrorCategory =
+      code === 2
+        ? 'network'
+        : code === 3
+          ? 'decode'
+          : code === 4
+            ? 'source'
+            : 'provider';
+    emit({
+      lifecycle: 'error',
+      activation: 'error',
+      playback: 'paused',
+      error: {
+        category,
+        fatal: true,
+        recoverable: category === 'network',
+        message:
+          video.error?.message || 'The media element could not load the source.'
+      }
+    });
+  };
 
   const play = async (): Promise<CommandResult> => {
     try {
       await video.play();
       return { ok: true };
-    } catch {
-      // A browser's autoplay policy is the one realistic way `play()`
-      // rejects here, and `'blocked'` is this library's name for exactly
-      // that refusal.
-      return { ok: false, reason: 'blocked' };
+    } catch (cause) {
+      // A browser's autoplay policy is one realistic way `play()` rejects
+      // here, but not the only one: the `<source>` above carries no `type`
+      // and its `src` is whatever URL a consumer's `providerOptions` names,
+      // so a 404 or a format the browser cannot decode is just as real.
+      // `NotAllowedError` is the policy refusal specifically; everything
+      // else is reported as this library's own catch-all instead of
+      // guessed to be `'blocked'`.
+      const isPolicyRefusal =
+        cause instanceof DOMException && cause.name === 'NotAllowedError';
+      return {
+        ok: false,
+        reason: isPolicyRefusal ? 'blocked' : 'provider-error'
+      };
     }
   };
   const pause = async (): Promise<CommandResult> => {
@@ -663,6 +709,7 @@ export const createExampleFileAdapter: ProviderAdapterFactory<
       video.addEventListener('playing', onPlaying);
       video.addEventListener('pause', onPause);
       video.addEventListener('ended', onEnded);
+      video.addEventListener('error', onError);
       onLoadedMetadata();
     },
     load: () => {
@@ -674,6 +721,7 @@ export const createExampleFileAdapter: ProviderAdapterFactory<
       video.removeEventListener('playing', onPlaying);
       video.removeEventListener('pause', onPause);
       video.removeEventListener('ended', onEnded);
+      video.removeEventListener('error', onError);
       if (!video.paused) {
         try {
           video.pause();
