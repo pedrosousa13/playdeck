@@ -1,6 +1,7 @@
 import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { acmeProvider } from './supplied-provider-fixture';
+import { exampleFileProvider } from '../../../examples/provider-setup-file-adapter';
+import { assetUrl } from './asset-url';
 
 declare global {
   interface Window {
@@ -10,19 +11,29 @@ declare global {
 
 // Drives a full playback flow through a source kind this package ships no
 // loader for -- `Player.Root`'s `providers` prop, resolved by
-// `./supplied-provider-fixture`'s test-local "acme" registration. `loading:
-// 'eager'` and no `Player.ActivationButton`, deliberately: `e2e/native-mp4.spec.ts`
-// already covers the pre-ready refusal window that overlay exists for, and
-// this fixture's own job is the seam a supplied kind reaches once attached --
-// play, pause, ended -- not activation timing a second time.
+// `examples/provider-setup-file-adapter.tsx`'s real, working "example-file"
+// registration. `loading: 'eager'` and no `Player.ActivationButton`,
+// deliberately: `e2e/native-mp4.spec.ts` already covers the pre-ready
+// refusal window that overlay exists for, and this fixture's own job is the
+// seam a supplied kind reaches once attached -- play, pause, ended -- not
+// activation timing a second time.
+//
+// This is the workbench half of `examples/provider-setup-file-adapter.tsx`,
+// the same split `archetype-streaming.stories.tsx` uses for
+// `examples/archetype-streaming-service.tsx`: the story imports the real
+// adapter rather than rebuilding a second copy of it, and points it at the
+// workbench's own local clip through `providerOptions` -- the one setting
+// `examples/`'s own doc snippet cannot know, because it has no base path to
+// resolve `assetUrl` against.
 const SuppliedProviderFixture = () => (
   <Player.Root
     loading="eager"
-    providers={{ acme: acmeProvider }}
+    providerOptions={{ 'example-file': { src: assetUrl('tracer.mp4') } }}
+    providers={{ 'example-file': exampleFileProvider }}
     ref={(handle) => {
       window.playdeckHandle = handle ?? undefined;
     }}
-    source="https://acme.example/videos/tracer"
+    source="https://files.example/clips/tracer"
   >
     <Player.Viewport
       data-testid="viewport"
@@ -53,4 +64,4 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-export const AcmeClip: Story = {};
+export const ExampleFileClip: Story = {};

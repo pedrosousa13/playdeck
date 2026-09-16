@@ -40,19 +40,23 @@
     { "path": "../../packages/provider-native" },
     { "path": "../../packages/react" }
   ],
-  // The two archetype compositions are named one by one rather than swept in
-  // with a glob. Both surfaces mount the same file — Storybook as a story, the
-  // site as an island — and the story here imports them, so this project has to
-  // list them or `tsc` refuses a file it is compiling but was not told about.
-  // They are also members of the `examples` project, which checks them against
-  // the same declarations; being in two projects costs a second check and
-  // nothing else, and it is what keeps `examples/` the single source.
+  // The examples this project's own stories import are named one by one
+  // rather than swept in with a glob. The two archetype compositions mount
+  // the same file on both surfaces — Storybook as a story, the site as an
+  // island — and `provider-setup-file-adapter.tsx` is the real adapter
+  // `supplied-provider.stories.tsx` drives; a story importing any of them
+  // means this project has to list it or `tsc` refuses a file it is
+  // compiling but was not told about. Each is also a member of the
+  // `examples` project, which checks it against the same declarations;
+  // being in two projects costs a second check and nothing else, and it is
+  // what keeps `examples/` the single source.
   "include": [
     ".storybook/**/*",
     "stories/**/*",
     "vitest.config.ts",
     "../../examples/archetype-streaming-service.tsx",
     "../../examples/archetype-course-platform.tsx",
+    "../../examples/provider-setup-file-adapter.tsx",
     // `seek-slider-order.contract.test.ts` imports `BenchIsland.tsx` (via the
     // `@/*` mapping above), and project references can't stand in for the
     // rest of that module's transitive `@/...` imports here the way they do
