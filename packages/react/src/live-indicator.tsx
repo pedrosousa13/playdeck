@@ -36,13 +36,10 @@ export type LiveIndicatorProps = ComponentPropsWithRef<'button'>;
  * not use the uniform gate should find this paragraph beside it, not read it
  * as drift and "fix" it.
  *
- * CORRECTION to an earlier version of this docstring: it used to say "if
- * live-edge seeking is ever wired onto this control, it gains an `onClick`
- * and sheds `disabled`", framing the disabled badge as a stand-in for a
- * not-yet-built feature that `onClick` would replace outright. Seeking is now
- * wired (above), and the two behaviours coexist rather than one replacing the
- * other: `available` gets the `onClick` and sheds `disabled`; `unavailable`
- * keeps `disabled`, permanently, for the reason above -- not provisionally.
+ * The `disabled` badge is not a stand-in for a feature that is missing: the
+ * two behaviours coexist. `available` gets the `onClick` and sheds
+ * `disabled`; `unavailable` keeps `disabled` permanently, for the reason
+ * above.
  */
 export const LiveIndicator = ({
   'aria-label': ariaLabel,

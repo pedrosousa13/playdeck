@@ -88,7 +88,11 @@ as the closed union `Availability` and carried per capability on
 part of the answer and not decoration — `unknown` and `unavailable` are only
 honest when they say why, which is what lets a control explain itself rather than
 merely vanish. A control whose command the active provider cannot honour renders
-nothing rather than rendering disabled.
+nothing rather than rendering disabled. One named exception: `LiveIndicator` is
+an indicator rather than a control — it reports that the stream is live, it
+offers no command — so where `liveEdge` is unavailable it stays mounted as a
+non-interactive badge. Hiding it would suppress something true because a
+different capability is missing.
 
 The marketing site draws the same three states as its own colour roles
 (`--color-available`, `--color-unknown`, `--color-unavailable`) and binds them:
