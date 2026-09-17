@@ -200,7 +200,19 @@ export type PlayerLiveState = {
 export type PlayerRemotePlaybackState =
   'connecting' | 'connected' | 'disconnected' | null;
 
-export type PlayerProvider = 'native' | 'hls' | 'youtube' | 'vimeo' | 'wistia';
+// Closed over the five built-in kinds by default (`Extra` defaults to
+// `never`, which a union absorbs without contributing a member), mirroring
+// `PlayerSource`'s own widening below rather than inventing a second shape --
+// every existing bare usage, `PlayerState.provider` and `PlayerEventFor.provider`
+// among them, keeps typechecking against exactly the five-member union it
+// always did. `Extra` is `@playdeck/react`'s own seam again: `ProviderAdapter`
+// opens through it too, so a supplied kind's own factory
+// (`packages/react/src/provider-loaders.ts`'s `ProviderAdapterFactory`) can
+// report its own identity on `ProviderAdapter.provider` the same way it
+// already writes its own `PlayerSource` shape -- a supplied provider needs
+// both types open, which is why they are widened the same way.
+export type PlayerProvider<Extra = never> =
+  'native' | 'hls' | 'youtube' | 'vimeo' | 'wistia' | Extra;
 
 export type HlsEngine = 'native' | 'hls.js';
 
@@ -635,8 +647,12 @@ export type SourceDetectionFailure = {
 export type SourceDetectionResult =
   SourceDetectionSuccess | SourceDetectionFailure;
 
-export type ProviderAdapter = {
-  provider: PlayerProvider;
+// `Extra` mirrors `PlayerProvider`'s own parameter directly -- a supplied
+// kind's own adapter factory is what actually produces this value, so this is
+// the type that has to open for `provider:` below to hold a supplied kind's
+// identity without a cast at the point the factory builds one.
+export type ProviderAdapter<Extra = never> = {
+  provider: PlayerProvider<Extra>;
   attach: () => void | Promise<void>;
   load: () => void | Promise<void>;
   destroy: () => void | Promise<void>;

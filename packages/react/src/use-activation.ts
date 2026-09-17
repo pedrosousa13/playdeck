@@ -472,7 +472,12 @@ const providerError = (cause: unknown, type: ResolvedPlayerSource['type']) => ({
   message: `Unable to load the ${PROVIDER_LABELS[type]} provider. Playdeck cannot say why: the rejection it caught is on this error's cause. See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for what to check.`
 });
 
-const destroyStale = (adapter: ProviderAdapter): void => {
+// `ProviderAdapter<string>`, not the bare `ProviderAdapter`: the adapter this
+// destroys is whatever `loadProvider` resolved to, which is honestly typed
+// that wide (`provider-loaders.ts`'s own `loadProvider` doc comment) since a
+// supplied kind's own factory can report any identity. Destruction never
+// reads `provider` at all, so the wider type costs this function nothing.
+const destroyStale = (adapter: ProviderAdapter<string>): void => {
   try {
     void Promise.resolve(adapter.destroy()).catch(() => undefined);
   } catch {
@@ -1155,7 +1160,15 @@ export const useActivation = (
         const queuePlay = session.current.queuedPlay;
         session.current.queuedPlay = false;
         if (!queuePlay) {
-          controller.setProvider(adapter);
+          // `PlayerController.setProvider` (`@playdeck/core`) is typed
+          // against the bare, five-only `ProviderAdapter` -- core has no
+          // notion of a supplied kind, and never reads `provider` as
+          // anything but an opaque value to echo onto `PlayerState.provider`.
+          // The cast is exactly as safe as `provider-loaders.ts`'s own
+          // `const builtin = source as ResolvedPlayerSource`: it narrows a
+          // type that is honestly wider back to what this boundary's public
+          // signature promises, without changing what value crosses it.
+          controller.setProvider(adapter as ProviderAdapter);
           return;
         }
         // A queued user play has to be issued after this provider has loaded.
@@ -1189,6 +1202,7 @@ export const useActivation = (
           dispose();
           void controller.playWithOrigin('user');
         };
+        // Same cast, same reason, as the other `setProvider` call above.
         controller.setProvider({
           ...adapter,
           load: () => {
@@ -1204,7 +1218,7 @@ export const useActivation = (
             playWhenLoaded();
             return result;
           }
-        });
+        } as ProviderAdapter);
         subscription.unsubscribe = controller.subscribe((state) => {
           if (disposed) return;
           if (!isCurrentLoad() || state.activation === 'error') {

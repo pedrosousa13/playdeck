@@ -155,6 +155,15 @@ export type SuppliedProviderSource = { readonly type: string };
 // hands back, is the call that actually builds the adapter. `load()` is
 // "lazy" because calling it is what performs a supplied kind's own dynamic
 // import; calling what it resolves to is what performs the build.
+//
+// The factory's return type is `ProviderAdapter<Source['type']>`, not the
+// bare `ProviderAdapter` every built-in branch below returns: `Source['type']`
+// is the same literal a registration's own `Source` already carries (the
+// field `loadProvider` dispatches on), so instantiating `PlayerProvider`'s
+// `Extra` parameter with it is what lets the factory write `provider:
+// 'example-file'` (say) directly on the adapter it builds, with no cast --
+// `examples/provider-setup-file-adapter.tsx`'s `createExampleFileAdapter` is
+// exactly this.
 export type ProviderAdapterFactory<
   Source extends SuppliedProviderSource,
   Options extends Record<string, PrimitiveOptionValue> = Record<string, never>
@@ -162,7 +171,7 @@ export type ProviderAdapterFactory<
   media: PlayerMediaMount | null,
   source: Source,
   options?: Options
-) => ProviderAdapter | Promise<ProviderAdapter>;
+) => ProviderAdapter<Source['type']> | Promise<ProviderAdapter<Source['type']>>;
 
 /**
  * One entry of `Root`'s `providers` prop, keyed by the source-kind name it
@@ -317,13 +326,22 @@ export type ProviderLoaderRequest = {
   readonly providers?: PlayerProviders;
 };
 
+// The return type is `ProviderAdapter<SuppliedProviderSource['type']>`
+// (`SuppliedProviderSource['type']` is `string`), not the bare `ProviderAdapter`
+// every one of the five built-in branches below returns on its own: a
+// registration's own factory is free to report any identity, so this
+// function's own public contract has to admit that width honestly rather
+// than narrowing it back with a cast at the one return statement that
+// actually needs it.
 export const loadProvider = async ({
   media,
   nativeOptions,
   providerOptions,
   providers,
   source
-}: ProviderLoaderRequest): Promise<ProviderAdapter> => {
+}: ProviderLoaderRequest): Promise<
+  ProviderAdapter<SuppliedProviderSource['type']>
+> => {
   // The five built-in branches below are typechecked against the plain,
   // non-generic union `ResolvedPlayerSource` -- what `source` was typed as
   // before `providers` existed. `ResolvedPlayerSource<SuppliedProviderSource>`
