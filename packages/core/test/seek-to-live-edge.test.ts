@@ -42,7 +42,8 @@ const capabilitiesWith = (
   pictureInPicture: { status: 'available' },
   airPlay: { status: 'unavailable', reason: 'browser' },
   customControls: { status: 'available' },
-  providerPoster: { status: 'unavailable', reason: 'source' }
+  providerPoster: { status: 'unavailable', reason: 'source' },
+  remotePlayback: { status: 'unavailable', reason: 'browser' }
 });
 
 test('seekToLiveEdge reports not-ready before a provider is installed', async () => {
