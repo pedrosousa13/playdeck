@@ -15,6 +15,11 @@ and provider contract, with nothing rendered for you.
 pnpm add @playdeck/core
 ```
 
+This package imports no React API and has no React dependency of any kind —
+the framework-free claim above holds at the manifest level too. If you do want
+the React primitives on top of it, `@playdeck/react`'s peer range is
+`>=19 <20`: React 19 only.
+
 ## What it gives you
 
 <!-- example:core-quickstart -->

@@ -7,10 +7,14 @@ progressive MP4/WebM, and HLS in browsers that play it natively (Safari, iOS).
 pnpm add @playdeck/provider-native
 ```
 
+Driving the `<video>`/`<audio>` element is plain DOM, so this package has no
+React dependency of its own; see "Without React" below for driving a
+`PlayerController` yourself. `@playdeck/react`, which supplies the primitives
+above, is React 19 only.
+
 `@playdeck/react` loads this for you when the source resolves to `video` — an
 `.mp4` or `.webm` path, or an explicit `{ type: 'video' }` source; see
 [Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md#the-other-three-providers).
-See "Without React" below for driving a `PlayerController` yourself.
 
 <!-- example:provider-setup-native -->
 

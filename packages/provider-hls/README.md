@@ -9,6 +9,11 @@ reimplementing it.
 pnpm add @playdeck/provider-hls
 ```
 
+This package has no React dependency of its own — the HLS engine and its
+native fallback are driven through a `PlayerController`, as in "Without React"
+below. Where you do pair it with `@playdeck/react`'s primitives, that
+package's peer range is React 19 only.
+
 `@playdeck/react` loads this for you when the source resolves to `hls` — an
 `.m3u8` path, or an explicit `{ type: 'hls' }` source; see
 [Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md#the-other-three-providers). hls.js

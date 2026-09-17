@@ -14,9 +14,11 @@ regardless of whether a seek-to-edge command exists. See the docstring above
 pnpm add @playdeck/react
 ```
 
-React 19 is a peer dependency. Provider packages are pulled in as dependencies
-but loaded lazily — a consumer playing only MP4 ships no YouTube, Vimeo, Wistia
-or hls.js code in its initial graph, and makes no provider network requests.
+React 19 is a peer dependency, and only React 19 — the range is `>=19 <20`, so
+a React 18 or React 20 project cannot install this package. Provider packages
+are pulled in as dependencies but loaded lazily — a consumer playing only MP4
+ships no YouTube, Vimeo, Wistia or hls.js code in its initial graph, and makes
+no provider network requests.
 
 This package's entry carries a `'use client'` directive, so a React Server
 Component can import these primitives and render them directly, with no wrapper
