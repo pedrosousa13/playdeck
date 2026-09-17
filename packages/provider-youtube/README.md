@@ -175,6 +175,14 @@ page loaded, not as a contract Playdeck controls.
   and there is no live-stream fixture in this repo to verify it against, so
   taking it would trade an honest gap for a claim nobody here can check. Pinned
   by "pins the liveness gap" in `test/index.test.ts` (#187).
+- **`liveEdge` is `unavailable` / `provider`.** `getDuration()`,
+  `getCurrentTime()` and `getVideoLoadedFraction()` are the IFrame Player
+  API's whole surface here — no seekable-range accessor at all, so a DVR
+  window's start is not expressible and neither is an edge to seek to.
+  `getDuration()` is not a stand-in for one either: on a 24/7 DVR stream it
+  answered a fixed value for 150 seconds while the playhead advanced (see the
+  `PLAYING` branch of `onPlayerStateChange` in `src/playback.ts`, and #403), so
+  it is a snapshot rather than a value tracking the edge.
 - **`startTime` and `endTime` are enforced by this adapter, not by YouTube.**
   The `start` player var is written as a load hint so the embed does not load
   from zero, but it is whole-second only, so the adapter seeks to the exact

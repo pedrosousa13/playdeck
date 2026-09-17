@@ -230,6 +230,13 @@ origins list and what a page's CSP has to allow.
   or the player a `retry()` replaces. Each tick goes through the same equality
   guard as every other recompute, so a paused player that has not moved relative
   to the edge publishes nothing at all.
+- **`liveEdge` is `unavailable` / `provider`.** `PublicApi` has no seekable-range
+  accessor and no dedicated live-edge member. `duration()` is what the at-edge
+  recompute above already reuses as the moving edge for its own tolerance
+  check, purely because it is the closest thing available — not because it is
+  an actionable seek target this adapter is prepared to land a viewer on. With
+  nothing to build a real one from, this reports the same verdict as every
+  other surface `PublicApi` never grew.
 - **`fullscreen` is `available`.** `PublicApi.requestFullscreen()` and
   `cancelFullscreen()` drive the player's own fullscreen element, and its
   `enter-fullscreen` / `cancel-fullscreen` events confirm the change.

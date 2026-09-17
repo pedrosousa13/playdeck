@@ -4,6 +4,11 @@ Headless, composable React 19 media-player primitives with one API across
 native MP4/WebM, HLS, YouTube, Vimeo and Wistia. No CSS is imported by the
 primitives, and every control is capability-gated: a control whose command the
 active provider cannot honour renders nothing rather than rendering disabled.
+One deliberate, named exception: `LiveIndicator` is an indicator rather than a
+control, so where its `liveEdge` command is unavailable it stays mounted as a
+non-interactive `disabled` badge instead of vanishing — being live is true
+regardless of whether a seek-to-edge command exists. See the docstring above
+`LiveIndicator` for the reasoning.
 
 ```sh
 pnpm add @playdeck/react
@@ -330,9 +335,10 @@ also in `@playdeck/core`.
 `LoadingIndicator`, `ErrorDisplay`, `Captions`, `Gestures`, `LiveIndicator`.
 
 Each overlay renders only when its own state calls for it — nothing is drawn
-disabled, with one exception: `LiveIndicator` renders as a permanently
-disabled button whenever it renders at all, because seeking to the live edge
-is not built yet (see the comment in the example below):
+disabled, with one exception: `LiveIndicator` stays mounted where its
+`liveEdge` capability is unavailable, as a disabled badge rather than an
+active button, for the reason given beside the capability-gating rule above
+(see the comment in the example below):
 
 <!-- example:react-overlays -->
 
@@ -353,9 +359,10 @@ export const Overlays = () => (
     <Player.LoadingIndicator />
     <Player.Captions />
     {/* Renders only on a live source -- nothing while `state.live` is null.
-        The one exception to "no disabled-looking placeholders" above:
-        whenever it does render, it renders as a disabled button, because
-        seeking to the live edge is not built yet. */}
+        The one exception to "no disabled-looking placeholders" above: where
+        the provider cannot seek to the live edge it stays mounted as a
+        disabled badge, because being live is true whether or not that
+        command exists. Where the provider can, it is an active button. */}
     <Player.LiveIndicator />
     <Player.Gestures
       seekOffset={10}
@@ -485,6 +492,13 @@ values are documented in the
 long as any remainder is left — `-1:23`, and still `-0:00` through the last
 second before the end. Only an exhausted remainder reads `0:00`. Each instance
 carries `data-time-type`, so the three are styleable apart.
+
+On a live source, `current` reports distance from the live edge rather than
+elapsed time: a negative offset while playback is behind it — `-0:42` — and
+the word `LIVE` once it is within the edge's tolerance. `liveLabel` sets that
+word, for a consumer translating the interface; it defaults to `LIVE`.
+`duration` has no total to report on a live source and so renders no time at
+all, leaving the `data-state="untimed"` hook below in its place.
 
 `data-state="untimed"` marks a `Time` on a source with no duration to measure
 against — a live stream, or one whose duration has not arrived yet. It marks all

@@ -103,7 +103,7 @@ out when a command will land; `activation` is not a substitute for either.
 | `textTrackLabel`             | The label a provider should publish for a track, given its own label and language.                             |
 | `notifySafely`               | Notifies one listener so that its throw neither abandons the emit nor escapes into the caller.                 |
 | `createTimeBoundary`         | The sanitised `[startTime, endTime]` window a provider enforces, and every question it answers.                |
-| `deriveLiveState`            | The `isLive` / `atLiveEdge` derivation every adapter publishes `live` from.                                    |
+| `deriveLiveState`            | The `isLive` / `atLiveEdge` / `offsetFromEdge` derivation every adapter publishes `live` from.                 |
 | `liveStateEqual`             | Whether two live states say the same thing — what an adapter checks before publishing a change.                |
 | `deriveChapters`             | The published `Chapter` collection, given what a provider reports and the media duration — end times included. |
 | `chaptersEqual`              | Whether two chapter collections say the same thing — what an adapter checks before publishing a change.        |
@@ -617,9 +617,14 @@ export const live = deriveLiveState({
   currentTime: 3594
 });
 
-// -> { isLive: true, atLiveEdge: true }. `null` means "not live, or not yet
-// known" — a control should not claim either until it is.
+// -> { isLive: true, atLiveEdge: true, offsetFromEdge: 6 }. `null` means "not
+// live, or not yet known" — a control should not claim either until it is.
 export const atEdge = live?.atLiveEdge ?? false;
+
+// Whole seconds, `0` at or ahead of the edge — the resolution `Time` renders
+// at, and why `liveStateEqual` compares it: an unrounded float would differ
+// on essentially every `timeupdate` and republish `live` many times a second.
+export const behindBy = live?.offsetFromEdge ?? 0;
 
 // Omitting `atEdgeThreshold` uses the shared tolerance every adapter uses.
 // Pass one only to answer a different question than the players do.
@@ -640,6 +645,21 @@ export const changed = !liveStateEqual(live, tight);
 Providers that cannot determine liveness leave `live` as `null`. That is not
 "this is on-demand" — it is "nobody has said", and a control should render
 neither claim until one arrives.
+
+## Live edge
+
+`capabilities.liveEdge` says whether the active provider can report a live
+edge to seek to at all, told apart the same way `capabilities.chapters` is:
+`unavailable` with `provider` means the provider has no such surface for any
+source, and `unavailable` with `source` means this particular source is not
+live. `PlayerController.seekToLiveEdge()` is the command it gates: it refuses
+with `not-ready` — the same `RefusedCommand` shape every pre-attach refusal
+uses — whenever there is no provider, `capabilities.liveEdge` is not
+`available`, or the attached adapter implements no `seekToLiveEdge` at all.
+Where the provider can answer, it lands on the provider's own notion of the
+edge: `@playdeck/provider-hls`'s hls.js engine seeks to hls.js's own
+`liveSyncPosition`, deliberately behind the raw seekable end, rather than a
+position this library would compute itself.
 
 ## Chapters
 

@@ -66,7 +66,11 @@ test('publishes live state from an endless duration and a seekable window', asyn
 
   await provider.attach();
 
-  expect(lastLive(patches)).toEqual({ isLive: true, atLiveEdge: false });
+  expect(lastLive(patches)).toEqual({
+    isLive: true,
+    atLiveEdge: false,
+    offsetFromEdge: 30
+  });
 });
 
 test('never claims liveness for a finite source, even at a URL that says live', async () => {
@@ -99,12 +103,20 @@ test('recomputes the at-edge flag as the playhead moves', async () => {
   const { media, patches, provider } = collect(timeline);
 
   await provider.attach();
-  expect(lastLive(patches)).toEqual({ isLive: true, atLiveEdge: false });
+  expect(lastLive(patches)).toEqual({
+    isLive: true,
+    atLiveEdge: false,
+    offsetFromEdge: 30
+  });
 
   timeline.currentTime = 28;
   media.dispatchEvent(new Event('timeupdate'));
 
-  expect(lastLive(patches)).toEqual({ isLive: true, atLiveEdge: true });
+  expect(lastLive(patches)).toEqual({
+    isLive: true,
+    atLiveEdge: true,
+    offsetFromEdge: 2
+  });
 });
 
 test('recomputes the at-edge flag as the seekable window moves', async () => {
@@ -116,12 +128,20 @@ test('recomputes the at-edge flag as the seekable window moves', async () => {
   const { media, patches, provider } = collect(timeline);
 
   await provider.attach();
-  expect(lastLive(patches)).toEqual({ isLive: true, atLiveEdge: true });
+  expect(lastLive(patches)).toEqual({
+    isLive: true,
+    atLiveEdge: true,
+    offsetFromEdge: 2
+  });
 
   timeline.seekable = [[0, 90]];
   media.dispatchEvent(new Event('progress'));
 
-  expect(lastLive(patches)).toEqual({ isLive: true, atLiveEdge: false });
+  expect(lastLive(patches)).toEqual({
+    isLive: true,
+    atLiveEdge: false,
+    offsetFromEdge: 62
+  });
 });
 
 test('carries no live key while the derived value is unchanged', async () => {
@@ -134,7 +154,11 @@ test('carries no live key while the derived value is unchanged', async () => {
 
   await provider.attach();
   const before = patches.length;
-  timeline.currentTime = 1;
+  // 0.4s, not a whole second: `offsetFromEdge` rounds to the same value (30)
+  // either side of this move, so the derived `live` value is genuinely
+  // unchanged. A whole-second move changes it by design, which would make
+  // this test assert the wrong thing.
+  timeline.currentTime = 0.4;
   media.dispatchEvent(new Event('timeupdate'));
   media.dispatchEvent(new Event('progress'));
   media.dispatchEvent(new Event('canplay'));
@@ -143,10 +167,10 @@ test('carries no live key while the derived value is unchanged', async () => {
   // The unchanged events still publish what did change, and nothing more:
   // no standalone patch is emitted for a live value that stayed put.
   expect(patches.slice(before)).toEqual([
-    { currentTime: 1 },
+    { currentTime: 0.4 },
     { buffered: [], seekable: [{ start: 0, end: 30 }] },
     { buffering: false },
-    expect.objectContaining({ currentTime: 1 })
+    expect.objectContaining({ currentTime: 0.4 })
   ]);
 });
 
@@ -167,7 +191,11 @@ test('carries no live key when a retry reloads an unchanged source', async () =>
   // A retry republishes the media state, but the liveness it derives is the one
   // already published, so no second `live` patch escapes.
   expect(livePatches(patches)).toHaveLength(1);
-  expect(lastLive(patches)).toEqual({ isLive: true, atLiveEdge: false });
+  expect(lastLive(patches)).toEqual({
+    isLive: true,
+    atLiveEdge: false,
+    offsetFromEdge: 30
+  });
 });
 
 test('publishes live again when a retry reloads a changed source', async () => {
@@ -179,7 +207,11 @@ test('publishes live again when a retry reloads a changed source', async () => {
   const { media, patches, provider } = collect(timeline);
 
   await provider.attach();
-  expect(lastLive(patches)).toEqual({ isLive: true, atLiveEdge: false });
+  expect(lastLive(patches)).toEqual({
+    isLive: true,
+    atLiveEdge: false,
+    offsetFromEdge: 30
+  });
 
   await provider.retry?.();
   // The reloaded source comes back with a window whose end is within the
@@ -188,5 +220,9 @@ test('publishes live again when a retry reloads a changed source', async () => {
   media.dispatchEvent(new Event('loadedmetadata'));
 
   expect(livePatches(patches)).toHaveLength(2);
-  expect(lastLive(patches)).toEqual({ isLive: true, atLiveEdge: true });
+  expect(lastLive(patches)).toEqual({
+    isLive: true,
+    atLiveEdge: true,
+    offsetFromEdge: 5
+  });
 });

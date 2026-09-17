@@ -50,13 +50,14 @@ export const deriveLiveState = (
     ? (input.liveEdge as number)
     : seekableEnd;
   if (!Number.isFinite(edge) || !Number.isFinite(input.currentTime)) {
-    return Object.freeze({ isLive: true, atLiveEdge: true });
+    return Object.freeze({ isLive: true, atLiveEdge: true, offsetFromEdge: 0 });
   }
   const distance = Math.max(0, edge - input.currentTime);
   return Object.freeze({
     isLive: true,
     atLiveEdge:
-      distance <= (input.atEdgeThreshold ?? LIVE_EDGE_THRESHOLD_SECONDS)
+      distance <= (input.atEdgeThreshold ?? LIVE_EDGE_THRESHOLD_SECONDS),
+    offsetFromEdge: Math.round(distance)
   });
 };
 
@@ -68,4 +69,5 @@ export const liveStateEqual = (
   (a !== null &&
     b !== null &&
     a.isLive === b.isLive &&
-    a.atLiveEdge === b.atLiveEdge);
+    a.atLiveEdge === b.atLiveEdge &&
+    a.offsetFromEdge === b.offsetFromEdge);

@@ -88,7 +88,11 @@ as the closed union `Availability` and carried per capability on
 part of the answer and not decoration — `unknown` and `unavailable` are only
 honest when they say why, which is what lets a control explain itself rather than
 merely vanish. A control whose command the active provider cannot honour renders
-nothing rather than rendering disabled.
+nothing rather than rendering disabled. One named exception: `LiveIndicator` is
+an indicator rather than a control — it reports that the stream is live, it
+offers no command — so where `liveEdge` is unavailable it stays mounted as a
+non-interactive badge. Hiding it would suppress something true because a
+different capability is missing.
 
 The marketing site draws the same three states as its own colour roles
 (`--color-available`, `--color-unknown`, `--color-unavailable`) and binds them:
@@ -298,6 +302,23 @@ a point, because an engine carries its ranges across one and they stay true. A
 window that merely moves — a DVR window dropping ranges off its start — is
 non-empty at every step and is published like any other reading.
 _Avoid_: buffer, buffer level, download progress
+
+**Live edge**:
+The provider's own answer to where live playback is happening right now,
+published on `PlayerLiveState` as `offsetFromEdge` — how far behind it
+playback is, in whole seconds, `0` at or ahead of it — and gated by its own
+capability, `capabilities.liveEdge`, told apart the way `chapters`'s is: a
+provider that cannot report one at all answers `unavailable`/`provider`, a
+source that simply is not live answers `unavailable`/`source`. Whole seconds
+because `liveStateEqual` is what every adapter consults to decide whether a
+changed value is worth publishing, and an unrounded float would differ on
+essentially every `timeupdate`; whole seconds is also the resolution `Time`
+renders at. `PlayerController.seekToLiveEdge()` always lands on the
+provider's own notion of this edge rather than one the controller computes:
+hls.js's `liveSyncPosition`, deliberately behind the raw seekable end, on
+that engine; the raw seekable end itself on the native and native-HLS
+engines, the only notion of an edge a plain media element has.
+_Avoid_: live position, DVR edge, broadcast edge
 
 **Recovered autoplay**:
 Playback that started only because the audible attempt was refused by policy and

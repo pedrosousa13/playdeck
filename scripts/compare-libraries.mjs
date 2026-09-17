@@ -376,13 +376,14 @@ export const libraries = [
     composition: 'core + primitives + native provider',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 21957 bytes measured 2026-09-15 -- 21.4423828125 KB, 21.44 KB to two
-    // places, rounded up to the next 0.25 KB. The growth from 21.25 KB
-    // (#659's own committed figure, main's own ceiling before #662's
-    // `providers` prop merged into this branch) is #662's provider seam, the
-    // same reason the "no parts" row above grew, including the cycle guard's
-    // `seen.delete` bookkeeping described there.
-    ceilingKb: 21.5
+    // 22140 bytes measured 2026-09-17 -- 21.6210937500 KB, 21.62 KB to two
+    // places, rounded up to the next 0.25 KB. The growth from 21.5 KB (#662's
+    // provider seam, the same reason the "no parts" row above grew, including
+    // the cycle guard's `seen.delete` bookkeeping described there) is #180's
+    // live edge: `deriveLiveState` now carries `offsetFromEdge`, the native
+    // provider answers `seekToLiveEdge` from its own seekable end, and `Time`
+    // gained the live-aware branch that renders that offset or the LIVE label.
+    ceilingKb: 21.75
   },
   {
     name: 'Playdeck (play-only)',
@@ -412,13 +413,13 @@ export const libraries = [
       "core + primitives + native provider + control bar (5 of Media Chrome's 7 controls)",
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 27181 bytes measured 2026-09-15 -- 26.5439453125 KB, 26.54 KB to two
-    // places, rounded up to the next 0.25 KB. The growth from 26.5 KB
-    // (#659's own committed figure, main's own ceiling before #662's
-    // `providers` prop merged into this branch) is #662's provider seam, the
-    // same reason the "no parts" row above grew, including the cycle guard's
-    // `seen.delete` bookkeeping described there.
-    ceilingKb: 26.75
+    // 27423 bytes measured 2026-09-17 -- 26.7802734375 KB, 26.78 KB to two
+    // places, rounded up to the next 0.25 KB. The growth from 26.75 KB
+    // (#662's provider seam, the same reason the "no parts" row above grew,
+    // including the cycle guard's `seen.delete` bookkeeping described there)
+    // is #180's live edge, plus what only this row pulls in: `LiveIndicator`'s
+    // press path and `Time`'s live-aware branch both land in the control bar.
+    ceilingKb: 27
   },
   {
     name: 'react-player',

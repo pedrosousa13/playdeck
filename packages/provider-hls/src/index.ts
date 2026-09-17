@@ -193,6 +193,14 @@ export const createHlsProvider = (
   let hlsLiveHint: boolean | undefined;
   let liveState: PlayerLiveState = null;
   let liveSeekMeaningful = true;
+  // Whether the hls.js engine can currently report a live edge to seek to.
+  // Tracked the same way as `liveSeekMeaningful` -- a closure variable
+  // `decorateCapabilities` reads directly, kept in step by `syncLive` -- and
+  // deliberately not derived from `liveSeekMeaningful` alone: a manifest can
+  // report a `liveSyncPosition` before or after the window becomes wide
+  // enough to scrub, so the two can change independently and each needs its
+  // own trigger for a re-decoration (below).
+  let liveEdgeAvailable = false;
   // The bounded hold for a raw element error on the hls.js path -- see
   // `HLS_JS_ELEMENT_ERROR_TIMEOUT_MS`. Set only while one is pending, and
   // cleared by whichever comes first: hls.js claiming the failure, the
@@ -239,7 +247,19 @@ export const createHlsProvider = (
       selectAudioTrack:
         engine === 'hls.js'
           ? audioTracks.selectAudioTrackAvailability()
-          : capabilities.selectAudioTrack
+          : capabilities.selectAudioTrack,
+      // The native engine's own answer passes through unchanged: it comes
+      // from the embedded native provider reading the same media element's
+      // `seekable`, which is exactly what a native HLS playback session is.
+      // hls.js has its own notion of the edge -- `liveSyncPosition`, behind
+      // the raw seekable end on purpose -- so its engine answers from
+      // `liveEdgeAvailable` instead.
+      liveEdge:
+        engine === 'hls.js'
+          ? liveEdgeAvailable
+            ? { status: 'available' }
+            : { status: 'unavailable', reason: 'source' }
+          : capabilities.liveEdge
     };
     return liveSeekMeaningful
       ? withQuality
@@ -304,10 +324,18 @@ export const createHlsProvider = (
   const syncLive = (patch: ProviderStatePatch): ProviderStatePatch => {
     const nextLive = computeLiveState();
     const meaningful = seekWindowMeaningful(nextLive);
+    const nextLiveEdgeAvailable =
+      engine === 'hls.js' &&
+      Boolean(nextLive?.isLive) &&
+      Number.isFinite(attachment.getInstance()?.liveSyncPosition) &&
+      meaningful;
     const liveChanged = !liveStateEqual(nextLive, liveState);
     const meaningfulChanged = meaningful !== liveSeekMeaningful;
+    const liveEdgeAvailableChanged =
+      nextLiveEdgeAvailable !== liveEdgeAvailable;
     liveState = nextLive;
     liveSeekMeaningful = meaningful;
+    liveEdgeAvailable = nextLiveEdgeAvailable;
     const liveField: ProviderStatePatch = liveChanged ? { live: nextLive } : {};
     const durationField: ProviderStatePatch = liveChanged
       ? {
@@ -322,7 +350,7 @@ export const createHlsProvider = (
         : {};
     const capabilitiesField: ProviderStatePatch = patch.capabilities
       ? { capabilities: decorateCapabilities(patch.capabilities) }
-      : meaningfulChanged && lastCapabilities
+      : (meaningfulChanged || liveEdgeAvailableChanged) && lastCapabilities
         ? { capabilities: decorateCapabilities(lastCapabilities) }
         : {};
     return { ...patch, ...liveField, ...durationField, ...capabilitiesField };
@@ -331,10 +359,12 @@ export const createHlsProvider = (
   const emitLiveUpdate = (): void => {
     const before = liveState;
     const beforeMeaningful = liveSeekMeaningful;
+    const beforeLiveEdgeAvailable = liveEdgeAvailable;
     const patch = syncLive({});
     if (
       liveStateEqual(before, liveState) &&
-      beforeMeaningful === liveSeekMeaningful
+      beforeMeaningful === liveSeekMeaningful &&
+      beforeLiveEdgeAvailable === liveEdgeAvailable
     ) {
       return;
     }
@@ -452,10 +482,13 @@ export const createHlsProvider = (
       hlsLiveHint = undefined;
       liveState = null;
       liveSeekMeaningful = true;
+      liveEdgeAvailable = false;
       textTracks.reset();
       audioTracks.reset();
     },
-    startHlsJs: attachment.startHlsJs
+    startHlsJs: attachment.startHlsJs,
+    getLiveSyncPosition: () =>
+      attachment.getInstance()?.liveSyncPosition ?? undefined
   });
 
   return {
@@ -471,6 +504,7 @@ export const createHlsProvider = (
     pause: playback.pause,
     seekTo: playback.seekTo,
     seekBy: playback.seekBy,
+    seekToLiveEdge: playback.seekToLiveEdge,
     mute: playback.mute,
     unmute: playback.unmute,
     setVolume: playback.setVolume,
