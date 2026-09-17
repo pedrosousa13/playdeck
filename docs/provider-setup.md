@@ -561,6 +561,7 @@ const capabilities: PlayerCapabilities = {
   selectTextTrack: unimplemented,
   selectAudioTrack: unimplemented,
   chapters: unimplemented,
+  liveEdge: unimplemented,
   fullscreen: unimplemented,
   pictureInPicture: unimplemented,
   airPlay: unimplemented,
