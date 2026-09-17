@@ -896,8 +896,8 @@ test('ownership survives an eventless playing patch interleaved before the re-en
   );
 });
 
-// Pins the origin-resolution rule the maintainer's decision on #695 states:
-// an unsolicited `'provider'` play -- no `playWithOrigin` call of ours
+// Pins the rule the maintainer's decision on #695 states: an unsolicited
+// `'provider'` play -- no `playWithOrigin` call of ours
 // registered a pending origin for it, the same shape #695's WebKit run
 // showed -- arriving while ownership already reads `'auto-paused'` is read as
 // the engine resuming what we paused, not a takeover. Staged the same way the

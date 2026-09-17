@@ -367,33 +367,35 @@ test('a player auto-paused by leaving the viewport resumes when it scrolls back 
   await expect(play).toHaveAttribute('data-state', 'playing');
 });
 
-// #695: a single re-entry cannot observe this bug, because the resume
-// itself still happens -- it is issued off `'auto-paused'`, which #309's
-// guard still recognises correctly at that crossing. The defect was in what
-// the resume left behind: `playbackOwnership` silently fell to `'none'` once
-// the resumed play's `'autoplay'` origin was consumed by a patch that could
-// not carry it and resolved as `'provider'`. Nothing about that shows up at
-// the resume itself -- `'none'` and `'auto-paused'` both read as `"playing"`
-// right then. It only surfaces on the *next* exit: with ownership at
-// `'none'`, the player behaves exactly as designed for a viewer-owned player
-// (see 'a player the viewer takes over from autoplay keeps playing when it
-// scrolls out of view' below) and never auto-pauses again. That the first
-// crossing stays clean is #695's own evidence rather than an assumption: its
-// WebKit run confirms the exit pause at 0.695 as `'autoplay'`, so the first
-// autoplay's origin survived and only the resume's was lost.
+// A single re-entry cannot observe this bug (#695), which is why it shipped.
+// The resume itself still happens: it is issued off `'auto-paused'`, which
+// #309's guard recognises correctly at that crossing. What goes wrong is what
+// the resume leaves behind, and `'none'` and `'auto-paused'` both read as
+// `"playing"` right then, so nothing is visible until the *next* exit -- where
+// a player whose ownership has fallen to `'none'` behaves exactly as designed
+// for a viewer-owned one (see 'a player the viewer takes over from autoplay
+// keeps playing when it scrolls out of view' below) and never auto-pauses
+// again.
 //
-// Demonstrated red, by substitute mutation. WebKit cannot launch on the
-// development machine, and on chromium this passes with or without the fix,
-// so `provider-native`'s `onPlay` was made to emit `onPlaying`'s eventless
-// `{ playback: 'playing' }` ahead of its own patch, reproducing the
-// `playing`-before-`play` interleaving on an engine that does not produce
-// it. With that mutation and `player-controller.ts`'s gate reverted, the
-// last assertion below fails on chromium: `expect(locator)
-// .toHaveAttribute` expected "paused", received "playing", 5000ms timeout.
-// With the gate restored it passes. The mutation is coarser than the defect
-// -- it double-emits on every play, not only on a resume -- so it also
-// reddens the single-re-entry neighbour above, which the real WebKit
-// behaviour does not.
+// The mechanism, from the instrumented WebKit run rather than inferred: on an
+// engine that manages viewport playback of muted autoplaying video itself,
+// the engine resumes the media on its own and Playdeck issues no play at all.
+// Nothing registers a pending origin, so the `play` event resolves as
+// `'provider'` -- correctly, since nobody commanded it -- and the ownership
+// tracker in `use-activation.ts` used to read that as a viewer takeover.
+// Two earlier explanations were investigated and disproved, so neither should
+// be reached for again here: an eventless `playing` patch consuming the
+// origin (a real defect, fixed separately, which left this reproduction red),
+// and `configureAutoplay`'s autoplay-only delete (reached once at startup,
+// never during a crossing).
+//
+// This test is not demonstrated red on a local engine, and cannot be.
+// Chromium and firefox resume through Playdeck's own command, so the pending
+// origin is always registered there and this passes with or without the fix;
+// WebKit is the engine that exhibits it and does not launch on the
+// development machine. Its redness is CI's to establish. The rule itself is
+// pinned without a browser in packages/react/test/activation.test.tsx, which
+// is where the local red-green evidence for this fix lives.
 test('a player resumed by re-entering the viewport still auto-pauses on the next exit', async ({
   page
 }) => {
