@@ -287,6 +287,16 @@ viewport's exit-crossing free to pause it, and only a `pause` reporting it
 makes a later re-entry free to resume it. A viewer's or an API caller's own
 play or pause is ownership released, not ownership taken, so a scroll crossing
 never touches it either way (#309).
+
+One `play` that reports no origin at all keeps ownership rather than releasing
+it: a `'provider'` play arriving while ownership already reads `'auto-paused'`.
+An engine that manages viewport playback of muted autoplaying video itself
+resumes what the exit-crossing paused without Playdeck issuing any command, so
+there is no origin to carry and `'provider'` is the honest answer — the origin
+is not rewritten to say otherwise. Ownership is what reinterprets it, and only
+in that one state: the engine is continuing exactly the playback this strategy
+paused, which is the opposite of a takeover. In every other ownership state an
+unowned play still releases ownership.
 _Avoid_: autoplay flag, ownership flag, playback flag
 
 **Buffered window**:

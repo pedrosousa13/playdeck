@@ -367,6 +367,53 @@ test('a player auto-paused by leaving the viewport resumes when it scrolls back 
   await expect(play).toHaveAttribute('data-state', 'playing');
 });
 
+// A single re-entry cannot observe this bug (#695), which is why it shipped.
+// The resume itself still happens: it is issued off `'auto-paused'`, which
+// #309's guard recognises correctly at that crossing. What goes wrong is what
+// the resume leaves behind, and `'none'` and `'auto-paused'` both read as
+// `"playing"` right then, so nothing is visible until the *next* exit -- where
+// a player whose ownership has fallen to `'none'` behaves exactly as designed
+// for a viewer-owned one (see 'a player the viewer takes over from autoplay
+// keeps playing when it scrolls out of view' below) and never auto-pauses
+// again.
+//
+// The mechanism, from the instrumented WebKit run rather than inferred: on an
+// engine that manages viewport playback of muted autoplaying video itself,
+// the engine resumes the media on its own and Playdeck issues no play at all.
+// Nothing registers a pending origin, so the `play` event resolves as
+// `'provider'` -- correctly, since nobody commanded it -- and the ownership
+// tracker in `use-activation.ts` used to read that as a viewer takeover.
+// Two earlier explanations were investigated and disproved, so neither should
+// be reached for again here: an eventless `playing` patch consuming the
+// origin (a real defect, fixed separately, which left this reproduction red),
+// and `configureAutoplay`'s autoplay-only delete (reached once at startup,
+// never during a crossing).
+//
+// This test is not demonstrated red on a local engine, and cannot be.
+// Chromium and firefox resume through Playdeck's own command, so the pending
+// origin is always registered there and this passes with or without the fix;
+// WebKit is the engine that exhibits it and does not launch on the
+// development machine. Its redness is CI's to establish. The rule itself is
+// pinned without a browser in packages/react/test/activation.test.tsx, which
+// is where the local red-green evidence for this fix lives.
+test('a player resumed by re-entering the viewport still auto-pauses on the next exit', async ({
+  page
+}) => {
+  await page.goto(viewportScrollStory);
+  const play = await mountedPlayButton(page);
+
+  await scrollPlayerIntoView(page);
+  await expect(play).toHaveAttribute('data-state', 'playing');
+  await scrollPlayerOutOfView(page);
+  await expect(play).toHaveAttribute('data-state', 'paused');
+
+  await scrollPlayerIntoView(page);
+  await expect(play).toHaveAttribute('data-state', 'playing');
+
+  await scrollPlayerOutOfView(page);
+  await expect(play).toHaveAttribute('data-state', 'paused');
+});
+
 test('a player the viewer takes over from autoplay keeps playing when it scrolls out of view', async ({
   page
 }) => {

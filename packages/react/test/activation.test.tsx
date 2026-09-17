@@ -896,6 +896,73 @@ test('ownership survives an eventless playing patch interleaved before the re-en
   );
 });
 
+// Pins the rule the maintainer's decision on #695 states: an unsolicited
+// `'provider'` play -- no `playWithOrigin` call of ours
+// registered a pending origin for it, the same shape #695's WebKit run
+// showed -- arriving while ownership already reads `'auto-paused'` is read as
+// the engine resuming what we paused, not a takeover. Staged the same way the
+// eventless-patch test above stages its ordering: `fake.emit` is called
+// directly, with no preceding `controller.playWithOrigin`, so
+// `#consumePendingOrigin` finds nothing and the event resolves as `event.origin`
+// itself -- `'provider'`, from `playEvent`.
+//
+// Demonstrated red: run against `use-activation.ts` with the `||
+// engineResumedOwnPause` disjunct removed (`event.origin === 'autoplay' ?
+// 'autoplaying' : 'none'`, its state before this commit), this failed --
+//
+//   AssertionError: expected 2nd "pauseWithOrigin" call to have been called
+//   with [ 'autoplay' ], but called only 1 times
+//
+// -- because the unsolicited play dropped ownership to `'none'`, and the
+// exit below found nothing of this hook's own to pause. Passes again with the
+// disjunct restored, and its neighbour below passed throughout -- the
+// scoping it pins was never in question.
+test('an engine resuming its own auto-pause keeps ownership, not a takeover', async () => {
+  const { controller, fake, observer, pauseWithOrigin } =
+    await setUpViewportPlayback();
+  await playAs(controller, fake, 'autoplay');
+  act(() =>
+    observer.intersect({ isIntersecting: false, intersectionRatio: 0 })
+  );
+  await vi.waitFor(() =>
+    expect(pauseWithOrigin).toHaveBeenCalledExactlyOnceWith('autoplay')
+  );
+  act(() => fake.emit({ playback: 'paused' }, pauseEvent));
+
+  // The engine resumes the media on its own -- no `playWithOrigin` call of
+  // ours precedes this, so nothing is pending to confirm it.
+  act(() => fake.emit({ playback: 'playing' }, playEvent));
+
+  act(() =>
+    observer.intersect({ isIntersecting: false, intersectionRatio: 0 })
+  );
+
+  await vi.waitFor(() =>
+    expect(pauseWithOrigin).toHaveBeenNthCalledWith(2, 'autoplay')
+  );
+});
+
+// The rule's other edge, and the reason it is not "unowned plays become
+// autoplay": the same unconfirmed `'provider'` play, arriving while ownership
+// reads `'none'` rather than `'auto-paused'`, must still read as a takeover.
+test('an unsolicited play outside auto-paused ownership is still a takeover', async () => {
+  const { controller, fake, observer, pauseWithOrigin } =
+    await setUpViewportPlayback();
+  // A viewer's own play leaves ownership at `'none'` from the start (#309).
+  await playAs(controller, fake, 'user');
+
+  // The same unconfirmed shape as the test above -- no preceding
+  // `playWithOrigin` -- but ownership here was never `'auto-paused'`.
+  act(() => fake.emit({ playback: 'playing' }, playEvent));
+
+  act(() =>
+    observer.intersect({ isIntersecting: false, intersectionRatio: 0 })
+  );
+  await act(async () => undefined);
+
+  expect(pauseWithOrigin).not.toHaveBeenCalled();
+});
+
 // The mirror of the "viewer-pressed" case above, but reached mid-cycle rather
 // than from the start: a viewer who takes over playback the viewport itself
 // started has to be respected from that point on, not only when they were

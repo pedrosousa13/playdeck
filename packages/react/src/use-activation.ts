@@ -1050,8 +1050,18 @@ export const useActivation = (
   // is set only by this hook's own `controller.playWithOrigin('autoplay')`
   // (the re-entry resume below) and by `Root`'s own autoplay attempt, which is
   // what a `loading: 'viewport'` session with `autoplay` set arms in the first
-  // place. Any other origin -- `'user'`, `'api'`, `'provider'`, `'system'` --
-  // means a viewer or a caller took the wheel, and ownership drops to
+  // place. `'provider'` joins it under one condition: ownership already reads
+  // `'auto-paused'`, which only this hook's own exit pause ever sets, so a
+  // `'provider'` play landing there is an engine resuming the very playback we
+  // paused rather than a takeover -- confirmed of WebKit, which manages
+  // viewport playback of muted autoplaying video itself and resumes it
+  // without Playdeck ever issuing a play, leaving no pending origin for the
+  // controller to confirm (#695). A genuine takeover is unaffected: a viewer's
+  // or a caller's play is confirmed through a pending origin and arrives as
+  // `'user'` or `'api'`, never falling back to `'provider'` at all -- and
+  // outside `'auto-paused'`, a `'provider'` play still drops ownership to
+  // `'none'` exactly as before, so this is not a general "unowned plays become
+  // autoplay" rule. Any other origin, in any other ownership state, drops to
   // `'none'` so a later exit leaves that playback alone. `pause` is the mirror
   // image: only a pause carrying the `'autoplay'` origin is this hook's own,
   // recorded as `'auto-paused'` so a later re-entry knows there is something
@@ -1063,8 +1073,13 @@ export const useActivation = (
     if (options.loading !== 'viewport') return;
     const controller = options.controller;
     const unsubscribePlay = controller.on('play', (event) => {
+      const engineResumedOwnPause =
+        event.origin === 'provider' &&
+        session.current.playbackOwnership === 'auto-paused';
       session.current.playbackOwnership =
-        event.origin === 'autoplay' ? 'autoplaying' : 'none';
+        event.origin === 'autoplay' || engineResumedOwnPause
+          ? 'autoplaying'
+          : 'none';
     });
     const unsubscribePause = controller.on('pause', (event) => {
       session.current.playbackOwnership =
