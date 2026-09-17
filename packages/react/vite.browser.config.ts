@@ -47,9 +47,9 @@ export default defineConfig({
       // itself is bundled -- was tried first and reverted: hls.js and
       // `@vimeo/player` would ship inside `@playdeck/react`'s own tarball,
       // which every consumer downloads whether or not they load this entry.
-      // That is the exact thing issue #448's brief warned against: "a bundle
-      // that pulls every provider would misrepresent the library's size to
-      // exactly the audience this entry exists for."
+      // It would also misrepresent the library's size to exactly the audience
+      // this entry exists for: someone evaluating Playdeck from one HTML page
+      // reads the number they download as the number it costs.
       external: [
         '@playdeck/provider-hls',
         '@playdeck/provider-vimeo',

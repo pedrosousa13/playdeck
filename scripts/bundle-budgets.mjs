@@ -181,10 +181,11 @@ export const targets = [
     // YouTube, Vimeo and Wistia are not merely lazy here, unlike the rows
     // below: they are not in this artifact at all.
     //
-    // 100 KB gzip, set a little above the 84.78 KB this measured at when the
-    // entry was added -- enough headroom for React or a primitive to grow
-    // without every commit re-litigating the figure, tight enough that a
-    // second copy of something already in the graph has to be argued for.
+    // 100 KB gzip, set well above what this measures at -- enough headroom
+    // for React or a primitive to grow without every commit re-litigating the
+    // figure, tight enough that a second copy of something already in the
+    // graph has to be argued for. The live figure is whatever this script
+    // prints; a number repeated in prose here would only go stale against it.
     name: '@playdeck/react/browser',
     path: 'packages/react/dist/browser.js',
     budget: 100

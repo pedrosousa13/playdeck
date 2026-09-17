@@ -171,6 +171,26 @@ try {
     );
   }
 
+  // The whole graph, named rather than merely filtered. The two checks above
+  // catch a missing native chunk and a foreign provider, but neither would
+  // notice a chunk that is new and unaccounted for -- a primitive split out
+  // on its own, or a second copy of something already in the graph. This
+  // entry's initial cost is three files, and that is the claim its budget
+  // rows are written against, so the test asserts the set rather than
+  // reporting it.
+  const expectedScripts = ['/browser.js', '/core.js', '/provider-native.js'];
+  const unexpected = requestedScripts.filter(
+    (pathname) => !expectedScripts.includes(pathname)
+  );
+  if (
+    unexpected.length > 0 ||
+    requestedScripts.length !== expectedScripts.length
+  ) {
+    throw new Error(
+      `The no-build entry requested ${requestedScripts.length} scripts, not the ${expectedScripts.length} it is budgeted for: ${requestedScripts.join(', ')}.`
+    );
+  }
+
   console.log('OK: the no-build entry played tracer.mp4 with no bundler.');
   console.log(`Scripts requested: ${requestedScripts.join(', ')}`);
 } finally {

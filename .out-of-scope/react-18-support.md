@@ -49,8 +49,8 @@ package's real test command was run.
 **387 of 695 tests failed, across 17 of 29 test files.** The cause is single
 and total: ref-as-prop. `Player.Root`'s own `ref` never reaches the component
 under React 18, and that ref is how the test helpers — and any consumer —
-reach the imperative handle, so sixteen further suites fail behind that one
-loss. No other 18-vs-19 difference was found to affect this package: nothing
+reach the imperative handle, so most of the remaining suites fail behind that
+one loss rather than for reasons of their own. No other 18-vs-19 difference was found to affect this package: nothing
 about `useSyncExternalStore`, `useId`, automatic batching or StrictMode effect
 timing showed up as a cause anywhere in the failures.
 

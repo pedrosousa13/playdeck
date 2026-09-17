@@ -26,10 +26,11 @@ would have misrepresented the library's size to exactly the audience this
 entry exists for. A source that needs one of the four fails at the point of
 use with an unresolved import — an honest limitation, not a silent one.
 
-Measured (gzip): `browser.js` 87.63 KB, the `@playdeck/core` chunk it shares
-with the native provider 8.50 KB, the native provider itself 6.43 KB —
+Measured (gzip): `browser.js` 85.22 KB, the `@playdeck/core` chunk it shares
+with the native provider 8.38 KB, the native provider itself 6.64 KB —
 budgeted in `scripts/bundle-budgets.mjs`, alongside the default entry's own
-figures. `tests/bundle/no-build/test.mjs` drives a real Chromium page over
+figures. `pnpm test:budgets` is what prints those three, so they are worth
+re-reading there rather than here once anything in the graph moves. `tests/bundle/no-build/test.mjs` drives a real Chromium page over
 this exact artifact — served with no build step of its own — and plays an MP4
 end to end, while asserting that no HLS, YouTube, Vimeo or Wistia code is ever
 requested.
