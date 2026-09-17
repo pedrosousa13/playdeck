@@ -86,9 +86,7 @@ const behindEdge: PlayerLiveState = {
 const available: Availability = { status: 'available' };
 const unavailable: Availability = { status: 'unavailable', reason: 'provider' };
 
-const capabilitiesWith = (
-  liveEdge: Availability
-): PlayerCapabilities => {
+const capabilitiesWith = (liveEdge: Availability): PlayerCapabilities => {
   const notReady: Availability = { status: 'unknown', reason: 'not-ready' };
   return {
     seek: notReady,
@@ -407,7 +405,10 @@ describe('Player.LiveIndicator', () => {
   // Reverted, all 11 passed again.
   test('stays a non-interactive LIVE badge, not null, when the capability is unavailable', () => {
     const { container, emitState } = renderWithPlayer(<Player.LiveIndicator />);
-    emitState({ live: behindEdge, capabilities: capabilitiesWith(unavailable) });
+    emitState({
+      live: behindEdge,
+      capabilities: capabilitiesWith(unavailable)
+    });
     expect(livePart(container)).not.toBe(null);
     const button = livePart(container) as HTMLButtonElement;
     expect(button.tagName).toBe('BUTTON');

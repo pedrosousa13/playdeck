@@ -14,9 +14,10 @@ export const Overlays = () => (
     <Player.LoadingIndicator />
     <Player.Captions />
     {/* Renders only on a live source -- nothing while `state.live` is null.
-        The one exception to "no disabled-looking placeholders" above:
-        whenever it does render, it renders as a disabled button, because
-        seeking to the live edge is not built yet. */}
+        The one exception to "no disabled-looking placeholders" above: where
+        the provider cannot seek to the live edge it stays mounted as a
+        disabled badge, because being live is true whether or not that
+        command exists. Where the provider can, it is an active button. */}
     <Player.LiveIndicator />
     <Player.Gestures
       seekOffset={10}
