@@ -4,7 +4,6 @@ import type {
   CommandResult,
   PlayerCapabilities,
   PlayerErrorCategory,
-  PlayerProvider,
   ProviderAdapter,
   ProviderStatePatch
 } from '@playdeck/core';
@@ -202,19 +201,13 @@ export const createExampleFileAdapter: ProviderAdapterFactory<
     return { ok: true };
   };
 
-  const adapter: ProviderAdapter = {
-    // `PlayerProvider` is a closed union of the five built-in kinds
-    // (`@playdeck/core`), with no member for a supplied one -- unlike
-    // `PlayerSource`, which opened through an `Extra` type parameter when the
-    // `providers` prop shipped. Reporting `'native'` here would satisfy the
-    // type while asserting something false: this is not
-    // `@playdeck/provider-native`'s adapter, and a consumer or a test reading
-    // `PlayerState.provider` is entitled to tell the two apart. The cast
-    // reports this adapter's own honest identity instead of one of the five;
-    // widening `PlayerProvider` itself would touch a published package's
-    // types, which is out of reach for a file that lives entirely outside
-    // them.
-    provider: 'example-file' as unknown as PlayerProvider,
+  const adapter: ProviderAdapter<ExampleFileSource['type']> = {
+    // Honest, not a cast: `ProviderAdapter`'s own `Extra` parameter
+    // (`@playdeck/core`) is instantiated here with `ExampleFileSource['type']`,
+    // the same literal `ProviderAdapterFactory` above already carries, so this
+    // adapter reports its own identity rather than borrowing one of the five
+    // built-in kinds.
+    provider: 'example-file',
     attach: () => {
       video.addEventListener('loadedmetadata', onLoadedMetadata);
       video.addEventListener('timeupdate', onTimeUpdate);

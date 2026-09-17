@@ -3,6 +3,7 @@
 import { expect, expectTypeOf, test, vi } from 'vitest';
 import {
   detectSource,
+  type PlayerState,
   type ProviderAdapter,
   type ResolvedPlayerSource
 } from '@playdeck/core';
@@ -13,6 +14,7 @@ import type { YouTubeProviderOptions } from '@playdeck/provider-youtube';
 import type {
   PlayerProviderOptions,
   PrimitiveOptionBag,
+  ProviderAdapterFactory,
   ProviderRegistration,
   SuppliedProviderOptions,
   SuppliedSource
@@ -684,6 +686,64 @@ test('a supplied kind types its own source shape and its own providerOptions key
     hls: { build: 'light' }
   };
   void options;
+});
+
+// `PlayerProvider`'s own generic parameter (`@playdeck/core`'s `types.ts`)
+// mirrors `PlayerSource`'s: `Extra` defaults to `never`, which a union
+// absorbs without contributing a member, so `PlayerState.provider` -- typed
+// off the bare, non-generic `PlayerProvider` -- stays exactly the five-member
+// union it always was for a `Root` that never sets `providers`. Equality,
+// not assignability, for `root-props.test.ts`'s own reason: assignability
+// alone would still pass a `PlayerState.provider` that had quietly widened to
+// `string`.
+//
+// Demonstrated red: with `PlayerProvider`'s `Extra` default changed from
+// `never` to `string` (`packages/core/src/types.ts`), `pnpm typecheck`
+// reported TS2344 here -- "Type 'string' is not assignable to type
+// '"native" | "hls" | "youtube" | "vimeo" | "wistia" | null'" -- reverted
+// afterwards.
+test('a consumer who never sets providers still narrows PlayerState.provider over exactly the five built-in kinds', () => {
+  expectTypeOf<PlayerState['provider']>().toEqualTypeOf<
+    'native' | 'hls' | 'youtube' | 'vimeo' | 'wistia' | null
+  >();
+});
+
+// The other half of `PlayerProvider`'s own widening: a supplied kind's
+// factory (`ProviderAdapterFactory`) can report its own identity on the
+// `ProviderAdapter` it builds directly, with no cast --
+// `examples/provider-setup-file-adapter.tsx`'s `createExampleFileAdapter` is
+// exactly this, typed here against a minimal stand-in rather than the real
+// file so this claim is proven independently of it.
+//
+// Demonstrated red: with `ProviderAdapterFactory`'s return type
+// (`provider-loaders.ts`) reverted to the bare `ProviderAdapter` it was
+// before this change, `pnpm typecheck` reported TS2322 at this test's own
+// `provider: 'acme'` line -- "Type '"acme"' is not assignable to type
+// '"native" | "hls" | "youtube" | "vimeo" | "wistia"'" -- reverted
+// afterwards.
+test('a supplied kind reports its own identity on ProviderAdapter without a cast', () => {
+  const factory: ProviderAdapterFactory<AcmeSource, AcmeOptions> = () => ({
+    provider: 'acme',
+    attach: () => undefined,
+    load: () => undefined,
+    destroy: () => undefined,
+    subscribe: () => () => undefined
+  });
+  void factory;
+});
+
+test('a supplied kind cannot report a provider identity other than its own kind or a built-in one', () => {
+  const factory: ProviderAdapterFactory<AcmeSource, AcmeOptions> = () => ({
+    // @ts-expect-error `mystery` is neither `AcmeSource['type']` ('acme') nor
+    // one of the five built-in `PlayerProvider` members `ProviderAdapter`'s
+    // `Extra` parameter admits alongside it.
+    provider: 'mystery',
+    attach: () => undefined,
+    load: () => undefined,
+    destroy: () => undefined,
+    subscribe: () => () => undefined
+  });
+  void factory;
 });
 
 test('rejects a source object whose type matches no registered kind at the type level', () => {
