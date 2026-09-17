@@ -37,9 +37,10 @@ running the suite against both, forever, and the interesting failures are the
 ones that only appear on one. That is a standing obligation on every future
 change, not a one-off migration.
 
-**Measured for real, not just reasoned about (2026-09-16).** A maintainer
-ruling briefly adopted React 18 on 2026-09-15, on condition that it be verified
-against a real install rather than decided from the range alone. React 18.3.1
+**Measured for real, not just reasoned about.** A maintainer ruling briefly
+adopted React 18 on 2026-09-15, on condition that it be verified against a real
+install rather than decided from the range alone. The verification ran the same
+day. React 18.3.1
 and React DOM 18.3.1 were installed as `packages/react`'s real
 devDependencies, with `@testing-library/react` pinned alongside them so pnpm's
 peer resolution anchored to 18 rather than the workspace's 19, and the
@@ -103,6 +104,7 @@ two-major test matrix each costed, rather than as a change to the peer range.
   three bundled packaging decisions. Declined by the maintainer on 2026-08-25,
   after the `forwardRef` and `ComponentPropsWithRef` measurement above. A
   2026-09-15 ruling on the same issue briefly reversed that decline and asked
-  for the range to be widened and verified against a real React 18 install;
-  the 2026-09-16 measurement above is that verification, and it reversed the
-  ruling back to declined the same day this file's count was corrected.
+  for the range to be widened and verified against a real React 18 install.
+  The measurement above is that verification; on reading it the maintainer
+  reversed the ruling back to declined on 2026-09-16, which is the decision
+  this file now records.
