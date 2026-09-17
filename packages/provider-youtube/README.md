@@ -7,6 +7,9 @@ the IFrame Player API.
 pnpm add @playdeck/provider-youtube
 ```
 
+This package carries no React dependency, only the IFrame Player API.
+`@playdeck/react`, which supplies the primitives above, is React 19 only.
+
 `@playdeck/react` loads this for you when the source resolves to `youtube`.
 [Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md#youtube) lists the URL forms that
 resolve to it, the ones that do not, and the options reachable through

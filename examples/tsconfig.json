@@ -11,6 +11,7 @@
     "paths": {
       "@playdeck/core": ["../packages/core/dist/index.d.ts"],
       "@playdeck/react": ["../packages/react/dist/index.d.ts"],
+      "@playdeck/react/browser": ["../packages/react/dist/browser.d.ts"],
       "@playdeck/provider-native": [
         "../packages/provider-native/dist/index.d.ts"
       ],

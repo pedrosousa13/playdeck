@@ -14,9 +14,11 @@ regardless of whether a seek-to-edge command exists. See the docstring above
 pnpm add @playdeck/react
 ```
 
-React 19 is a peer dependency. Provider packages are pulled in as dependencies
-but loaded lazily — a consumer playing only MP4 ships no YouTube, Vimeo, Wistia
-or hls.js code in its initial graph, and makes no provider network requests.
+React 19 is a peer dependency, and only React 19 — the range is `>=19 <20`, so
+a React 18 or React 20 project cannot install this package. Provider packages
+are pulled in as dependencies but loaded lazily — a consumer playing only MP4
+ships no YouTube, Vimeo, Wistia or hls.js code in its initial graph, and makes
+no provider network requests.
 
 This package's entry carries a `'use client'` directive, so a React Server
 Component can import these primitives and render them directly, with no wrapper
@@ -898,6 +900,72 @@ requirement, so a headless consumer is bound only by the JavaScript floor.
 
 `test/theme.test.ts` freezes the stylesheet's CSS feature inventory, so a newer
 feature fails the build rather than silently moving this number.
+
+## No-build usage
+
+`@playdeck/react/browser` is a second entry for a consumer with a plain HTML
+page and a `<script type="module">` tag — no bundler, no package manager.
+React 19 ships no UMD and no ESM build of its own, so there is no
+script-tag-loadable React for an import map to point at; this entry bundles
+React, ReactDOM and the JSX runtime instead of leaving them external, and
+re-exports `createElement` and `createRoot` alongside the usual primitives so
+a page with nothing but a `<script>` tag can build a tree with no JSX and
+mount it.
+
+Only the native provider ships in this bundle — HLS, YouTube, Vimeo and Wistia
+stay external, exactly as they are for the default entry. Carrying every
+provider would put hls.js and `@vimeo/player` inside this package's own
+tarball, downloaded by every consumer whether or not they load this entry.
+`Player.Media` and a native source (an MP4 or WebM URL) work through this
+entry; an HLS, YouTube, Vimeo or Wistia source fails at the point of use with
+an unresolved import, and needs the default entry and a bundler instead.
+
+<!-- example:no-build -->
+
+```ts
+import {
+  Controls,
+  createElement,
+  createRoot,
+  FullscreenButton,
+  Media,
+  PlayButton,
+  Root,
+  SeekSlider,
+  Time,
+  Viewport
+} from '@playdeck/react/browser';
+
+// `createElement` in place of JSX -- a page with nothing but a `<script>` tag
+// has no compiler to turn JSX into this for it. Only `Media` and native
+// sources work through this entry; see the paragraph above for why.
+const player = createElement(Root, {
+  source: 'https://example.com/clip.mp4',
+  children: createElement(
+    Viewport,
+    null,
+    createElement(Media, null),
+    createElement(
+      Controls,
+      null,
+      createElement(PlayButton, null),
+      createElement(SeekSlider, null),
+      createElement(Time, { type: 'current' }),
+      createElement(FullscreenButton, null)
+    )
+  )
+});
+
+const container = document.getElementById('root');
+if (!container) throw new Error('#root is missing from the page');
+createRoot(container).render(player);
+```
+
+<!-- /example -->
+
+A page loading `@playdeck/react/browser` this way still needs the file itself
+served from somewhere — from `node_modules` after `pnpm add @playdeck/react`,
+or from a CDN that mirrors npm.
 
 ## License
 

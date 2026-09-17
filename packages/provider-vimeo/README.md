@@ -7,6 +7,10 @@ The Vimeo provider for [Playdeck](https://github.com/pedrosousa13/playdeck), ove
 pnpm add @playdeck/provider-vimeo
 ```
 
+This package has no React dependency of its own, only the `@vimeo/player`
+SDK. The primitives above come from `@playdeck/react`, whose peer range is
+React 19 only.
+
 `@playdeck/react` loads this for you when the source resolves to `vimeo`. The SDK
 is bundled as a dependency and imported dynamically — nothing is fetched from a
 Vimeo CDN. [Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md#vimeo) lists the URL

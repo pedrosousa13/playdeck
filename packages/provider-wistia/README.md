@@ -7,6 +7,10 @@ Wistia's Aurora `<wistia-player>` element.
 pnpm add @playdeck/provider-wistia
 ```
 
+This package has no React dependency of its own — the Aurora
+`<wistia-player>` element is driven directly. Pair it with `@playdeck/react`
+for the primitives above, and note that package's peer range is React 19 only.
+
 `@playdeck/react` loads this for you when the source resolves to `wistia`, for
 the URL forms [Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md#the-other-three-providers)
 lists. The

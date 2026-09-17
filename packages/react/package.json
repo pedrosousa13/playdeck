@@ -46,6 +46,10 @@
         "default": "./esm-only.cjs"
       }
     },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "default": "./dist/browser.js"
+    },
     "./theme.css": "./theme.css",
     "./docked.css": "./docked.css"
   },
@@ -80,7 +84,7 @@
     "react-dom": "19.2.8"
   },
   "scripts": {
-    "build": "vite build && tsc -b",
+    "build": "vite build && vite build --config vite.browser.config.ts && tsc -b",
     "test": "vitest run --config ../../vitest.config.ts packages/react/test"
   }
 }
