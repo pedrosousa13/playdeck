@@ -1166,16 +1166,16 @@ describe('theme.css overlay rules (not shared with docked.css)', () => {
     expect(query).toMatch(
       /padding-bottom:\s*calc\(\s*var\(--playdeck-space-1,\s*0\.25rem\)/
     );
-    // Still ahead of WCAG 2.5.8's 24px floor at 40px; 2.75rem (44px) is the
-    // desktop-only lock the token's own doc comment records.
+    // Still the button box's own desktop-independent size; 2.75rem (44px) is
+    // the desktop-only default the token's own doc comment records.
     expect(query).toMatch(/--playdeck-control-size:\s*2\.5rem;/);
-    // The accessibility floor `controlTargetStyle` reads, moved down here
-    // alongside the size above -- the one place besides the desktop default
-    // allowed to move it (loading-error.tsx's own comment on the token).
-    expect(query).toMatch(/--playdeck-control-min-size:\s*2\.5rem;/);
-    // The seek row's own floor, at the 24px WCAG 2.5.8 minimum itself --
-    // independent of the button size above.
-    expect(query).toMatch(/--playdeck-seek-slider-min-block-size:\s*1\.5rem;/);
+    // Neither touch-target floor moves in this query any more (#736): both
+    // are read by the primitives as the `min-width`/`min-height` themselves,
+    // and Playdeck commits to WCAG 2.2 SC 2.5.5's 44px minimum for both, so
+    // leaving them unset here is what keeps every button and the seek row at
+    // the locked 2.75rem regardless of the smaller box set above.
+    expect(query).not.toMatch(/--playdeck-control-min-size:/);
+    expect(query).not.toMatch(/--playdeck-seek-slider-min-block-size:/);
 
     expect(query).toMatch(
       /:where\(\[data-playdeck-part='time'\]\)\s*\{[^}]*padding-inline:\s*var\(--playdeck-space-1,\s*0\.25rem\);/
@@ -1245,13 +1245,14 @@ describe('docked.css phone sizing (not shared with theme.css)', () => {
     expect(query).toMatch(
       /padding-bottom:\s*calc\(\s*var\(--playdeck-space-1,\s*0\.25rem\)/
     );
-    // Still ahead of WCAG 2.5.8's 24px floor at 40px; 2.75rem (44px) is the
-    // desktop-only lock the token's own doc comment records in theme.css.
+    // Still the button box's own desktop-independent size; 2.75rem (44px) is
+    // the desktop-only default the token's own doc comment records in
+    // theme.css.
     expect(query).toMatch(/--playdeck-control-size:\s*2\.5rem;/);
-    // The accessibility floor `controlTargetStyle` reads; see theme.css's
-    // own copy of this test.
-    expect(query).toMatch(/--playdeck-control-min-size:\s*2\.5rem;/);
-    expect(query).toMatch(/--playdeck-seek-slider-min-block-size:\s*1\.5rem;/);
+    // Neither touch-target floor moves in this query any more (#736); see
+    // theme.css's own copy of this test.
+    expect(query).not.toMatch(/--playdeck-control-min-size:/);
+    expect(query).not.toMatch(/--playdeck-seek-slider-min-block-size:/);
 
     expect(query).toMatch(
       /:where\(\[data-playdeck-part='time'\]\)\s*\{[^}]*padding-inline:\s*var\(--playdeck-space-1,\s*0\.25rem\);/

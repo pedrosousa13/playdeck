@@ -370,9 +370,11 @@ export const ErrorDisplay = ({
 // (`stories/theme.stories.tsx`'s `ControlSizeFloorHolds` measured that
 // directly: 36px, not the locked 44px). A dedicated token keeps the floor
 // independent of the size a consumer themes: it falls back to the desktop
-// 44px lock for a bare consumer, same as before, and only the theme's own
-// "below 48rem" query -- which sets this token alongside
-// `--playdeck-control-size` -- is what moves it down to 40px.
+// 44px lock for a bare consumer, and neither shipped stylesheet's own
+// "below 48rem" query moves it any lower (#736 -- both used to, which was a
+// WCAG 2.2 SC 2.5.5 defect; that query still shrinks `--playdeck-control-size`
+// alone, and `min-width`/`min-height` win over a smaller `width`/`height`
+// regardless of which rule set which, so the locked value still applies).
 export const controlTargetStyle: CSSProperties = {
   minWidth: 'var(--playdeck-control-min-size, 2.75rem)',
   minHeight: 'var(--playdeck-control-min-size, 2.75rem)'

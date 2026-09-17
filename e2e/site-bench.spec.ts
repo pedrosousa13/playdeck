@@ -669,12 +669,23 @@ test('below 48rem, the resting theme bar overlays the picture, and docked still 
  * `Bench.astro`'s own CSS alone -- and the bar's own height holds once a
  * real player has replaced it.
  *
+ * The bar's own ceiling moved from 76px to 100px in #736: that block used to
+ * also lower both touch-target floors to shrink the bar further, which was a
+ * WCAG defect (Playdeck commits to 44px, SC 2.5.5). With neither floor
+ * lowered any more, a locked-44px seek row plus a locked-44px button row plus
+ * this block's own trimmed padding (4px top, 4px bottom, no safe-area inset
+ * at this viewport) measures 96px -- still one seek row and one button row,
+ * not the third row #622 exists to prevent, so 100px is headroom on the
+ * measured figure rather than a second density budget. Red at the old 76
+ * threshold with both floors already fixed: this test measured the same
+ * 96px and failed `toBeLessThanOrEqual(76)`; green once raised to 100.
+ *
  * 375x812 rather than the 375x800 the rest of this file's narrow tests use:
  * the maintainer's own measurements for this ruling were taken at 812, a
  * true iPhone viewport height, and the extra 12px changes nothing this test
  * checks.
  */
-test('below 48rem, the stage letterboxes to 16:9 and the bar fits under 76px', async ({
+test('below 48rem, the stage letterboxes to 16:9 and the bar fits under 100px', async ({
   page
 }) => {
   test.slow();
@@ -702,7 +713,7 @@ test('below 48rem, the stage letterboxes to 16:9 and the bar fits under 76px', a
     controlsBox.x + controlsBox.width / 2,
     controlsBox.y + controlsBox.height / 2
   );
-  expect(controlsBox.height).toBeLessThanOrEqual(76);
+  expect(controlsBox.height).toBeLessThanOrEqual(100);
 });
 
 /**
@@ -765,6 +776,160 @@ test('after a press, the live stats readout reports a real rendition', async ({
     timeout: 20_000
   });
 });
+
+/**
+ * Touch-target floors on phones (#736). `theme.css` and `docked.css` each
+ * used to lower `--playdeck-control-min-size` to 2.5rem (40px) and
+ * `--playdeck-seek-slider-min-block-size` to 1.5rem (24px) inside their own
+ * `48rem` media query -- and the primitives read those two tokens directly as
+ * `min-width`/`min-height`, so whatever the query set was the floor. The
+ * maintainer's ruling holds Playdeck to WCAG 2.2 SC 2.5.5 Target Size
+ * (Enhanced), 44x44 CSS px, so neither floor may drop below that at any width.
+ *
+ * Measured in a real browser, against every narrow width this file already
+ * covers elsewhere, in both shipped skins -- reading the stylesheet's own
+ * header comment is exactly what shipped this defect (it calls 2.75rem "the
+ * locked" floor, while each file's own `48rem` media query overrode it
+ * anyway), so this reads `getBoundingClientRect()` on the actual rendered
+ * controls instead.
+ *
+ * Red: run against the stylesheets before the two lowering declarations were
+ * removed, all 8 cases here (4 widths x 2 skins) failed the button-width
+ * assertion, every one `Received: 40` against `Expected: >= 44` -- 40px
+ * being exactly the `2.5rem` the phone block set. Green on chromium and
+ * firefox after the removal.
+ */
+const narrowFloorViewports: readonly {
+  readonly width: number;
+  readonly height: number;
+  readonly hasTouch?: boolean;
+  readonly isMobile?: boolean;
+}[] = [
+  { width: 320, height: 720 },
+  { width: 360, height: 740, hasTouch: true, isMobile: true },
+  { width: 375, height: 800 },
+  { width: 375, height: 812 }
+];
+
+for (const viewport of narrowFloorViewports) {
+  test.describe(`touch targets hold at 44px, ${viewport.width}x${viewport.height} (#736)`, () => {
+    test.use({
+      viewport: { width: viewport.width, height: viewport.height },
+      hasTouch: viewport.hasTouch ?? false,
+      isMobile: viewport.isMobile ?? false
+    });
+
+    for (const skin of ['theme', 'docked'] as const) {
+      test(`the ${skin} skin`, async ({ page }) => {
+        test.slow();
+        await page.goto(landing);
+        await expect(activationButton(page)).toBeVisible();
+        if (skin === 'docked') {
+          await position(page, 'skin', 'docked').click();
+        }
+        await activationButton(page).click();
+        await expect(controls(page)).toBeVisible({ timeout: 20_000 });
+
+        const controlsBox = await controls(page).boundingBox();
+        if (controlsBox === null) {
+          throw new Error('Could not measure the bar.');
+        }
+        // Held on the bar before reading it, the same guard
+        // `activateAndMeasure` uses: theme's own auto-hide must not catch
+        // this read mid-fade.
+        await page.mouse.move(
+          controlsBox.x + controlsBox.width / 2,
+          controlsBox.y + controlsBox.height / 2
+        );
+
+        const geometry = await page.evaluate(() => {
+          const controlsEl = document.querySelector(
+            '[data-playdeck-part="controls"]'
+          );
+          const seekEl = document.querySelector(
+            '[data-playdeck-part="seek-slider"]'
+          );
+          if (controlsEl === null || seekEl === null) {
+            throw new Error('Missing a required control-bar part.');
+          }
+          // The same button-shaped-part list `e2e/site-bench.spec.ts`'s own
+          // '#622' row-fit test reads from the DOM rather than hand-picking:
+          // a control this clip does not gate on (captions, AirPlay) is
+          // simply absent from the result rather than throwing.
+          const buttonParts = [
+            'play-button',
+            'mute-button',
+            'captions-button',
+            'fullscreen-button',
+            'pip-button',
+            'airplay-button',
+            'settings-menu-trigger'
+          ];
+          const buttonRects = buttonParts
+            .flatMap((part) =>
+              Array.from(
+                controlsEl.querySelectorAll(`[data-playdeck-part="${part}"]`)
+              )
+            )
+            .filter((el) => (el as HTMLElement).offsetParent !== null)
+            .map((el) => {
+              const rect = el.getBoundingClientRect();
+              return {
+                width: rect.width,
+                height: rect.height,
+                top: rect.top,
+                left: rect.left,
+                right: rect.right,
+                bottom: rect.bottom
+              };
+            });
+          const seekRect = seekEl.getBoundingClientRect();
+          return {
+            buttonRects,
+            seekHeight: seekRect.height,
+            controlsScrollWidth: controlsEl.scrollWidth,
+            controlsClientWidth: controlsEl.clientWidth,
+            docScrollWidth: document.documentElement.scrollWidth,
+            docClientWidth: document.documentElement.clientWidth
+          };
+        });
+
+        // At least one button-shaped control renders at every width this
+        // file tests -- an empty result would let every assertion below pass
+        // vacuously.
+        expect(geometry.buttonRects.length).toBeGreaterThan(0);
+
+        for (const rect of geometry.buttonRects) {
+          expect(Math.round(rect.width)).toBeGreaterThanOrEqual(44);
+          expect(Math.round(rect.height)).toBeGreaterThanOrEqual(44);
+        }
+        expect(Math.round(geometry.seekHeight)).toBeGreaterThanOrEqual(44);
+
+        // Neither the bar nor the page scrolls sideways at this width.
+        expect(geometry.controlsScrollWidth).toBeLessThanOrEqual(
+          geometry.controlsClientWidth
+        );
+        expect(geometry.docScrollWidth).toBeLessThanOrEqual(
+          geometry.docClientWidth
+        );
+
+        // No two visible button-shaped controls overlap each other.
+        for (let i = 0; i < geometry.buttonRects.length; i++) {
+          for (let j = i + 1; j < geometry.buttonRects.length; j++) {
+            const a = geometry.buttonRects[i];
+            const b = geometry.buttonRects[j];
+            const overlaps =
+              a.left < b.right &&
+              b.left < a.right &&
+              a.top < b.bottom &&
+              b.top < a.bottom;
+            expect(overlaps).toBe(false);
+          }
+        }
+      });
+    }
+  });
+}
 
 /**
  * The row-two overflow (#622), on the resting `theme` skin: at the desktop

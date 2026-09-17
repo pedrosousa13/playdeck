@@ -877,18 +877,18 @@ directly by the primitives they size (`controlTargetStyle` in
 `loading-error.tsx`; the constant beside `SeekSlider` in
 `transport-controls.tsx`) as the `min-width`/`min-height` itself, rather than by
 either stylesheet, so a headless player with no stylesheet imported gets the
-44px WCAG 2.5.8 minimum from their `2.75rem` fallback alone. `--playdeck-control-size`
-moves a button's own size and _is_ what these floors clamp: a value set for it
-alone cannot shrink a control below whatever the floor token currently resolves
-to. The floor tokens themselves are not clamped — a value set for either is
-obeyed outright, which is exactly what both shipped stylesheets do below their
-`48rem` phone query: `theme.css`'s header calls `2.75rem` "the locked" minimum,
-but its phone block sets `--playdeck-control-min-size: 2.5rem` and
-`--playdeck-seek-slider-min-block-size: 1.5rem` (`docked.css` repeats both),
-lowering the floor to 40px and 24px on phones. So the 44px minimum holds for a
-bare, unstyled player, and does **not** hold once either shipped stylesheet is
-imported and the viewport narrows — which is precisely where a touch target
-matters most.
+44px minimum — WCAG 2.2 SC 2.5.5 _Target Size (Enhanced)_ — from their
+`2.75rem` fallback alone. `--playdeck-control-size` moves a button's own size
+and _is_ what these floors clamp: a value set for it alone cannot shrink a
+control below whatever the floor token currently resolves to. The floor
+tokens themselves are not clamped — a value set for either is obeyed
+outright. Both shipped stylesheets' `48rem` phone query still shrinks
+`--playdeck-control-size` to `2.5rem` (40px, the visual button box), but
+neither query sets either floor token any more, so `min-width`/`min-height`
+hold every button and the seek row at the locked `2.75rem` regardless. So the
+44px minimum holds for a bare, unstyled player, and holds equally once either
+shipped stylesheet is imported and the viewport narrows — which is precisely
+where a touch target matters most.
 
 ## Browser support
 

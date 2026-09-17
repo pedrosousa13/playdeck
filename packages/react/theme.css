@@ -711,13 +711,21 @@
    * still docks the bar, unconditionally, for a reader who chooses that skin.
    *
    * What is left is the row-two arithmetic: five buttons plus the times
-   * overflowed 375px onto a third row at the desktop control size (#622); and,
-   * as of 2026-09-04, the bar's own height. Letterboxing the stage to 16:9
-   * below this width (`Bench.astro`'s own rule) buys the picture back some of
-   * what the bar used to cover, but the bar was still close to 100px tall at
-   * 375px wide -- the seek row's own 44px floor plus a 40px button row plus
-   * 16px of padding top and bottom -- so it is trimmed here too, to keep it
-   * near or under 76px.
+   * overflowed 375px onto a third row at the desktop control size (#622).
+   * `pip-button`'s own coarse-pointer hide (below) and this block's gap and
+   * padding trims resolve that at every width this package tests.
+   *
+   * This block used to also trim the bar's own height, by lowering both
+   * touch-target floors below this query -- 40px buttons, a 24px seek row --
+   * to keep the bar near or under 76px tall once the 16:9 letterbox
+   * (`Bench.astro`'s own rule) had bought some of the picture back. That
+   * lowering shipped as a WCAG defect (#736): the floor tokens below are read
+   * by the primitives as the `min-width`/`min-height` themselves, so setting
+   * them under 2.75rem (44px) was obeyed outright, and Playdeck commits to
+   * WCAG 2.2 SC 2.5.5 Target Size (Enhanced) for both. Neither floor moves
+   * here any more, so the bar is taller below 48rem than that earlier budget
+   * -- see this file's own comments on the two floor tokens below for why
+   * that costs no row, no wrap and no scroll.
    */
   @media (max-width: 48rem) {
     :where([data-playdeck-part='controls']) {
@@ -742,23 +750,24 @@
       );
       /* 2.75rem is a desktop value: it is the size a pointer can miss by a
        * few px and still correct on the next attempt, which a phone screen
-       * with no cursor to hover first has less need of. 2.5rem (40px) still
-       * clears WCAG 2.5.8's 24px minimum target size with room to spare, and
-       * freeing those 8px per button is what the row-two overflow (#622)
-       * needed to resolve on one line at 360px -- see the arithmetic in
-       * `theme.test.ts`'s phone-sizing test. Both tokens move together: the
-       * size above and the floor below are read separately by
-       * `controlTargetStyle` (loading-error.tsx) precisely so that a bare
-       * consumer setting only `--playdeck-control-size` cannot also move the
-       * floor -- this query is the one place that is allowed to. */
+       * with no cursor to hover first has less need of, so this query still
+       * shrinks the button box itself to 2.5rem (40px) -- freeing those 8px
+       * per button is what the row-two overflow (#622) needed to resolve on
+       * one line at 360px -- see the arithmetic in `theme.test.ts`'s
+       * phone-sizing test. It does NOT move `--playdeck-control-min-size`
+       * (#736): that token is a separate read, precisely so a value set here
+       * for `--playdeck-control-size` cannot also move it (see
+       * `controlTargetStyle`'s own comment in loading-error.tsx), and `min-
+       * width`/`min-height` always win over a smaller `width`/`height`
+       * regardless of which rule set which. Leaving the floor token unset
+       * here means every button still renders at the locked 44px (WCAG 2.2
+       * SC 2.5.5) no matter how small a box this line declares. */
       --playdeck-control-size: 2.5rem;
-      --playdeck-control-min-size: 2.5rem;
-      /* The seek row's own floor, independent of the button size above: row
-       * two still needs 40px targets, but row one is a track and a thumb, not
-       * a button, and 1.5rem (24px) is the WCAG 2.5.8 minimum it can shrink
-       * to without falling under it -- the same floor the button row is held
-       * at, just not the same value. */
-      --playdeck-seek-slider-min-block-size: 1.5rem;
+      /* The seek row carries no size token of its own -- unlike the buttons
+       * above, `--playdeck-seek-slider-min-block-size` is the whole visual
+       * height, not a floor under a separately-shrunk box -- so honouring
+       * the 44px floor here (#736) means this row no longer shrinks on
+       * phones at all; there is nothing left for this query to set. */
     }
 
     /* Trimmed so "0:01 / 1:30" costs no more width than the digits need --
