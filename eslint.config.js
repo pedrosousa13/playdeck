@@ -37,6 +37,14 @@ export default tseslint.config(
       // whatever branch it holds fails a run that named no file of theirs
       // (#607).
       '.worktrees/**',
+      // The sibling path agent worktrees land in, and not covered by the
+      // entry above: a flat-config glob does not match across the `.claude/`
+      // prefix, so `.worktrees/**` reaches neither this directory nor
+      // anything under it (#679). Leaving it unlisted does more than slow the
+      // run down -- a worktree on disk is a second candidate tsconfig root,
+      // and typescript-eslint then refuses to parse the repo's own source as
+      // well as the worktree's, so the gate fails on files nobody touched.
+      '.claude/worktrees/**',
       '.superpowers/**',
       'docs/superpowers/plans/**',
       // MPEG-TS media segments share the .ts extension with TypeScript.
