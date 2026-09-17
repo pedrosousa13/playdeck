@@ -782,25 +782,33 @@ export const SeekSlider = ({
 export type TimeProps = Omit<ComponentPropsWithRef<'time'>, 'ref'> & {
   readonly ref?: Ref<HTMLElement>;
   readonly type?: 'current' | 'duration' | 'remaining';
+  // The word `type="current"` renders once playback is within the live
+  // edge's tolerance (`state.live.atLiveEdge`), in place of an offset.
+  // Localisable because it is the one piece of text this part ever renders
+  // untranslated on its own account — everything else is a formatted number.
+  readonly liveLabel?: string;
 };
 
 export const Time = ({
   children,
+  liveLabel = 'LIVE',
   ref,
   type = 'current',
   ...props
 }: TimeProps) => {
-  const { currentTime, duration, provider } = usePlayerState((state) => ({
+  const { currentTime, duration, live, provider } = usePlayerState((state) => ({
     currentTime: state.currentTime,
     duration: state.duration,
+    live: state.live,
     provider: state.provider
   }));
   const hasDuration = typeof duration === 'number' && Number.isFinite(duration);
   // `null` for a total this source does not have — a live stream, or one whose
   // duration has not arrived. `0` was the defect (#248): `formatTime(0)` renders
   // `0:00`, and a viewer reads a zero-length video rather than an untimed one.
-  // `current` never reaches it, because `currentTime` means the same thing on a
-  // live source as on a VOD one, so a `current` instance is always the `<time>`
+  // `current` never reaches it, because on a live source it reports
+  // `live.offsetFromEdge` in place of `currentTime` (below) rather than
+  // falling back to `null`, so a `current` instance is always the `<time>`
   // below.
   const seconds =
     type === 'duration'
@@ -811,7 +819,16 @@ export const Time = ({
         ? hasDuration
           ? Math.max(0, duration - currentTime)
           : null
-        : currentTime;
+        : // A live source has no fixed start `current` counts up from that
+          // means anything to a viewer. What varies instead, and what
+          // `CONTEXT.md`'s "Live edge" entry already names, is how far behind
+          // the provider's own edge playback has fallen —
+          // `live.offsetFromEdge`, already in the whole seconds this
+          // component renders at (`live-state.ts`). `type="duration"` never
+          // reaches here: `hasDuration` is false for every live source
+          // (`duration` is published `null`/`Infinity` while live), so it
+          // takes the branch above instead.
+          (live?.offsetFromEdge ?? currentTime);
 
   // Not a `<time>`: there is no time here to mark up. Keeping the element and
   // emptying it would leave a `<time>` with neither a `datetime` nor parseable
@@ -856,7 +873,13 @@ export const Time = ({
 
   const formatted = formatTime(seconds);
   const display =
-    type === 'remaining' && seconds > 0 ? `-${formatted}` : formatted;
+    type === 'current' && live !== null
+      ? live.atLiveEdge
+        ? liveLabel
+        : `-${formatted}`
+      : type === 'remaining' && seconds > 0
+        ? `-${formatted}`
+        : formatted;
 
   return (
     <time

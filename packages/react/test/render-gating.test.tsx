@@ -319,8 +319,10 @@ const PART_TABLE: Record<string, PartEntry> = {
     ]),
     mount: bare(Player.SeekSlider)
   },
+  // `live` added for the negative-offset/LIVE rendering `type="current"`
+  // gains on a live source (`live.offsetFromEdge`, `live.atLiveEdge`).
   Time: {
-    fields: new Set(['currentTime', 'duration', 'provider']),
+    fields: new Set(['currentTime', 'duration', 'live', 'provider']),
     mount: bare(Player.Time)
   },
   FullscreenButton: {
@@ -409,12 +411,12 @@ const PART_TABLE: Record<string, PartEntry> = {
     fields: new Set(['audioTracks', 'capabilities']),
     mount: bare(Player.AudioTrackMenu)
   },
-  // `live` alone -- no capability gate, since it renders/withholds off
-  // `state.live` itself rather than a `PlayerCapabilities` field. That it
-  // actually reads only `live` is proven by `test/live-indicator.test.tsx`,
+  // `live` gates whether it withholds at all; `capabilities` (`liveEdge`)
+  // gates whether it presses as a button or stays a disabled badge. That it
+  // actually reads only these two is proven by `test/live-indicator.test.tsx`,
   // not by this table entry.
   LiveIndicator: {
-    fields: new Set(['live']),
+    fields: new Set(['live', 'capabilities']),
     mount: bare(Player.LiveIndicator)
   },
   // Reads seven fields through one selector -- the shortcut layer has to know

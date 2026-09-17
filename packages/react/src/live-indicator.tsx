@@ -1,5 +1,5 @@
 import { controlTargetStyle } from './loading-error.js';
-import { usePlayerState } from './player-context.js';
+import { usePlayer, usePlayerState } from './player-context.js';
 import type { ComponentPropsWithRef } from 'react';
 
 export type LiveIndicatorProps = ComponentPropsWithRef<'button'>;
@@ -14,22 +14,50 @@ export type LiveIndicatorProps = ComponentPropsWithRef<'button'>;
  * returns `null` for every non-live case instead), so those are the only two
  * reachable states.
  *
- * Structurally a `<button type="button">`, and `disabled`: seeking to the live
- * edge is not built yet, so a press here would do nothing today.
- * `disabled` is what keeps it genuinely non-interactive -- out of the tab
- * order, announced unavailable -- rather than `aria-disabled`, which would
- * leave it focusable. That is current behaviour rather than a permanent
- * guarantee: if live-edge seeking is ever wired onto this control, it gains
- * an `onClick` and sheds `disabled`.
+ * Where `capabilities.liveEdge` is `available`, this is the button: pressing
+ * it issues `PlayerController.seekToLiveEdge()`, following the same
+ * consumer-`onClick`/`preventDefault` contract every other command-issuing
+ * part in this package uses (see `PlayButton`, above `PlayButtonProps`).
+ *
+ * Where it is not `available`, the part stays mounted as a non-interactive
+ * LIVE badge instead of vanishing -- a deliberate, named exception to the
+ * uniform rule this package otherwise holds without exception (stated in
+ * `packages/react/README.md`, beside its capability-gating rule, and in
+ * `CONTEXT.md`'s **Availability** entry): "a control whose command the active
+ * provider cannot honour renders nothing rather than rendering disabled."
+ * `LiveIndicator` is an indicator, not a control: it reports a property of
+ * the stream (that it is live, and whether the viewer is at its edge), it
+ * does not offer a command of its own. Being live is true whether or not a
+ * seek-to-edge command exists on the active provider, and hiding the badge
+ * because a *different* capability (`liveEdge`) is unavailable would suppress
+ * something true. `disabled` (never `aria-disabled`) is what keeps it
+ * genuinely non-interactive in that state -- out of the tab order, announced
+ * unavailable. A future reader who finds a capability-gated part that does
+ * not use the uniform gate should find this paragraph beside it, not read it
+ * as drift and "fix" it.
+ *
+ * CORRECTION to an earlier version of this docstring: it used to say "if
+ * live-edge seeking is ever wired onto this control, it gains an `onClick`
+ * and sheds `disabled`", framing the disabled badge as a stand-in for a
+ * not-yet-built feature that `onClick` would replace outright. Seeking is now
+ * wired (above), and the two behaviours coexist rather than one replacing the
+ * other: `available` gets the `onClick` and sheds `disabled`; `unavailable`
+ * keeps `disabled`, permanently, for the reason above -- not provisionally.
  */
 export const LiveIndicator = ({
   'aria-label': ariaLabel,
   children,
+  onClick,
   style,
   ...props
 }: LiveIndicatorProps) => {
-  const live = usePlayerState((state) => state.live);
+  const { live, status } = usePlayerState((state) => ({
+    live: state.live,
+    status: state.capabilities.liveEdge.status
+  }));
+  const { controller } = usePlayer();
   if (live === null) return null;
+  const seekable = status === 'available';
 
   return (
     <button
@@ -37,7 +65,12 @@ export const LiveIndicator = ({
       aria-label={ariaLabel ?? 'Live'}
       data-playdeck-part="live"
       data-state={live.atLiveEdge ? 'at-edge' : 'behind-edge'}
-      disabled
+      disabled={!seekable}
+      onClick={(event) => {
+        onClick?.(event);
+        if (event.defaultPrevented || !seekable) return;
+        void controller.seekToLiveEdge();
+      }}
       style={{ ...controlTargetStyle, ...style }}
       type="button"
     >

@@ -1972,6 +1972,145 @@ describe('Time', () => {
     expect(attr(remaining ?? null, 'data-state')).toBe('untimed');
   });
 
+  // Distinct from the two "untimed" tests above: those drive `duration`
+  // alone and leave `state.live` at its default `null`, so neither is a
+  // "live source" as `PlayerState.live` defines the term. This one also
+  // sets `live`, matching what a live provider adapter actually publishes
+  // alongside a null/infinite `duration` -- the case #180's brief names.
+  // #180 does not change this rendering path (`type="duration"` was already
+  // untimed on a null/infinite duration, #248), so there is no unfixed
+  // version of THIS code to run the assertion against. Per
+  // docs/agents/demonstrated-red.md's documented fallback: substitute
+  // mutation, the untimed branch's `null` fallback (the #248 fix) changed
+  // back to `0` -- the exact defect #248 removed. Ran:
+  //
+  //   AssertionError: expected '0:00' to be '' // Object.is equality
+  //    ❯ packages/react/test/controls.test.tsx:1995:31
+  //      1993|     ];
+  //      1994|     expect(duration?.tagName).toBe('SPAN');
+  //      1995|     expect(duration?.textContent).toBe('');
+  //          |                               ^
+  //
+  //   Test Files  1 failed (1)
+  //        Tests  5 failed | 14 passed | 166 skipped (185)
+  //
+  // (Four other pre-existing tests share the same fixture shape and failed
+  // alongside this one, all for the same reintroduced #248 defect.) Reverted,
+  // all 19 of this describe block's tests passed again.
+  test('renders nothing for type="duration" on a genuinely live source', () => {
+    const { container } = renderWithPlayer(
+      <>
+        <Player.Time type="duration" />
+        <Player.Time type="remaining" />
+      </>,
+      {
+        currentTime: 42,
+        duration: Number.POSITIVE_INFINITY,
+        live: { isLive: true, atLiveEdge: true, offsetFromEdge: 0 }
+      }
+    );
+    const [duration, remaining] = [
+      ...container.querySelectorAll('[data-playdeck-part="time"]')
+    ];
+    expect(duration?.tagName).toBe('SPAN');
+    expect(duration?.textContent).toBe('');
+    expect(attr(duration ?? null, 'data-state')).toBe('untimed');
+    expect(remaining?.tagName).toBe('SPAN');
+    expect(remaining?.textContent).toBe('');
+  });
+
+  // Demonstrated red, substitute mutation: the `current`-on-a-live-source
+  // branch of `seconds` (`live?.offsetFromEdge ?? currentTime`) reverted to
+  // plain `currentTime`. The same mutation fails this test and "keeps
+  // dateTime honest..." below it -- both read off the same `seconds`. Ran:
+  //
+  //   TestingLibraryElementError: Unable to find an element with the text: -0:42.
+  //    ❯ packages/react/test/controls.test.tsx:2008:25
+  //      2006|       live: { isLive: true, atLiveEdge: false, offsetFromEdge: 42 }
+  //      2007|     });
+  //      2008|     const time = screen.getByText('-0:42');
+  //          |                         ^
+  //
+  //   Test Files  1 failed (1)
+  //        Tests  2 failed | 17 passed | 166 skipped (185)
+  //
+  // Reverted, all 19 passed again.
+  test('shows a negative offset from the live edge on type="current" when behind it', () => {
+    renderWithPlayer(<Player.Time />, {
+      currentTime: 100,
+      duration: Number.POSITIVE_INFINITY,
+      live: { isLive: true, atLiveEdge: false, offsetFromEdge: 42 }
+    });
+    const time = screen.getByText('-0:42');
+    expect(time.tagName).toBe('TIME');
+    expect(attr(time, 'data-time-type')).toBe('current');
+  });
+
+  // Demonstrated red, substitute mutation: the `display` ternary's
+  // `live.atLiveEdge ? liveLabel : ...` branch removed, so `current` on a
+  // live source always shows the negative-offset form. Failed this test AND
+  // "honours a custom liveLabel prop" AND "keeps dateTime honest" below --
+  // all three query for the LIVE-branch text. Ran:
+  //
+  //   TestingLibraryElementError: Unable to find an element with the text: LIVE.
+  //    ❯ packages/react/test/controls.test.tsx:2019:19
+  //      2017|       live: { isLive: true, atLiveEdge: true, offsetFromEdge: 4 }
+  //      2018|     });
+  //      2019|     expect(screen.getByText('LIVE')).toBeDefined();
+  //          |                   ^
+  //
+  //   Test Files  1 failed (1)
+  //        Tests  3 failed | 16 passed | 166 skipped (185)
+  //
+  // Reverted, all 19 passed again.
+  test('shows the localisable LIVE label on type="current" once within the edge tolerance', () => {
+    renderWithPlayer(<Player.Time />, {
+      currentTime: 100,
+      duration: Number.POSITIVE_INFINITY,
+      live: { isLive: true, atLiveEdge: true, offsetFromEdge: 4 }
+    });
+    expect(screen.getByText('LIVE')).toBeDefined();
+  });
+
+  test('honours a custom liveLabel prop in place of the LIVE default', () => {
+    renderWithPlayer(<Player.Time liveLabel="AO VIVO" />, {
+      currentTime: 100,
+      duration: Number.POSITIVE_INFINITY,
+      live: { isLive: true, atLiveEdge: true, offsetFromEdge: 0 }
+    });
+    expect(screen.getByText('AO VIVO')).toBeDefined();
+    expect(screen.queryByText('LIVE')).toBeNull();
+  });
+
+  // "Keep dateTime honest for whatever you render" (#180's brief): pins that
+  // `dateTime` reflects the measured `offsetFromEdge` even in the render
+  // branch whose visible text is the word LIVE rather than a number.
+  //
+  // Demonstrated red, same substitute mutation as the offset test above
+  // (`seconds` reverted to plain `currentTime`) -- `datetime` then reports
+  // the raw playhead position instead of the offset:
+  //
+  //   AssertionError: expected 'PT100S' to be 'PT4S' // Object.is equality
+  //    ❯ packages/react/test/controls.test.tsx:2039:36
+  //      2037|     });
+  //      2038|     const time = screen.getByText('LIVE');
+  //      2039|     expect(attr(time, 'datetime')).toBe('PT4S');
+  //          |                                    ^
+  //
+  //   Test Files  1 failed (1)
+  //        Tests  2 failed | 17 passed | 166 skipped (185)
+  //
+  // Reverted, all 19 passed again.
+  test('keeps dateTime honest for the measured offset while the label reads LIVE', () => {
+    renderWithPlayer(<Player.Time />, {
+      currentTime: 100,
+      duration: Number.POSITIVE_INFINITY,
+      live: { isLive: true, atLiveEdge: true, offsetFromEdge: 4 }
+    });
+    const time = screen.getByText('LIVE');
+    expect(attr(time, 'datetime')).toBe('PT4S');
+  });
+
   test('still formats the elapsed time on an untimed source', () => {
     renderWithPlayer(<Player.Time />, { currentTime: 75, duration: null });
     const time = screen.getByText('1:15');

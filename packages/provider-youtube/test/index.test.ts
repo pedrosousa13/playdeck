@@ -2029,6 +2029,17 @@ test('reports chapters as unavailable for the provider without failing a command
 // `getCurrentTime()` and `getVideoLoadedFraction()` -- no seekable-range
 // accessor at all -- so there is no live edge this adapter could report,
 // before or after the player is ready.
+//
+// LIMITATION (maintainer ruling, 2026-09-16, #180): this suite runs offline
+// against a fake IFrame Player (see the file header) rather than a real
+// embed -- YouTube embeds will not authorize in this sandbox at all (error
+// 150, `getVideoData().errorCode === "auth"`, identical across headless
+// Chromium, real Chrome and Firefox, with `doubleclick` egress refused, on
+// every video including a control VOD). This test therefore verifies the
+// API surface the adapter calls -- that nothing in it exposes a seekable
+// range, so `liveEdge` is coded to always report `unavailable`/`provider` --
+// and NOT that a live YouTube stream actually behaves this way in a real
+// browser. A future reader must not mistake it for a runtime proof.
 test('reports liveEdge as unavailable for the provider, before and after ready', async () => {
   const controller = new PlayerController();
   const { fake, provider } = createAdapter();

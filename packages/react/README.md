@@ -4,6 +4,11 @@ Headless, composable React 19 media-player primitives with one API across
 native MP4/WebM, HLS, YouTube, Vimeo and Wistia. No CSS is imported by the
 primitives, and every control is capability-gated: a control whose command the
 active provider cannot honour renders nothing rather than rendering disabled.
+One deliberate, named exception: `LiveIndicator` is an indicator rather than a
+control, so where its `liveEdge` command is unavailable it stays mounted as a
+non-interactive `disabled` badge instead of vanishing — being live is true
+regardless of whether a seek-to-edge command exists. See the docstring above
+`LiveIndicator` for the reasoning.
 
 ```sh
 pnpm add @playdeck/react
