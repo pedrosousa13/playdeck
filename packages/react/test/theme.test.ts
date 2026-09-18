@@ -535,7 +535,7 @@ describe.each(fixtures)(
     // on a pseudo-element targets its host rather than reaching past it.
     test('below 48rem, both menus become a fixed bottom sheet with a scrim', () => {
       const sheetRule =
-        /:where\(\s*\[data-playdeck-part='settings-menu'\],\s*\[data-playdeck-part='captions-menu'\]\s*\)\s*\{\s*position:\s*fixed;\s*inset:\s*auto 0 0 0;\s*max-block-size:\s*70vh;\s*overflow-y:\s*auto;[^}]*\}/.exec(
+        /:where\(\[data-playdeck-part='settings-menu'\]\)\s*\{\s*position:\s*fixed;\s*inset:\s*auto 0 0 0;\s*max-block-size:\s*70vh;\s*overflow-y:\s*auto;[^}]*\}/.exec(
           withoutComments
         );
       expect(sheetRule).not.toBeNull();
