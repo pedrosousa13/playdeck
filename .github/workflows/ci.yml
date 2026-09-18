@@ -917,6 +917,17 @@ jobs:
       # transient network failure from a definitive removal — only the second
       # fails this job. scripts/check-site-links.mjs carries both arguments.
       - run: pnpm test:site-links
+      # `pnpm docs:check` in `static` above compares markdown source against
+      # `examples/` fixtures and never renders HTML, so a green run there
+      # proves a fence matches the file it came from and says nothing about
+      # the bytes a reader is served. This reads the build instead, for the
+      # same reason `test:site-links` does: `apps/site/src/shiki.ts`'s
+      # `repaintForContrast` transformer sits between the two today and is
+      # correct only by construction, and construction is not a gate — this
+      # extracts every highlighted code block's rendered text out of
+      # `apps/site/dist` and checks it byte for byte against the fence or
+      # `examples/` file it should have come from (#560).
+      - run: pnpm test:site-fences
 
   # 25 rather than 20: the install step is bounded at 22 minutes (see
   # .github/actions/playwright-install), and a 20-minute job cap left no room
