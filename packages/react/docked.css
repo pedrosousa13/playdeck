@@ -607,10 +607,7 @@
     position: relative;
   }
 
-  :where(
-    [data-playdeck-part='settings-menu'],
-    [data-playdeck-part='captions-menu']
-  ) {
+  :where([data-playdeck-part='settings-menu']) {
     position: absolute;
     inset-block-end: calc(100% + var(--playdeck-space-1, 0.25rem));
     inset-inline-end: 0;
@@ -633,10 +630,7 @@
    * surface, so it gets the same dimmed backdrop theme.css's sheet does.
    */
   @media (max-width: 48rem) {
-    :where(
-      [data-playdeck-part='settings-menu'],
-      [data-playdeck-part='captions-menu']
-    ) {
+    :where([data-playdeck-part='settings-menu']) {
       position: fixed;
       inset: auto 0 0 0;
       max-block-size: 70vh;
@@ -758,10 +752,7 @@
       outline: 2px solid highlight;
     }
 
-    :where(
-      [data-playdeck-part='settings-menu'],
-      [data-playdeck-part='captions-menu']
-    ) {
+    :where([data-playdeck-part='settings-menu']) {
       border: 1px solid canvastext;
       background-color: canvas;
     }
@@ -850,10 +841,7 @@
       accent-color: var(--playdeck-color-accent, #3ea6ff);
     }
 
-    :where(
-      [data-playdeck-part='settings-menu'],
-      [data-playdeck-part='captions-menu']
-    ) {
+    :where([data-playdeck-part='settings-menu']) {
       border-color: var(--playdeck-color-hairline, #2a2a2d);
       color: var(--playdeck-color-on-surface, #ededed);
       background-color: var(--playdeck-color-surface, #141416);
