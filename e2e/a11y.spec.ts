@@ -314,32 +314,30 @@ const themes = [
 // rather than the shared `knownIncomplete`. Everything outside both lists is
 // still matched by equality, so a new, undiagnosed id fails as before.
 //
-// menu-open / color-contrast (messageKey `bgOverlap`, on the current-time
-// `<time>`): a layout consequence of the composition, not a colour one, and not
-// specific to `docked.css` — `theme:themed` produces the identical geometry,
-// measured. `.playdeck-example-controls` is `flex-direction: column` and
-// declares no `align-items`; both theme files set `align-items: center` on that
-// same part. Mount either and the two example rows stop stretching to the bar's
-// full 768px and centre at their content width instead, which slides the
-// current time to the middle of the bar and under the settings menu — an opaque
-// popup anchored to the bar's right edge, opening upward over the seek row.
+// Empty since #682, which removed the one entry it had ever carried:
+// `menu-open` / `color-contrast` (messageKey `bgOverlap`, on the current-time
+// `<time>`). That finding was a layout consequence of the composition rather
+// than a colour one. `.playdeck-example-controls` is `flex-direction: column`
+// and used to declare no `align-items`, while both theme files set
+// `align-items: center` on that same part; against a column that centres each
+// row at its own content width instead of stretching it to the bar's full
+// 768px, which slid the current time into the middle of the bar and under the
+// settings menu. Whether axe noticed was genuinely engine-dependent — it
+// resolves a background at the text's own centre, and the centred row's width
+// differs by ~31px on font metrics alone, so chromium's centre landed inside
+// the menu and firefox's landed clear of it — which is what put the id in this
+// bucket rather than in `dockedKnownIncomplete`.
 //
-// The overlap itself is structural and present on both engines (the menu spans
-// x 304-490 in each; the current time spans 286.3-331.5 on chromium and
-// 270.8-316.0 on firefox — the row's centred width differs by ~31px on font
-// metrics alone). What differs is whether axe notices: it resolves a
-// background at the text's own centre, and that centre lands inside the menu on
-// chromium (308.9) and clear of it on firefox (293.4). So chromium returns the
-// text needs-review and firefox returns it clean, and both are right about the
-// same geometry. Absorbing it as expected would fail on firefox; expecting it
-// absent would fail on chromium — genuinely engine-dependent, which is what
-// this bucket exists for.
-//
-// Nothing is hidden from a user by it: `<time>` is not focusable, so SC 2.4.11
-// is untouched, and the text sits behind a popup the reader opened.
-const dockedOptionalIncomplete: Readonly<Record<string, readonly string[]>> = {
-  'menu-open': ['color-contrast']
-};
+// The composition now declares `align-items: stretch`, so both rows are full
+// width and the two boxes are nowhere near each other: with the settings menu
+// open under `docked`, the current time spans x20-65.20 on chromium and
+// x20-65.18 on firefox, and the menu spans x450-636 on both -- clear by
+// ~385px. Measured 2026-09-19 at 1280x720, dark scheme, in the reference
+// composition; webkit was not among them, because it cannot launch in the
+// environment this was measured in and CI is where these buckets first meet
+// it.
+const dockedOptionalIncomplete: Readonly<Record<string, readonly string[]>> =
+  {};
 
 // Per-state `incomplete` ids the docked pass expects in addition to
 // `knownIncomplete`, matched by equality exactly like it — as firmly pinned as
@@ -347,50 +345,40 @@ const dockedOptionalIncomplete: Readonly<Record<string, readonly string[]>> = {
 // different node starting to produce the same rule id, still fails the run.
 // The reason an entry lives here rather than in `knownIncomplete` is that it
 // is docked-only, never that it is unpinnable: `knownIncomplete` is asserted
-// against both passes below, and the headless pass genuinely does not
-// produce this id, so putting it there would fail headless instead.
+// against both passes below, so an id the headless pass does not produce
+// would fail headless if it were put there. The bucket is empty now, so
+// there is no such id to name -- this states the rule an entry would be
+// admitted under, not a claim about one.
 //
-// captions-menu-open / color-contrast: the same `align-items: center` cause
-// documented above for `menu-open` produces a second sub-finding here.
+// Empty since #682, and emptied rather than rewritten. The one entry it had
+// ever carried was `captions-menu-open` / `color-contrast`, which bundled two
+// sub-findings under that single rule id (axe groups by rule, not by node):
+// the current-time `<time>` (messageKey `bgOverlap`) under the captions menu,
+// and `[data-playdeck-part="caption-line"]` (messageKey
+// `elmPartiallyObscured`) under the captions trigger's own box. Both came from
+// the one cause described above — the theme's `align-items: center` read
+// against the composition's column — so `align-items: stretch` on
+// `.playdeck-example-controls` took both away at once and this state scans
+// clean on chromium and firefox.
 //
-// The current-time `<time>` (messageKey `bgOverlap`): the captions menu box
-// is anchored to the captions trigger, well to the left of the settings
-// trigger, so it lands even more squarely over the centred scrubber row.
-// Measured on chromium and firefox: the menu spans x272-442 on both engines
-// (its position comes from the trigger's own layout, not from text runs),
-// and the current time's own centre — 308.9 on chromium, 293.4 on firefox —
-// falls inside that range on both, where the settings case above only put
-// chromium's centre inside its (differently positioned) menu. Deterministic
-// on both measured engines is why this is pinned here rather than carried in
-// `dockedOptionalIncomplete`.
+// `e2e/caption-line-clearance.spec.ts` is what holds the trigger clear of the
+// `caption-line` from now on -- that part specifically, not the whole
+// `caption-cue` it sits inside -- and it measures rects rather than reading a
+// scan. That division is deliberate and predates the fix: the overlap was
+// always present with the menu closed too (docked `captions-on` scans clean
+// and is the control proving it), and axe only reported it once the captions
+// menu's own DOM was in the tree, because that is when its spatial grid
+// subdivides finely enough. The rects were identical either way. A scan is
+// therefore the wrong instrument for a geometry this fix is about, and a
+// rect assertion is the right one.
 //
-// Webkit is unmeasured, not measured-and-agreeing: it cannot launch on the
-// machine this was diagnosed on (missing system libs), so this entry has
-// only ever been checked against two of the three engine projects
-// `playwright.config.ts` runs, and CI is the first place it meets webkit. If
-// CI shows webkit disagreeing — the id optional rather than fixed, or absent
-// outright — that is *measured* engine dependence, on the same grounds
-// `dockedOptionalIncomplete` above already exists for, and the fix is to move
-// this entry there with that evidence. Not to add a webkit skip, and not to
-// weaken the pin pre-emptively on the strength of a machine that cannot run
-// it at all.
-//
-// A second sub-finding is bundled under this same `color-contrast` rule id
-// (axe groups by rule, not by node): `[data-playdeck-part="caption-line"]`,
-// messageKey `elmPartiallyObscured` — the captions trigger's own hitbox
-// sitting over part of the caption text. It predates this change and is
-// unrelated to the captions menu; its full measurement is on #682, filed
-// separately. What belongs here: the same overlap is present with the menu
-// closed too — docked `captions-on`, above, asserts both buckets empty and
-// scans clean, which is the control proving it — so the geometry alone does
-// not make axe report it. Axe's spatial grid only subdivides finely enough
-// to catch this overlap once the captions menu's own DOM is present in the
-// tree; the rects themselves are identical either way. Fixing #682 would not
-// remove this entry regardless: the time-row overlap above is an independent,
-// sufficient reason for `color-contrast` to keep firing in this state.
-const dockedKnownIncomplete: Readonly<Record<string, readonly string[]>> = {
-  'captions-menu-open': ['color-contrast']
-};
+// Webkit is unmeasured rather than measured-and-agreeing: both buckets were
+// emptied on chromium and firefox evidence alone, and CI is the first place
+// they meet webkit. A docked-only id that CI's webkit leg reports and the
+// other two do not is *measured* engine dependence, and belongs in one of
+// these buckets with that evidence written beside it — never behind a webkit
+// skip.
+const dockedKnownIncomplete: Readonly<Record<string, readonly string[]>> = {};
 
 for (const theme of themes) {
   for (const state of states) {

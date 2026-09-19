@@ -73,6 +73,18 @@ const layoutCss = `
   z-index: 20;
   display: flex;
   flex-direction: column;
+  /* Stated here rather than left to whichever stylesheet is mounted (#682).
+     Both shipped stylesheets write align-items: center on this part for their
+     own row direction, where it means "centre each control vertically within
+     its line" -- both wrap into two lines under flex-wrap: wrap, so the
+     direction is the load-bearing half, not the line count. Against the
+     column above it means something else entirely - shrink
+     each row to its own content width and centre it horizontally - so the
+     button row collapsed into the middle of the bar, directly under the
+     caption cue, and the seek row with it. The initial value is what a column
+     wants; declaring it is what stops the theme's row-direction assumption
+     from reaching this composition at all. */
+  align-items: stretch;
   gap: 0.25rem;
   padding: 0.25rem;
   /* Solid, not a gradient: a gradient background makes axe's color-contrast
