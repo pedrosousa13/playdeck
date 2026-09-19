@@ -5,8 +5,10 @@ import { onTestFinished } from 'vitest';
 // uncaught-error handling. In the runner that lands as an unhandled error and
 // fails the whole file, so a test that throws from a listener on purpose
 // captures those rethrows instead — and the test that owns the surfacing
-// contract asserts against what was captured. Shared by the native and HLS
-// provider tests, since both providers' fan-outs rethrow the same way.
+// contract asserts against what was captured. Shared by every provider suite
+// that drives a throwing listener -- state, dimensions or cues alike, which is
+// the whole of what a fan-out delivers to -- since the providers' fan-outs all
+// rethrow the same way.
 //
 // The scheduler is wrapped rather than replaced: other work under test also
 // schedules microtasks of its own, and swallowing those would stall the very

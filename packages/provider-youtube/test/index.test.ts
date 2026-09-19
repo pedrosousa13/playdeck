@@ -15,7 +15,7 @@
 // setting and which logs a `NotSupportedError` per frame rather than staying
 // quiet. Same intent, newer spelling.
 
-import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import {
   PlayerController,
   type ProviderEvent,
@@ -30,6 +30,7 @@ import {
   type YouTubePlayerOptions,
   type YouTubeProviderOptions
 } from '../src/index';
+import { captureRethrows } from '@playdeck/test-support/capture-rethrows';
 
 const playerStates = {
   UNSTARTED: -1,
@@ -2063,24 +2064,6 @@ test('reports liveEdge as unavailable for the provider, before and after ready',
 // The deliberate throw below is rethrown on a fresh task so it still reaches
 // uncaught-error handling; captured rather than run, which is what keeps it
 // from landing in the runner as an unhandled error.
-const captureRethrows = (): unknown[] => {
-  const errors: unknown[] = [];
-  const real = globalThis.queueMicrotask;
-  // Wrapped rather than replaced: the fake player applies its command effects
-  // on a later microtask, and swallowing those would stall this suite.
-  globalThis.queueMicrotask = (task: () => void) =>
-    real(() => {
-      try {
-        task();
-      } catch (error) {
-        errors.push(error);
-      }
-    });
-  onTestFinished(() => {
-    globalThis.queueMicrotask = real;
-  });
-  return errors;
-};
 
 // #95, reached through the adapter's own fan-out rather than the controller's
 // (#233): a bare `Set.forEach` stops at the first throw, so every subscriber
