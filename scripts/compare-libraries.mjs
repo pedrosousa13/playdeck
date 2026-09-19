@@ -383,14 +383,22 @@ export const libraries = [
     composition: 'core + primitives + native provider',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 22140 bytes measured 2026-09-17 -- 21.6210937500 KB, 21.62 KB to two
-    // places, rounded up to the next 0.25 KB. The growth from 21.5 KB (#662's
-    // provider seam, the same reason the "no parts" row above grew, including
-    // the cycle guard's `seen.delete` bookkeeping described there) is #180's
-    // live edge: `deriveLiveState` now carries `offsetFromEdge`, the native
-    // provider answers `seekToLiveEdge` from its own seekable end, and `Time`
-    // gained the live-aware branch that renders that offset or the LIVE label.
-    ceilingKb: 21.75
+    // 22313 bytes measured 2026-09-19 -- 21.7900390625 KB, 21.79 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 21.75 KB is #681's notice replacement: `#registerNotice`
+    // (`packages/core/src/player-controller.ts`) now looks for an entry the
+    // incoming notice matches before registering, re-keys that entry in place
+    // when it finds one, and `noticesMatch` (`packages/core/src/safety.ts`) is
+    // the comparison it makes. All of it sits in core, which every composition
+    // here includes, so all four Playdeck rows moved by the same ~0.11 KB and
+    // this is the only one carried past its ceiling. The whole distance from
+    // the last committed figure is this change's: that figure was 22140 bytes
+    // measured 2026-09-17, `results.md` measured this row at 21.69 KB, and so
+    // did this branch with the two source files above stashed. The 2026-09-17
+    // raise was #180's live edge -- `deriveLiveState` carrying
+    // `offsetFromEdge`, the native provider answering `seekToLiveEdge` from
+    // its own seekable end, and `Time`'s live-aware branch.
+    ceilingKb: 22
   },
   {
     name: 'Playdeck (play-only)',
@@ -425,13 +433,18 @@ export const libraries = [
       "core + primitives + native provider + control bar (5 of Media Chrome's 7 controls)",
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 27423 bytes measured 2026-09-17 -- 26.7802734375 KB, 26.78 KB to two
-    // places, rounded up to the next 0.25 KB. The growth from 26.75 KB
-    // (#662's provider seam, the same reason the "no parts" row above grew,
-    // including the cycle guard's `seen.delete` bookkeeping described there)
-    // is #180's live edge, plus what only this row pulls in: `LiveIndicator`'s
-    // press path and `Time`'s live-aware branch both land in the control bar.
-    ceilingKb: 27
+    // 27659 bytes measured 2026-09-19 -- 27.0107421875 KB, 27.01 KB to two
+    // places, rounded up to the next 0.25 KB. The whole 236-byte growth from
+    // the previous figure is #681's notice matching: `noticesMatch` and its
+    // declared-shape guard in `safety.ts`, and `#registerNotice`'s re-key in
+    // `player-controller.ts`. Both are in `@playdeck/core`, which every row
+    // here includes, so all four moved together and this is simply the row
+    // with the least headroom left. The previous figure was 27423 bytes
+    // measured 2026-09-17, `main`'s own, so nothing else is folded into this
+    // delta. That raise to 27 KB was #180's live edge plus what only this row
+    // pulls in -- `LiveIndicator`'s press path and `Time`'s live-aware branch
+    // both land in the control bar -- on top of #662's provider seam.
+    ceilingKb: 27.25
   },
   {
     name: 'react-player',

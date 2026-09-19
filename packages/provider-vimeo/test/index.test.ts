@@ -1062,6 +1062,62 @@ test('leaves a still-true suppression notice standing after a retry', async () =
   expect(controller.getState().error?.message).toContain('did not take effect');
 });
 
+// #681, at the concrete path it was found on: `start()` re-checks the
+// suppression and re-emits, `retry()` calls `start()` again, and this
+// attachment never withdraws the notice -- so every retry used to leave one
+// more registration behind for the rest of the provider's life.
+//
+// The registry is private and the published slot cannot see into it -- the
+// fold picks one winner however many entries stand behind it -- so what this
+// reads it through is the one contract that reaches it from outside: the
+// disposer the controller hands back per notice-carrying patch. Collecting
+// them is the test standing in for a provider that does withdraw; this
+// attachment deliberately never calls one, which is the whole reason the entry
+// it leaves has to be the same entry each time. Three emits and one disposal
+// clearing the slot is that claim: against the accumulating registry, the
+// third emit's disposer withdrew the third of three entries and the notice two
+// others still held stayed published.
+test('leaves one registration behind however many times a retry re-emits', async () => {
+  sdkState.seoMetadataSuppressed = false;
+  const controller = new PlayerController();
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdk = createFakeSdk();
+  sdkState.load = () => Promise.resolve(sdk.Sdk);
+  const provider = createVimeoProvider(mount, publicSource, {
+    suppressSeoMetadata: true
+  });
+  const withdrawals: Array<() => void> = [];
+  const observed: ProviderAdapter = {
+    ...provider,
+    subscribe: (listener) =>
+      provider.subscribe((patch, event) => {
+        const withdraw = listener(patch, event) as (() => void) | undefined;
+        if (withdraw) withdrawals.push(withdraw);
+        return withdraw;
+      })
+  };
+  const settled = new Promise<void>((resolve) => {
+    const stop = controller.subscribe((state) => {
+      if (state.lifecycle !== 'ready' && state.lifecycle !== 'error') return;
+      stop();
+      resolve();
+    });
+  });
+  controller.setProvider(observed);
+  await settled;
+
+  await controller.retry();
+  await controller.retry();
+
+  expect(withdrawals).toHaveLength(3);
+  expect(controller.getState().error?.message).toContain('did not take effect');
+
+  withdrawals[2]?.();
+
+  expect(controller.getState().error).toBeNull();
+});
+
 test('honors an explicit Do-Not-Track opt-out', async () => {
   const result = await setup({ options: { dnt: false } });
   expect(embedUrl(result).searchParams.get('dnt')).toBe('0');

@@ -284,6 +284,53 @@ export const mostImportantNotice = (
     undefined
   );
 
+// Every field a `PlayerError` declares, listed rather than chained through
+// `&&` so `RankOf` can make the list exhaustive: a field added to the type
+// fails to compile until it is named here, instead of silently widening what
+// counts as the same notice.
+const NOTICE_IDENTITY = [
+  'category',
+  'fatal',
+  'recoverable',
+  'severity',
+  'message',
+  'cause'
+] as const satisfies RankOf<keyof PlayerError>;
+
+// Whether two registered notices are the same notice restated rather than two
+// notices standing at once — the question `PlayerController`'s `#registerNotice`
+// asks of a re-emit, and the one thing identity cannot answer: the controller
+// freezes every notice it is handed, so a provider re-emitting the very same
+// singleton hands it a fresh object each time (#681).
+//
+// The value stands in for the identity instead, field by field with
+// `Object.is`. `cause` is `unknown` and can hold anything, so it is compared by
+// reference like the rest: two notices carrying two different `Error`s are two
+// notices, and a provider whose re-emit mints a new `cause` each time matches
+// nothing and registers again. That is the direction to be wrong in — it costs
+// the memory this is about, where matching too eagerly would collapse two
+// notices an operator needs told apart, which is a wrong answer.
+//
+// Nothing beyond these fields is compared, and a notice carrying anything
+// beyond them matches nothing at all. `freezeError` is `Object.freeze({
+// ...error })`, so an own property an adapter outside this repo hangs on a
+// notice survives onto the published `PlayerError` rather than being dropped —
+// which means two such notices differing ONLY there are genuinely different
+// and comparing just the declared fields would collapse them. Refusing to
+// match either of them registers both, the same direction `cause` is wrong in
+// above: it costs the memory this issue is about instead of merging two
+// notices an operator needs told apart. `cause` remains where anything beyond
+// the declared shape belongs.
+const onlyDeclaredFields = (notice: PlayerError): boolean =>
+  Object.keys(notice).every((key) =>
+    (NOTICE_IDENTITY as readonly string[]).includes(key)
+  );
+
+export const noticesMatch = (left: PlayerError, right: PlayerError): boolean =>
+  onlyDeclaredFields(left) &&
+  onlyDeclaredFields(right) &&
+  NOTICE_IDENTITY.every((field) => Object.is(left[field], right[field]));
+
 export const destroyProviderSafely = (provider: ProviderAdapter): void => {
   try {
     void Promise.resolve(provider.destroy()).catch(() => undefined);
