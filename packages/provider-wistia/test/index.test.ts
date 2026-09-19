@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import {
   PlayerController,
   type MediaDimensions,
@@ -10,6 +10,7 @@ import {
   type ProviderStatePatch,
   type WistiaSource
 } from '@playdeck/core';
+import { captureRethrows } from '@playdeck/test-support/capture-rethrows';
 import {
   API_READY_TIMEOUT_MS,
   createWistiaProvider,
@@ -1997,24 +1998,6 @@ test('reports chapters as unavailable for the provider', async () => {
 // The deliberate throws below are rethrown on a fresh task so they still reach
 // uncaught-error handling; captured rather than run, which is what keeps them
 // from landing in the runner as an unhandled error.
-const captureRethrows = (): unknown[] => {
-  const errors: unknown[] = [];
-  const real = globalThis.queueMicrotask;
-  // Wrapped rather than replaced: the fixtures schedule microtasks of their
-  // own, and swallowing those would stall the very load these tests drive.
-  globalThis.queueMicrotask = (task: () => void) =>
-    real(() => {
-      try {
-        task();
-      } catch (error) {
-        errors.push(error);
-      }
-    });
-  onTestFinished(() => {
-    globalThis.queueMicrotask = real;
-  });
-  return errors;
-};
 
 // Subscribed ahead of the recorder, unlike `setup`, because the thrower has to
 // come first for the fan-out behind it to be the thing under test.

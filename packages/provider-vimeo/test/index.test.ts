@@ -21,6 +21,7 @@ import {
   type TextCue,
   type VimeoSource
 } from '@playdeck/core';
+import { captureRethrows } from '@playdeck/test-support/capture-rethrows';
 import { available } from '../src/adapter-values';
 import {
   createVimeoAttachment,
@@ -3684,24 +3685,6 @@ test('stays ready when a chapterchange answers with a non-list', async () => {
 // The deliberate throws below are rethrown on a fresh task so they still reach
 // uncaught-error handling; captured rather than run, which is what keeps them
 // from landing in the runner as an unhandled error.
-const captureRethrows = (): unknown[] => {
-  const errors: unknown[] = [];
-  const real = globalThis.queueMicrotask;
-  // Wrapped rather than replaced: the fixtures schedule microtasks of their
-  // own, and swallowing those would stall the very load these tests drive.
-  globalThis.queueMicrotask = (task: () => void) =>
-    real(() => {
-      try {
-        task();
-      } catch (error) {
-        errors.push(error);
-      }
-    });
-  onTestFinished(() => {
-    globalThis.queueMicrotask = real;
-  });
-  return errors;
-};
 
 // #95, reached through the adapter's own fan-out rather than the controller's
 // (#233): a bare `Set.forEach` stops at the first throw, so every subscriber
