@@ -1067,17 +1067,42 @@ export const useActivation = (
   // outside `'auto-paused'`, a `'provider'` play still drops ownership to
   // `'none'` exactly as before, so this is not a general "unowned plays become
   // autoplay" rule. Any other origin, in any other ownership state, drops to
-  // `'none'` so a later exit leaves that playback alone. `pause` is the mirror
+  // `'none'` so a later exit leaves that playback alone -- every origin but
+  // `'system'`, which is the exception the next paragraph describes and the
+  // one origin this listener does not write ownership for at all. `pause` is
+  // the mirror
   // image: only a pause carrying the `'autoplay'` origin is this hook's own,
   // recorded as `'auto-paused'` so a later re-entry knows there is something
   // of its own to resume; every other pause -- a viewer pressing the button
   // included -- is a deliberate stop that re-entry must never override.
   // `ended` always returns to `'none'`: there is nothing left running for a
   // later exit to pause, and nothing paused for a later re-entry to resume.
+  //
+  // `'system'` is neither a grant nor a drop (#673): it is
+  // `provider-native`'s own label for a loop restart's `play` event --
+  // `restartFromBoundary` in `playback.ts` continuing playback it started,
+  // not a new play the viewer took over with. Ownership must survive the
+  // wrap rather than being reset OR (re-)granted by it, so a `'system'` play
+  // is read here and left alone: whatever ownership already stood --
+  // `'autoplaying'` for a viewport session still crossing its own
+  // boundaries, `'none'` for one a viewer already took over -- carries
+  // forward unchanged. `'auto-paused'` is the third state it can find, and
+  // it is left alone too rather than corrected: reaching it means the media
+  // is playing while the record says this hook paused it, which takes an
+  // engine resuming our own pause and publishing no play event at all --
+  // #695's WebKit behaviour minus the `'provider'` play that fix keys on. If
+  // that is ever observed, widening #695's rule above is where it belongs;
+  // guessing at it from a loop wrap here would grant ownership this hook
+  // never established.
+  //
+  // Only the `play` listener has this case. `'system'` is emitted at exactly
+  // one site (`playback.ts`'s `onPlay`), so no `'system'` pause exists for
+  // the `pause` listener below to leave alone, and none is anticipated here.
   useEffect(() => {
     if (options.loading !== 'viewport') return;
     const controller = options.controller;
     const unsubscribePlay = controller.on('play', (event) => {
+      if (event.origin === 'system') return;
       const engineResumedOwnPause =
         event.origin === 'provider' &&
         session.current.playbackOwnership === 'auto-paused';

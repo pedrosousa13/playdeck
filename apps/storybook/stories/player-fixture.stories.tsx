@@ -58,6 +58,10 @@ type PlayerFixtureProps = {
   // back into view under `loading: 'viewport'` (#309). The spacers are sized
   // in `SCROLL_SPACER_HEIGHT` below.
   readonly scrollPage?: boolean;
+  // `Player.Root`'s own `loop` prop, threaded through so
+  // `e2e/activation.spec.ts` can drive a viewport-autoplayed fixture that
+  // wraps on its own, for #673's auto-pause-survives-the-loop coverage.
+  readonly loop?: boolean;
 };
 
 // Tall enough that the player starts fully outside the observer's root even
@@ -289,7 +293,8 @@ const PlayerFixture = ({
   vimeoSuppressSeoMetadata,
   poster,
   posterShowWhilePaused,
-  scrollPage
+  scrollPage,
+  loop
 }: PlayerFixtureProps) => {
   const autoplay: Player.RootProps['autoplay'] = autoplayInput ?? false;
   const loading: Player.PlayerLoadingStrategy = loadingInput ?? 'viewport';
@@ -369,6 +374,7 @@ const PlayerFixture = ({
         defaultMuted={defaultMuted}
         endTime={endTime}
         loading={loading}
+        loop={loop}
         mediaMetadata={{
           title: 'Playdeck tracer',
           artist: 'Playdeck',
@@ -631,6 +637,15 @@ export const AutoplayMuted: Story = {
 // need the clip to outlast them, and still needs no network.
 export const ViewportAutoplayScrollMuted: Story = {
   args: { source: 'long', autoplay: 'muted', scrollPage: true }
+};
+
+// #673: the same tall scroll page as above, but `loop: true` and sourced from
+// the 1s default tracer rather than the 10s `long` one -- short enough for
+// the player to wrap on its own, more than once, while a spec holds it in
+// view, so `e2e/activation.spec.ts` can prove auto-pause survives the wrap
+// rather than firing only for the first exit.
+export const ViewportAutoplayScrollLoopMuted: Story = {
+  args: { autoplay: 'muted', scrollPage: true, loop: true }
 };
 
 export const AutoplayAudible: Story = {
