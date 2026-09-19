@@ -31,6 +31,7 @@ import {
   freezeError,
   isNotice,
   mostImportantNotice,
+  noticesMatch,
   notifySafely,
   orderedRanges,
   REFUSED_URL_NOTICES,
@@ -278,9 +279,12 @@ export class PlayerController {
   #pendingOrigins = new Map<PendingOriginKind, PendingOrigin>();
   // Every `configuration` notice currently registered — a provider's own
   // rejection AND a refused consumer URL alike — keyed by a token private to
-  // its own registration, never by the notice's content, so two calls
-  // reporting an identical-looking notice register, and can be withdrawn,
-  // independently. One map, one write below (`#registerNotice`), used by both
+  // its own registration rather than by the notice's content, so the disposer
+  // handed back withdraws exactly the registration it belongs to: two
+  // reporters refusing one consumer URL register, and are withdrawn,
+  // independently. What a provider re-emitting a notice it never withdrew does
+  // instead is `#registerNotice`'s own subject (#681). One map, one write
+  // below (`#registerNotice`), used by both
   // `reportRefusedUrl` and `setProvider`'s subscribe callback: the two used to
   // be tracked through separate maps with separate register/withdraw
   // implementations that happened to share an idiom, which is the very
@@ -317,10 +321,10 @@ export class PlayerController {
   // its own patch-supplied notice before calling in, for the reason its call
   // site says.
   //
-  // `notice` is compared by identity rather than the token being looked back
+  // The notice is compared by identity rather than the token being looked back
   // up — which is what lets one gate answer two different questions depending
-  // on scope: for `{ kind: 'provider' }`, where every registration's notice is
-  // unique, `this.#state.error === notice` alone says whether THIS
+  // on scope: for `{ kind: 'provider' }`, where no two entries hold the same
+  // value, `this.#state.error === entry.notice` alone says whether THIS
   // registration was published; for `{ kind: 'refused-url' }`, where several
   // registrations for one surface hold the very same shared value, it can
   // also be true of a sibling registration, which is why the second check
@@ -329,7 +333,53 @@ export class PlayerController {
   // same read either way (#330, #475).
   #registerNotice = (notice: PlayerError, scope: NoticeScope): (() => void) => {
     const token = Symbol('notice');
-    this.#notices.set(token, { notice, scope });
+    // What a re-emit does, and where it stops. A provider that re-decides a
+    // notice per load and never withdraws it registered one entry per emit,
+    // held for the rest of that provider's life (#681). So a
+    // `{ kind: 'provider' }` registration matching one already held REPLACES
+    // it: one provider subscription speaks on that scope, and an equal notice
+    // from it is the same claim restated, not a second claim. What "matching"
+    // means is `noticesMatch` in `safety.ts` — `freezeError` mints a fresh
+    // object per registration, so identity could not answer it.
+    //
+    // `{ kind: 'refused-url' }` is excluded deliberately rather than left
+    // untested. Those registrations are one per REPORTER: several component
+    // instances can hold the same prop, and each of them registers the very
+    // same shared `REFUSED_URL_NOTICES` value, so two of them are
+    // indistinguishable by content while being two independent claims about
+    // two different values. Replacing one with the other would withdraw a
+    // refusal that still stands as soon as the survivor's reporter released —
+    // the per-prop-boolean failure `reportRefusedUrl` exists not to have
+    // (#330).
+    const superseded =
+      scope.kind === 'provider'
+        ? [...this.#notices].find(
+            ([, held]) =>
+              held.scope.kind === 'provider' &&
+              noticesMatch(held.notice, notice)
+          )
+        : undefined;
+    // The value kept is the one already registered, not the equal one just
+    // handed in. `#state.error` holds the published notice by identity, and
+    // both gates in the disposer below read that identity; a replacement that
+    // swapped in the new object would leave the slot holding a value no entry
+    // still offers, and this disposer would then decline to clear it.
+    const entry = superseded?.[1] ?? { notice, scope };
+    if (superseded) {
+      // Re-keyed in place rather than deleted and re-added. The token is a
+      // fresh one, so deleting the superseded entry and setting the new token
+      // would append the entry — a `Map` puts a key it has not seen at the
+      // end — and `#currentProviderNotice` folds in insertion order, where a
+      // tie keeps whichever notice registered first (#368). A re-emit is not
+      // a new arrival and must not cost its notice that place.
+      const held = [...this.#notices];
+      this.#notices.clear();
+      for (const [key, value] of held) {
+        this.#notices.set(key === superseded[0] ? token : key, value);
+      }
+    } else {
+      this.#notices.set(token, entry);
+    }
     return () => {
       // A `Map` entry withdraws at most once. A later call — a duplicate
       // release, or one reaching a token `#clearProviderNotices` already
@@ -337,12 +387,15 @@ export class PlayerController {
       // nothing further; this is the one idempotency guard both callers rely
       // on (#330, #475).
       if (!this.#notices.delete(token)) return;
-      // Nothing published moves unless this was the entry showing.
-      if (this.#state.error !== notice) return;
+      // Nothing published moves unless this was the entry showing. Read off
+      // the entry rather than off the parameter: where this registration
+      // replaced an earlier one, the value held — and published — is that
+      // earlier one's.
+      if (this.#state.error !== entry.notice) return;
       // ...and even then, only if nothing left standing resolves to the exact
       // same value — a sibling registration for the same refused surface,
       // which withdrawing this one must not disturb.
-      if (this.#resolveScope(scope) === notice) return;
+      if (this.#resolveScope(scope) === entry.notice) return;
       // `error: null` is what forces `#applyPatch` to refill the slot from
       // whatever the registry — and any standing failure — still says, rather
       // than keep the now-stale reference by identity.

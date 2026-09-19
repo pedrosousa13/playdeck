@@ -454,10 +454,16 @@ through a state patch; a consumer-supplied URL prop the shared allowlist refuses
 — every one except `source`, which is a **Refused source** and reports its own
 value — is reported by `reportRefusedUrl`, which names the refused surface and
 never the value. Both register into ONE internal registry `PlayerController`
-holds, keyed by a token private to each registration rather than by content, so
-two calls reporting an identical-looking notice register — and withdraw —
-independently: a notice stands while at least one registration for it stands,
-and is withdrawn only by the registration that made it. `reportRefusedUrl`
+holds, keyed by a token private to each registration. A provider re-emitting a
+notice it never withdrew is restating one claim, not making a second, so a
+matching provider notice replaces its predecessor in place and the disposer of
+the emit that stands is the one that withdraws it (#681). Matching is by the
+declared `PlayerError` fields, and a notice carrying anything beyond them
+matches nothing — registering twice costs memory, where merging two notices an
+operator needs told apart is a wrong answer. `reportRefusedUrl` is deliberately
+outside this: its registrations are one per refused surface reported, all
+holding the same shared value, so they register — and withdraw —
+independently, a refusal standing while at least one reporter still holds it. `reportRefusedUrl`
 hands its caller the registration's disposer directly; a provider gets its own
 back through its state-patch listener's return value, and holds it to withdraw
 a notice whose condition a later load no longer meets — `startTime` in
