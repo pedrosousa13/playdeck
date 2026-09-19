@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { targets } from './bundle-budgets.mjs';
 import {
   composeRows,
   driftReasons,
@@ -158,6 +159,54 @@ test('an anchor that matches twice fails rather than rewriting both', () => {
         anchors()
       ),
     /matched 2 places/
+  );
+});
+
+// The forward edge of the coupling between the two scripts. `sizeOf` and
+// `rulesSizeOf` in `readme-bytes.mjs` already throw when `bundle-budgets.mjs`
+// STOPS measuring a name they ask for; a target arriving there that nothing
+// here asks for was unguarded, and `measure()`'s `figures` is a hand-written
+// object literal, so nothing structural would have noticed. That is how
+// `docked.css` drifted (#601): the budget script measured it, the README named
+// only `theme.css`, and `docs:bytes:check` stayed green on a sentence that
+// listed one stylesheet out of two.
+//
+// Only the `budgetedSubset` targets are held to this. Core and the primitives
+// are budgeted and named in the prose too, but their figure is on the whole
+// file; a subset budget is what a file shipped as authored gets, which today
+// means a stylesheet, and a stylesheet the section omits is the failure above.
+//
+// The names come from `targets` rather than from a list typed here, because a
+// list typed here would go stale the same way the `figures` literal does.
+//
+// The backticks around the name are required rather than incidental: without
+// them an anchor for a `dark-theme.css` that does not exist yet reports
+// `theme.css` as named, and the run goes green with no sentence naming the
+// file. Every stylesheet anchor already writes the name in backticks, so one
+// that does not fails here loudly rather than passing quietly -- a spurious
+// red an author can act on, which is the direction to be wrong in.
+//
+// What this does NOT catch: the match is on a basename, so two budgeted
+// stylesheets sharing one at different paths would each be satisfied by the
+// other's anchor. Today's targets cannot collide that way, and the rest of the
+// coupling keys on `target.name` rather than a basename, so closing it means
+// changing what an anchor is expected to write -- out of scope here, and worth
+// its own issue if a second package ever ships a stylesheet.
+test('anchors every stylesheet bundle-budgets.mjs budgets a subset of', () => {
+  const sources = proseAnchors(figures, versions).map(({ pattern }) =>
+    pattern.source.replaceAll('\\', '')
+  );
+  const unanchored = targets
+    .filter(({ budgetedSubset }) => budgetedSubset !== undefined)
+    .map(({ path }) => path.split('/').at(-1))
+    .filter(
+      (file) => !sources.some((source) => source.includes(`\`${file}\``))
+    );
+
+  assert.deepEqual(
+    unanchored,
+    [],
+    `bundle-budgets.mjs budgets a subset of ${unanchored.join(', ')}, which no anchor in proseAnchors names. Give the figure a key in measure()'s figures, an anchor per sentence that prints it, and a sentence in README.md for each anchor to own.`
   );
 });
 
