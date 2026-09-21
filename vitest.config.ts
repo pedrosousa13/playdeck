@@ -10,14 +10,19 @@ export default defineConfig({
     // like `@playdeck/react/theme.css` and rewrites them against `index.tsx`,
     // 404ing (`BenchIsland.tsx` imports `@playdeck/react/theme.css?url` for a
     // `<link>` tag's `href`, which is what `seek-slider-order.contract.test.ts`
-    // exercises by importing `BenchIsland.tsx`). `@playdeck/react` is the only
-    // one of these packages with subpath exports to protect — the pnpm
-    // workspace already symlinks `@playdeck/react` (and every other package
-    // here) into `apps/site/node_modules`, and its `package.json` already maps
-    // `./theme.css` and `./docked.css` to the real files, so once the alias
-    // stops swallowing the subpath, plain Node resolution answers it with no
-    // alias of its own needed. `/^@playdeck\/react$/`, anchored, is what
-    // narrows the match to the bare specifier only.
+    // exercises by importing `BenchIsland.tsx`). Two of these packages have a
+    // subpath to protect, and they want opposite things from it. For
+    // `@playdeck/react` the answer is to get out of the way: the pnpm
+    // workspace already symlinks it into `apps/site/node_modules` and its
+    // `package.json` already maps `./theme.css` and `./docked.css` to the real
+    // files, so once the alias stops swallowing the subpath, plain Node
+    // resolution answers it. For `@playdeck/core/thumbnails` it is not, since
+    // Node resolution would answer with the package's built `dist`, and every
+    // other alias here exists precisely so a test runs the source it is
+    // testing -- so that subpath gets an alias of its own, to the module the
+    // bare specifier's own alias would never reach. `/^@playdeck\/react$/` and
+    // `/^@playdeck\/core$/`, anchored, are what narrow each match to the bare
+    // specifier only.
     alias: [
       // `apps/site`'s own alias, the one `astro.config.ts`, its `tsconfig.json`
       // and `components.json` all declare, repeated here so a unit test can
@@ -28,9 +33,15 @@ export default defineConfig({
         replacement: fileURLToPath(new URL('./apps/site/src', import.meta.url))
       },
       {
-        find: '@playdeck/core',
+        find: /^@playdeck\/core$/,
         replacement: fileURLToPath(
           new URL('./packages/core/src/index.ts', import.meta.url)
+        )
+      },
+      {
+        find: /^@playdeck\/core\/thumbnails$/,
+        replacement: fileURLToPath(
+          new URL('./packages/core/src/thumbnails.ts', import.meta.url)
         )
       },
       {

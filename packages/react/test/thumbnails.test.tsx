@@ -213,8 +213,16 @@ describe('SeekSlider thumbnails', () => {
     renderWithPlayer(
       <Player.SeekSlider thumbnails="https://cdn.example.test/thumbs.vtt" />
     );
+    // Awaited rather than read synchronously: the part ships in the chunk
+    // `SeekSlider` imports for it (`transport-controls.tsx`'s
+    // `useThumbnailPreview`), so it mounts a tick after the slider does
+    // rather than in the same one. What this test is about is unchanged on
+    // the far side of that wait -- the cue file is fetched by neither the
+    // mount nor the preview arriving, only by an interaction.
+    await waitFor(() =>
+      expect(attr(getThumbnail(), 'data-state')).toBe('hidden')
+    );
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(attr(getThumbnail(), 'data-state')).toBe('hidden');
   });
 
   test('arms the fetch on the first pointer over the slider, and only once', async () => {
@@ -318,7 +326,12 @@ describe('SeekSlider thumbnails', () => {
       <Player.SeekSlider thumbnails="https://cdn.example.test/thumbs.vtt" />
     );
     hoverAt(50);
-    expect(capturedSignal?.aborted).toBe(false);
+    // Awaited for the same reason the mount test above awaits: the hover is
+    // recorded by `SeekSlider` immediately, but the fetch it arms belongs to
+    // the chunk that carries the preview, so `capturedSignal` exists one
+    // tick later. The abort this test is about is asserted on the same
+    // signal, unchanged.
+    await waitFor(() => expect(capturedSignal?.aborted).toBe(false));
 
     unmount();
     expect(capturedSignal?.aborted).toBe(true);

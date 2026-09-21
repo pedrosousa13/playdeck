@@ -1,0 +1,20 @@
+{
+  "name": "@playdeck/bundle-thumbnails",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "test": "node test.mjs"
+  },
+  "dependencies": {
+    "@playdeck/react": "workspace:*",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1",
+    "@vitejs/plugin-react": "6.0.4",
+    "vite": "8.1.5"
+  }
+}

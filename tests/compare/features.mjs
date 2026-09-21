@@ -1458,7 +1458,10 @@ export const axes = [
         anchor: {
           kind: 'file',
           module: '@playdeck/react',
-          path: 'dist/index.js',
+          // Not `dist/index.js`: the part ships in the chunk `SeekSlider`
+          // imports only when a consumer sets `thumbnails` (#727), which is
+          // the same file a consumer downloads to get this feature.
+          path: 'dist/thumbnails.js',
           includes: '"data-playdeck-part": "thumbnail"'
         },
         source: PLAYDECK_REACT_README

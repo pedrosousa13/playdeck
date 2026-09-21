@@ -186,9 +186,36 @@ export const targets = [
     // figure, tight enough that a second copy of something already in the
     // graph has to be argued for. The live figure is whatever this script
     // prints; a number repeated in prose here would only go stale against it.
+    //
+    // Two rows below measure the rest of what this entry costs on load --
+    // the shared `@playdeck/core` chunk and, since #727, the shared React
+    // one -- so this figure is the entry file's own and not the artifact's
+    // whole initial cost.
     name: '@playdeck/react/browser',
     path: 'packages/react/dist/browser.js',
     budget: 100
+  },
+  {
+    // The second chunk `vite.browser.config.ts` factors out of that entry,
+    // and it holds React itself: the entry and the thumbnail preview
+    // `SeekSlider` loads on demand are both React code, so Rollup puts what
+    // they share in a file both can reach. Like the core chunk below it, a
+    // consumer downloads it on every load rather than lazily, which is why
+    // it is measured here at all rather than left to the lazy rows.
+    //
+    // 5 KB gzip, and a reference figure in the weakest sense the word has
+    // here: what this file weighs is React's business, not this repo's, so
+    // crossing it is not something a commit could fix by writing less code.
+    // It is measured at 3.3 KB, and 5 KB is the next round figure that
+    // leaves React room to grow across a minor release while still being
+    // well under what a second copy of it (6.6 KB) would read. A figure
+    // rather than `budget: null` because `null` here means "lazily loaded,
+    // so it does not compete for the initial-graph figure", and this chunk
+    // is the opposite of that: every consumer of the entry downloads it on
+    // every load.
+    name: '@playdeck/react/browser (shared React chunk)',
+    path: 'packages/react/dist/react.js',
+    budget: 5
   },
   {
     // `@playdeck/core` is the one dependency both this entry and every

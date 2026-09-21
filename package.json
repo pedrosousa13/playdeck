@@ -23,7 +23,7 @@
     "test:budgets": "node scripts/check-bundle-budgets.mjs",
     "test:story-fixtures": "node scripts/story-fixtures.mjs",
     "media:sprite-fright": "node scripts/media-sprite-fright.mjs",
-    "test:bundle": "turbo run build --filter=@playdeck/bundle-native-only --filter=@playdeck/bundle-no-build && pnpm --filter @playdeck/bundle-native-only test && pnpm --filter @playdeck/bundle-no-build test",
+    "test:bundle": "turbo run build --filter=@playdeck/bundle-native-only --filter=@playdeck/bundle-no-build --filter=@playdeck/bundle-thumbnails && pnpm --filter @playdeck/bundle-native-only test && pnpm --filter @playdeck/bundle-no-build test && pnpm --filter @playdeck/bundle-thumbnails test",
     "test:docs": "node --test scripts/docs-examples.test.mjs",
     "test:audit": "node scripts/audit.mjs",
     "test:audit-unit": "node --test scripts/audit.test.mjs scripts/bundle-budgets.test.mjs scripts/check-rendered-fences.test.mjs scripts/client-boundary.test.mjs scripts/compare-features.test.mjs scripts/compare-libraries.test.mjs scripts/esm-only-guard.test.mjs scripts/gate-parser.test.mjs scripts/packaging-fixture.test.mjs scripts/readme-bytes.test.mjs scripts/release-tags.test.mjs scripts/resolution-modes.test.mjs scripts/shipped-changelog.test.mjs scripts/site-build-inputs.test.mjs scripts/story-fixtures.test.mjs scripts/workspace-packages.test.mjs",

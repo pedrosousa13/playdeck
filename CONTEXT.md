@@ -231,7 +231,10 @@ pixels -- parsed from the payload's `#xywh=` fragment -- cropping one frame
 out of a shared sprite sheet rather than each cue naming its own image.
 Parsed and held by the primitive itself rather than published on player
 state the way a Chapter or an Audio track is: nothing about it depends on a
-provider.
+provider. The parser is `@playdeck/core/thumbnails`, a subpath of its own so
+that a consumer who never sets the prop never downloads it -- `SeekSlider`
+reaches the whole preview, that parser included, through a dynamic import
+(#727).
 _Avoid_: sprite frame, thumbnail track, preview image
 
 **Behaviour plugin**:

@@ -489,6 +489,15 @@ notice `mediaMetadata`'s artwork does. The part's name and its `data-state`
 values are documented in the
 [**Contract**](https://playdeck.video/guides/contract/) guide.
 
+The preview is code you pay for only when you ask for it. The cue fetch, the
+cue lookup, the crop geometry and the `thumbnail` part all live in a module
+`SeekSlider` imports through a dynamic `import()`, started when the prop is
+present, so a seek slider without it downloads none of them — the same trade
+`Player.Root` makes for provider adapters. The part therefore appears once
+that module has loaded rather than in the same frame as the slider; it is
+absolutely positioned and starts hidden, so nothing moves when it does, and a
+hover or focus that happens first is previewed as soon as it arrives.
+
 `Time` takes a `type` of `current` (the default), `duration` or `remaining`.
 `remaining` counts down from the duration and carries a leading minus for as
 long as any remainder is left — `-1:23`, and still `-0:00` through the last

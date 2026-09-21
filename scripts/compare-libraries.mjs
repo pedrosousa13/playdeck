@@ -433,18 +433,32 @@ export const libraries = [
       "core + primitives + native provider + control bar (5 of Media Chrome's 7 controls)",
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 27659 bytes measured 2026-09-19 -- 27.0107421875 KB, 27.01 KB to two
-    // places, rounded up to the next 0.25 KB. The whole 236-byte growth from
-    // the previous figure is #681's notice matching: `noticesMatch` and its
-    // declared-shape guard in `safety.ts`, and `#registerNotice`'s re-key in
-    // `player-controller.ts`. Both are in `@playdeck/core`, which every row
-    // here includes, so all four moved together and this is simply the row
-    // with the least headroom left. The previous figure was 27423 bytes
-    // measured 2026-09-17, `main`'s own, so nothing else is folded into this
-    // delta. That raise to 27 KB was #180's live edge plus what only this row
-    // pulls in -- `LiveIndicator`'s press path and `Time`'s live-aware branch
-    // both land in the control bar -- on top of #662's provider seam.
-    ceilingKb: 27.25
+    // 26547 bytes measured 2026-09-21 -- 25.9248046875 KB, 25.92 KB to two
+    // places, rounded up to the next 0.25 KB. Lowered rather than raised,
+    // which is what #727 was for: the thumbnail preview is now a module
+    // `SeekSlider` reaches only through a dynamic `import()`, so a control
+    // bar that never sets `thumbnails` no longer carries the cue fetch, the
+    // cue lookup, the crop geometry or the part's JSX. It was 27659 bytes
+    // measured 2026-09-19 against a 27.25 KB ceiling, so this is 1112 bytes
+    // (1.09 KB) off the row.
+    //
+    // Both halves of that had to move, and only one of them is React's.
+    // `parseThumbnailCues` is `@playdeck/core`'s, and a React-side dynamic
+    // import could not reach it while core shipped as a single bundled
+    // module: the eager graph imports that module for other exports, so
+    // everything the lazy chunk referenced was emitted with it. #727 gives
+    // core a second export subpath (`@playdeck/core/thumbnails`), built as
+    // its own bundle, and the parser moves with it.
+    //
+    // The 1112-byte drop is not all of it this issue's, and the other three
+    // rows are what says so: 21643, 22329 and 23442 bytes in the same run,
+    // against the 21520, 22313 and 23302 their own entries above record for
+    // 2026-09-19. None of them renders a seek slider, so none was carrying
+    // the preview and none can have been relieved of it -- their +123, +16
+    // and +140 are drift accrued since that run, and this row carries the
+    // same drift under the saving. None of the three crosses a 0.25 KB step,
+    // so no other ceiling moves.
+    ceilingKb: 26
   },
   {
     name: 'react-player',
