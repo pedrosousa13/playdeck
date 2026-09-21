@@ -16,7 +16,6 @@ import {
   usePlayerState,
   useRefusedUrlReport
 } from './player-context.js';
-import { useThumbnailCues, useThumbnailPreview } from './thumbnails.js';
 import {
   useEffect,
   useId,
@@ -25,6 +24,48 @@ import {
   type ComponentPropsWithRef,
   type Ref
 } from 'react';
+
+// The thumbnail preview, loaded only when a consumer asks for it.
+//
+// `thumbnails.tsx` holds the whole feature -- the cue fetch, the parser it
+// reaches in `@playdeck/core/thumbnails`, the crop geometry and the
+// `thumbnail` part's JSX -- and this is the only reference to it anywhere in
+// the package, so a bundler emits all of it in a chunk that nothing in the
+// eager graph imports. A control bar that never sets `thumbnails` does not
+// download it (#727); `Player.Root`'s provider loading (`provider-loaders.ts`)
+// makes the same trade for the provider adapters.
+//
+// Started from the prop's presence rather than from the first hover, which is
+// the difference between a preview that is ready when a viewer reaches for it
+// and one that misses the gesture that asked for it. The WebVTT file stays on
+// the first-interaction schedule it has always been on -- this loads the code,
+// `useThumbnailCues` still decides when to load the cues.
+type ThumbnailPreviewModule = typeof import('./thumbnails.js');
+
+const useThumbnailPreview = (
+  enabled: boolean
+): ThumbnailPreviewModule['ThumbnailPreview'] | null => {
+  const [loaded, setLoaded] = useState<ThumbnailPreviewModule | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    let live = true;
+    void import('./thumbnails.js')
+      .then((module) => {
+        if (live) setLoaded(module);
+      })
+      .catch(() => {
+        // A chunk that fails to load leaves the slider exactly as it is
+        // without the prop: no part, no preview, and nothing reported. The
+        // preview is decorative and `aria-hidden`, so there is no
+        // degradation here worth a notice of its own -- the same silence a
+        // cue file that fails to fetch already settles on.
+      });
+    return () => {
+      live = false;
+    };
+  }, [enabled]);
+  return loaded?.ThumbnailPreview ?? null;
+};
 
 // How many digits sit after the point, including the ones `String` hides in
 // exponent form (it switches to it below 1e-6).
@@ -566,40 +607,44 @@ export const SeekSlider = ({
   // The allowlisted `thumbnails` URL, resolved unconditionally (like every
   // other consumer URL prop in this package) so the hooks below it -- and the
   // capability gate right after -- see a stable call order regardless of
-  // `status`. A refused URL reports the `'thumbnails'` surface and is never
-  // handed to `useThumbnailCues`, so nothing is fetched for it.
+  // `status`. A refused URL reports the `'thumbnails'` surface and never
+  // reaches `ThumbnailPreview`, so nothing is fetched for it.
   const resolvedThumbnails = permittedUrl(thumbnails);
   useRefusedUrlReport(
     controller,
     'thumbnails',
     thumbnails !== undefined && resolvedThumbnails === undefined
   );
-  const { arm: armThumbnails, cues: thumbnailCues } =
-    useThumbnailCues(resolvedThumbnails);
+  const ThumbnailPreview = useThumbnailPreview(
+    resolvedThumbnails !== undefined
+  );
+  // The interaction the preview reads, recorded here rather than in the
+  // chunk that reads it: the pointer's x within this wrapper as a fraction
+  // of its width, and whether the input holds focus. Two pieces of state,
+  // and the arithmetic for one of them, are what stays behind when the rest
+  // of the feature moves out of the eager graph -- and they have to stay,
+  // because the events that produce them land on elements this component
+  // owns. It also settles the timing: a hover that arrives before the chunk
+  // does is recorded rather than dropped, so the preview that follows is the
+  // one that gesture asked for instead of the next one.
+  const [pointerFraction, setPointerFraction] = useState<number | null>(null);
+  const [inputFocused, setInputFocused] = useState(false);
+  const trackPointer = (clientX: number, target: Element): void => {
+    if (resolvedThumbnails === undefined) return;
+    const rect = target.getBoundingClientRect();
+    setPointerFraction(
+      rect.width > 0
+        ? Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
+        : 0
+    );
+  };
   // A held preview is clamped like media time is: the window it was asked
   // against can have moved on before the seek was answered. Computed above
   // the capability gate, unlike every other render-only value below it,
-  // because `useThumbnailPreview`'s own refusal report needs it and has to
-  // run before the gate too, to keep this hook's call order stable across
-  // every value `status` takes.
+  // because `ThumbnailPreview` takes it as a prop and the hooks above have to
+  // run before the gate too, to keep this component's hook call order stable
+  // across every value `status` takes.
   const value = window ? snapToStep(preview ?? currentTime, min, max, grid) : 0;
-  const {
-    onBlur: onThumbnailBlur,
-    onFocus: onThumbnailFocus,
-    onPointerLeave: onThumbnailPointerLeave,
-    thumbnailImage,
-    thumbnailLeft,
-    trackPointer
-  } = useThumbnailPreview({
-    arm: armThumbnails,
-    controller,
-    cues: thumbnailCues,
-    hasWindow: window !== null,
-    min,
-    resolvedThumbnails,
-    span,
-    value
-  });
   if (status !== 'available') return null;
   const hasDuration = typeof duration === 'number' && duration > 0;
   // The geometry below is `aria-hidden`, so this description is the extent's
@@ -626,7 +671,7 @@ export const SeekSlider = ({
         props.onPointerEnter?.(event);
       }}
       onPointerLeave={(event) => {
-        onThumbnailPointerLeave();
+        setPointerFraction(null);
         props.onPointerLeave?.(event);
       }}
       onPointerMove={(event) => {
@@ -694,7 +739,7 @@ export const SeekSlider = ({
         max={max}
         min={min}
         onBlur={(event) => {
-          onThumbnailBlur();
+          setInputFocused(false);
           inputProps?.onBlur?.(event);
         }}
         onChange={(event) => {
@@ -703,7 +748,7 @@ export const SeekSlider = ({
           inputProps?.onChange?.(event);
         }}
         onFocus={(event) => {
-          onThumbnailFocus();
+          if (resolvedThumbnails !== undefined) setInputFocused(true);
           inputProps?.onFocus?.(event);
         }}
         style={{
@@ -723,45 +768,36 @@ export const SeekSlider = ({
           {share}% loaded
         </span>
       )}
-      {/* Mounted whenever `thumbnails` resolves to a permitted URL, whether or
-          not a preview is showing right now -- like `Poster`, so a theme can
-          transition between `data-state`s instead of the part popping in and
-          out of the DOM on every hover start and stop. Decorative geometry,
-          exactly like `seek-buffered` above: `aria-hidden`, and never a live
-          region, because a hovered preview would otherwise announce on every
-          pointer move. */}
-      {resolvedThumbnails === undefined ? null : (
-        <div
-          aria-hidden="true"
-          data-playdeck-part="thumbnail"
-          data-state={thumbnailImage === null ? 'hidden' : 'visible'}
-          style={{
-            position: 'absolute',
-            bottom: '100%',
-            left: thumbnailLeft,
-            transform: 'translateX(-50%)',
-            overflow: 'hidden',
-            visibility: thumbnailImage === null ? 'hidden' : 'visible',
-            width: thumbnailImage?.region?.width,
-            height: thumbnailImage?.region?.height
-          }}
-        >
-          {thumbnailImage === null ? null : (
-            <img
-              alt=""
-              src={thumbnailImage.url}
-              style={
-                thumbnailImage.region
-                  ? {
-                      position: 'absolute',
-                      left: -thumbnailImage.region.x,
-                      top: -thumbnailImage.region.y
-                    }
-                  : undefined
-              }
-            />
-          )}
-        </div>
+      {/* The `thumbnail` part, rendered by the chunk that owns it -- see
+          `useThumbnailPreview` at the top of this file. Absent until that
+          chunk resolves, which is a request started at mount rather than at
+          the first hover, and which paints nothing when it arrives: the part
+          is `position: absolute` inside this wrapper, so it displaces
+          nothing, and it arrives `hidden` unless a gesture is already
+          waiting for it. */}
+      {ThumbnailPreview === null || resolvedThumbnails === undefined ? null : (
+        /* eslint-disable-next-line react-hooks/static-components -- Nothing
+           is created during render here: `ThumbnailPreview` is a module
+           export, and `useThumbnailPreview` above only holds whichever value
+           `import()` resolved to. Its identity changes exactly once, from
+           `null` to that export, so React reconciles every render after the
+           first as the same component type and the state-resetting hazard
+           this rule names cannot arise. `lazy()` plus `<Suspense>` is the
+           shape the rule would accept, and it was not taken: a chunk that
+           fails to load would then throw into the consumer's tree with no
+           error boundary of ours between, over an `aria-hidden` preview that
+           is meant to degrade to nothing. */
+        <ThumbnailPreview
+          controller={controller}
+          hasWindow={window !== null}
+          inputFocused={inputFocused}
+          min={min}
+          permittedUrl={permittedUrl}
+          pointerFraction={pointerFraction}
+          span={span}
+          url={resolvedThumbnails}
+          value={value}
+        />
       )}
       {children}
     </div>

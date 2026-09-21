@@ -732,6 +732,16 @@ one it ends. Playdeck publishes the parser and draws none of it itself:
 `thumbnails` URL lazily and rendering the active cue's region as its
 `thumbnail` part.
 
+Both functions, and both types, are also reachable at
+`@playdeck/core/thumbnails` — a second entry point carrying the parser and
+nothing else. Import them from there when the code that uses them is loaded on
+demand: a bundler decides which chunk a module belongs in from which entry
+points reach it, so a parser that shares a module with the rest of core is
+emitted wherever the rest of core is. `SeekSlider` imports it from that
+subpath for exactly that reason, which is what lets a control bar that sets no
+`thumbnails` prop download none of the preview. `@playdeck/core` itself keeps
+exporting all four, so an import that does not care changes nothing.
+
 <!-- example:core-thumbnails -->
 
 ```ts

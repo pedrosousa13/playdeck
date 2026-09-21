@@ -464,10 +464,12 @@ const renderThumbnailFixture = () => (
 
 // Hovers the track's centre and waits for the reveal to settle, returning the
 // part for each story's own rule-pair-specific assertions. The part mounts
-// hidden from the first render (nothing has hovered yet), so the rest-state
+// hidden (nothing has hovered yet), so once it is there the rest-state
 // `opacity` is read immediately, with nothing to wait out -- a transition
 // only runs when a property changes while already rendered, not on the value
-// a stylesheet gives it at mount.
+// a stylesheet gives it at mount. Its arrival is waited for, though: it ships
+// in the chunk `SeekSlider` imports when `thumbnails` is set, a tick after
+// the slider itself renders.
 //
 // The reveal is different: `getComputedStyle` mid-transition reads a value
 // between `0` and `1` on either side of the flip, so a bare read once would
@@ -483,6 +485,11 @@ const revealThumbnail = async ({
   const track = canvasElement.querySelector(
     '[data-playdeck-part="seek-slider"]'
   ) as HTMLElement;
+  await waitFor(() =>
+    expect(
+      canvasElement.querySelector('[data-playdeck-part="thumbnail"]')
+    ).not.toBeNull()
+  );
   const thumbnail = canvasElement.querySelector(
     '[data-playdeck-part="thumbnail"]'
   ) as HTMLElement;

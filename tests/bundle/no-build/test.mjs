@@ -175,10 +175,25 @@ try {
   // catch a missing native chunk and a foreign provider, but neither would
   // notice a chunk that is new and unaccounted for -- a primitive split out
   // on its own, or a second copy of something already in the graph. This
-  // entry's initial cost is three files, and that is the claim its budget
+  // entry's initial cost is four files, and that is the claim its budget
   // rows are written against, so the test asserts the set rather than
   // reporting it.
-  const expectedScripts = ['/browser.js', '/core.js', '/provider-native.js'];
+  //
+  // `react.js` is the fourth, and it arrived with the thumbnail preview
+  // moving behind a dynamic import (#727): the entry and that preview are
+  // both React code, so Rollup factors React itself out of the entry into a
+  // chunk they share. It is one more request at the same depth in the
+  // waterfall as `core.js`, not one more round trip after it, and it is
+  // fewer bytes overall -- the entry's eager gzip total fell from 93.76 KB
+  // to 92.87 KB across that change, measured on this build with the preview
+  // absent, which is the case this page is. A page that does set
+  // `thumbnails` pays for the preview then, and only then.
+  const expectedScripts = [
+    '/browser.js',
+    '/core.js',
+    '/provider-native.js',
+    '/react.js'
+  ];
   const unexpected = requestedScripts.filter(
     (pathname) => !expectedScripts.includes(pathname)
   );

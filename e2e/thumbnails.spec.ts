@@ -254,6 +254,110 @@ test('focusing the input by keyboard previews the tile at its own value, and End
   await expect.poll(() => sampleTileColor(page)).toEqual(MAGENTA);
 });
 
+// #727: the preview is a module `SeekSlider` imports only when `thumbnails`
+// is set, so there is a window between the slider mounting and the preview
+// existing. This drives that window deliberately -- the module's own request
+// is held until after the pointer has been over the track -- and checks the
+// three things that window could cost a viewer: a preview that misses the
+// gesture that asked for it, a flash of something unstyled while it arrives,
+// and the layout moving under the pointer when it does.
+//
+// The hover is this spec's own and comes after `gotoStoryReady`, not before
+// it: with the module held, the story's own `play()` cannot reach the reveal
+// it waits for, and where that leaves the story's synthetic pointer is not
+// something this test should depend on. A real pointer moved afterwards is
+// the last thing to touch the slider either way.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md), two substitute
+// mutations, each run in isolation (chromium and firefox):
+//
+// 1. The dropped hover: `trackPointer` in
+//    packages/react/src/transport-controls.tsx given an early return while
+//    the module is absent (`if (resolvedThumbnails === undefined ||
+//    ThumbnailPreview === null) return;`) -- which is what it would do if the
+//    interaction were recorded by the chunk instead of by `SeekSlider` --
+//
+//      Error: expect(locator).toHaveAttribute(expected) failed
+//      Locator:  locator('[data-playdeck-part="thumbnail"]')
+//      Expected: "visible"
+//      Received: "hidden"
+//      Timeout:  5000ms
+//      1 failed [chromium] › the preview honours a hover that arrived before
+//      its module did, without shifting the layout
+//      1 failed [firefox]  › (the same)
+//
+//    (the preview mounts, and stays hidden: the hover that asked for it
+//    happened while nothing was listening.) Reverted, and both passed again.
+//
+// 2. The layout shift: the `thumbnail` part's own `position: 'absolute'`
+//    removed in packages/react/src/thumbnails.tsx, so the part takes space in
+//    the slider's box when it arrives. Both engines failed, at different
+//    assertions -- firefox on the box, which is what this half is for:
+//
+//      Error: the slider's box moved when the preview arrived
+//      expect(received).toEqual(expected) // deep equality
+//      -   "height": 52,      +   "height": 142,
+//          "width": 432,          "width": 432,
+//          "x": 40,               "x": 40,
+//      -   "y": 218,          +   "y": 128,
+//      1 failed [firefox] › the preview honours a hover that arrived before
+//      its module did, without shifting the layout
+//
+//    (90px of sprite tile taking space in a control that was 52px tall, and
+//    pushing the whole slider 90px up the viewport.) chromium never reached
+//    that line, failing one assertion earlier on the tile colour, because a
+//    part no longer positioned against the slider is no longer over the
+//    video and the screenshot reads the page behind it:
+//
+//      Error: expect(received).toEqual(expected) // deep equality
+//      -   { "b": 0, "g": 255, "r": 0 }     (GREEN)
+//      +   { "b": 19, "g": 14, "r": 11 }    (the workbench's own background)
+//      1 failed [chromium] › (the same test)
+//
+//    Reverted, and both passed again.
+test('the preview honours a hover that arrived before its module did, without shifting the layout', async ({
+  page
+}) => {
+  let release = (): void => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  // The preview module, and nothing else: `thumbnails.vtt` and
+  // `thumbnails-sprite.svg` are served from the workbench's own `public/` and
+  // must keep loading, or the preview would have nothing to show once the
+  // module it is waiting on arrives. Matched by path rather than by glob
+  // because the workbench serves this module from outside its own root, at
+  // `/@fs/<absolute path>`.
+  await page.route(
+    (url) => url.pathname.endsWith('/packages/react/src/thumbnails.tsx'),
+    async (route) => {
+      await held;
+      await route.continue();
+    }
+  );
+
+  await gotoStoryReady(page, withThumbnailsStory);
+
+  // Nothing painted, and nothing in the DOM to paint: the part ships in the
+  // held module, so a flash of an unstyled or mispositioned box before it
+  // arrives is not something this can have.
+  await expect(thumbnail(page)).toHaveCount(0);
+  const before = await track(page).boundingBox();
+
+  // 30% of a 10s window: 3s, the 2-4s cue, tile 1, green -- the same hover
+  // the first test in this file makes, made here while the preview does not
+  // yet exist to receive it.
+  await hoverFraction(page, 0.3);
+  release();
+
+  await expect(thumbnail(page)).toHaveAttribute('data-state', 'visible');
+  await expect.poll(() => sampleTileColor(page)).toEqual(GREEN);
+  expect(
+    await track(page).boundingBox(),
+    "the slider's box moved when the preview arrived"
+  ).toEqual(before);
+});
+
 // Demonstrated red (docs/agents/demonstrated-red.md), natural revert
 // (chromium and firefox): `thumbnailLeftStyle` in thumbnails.ts reverted to
 // its pre-#658-clamp body --

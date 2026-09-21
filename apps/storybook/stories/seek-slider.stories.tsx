@@ -38,7 +38,7 @@ const meta = {
           '',
           '**Capability** — gated by `seek`; renders nothing until `seek` resolves `available`.',
           '',
-          '**Thumbnails** — a `thumbnails` prop (a WebVTT sprite-cue URL) renders a `data-playdeck-part="thumbnail"` crop above the previewed time: the pointer position while hovering, or the input\'s own value while it holds keyboard focus. It mounts once the URL resolves and stays mounted, toggling `data-state="hidden" | "visible"` rather than popping in and out — see `WithThumbnails` and `ThumbnailFollowsKeyboardFocus` below.',
+          '**Thumbnails** — a `thumbnails` prop (a WebVTT sprite-cue URL) renders a `data-playdeck-part="thumbnail"` crop above the previewed time: the pointer position while hovering, or the input\'s own value while it holds keyboard focus. It mounts once the URL resolves and the chunk that carries it has loaded, then stays mounted, toggling `data-state="hidden" | "visible"` rather than popping in and out — see `WithThumbnails` and `ThumbnailFollowsKeyboardFocus` below.',
           '',
           '**Styling** — plain CSS against the parts. The `Styled` story below mounts this file as its own `<style>`. Turning the Theme toolbar toggle on adds `theme.css` underneath, not over: everything here is unlayered, and unlayered CSS beats the `@layer playdeck` the whole theme lives in:',
           '```css',
@@ -309,8 +309,9 @@ const renderWithThumbnails = () => (
  * The `thumbnails` prop, wired to a fixture WebVTT sprite-cue file
  * (`thumbnails.vtt`, dividing a 10s clip evenly across the five tiles of
  * `thumbnails-sprite.svg` — that file's own `NOTE` says which cue is which
- * tile). The `thumbnail` part mounts hidden, since nothing has hovered yet,
- * and stays mounted rather than popping in and out as the pointer moves.
+ * tile). The `thumbnail` part mounts hidden with the chunk that carries it,
+ * since nothing has hovered yet, and stays mounted rather than popping in and
+ * out as the pointer moves.
  *
  * Hovering the track previews the time under the pointer -- here, the
  * track's centre, 5s into a 10s window, which is `thumbnails.vtt`'s 4-6s
@@ -326,10 +327,18 @@ export const WithThumbnails: Story = {
     const track = canvasElement.querySelector(
       '[data-playdeck-part="seek-slider"]'
     ) as HTMLElement;
+    // Waited for rather than read straight off the canvas: the part ships in
+    // the chunk `SeekSlider` imports when `thumbnails` is set, so it mounts a
+    // tick after the slider itself does. Nothing replaces it after that, so
+    // the node captured below stays the live one for every assertion here.
+    await waitFor(() =>
+      expect(
+        canvasElement.querySelector('[data-playdeck-part="thumbnail"]')
+      ).toHaveAttribute('data-state', 'hidden')
+    );
     const thumbnail = canvasElement.querySelector(
       '[data-playdeck-part="thumbnail"]'
     ) as HTMLElement;
-    await expect(thumbnail).toHaveAttribute('data-state', 'hidden');
 
     // `hover()`'s own default position is not the element's centre, so the
     // centre is set explicitly -- landing on the 4-6s cue depends on it.
@@ -368,10 +377,18 @@ export const ThumbnailFollowsKeyboardFocus: Story = {
   render: renderWithThumbnails,
   play: async ({ canvas, canvasElement, userEvent }) => {
     const slider = await canvas.findByRole('slider', { name: 'Seek' });
+    // Waited for rather than read straight off the canvas: the part ships in
+    // the chunk `SeekSlider` imports when `thumbnails` is set, so it mounts a
+    // tick after the slider itself does. Nothing replaces it after that, so
+    // the node captured below stays the live one for every assertion here.
+    await waitFor(() =>
+      expect(
+        canvasElement.querySelector('[data-playdeck-part="thumbnail"]')
+      ).toHaveAttribute('data-state', 'hidden')
+    );
     const thumbnail = canvasElement.querySelector(
       '[data-playdeck-part="thumbnail"]'
     ) as HTMLElement;
-    await expect(thumbnail).toHaveAttribute('data-state', 'hidden');
 
     await userEvent.tab();
     await expect(slider).toHaveFocus();

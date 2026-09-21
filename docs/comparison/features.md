@@ -27,7 +27,7 @@ under any of these libraries -- so that limit is written in the footnote
 instead, for every column alike. `docs/comparison/method.md`'s "Features"
 section has the full rule.
 
-Measured 2026-09-15 against `tests/compare`'s pinned installs:
+Measured 2026-09-21 against `tests/compare`'s pinned installs:
 `Playdeck` 1.1.0, `react-player` 3.4.0, `Vidstack` 1.15.6, `Media Chrome` 4.19.2, `Video.js` 8.24.0, `Video.js 10 (beta)` 10.0.0-beta.32.
 
 | Axis                                                | Playdeck      | react-player  | Vidstack      | Media Chrome  | Video.js     | Video.js 10 (beta) |
@@ -293,7 +293,7 @@ Measured 2026-09-15 against `tests/compare`'s pinned installs:
 
 [^114]: **Chapters — Video.js 10 (beta)**: yes. mechanical check: `@videojs/react`'s `dist/dev/index.d.ts` includes `TimeSliderChapters`. Source: @videojs/react 10.0.0-beta.32, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
 
-[^115]: **Thumbnails / preview on seek — Playdeck**: yes. mechanical check: `@playdeck/react`'s `dist/index.js` includes `"data-playdeck-part": "thumbnail"`. Source: packages/react/README.md
+[^115]: **Thumbnails / preview on seek — Playdeck**: yes. mechanical check: `@playdeck/react`'s `dist/thumbnails.js` includes `"data-playdeck-part": "thumbnail"`. Source: packages/react/README.md
 
 [^116]: **Thumbnails / preview on seek — react-player**: no. The `light` prop is a static startup poster fetched through oEmbed (`thumbnail_url` in `dist/Preview.js`), not a hover/scrub seek preview. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `thumbnails`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
 

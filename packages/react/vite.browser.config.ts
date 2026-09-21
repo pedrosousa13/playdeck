@@ -9,6 +9,17 @@ import { defineConfig } from 'vite';
 // chunk instead of matching a hash that changes on every build.
 const PACKAGE_CHUNK = /packages\/([\w-]+)\/dist\/index\.js$/;
 
+// React's own modules, which land in a chunk of their own for the same reason
+// `@playdeck/core` does: this entry and the thumbnail preview `SeekSlider`
+// loads on demand (#727) are both React code, so Rollup factors out what they
+// share. It is named on the same reasoning as the package chunks above --
+// nothing versions these files but the package they ship in, and a name is
+// what lets tests/bundle/no-build and scripts/bundle-budgets.mjs say which
+// file they mean. Rolldown's own derived name for it is `jsx-runtime`, after
+// whichever of React's entry points seeded the chunk, which is neither what
+// the file holds nor stable against a change in how this entry imports React.
+const REACT_MODULE = /node_modules\/react\//;
+
 export default defineConfig({
   // The no-build entry ships as the final artifact a browser runs, not source
   // for another bundler to finish -- so unlike the default `.` build, which
@@ -67,7 +78,25 @@ export default defineConfig({
             chunkInfo.facadeModuleId ??
             (chunkInfo.moduleIds.length === 1 ? chunkInfo.moduleIds[0] : null);
           const match = id?.match(PACKAGE_CHUNK);
-          return match ? `${match[1]}.js` : 'assets/[name]-[hash].js';
+          if (match) return `${match[1]}.js`;
+          // Bundler-internal helper modules carry a synthetic id (`\0...`)
+          // and belong to whatever real code they were emitted beside, so
+          // they are not what decides a chunk's identity here.
+          const authored = chunkInfo.moduleIds.filter(
+            (moduleId) => !moduleId.startsWith('\0')
+          );
+          if (
+            authored.length > 0 &&
+            authored.every((moduleId) => REACT_MODULE.test(moduleId))
+          ) {
+            return 'react.js';
+          }
+          // Everything else keeps Rolldown's own derived name, and still no
+          // hash: this build writes into a `dist` it never empties (see
+          // `emptyOutDir` below), so a hashed chunk leaves its previous
+          // copies behind on every change to it, which is how a stale
+          // `assets/` accumulates in a package that ships `dist` whole.
+          return 'assets/[name].js';
         }
       }
     }
