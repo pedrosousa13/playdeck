@@ -40,6 +40,14 @@ export type LiveIndicatorProps = ComponentPropsWithRef<'button'>;
  * two behaviours coexist. `available` gets the `onClick` and sheds
  * `disabled`; `unavailable` keeps `disabled` permanently, for the reason
  * above.
+ *
+ * The default `aria-label` is "Go to live" only where pressing the part
+ * would act -- `liveEdge` seekable and `data-state="behind-edge"` -- and
+ * "Live" in every other state, including at the edge with `liveEdge`
+ * seekable and behind the edge with it unavailable. The visible text stays
+ * "Live" throughout; "Go to live" contains it, which satisfies WCAG 2.5.3
+ * _Label in Name_. A consumer-supplied `aria-label` always wins, in every
+ * state, per this package's accessible-names rule (`packages/react/README.md`).
  */
 export const LiveIndicator = ({
   'aria-label': ariaLabel,
@@ -59,7 +67,9 @@ export const LiveIndicator = ({
   return (
     <button
       {...props}
-      aria-label={ariaLabel ?? 'Live'}
+      aria-label={
+        ariaLabel ?? (seekable && !live.atLiveEdge ? 'Go to live' : 'Live')
+      }
       data-playdeck-part="live"
       data-state={live.atLiveEdge ? 'at-edge' : 'behind-edge'}
       disabled={!seekable}

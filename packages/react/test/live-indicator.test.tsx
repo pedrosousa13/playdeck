@@ -283,6 +283,155 @@ describe('Player.LiveIndicator', () => {
     expect(livePart(container)?.getAttribute('aria-label')).toBe('Live');
   });
 
+  // -- accessible name: at-edge vs. behind-edge, with the capability -----
+
+  // Maintainer ruling (issue #728): the default name carries the state only
+  // where pressing the part would act -- "Go to live" once `liveEdge` is
+  // seekable and the viewer has fallen behind it, "Live" everywhere else.
+  //
+  // Demonstrated red against the actual unfixed source, not a substitute
+  // mutation: before this change `aria-label` was `ariaLabel ?? 'Live'` in
+  // every state, so a behind-edge, seekable render already read 'Live'. Ran:
+  //
+  //   AssertionError: expected 'Live' to be 'Go to live' // Object.is equality
+  //    ❯ packages/react/test/live-indicator.test.tsx:313:61
+  //      311|       capabilities: capabilitiesWith(available)
+  //      312|     });
+  //      313|     expect(livePart(container)?.getAttribute('aria-label')).toBe(
+  //         |                                                             ^
+  //      314|       'Go to live'
+  //
+  //   Test Files  1 failed (1)
+  //        Tests  1 failed | 14 passed (15)
+  //
+  // Reverted (source fixed), all 15 passed again.
+  test('names itself "Go to live" when behind the edge and the capability is available', () => {
+    const { container, emitState } = renderWithPlayer(<Player.LiveIndicator />);
+    emitState({
+      live: behindEdge,
+      capabilities: capabilitiesWith(available)
+    });
+    expect(livePart(container)?.getAttribute('aria-label')).toBe('Go to live');
+  });
+
+  // Demonstrated red, substitute mutation: the default-name ternary's
+  // `!live.atLiveEdge` half dropped, leaving `seekable ? 'Go to live' :
+  // 'Live'` -- the fix already passes this state before the mutation, so a
+  // real run against the unfixed source (always 'Live') would not fail it.
+  // Ran:
+  //
+  //   AssertionError: expected 'Go to live' to be 'Live' // Object.is equality
+  //    ❯ packages/react/test/live-indicator.test.tsx:340:61
+  //      338|       capabilities: capabilitiesWith(available)
+  //      339|     });
+  //      340|     expect(livePart(container)?.getAttribute('aria-label')).toBe('Live…
+  //         |                                                             ^
+  //
+  //   Test Files  1 failed (1)
+  //        Tests  1 failed | 14 passed (15)
+  //
+  // Reverted, all 15 passed again.
+  test('keeps the name "Live" at the edge even when the capability is available', () => {
+    const { container, emitState } = renderWithPlayer(<Player.LiveIndicator />);
+    emitState({
+      live: atEdge,
+      capabilities: capabilitiesWith(available)
+    });
+    expect(livePart(container)?.getAttribute('aria-label')).toBe('Live');
+  });
+
+  // Demonstrated red, substitute mutation: the default-name ternary's
+  // `seekable &&` half dropped, leaving `!live.atLiveEdge ? 'Go to live' :
+  // 'Live'` -- the capability gate falls out, so a behind-edge render names
+  // itself "Go to live" whether or not pressing it would do anything. Ran:
+  //
+  //   AssertionError: expected 'Go to live' to be 'Live' // Object.is equality
+  //    ❯ packages/react/test/live-indicator.test.tsx:365:61
+  //      363|       capabilities: capabilitiesWith(unavailable)
+  //      364|     });
+  //      365|     expect(livePart(container)?.getAttribute('aria-label')).toBe('Live…
+  //         |                                                             ^
+  //
+  //   Test Files  1 failed (1)
+  //        Tests  1 failed | 14 passed (15)
+  //
+  // Reverted, all 15 passed again.
+  test('keeps the name "Live" behind the edge when the capability is unavailable', () => {
+    const { container, emitState } = renderWithPlayer(<Player.LiveIndicator />);
+    emitState({
+      live: behindEdge,
+      capabilities: capabilitiesWith(unavailable)
+    });
+    expect(livePart(container)?.getAttribute('aria-label')).toBe('Live');
+  });
+
+  // At the edge, the name is 'Live' for every capability status -- the
+  // `!live.atLiveEdge` half of the ternary alone already forces it, so no
+  // mutation confined to the `seekable` half can fail this test in
+  // isolation (tried: hardcoding `seekable` to `true` still reads
+  // `!live.atLiveEdge` as `false` at the edge and stays 'Live'). The
+  // mutation that does reach it drops `!live.atLiveEdge` from the condition
+  // entirely and inverts `seekable`, i.e. `!seekable ? 'Go to live' :
+  // 'Live'` -- which, as expected, also fails the pre-existing 'names itself
+  // Live when no consumer label is given' test above (same at-edge shape,
+  // default capabilities) and the two behind-edge tests, since none of them
+  // reads `live.atLiveEdge` under this mutation either. Ran:
+  //
+  //   AssertionError: expected 'Go to live' to be 'Live' // Object.is equality
+  //    ❯ packages/react/test/live-indicator.test.tsx:283:61 (names itself Live when no consumer label is given)
+  //    ❯ packages/react/test/live-indicator.test.tsx:365:61 (keeps the name "Live" behind the edge when the capability is unavailable)
+  //    ❯ packages/react/test/live-indicator.test.tsx:397:61 (this test)
+  //   AssertionError: expected 'Live' to be 'Go to live' // Object.is equality
+  //    ❯ packages/react/test/live-indicator.test.tsx:314:61 (names itself "Go to live" ...)
+  //
+  //   Test Files  1 failed (1)
+  //        Tests  4 failed | 11 passed (15)
+  //
+  // Reverted, all 15 passed again.
+  test('keeps the name "Live" at the edge when the capability is unavailable', () => {
+    const { container, emitState } = renderWithPlayer(<Player.LiveIndicator />);
+    emitState({
+      live: atEdge,
+      capabilities: capabilitiesWith(unavailable)
+    });
+    expect(livePart(container)?.getAttribute('aria-label')).toBe('Live');
+  });
+
+  // The override contract stated in the docstring above `LiveIndicator` and
+  // in `packages/react/README.md`'s accessible-names section: a
+  // consumer-supplied `aria-label` wins in every state, including the one
+  // state whose default now differs from every other -- behind the edge,
+  // seekable, where the default itself is "Go to live" rather than "Live".
+  //
+  // Demonstrated red, substitute mutation: `ariaLabel ??` dropped from the
+  // `aria-label` attribute, leaving the computed default unconditionally (a
+  // real run against the unfixed source would not fail this -- `ariaLabel ??
+  // 'Live'` already lets a consumer label win in every state, so the
+  // override itself predates this change; what is new is that the default it
+  // would otherwise fall back to differs by state). That single mutation
+  // also fails the pre-existing 'honours a consumer aria-label' test above,
+  // which is the same override contract at the edge. Ran:
+  //
+  //   AssertionError: expected 'Live' to be 'Ao vivo' // Object.is equality
+  //    ❯ packages/react/test/live-indicator.test.tsx:264:61 (honours a consumer aria-label)
+  //   AssertionError: expected 'Go to live' to be 'Ao vivo' // Object.is equality
+  //    ❯ packages/react/test/live-indicator.test.tsx:432:61 (this test)
+  //
+  //   Test Files  1 failed (1)
+  //        Tests  2 failed | 13 passed (15)
+  //
+  // Reverted, all 15 passed again.
+  test('honours a consumer aria-label behind the edge when the capability is available', () => {
+    const { container, emitState } = renderWithPlayer(
+      <Player.LiveIndicator aria-label="Ao vivo" />
+    );
+    emitState({
+      live: behindEdge,
+      capabilities: capabilitiesWith(available)
+    });
+    expect(livePart(container)?.getAttribute('aria-label')).toBe('Ao vivo');
+  });
+
   // -- press behaviour: capability `available` --------------------------
 
   // Demonstrated red, substitute mutation: the call to

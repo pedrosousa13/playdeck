@@ -452,11 +452,12 @@ anyone driving the control by voice. Pass both, or pass an icon as `children`
 and let the name stand alone.
 
 Where a control's own label changes with its state — play/pause, mute/unmute,
-captions on/off, and the fullscreen and picture-in-picture toggles — **one name
-you supply holds in every state.** The library does not reassert its own wording
-in one state and keep yours in the other: naming the control is yours from the
-first prop onwards, so pick a name that reads correctly in both, or drive it
-yourself from `usePlayerState`.
+captions on/off, the fullscreen and picture-in-picture toggles, and
+`LiveIndicator`'s "Live"/"Go to live" — **one name you supply holds in every
+state.** The library does not reassert its own wording in one state and keep
+yours in the other: naming the control is yours from the first prop onwards,
+so pick a name that reads correctly in both, or drive it yourself from
+`usePlayerState`.
 
 `SeekSlider` is the one control whose props are the wrapper `<div>`'s rather
 than the interactive element's, because it renders buffered geometry around the
