@@ -417,6 +417,7 @@ test('a player resumed by re-entering the viewport still auto-pauses on the next
       };
     let videoAttached = false;
     let handleAttached = false;
+    let observerAttached = false;
     const attach = (): void => {
       if (!videoAttached) {
         const video = document.querySelector('[data-playdeck-part="media"]');
@@ -432,7 +433,26 @@ test('a player resumed by re-entering the viewport still auto-pauses on the next
         window.playdeckHandle.on('play', push('handle:play'));
         window.playdeckHandle.on('pause', push('handle:pause'));
       }
-      if (videoAttached && handleAttached) clearInterval(interval);
+      if (!observerAttached) {
+        const viewport = document.querySelector('[data-testid="viewport"]');
+        if (viewport) {
+          observerAttached = true;
+          new IntersectionObserver(
+            (entries) => {
+              for (const entry of entries) {
+                w.__log.push({
+                  t: performance.now(),
+                  label: `observer:${entry.isIntersecting ? 'in' : 'out'}@${entry.intersectionRatio.toFixed(3)}`
+                });
+              }
+            },
+            { threshold: [0, 0.05, 0.1, 0.2, 0.5, 1] }
+          ).observe(viewport);
+        }
+      }
+      if (videoAttached && handleAttached && observerAttached) {
+        clearInterval(interval);
+      }
     };
     const interval = setInterval(attach, 20);
     attach();
@@ -448,17 +468,29 @@ test('a player resumed by re-entering the viewport still auto-pauses on the next
   await expect(play).toHaveAttribute('data-state', 'playing');
 
   await scrollPlayerOutOfView(page);
-  const log = await page.evaluate(
-    () =>
-      (
-        window as unknown as {
-          __log: Array<{ t: number; label: string; origin?: string }>;
-        }
-      ).__log
-  );
-  // eslint-disable-next-line no-console
-  console.log('EVENTLOG', JSON.stringify(log));
-  await expect(play).toHaveAttribute('data-state', 'paused');
+  const dumpLog = async (label: string): Promise<void> => {
+    const log = await page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __log: Array<{ t: number; label: string; origin?: string }>;
+          }
+        ).__log
+    );
+    // eslint-disable-next-line no-console
+    console.log(`EVENTLOG:${label}`, JSON.stringify(log));
+  };
+  try {
+    await expect(play).toHaveAttribute('data-state', 'paused');
+    await dumpLog('pass');
+  } catch (error) {
+    // Extra window past the assertion's own timeout: tells apart "the pause
+    // command was never issued" from "it was issued, just later than the
+    // default timeout allowed for".
+    await page.waitForTimeout(10_000);
+    await dumpLog('fail-then-waited-10s');
+    throw error;
+  }
 });
 
 test('a player the viewer takes over from autoplay keeps playing when it scrolls out of view', async ({
