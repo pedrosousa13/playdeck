@@ -118,9 +118,46 @@ const states: ReadonlyArray<{
   // state is clean. The focus-reachability test below is what actually pins
   // that; this entry going away is the consequence.
   { name: 'idle', url: story('idle') },
-  { name: 'playing', url: story('playing') },
-  { name: 'paused', url: composition },
-  { name: 'captions-on', url: composition },
+  // playing: a real active cue renders here (`meta.parameters.player.cues`
+  // is staged in reference.stories.tsx; `Playing` overrides only
+  // `playback`/`currentTime`), and #760 lifted that cue clear of the
+  // control row's own top edge while the row is shown. That is a position
+  // fix, not a stacking one — the row and the cue no longer share a paint
+  // tie to resolve — but it moved the cue off the one opaque surface axe
+  // could resolve a background against (the control row) and onto the
+  // picture behind it, which the cue's own translucent default background
+  // (`rgba(0, 0, 0, 0.75)`) now has to be seen through.
+  //
+  // - `color-contrast` on `[data-playdeck-part="caption-line"]`, messageKey
+  //   `imgNode`: axe-core has no rule that rasterises a `<video>`/`<img>`
+  //   behind translucent text, so it reports "needs review" rather than a
+  //   verdict wherever text sits over one — a real limit of the tool, not a
+  //   claim about this text. `caption cue contrast against arbitrary video
+  //   content (#760)` in `packages/react/test/theme.test.ts` is the proof
+  //   this relies on instead: the cue's default colour and background clear
+  //   4.5:1 against both ends of what a video frame behind it can be (white
+  //   and black, measured 10.41:1 and 21.00:1), so the "needs review" here
+  //   is exactly that and nothing more.
+  //
+  // Both passes produce it identically — headless and docked alike, since
+  // this composition forces the control row into the same overlaid
+  // position regardless of theme — so it belongs in this shared list
+  // rather than in `dockedKnownIncomplete`. Every other state below that
+  // renders an active cue carries the same entry, for the same reason
+  // stated here once.
+  {
+    name: 'playing',
+    url: story('playing'),
+    knownIncomplete: ['color-contrast']
+  },
+  // paused, captions-on: the same `composition` story as `playing` above,
+  // so the same cue and the same #760 finding.
+  { name: 'paused', url: composition, knownIncomplete: ['color-contrast'] },
+  {
+    name: 'captions-on',
+    url: composition,
+    knownIncomplete: ['color-contrast']
+  },
   // menu-open: axe-core's aria-valid-attr-value check unconditionally flags
   // any aria-controls paired with a non-false aria-haspopup as "needs
   // review" (messageKey: controlsWithinPopup) the instant the attribute is
@@ -128,11 +165,15 @@ const states: ReadonlyArray<{
   // correctly-built aria-haspopup+aria-controls menu trips this; it is a
   // permanent axe-core limitation for the pattern, not specific to playdeck and
   // not fixable here.
+  //
+  // `color-contrast` joins it for the same #760 reason as `playing` above:
+  // this is the same `composition` story, with a settings menu opened on
+  // top of the same active cue.
   {
     name: 'menu-open',
     url: composition,
     open: 'settings',
-    knownIncomplete: ['aria-valid-attr-value']
+    knownIncomplete: ['aria-valid-attr-value', 'color-contrast']
   },
   // captions-menu-open: the same composition with the captions menu opened
   // instead. `CaptionsMenu` is a preset over `SettingsMenu`, so it composes a
@@ -140,23 +181,29 @@ const states: ReadonlyArray<{
   // option — inside the same primitives, and that tree had no scan coverage:
   // this spec only ever clicked the settings trigger (#419).
   //
-  // One diagnosed entry remains, per this list's own rule that a
+  // Two diagnosed entries, per this list's own rule that a
   // `knownIncomplete` id means an examined finding and never an unexamined
   // one:
   //
   // - `aria-valid-attr-value`: the same axe-core limitation as the settings
   //   state above, and for the same reason — axe flags the
   //   aria-haspopup+aria-controls pattern itself, not anything specific here.
+  // - `color-contrast`: the same #760 finding as `playing` above, and for
+  //   the same reason — this is the same `composition` story's active cue,
+  //   with the captions menu opened on top of it instead of the settings
+  //   one.
   //
-  // `color-contrast` used to sit here too: both radio items came back
-  // needs-review because axe could not resolve a background for them, since
-  // the settings menu got `.playdeck-example-menu` and `CaptionsMenu`'s
-  // default content got no className at all. #467 ruled that a composition
-  // defect and gave the captions menu paint plus placement instead of that
-  // class — why paint alone was not enough is measured and recorded next to
-  // the fix itself, at `.playdeck-example-captions` in
-  // `reference-player.tsx`. Axe now resolves a background and the entry is
-  // gone.
+  // `color-contrast` used to sit here for an unrelated reason and went away
+  // once: both radio items came back needs-review because axe could not
+  // resolve a background for them, since the settings menu got
+  // `.playdeck-example-menu` and `CaptionsMenu`'s default content got no
+  // className at all. #467 ruled that a composition defect and gave the
+  // captions menu paint plus placement instead of that class — why paint
+  // alone was not enough is measured and recorded next to the fix itself,
+  // at `.playdeck-example-captions` in `reference-player.tsx`. Axe resolved
+  // a background for the radio items after that, and stayed clean on them
+  // specifically; the entry now back on this state is the cue's, not
+  // theirs.
   //
   // #467 also settled a second, separable question this same state raised:
   // the two radio items measure side by side on one row, not stacked, when
@@ -168,21 +215,30 @@ const states: ReadonlyArray<{
     name: 'captions-menu-open',
     url: composition,
     open: 'captions',
-    knownIncomplete: ['aria-valid-attr-value']
+    knownIncomplete: ['aria-valid-attr-value', 'color-contrast']
   },
-  { name: 'blocked-autoplay', url: story('blocked-autoplay') },
+  // blocked-autoplay: `PlayButton`'s own `data-state='paused'` composition,
+  // with an active cue staged the same way `playing`'s story stages one —
+  // same #760 finding, for the same reason.
+  {
+    name: 'blocked-autoplay',
+    url: story('blocked-autoplay'),
+    knownIncomplete: ['color-contrast']
+  },
   // global-shortcuts: the same composition with `Player.Controls global`, so
   // the shortcut map is on `document` instead of on the region (#181). Axe
   // has no rule for SC 2.1.4 Character Key Shortcuts and cannot acquire one —
   // a single-character binding is not statically distinguishable from one
   // that can be turned off — so this state is not a 2.1.4 verdict. It is the
   // check the issue asks for: the mode is composed, scanned, and found to
-  // introduce nothing else. Expecting it as clean as `paused` is the whole
-  // assertion; the two states differ by one attribute and a listener.
+  // introduce nothing else beyond the same #760 `color-contrast` finding
+  // `paused` already carries — the two states differ by one attribute and a
+  // listener, and this is what the composition they share always produces.
   {
     name: 'global-shortcuts',
     url: story('global-shortcuts'),
-    globalShortcuts: true
+    globalShortcuts: true,
+    knownIncomplete: ['color-contrast']
   },
   // error: Player.ErrorDisplay is a real, full-viewport error surface while
   // an error exists (position: absolute; inset: 0; z-index: 40) — by design,
@@ -336,6 +392,13 @@ const themes = [
 // composition; webkit was not among them, because it cannot launch in the
 // environment this was measured in and CI is where these buckets first meet
 // it.
+//
+// Still empty after #760, which is the one other change to touch this file's
+// `incomplete` expectations since. That fix's own `color-contrast` finding
+// (see `playing`'s own comment above, in `states`) is not engine-dependent —
+// measured identically on chromium and firefox, both themes, for every state
+// that renders an active cue — so it belongs in the shared `knownIncomplete`
+// list, which every state carrying it now does, and not here.
 const dockedOptionalIncomplete: Readonly<Record<string, readonly string[]>> =
   {};
 
@@ -378,6 +441,13 @@ const dockedOptionalIncomplete: Readonly<Record<string, readonly string[]>> =
 // other two do not is *measured* engine dependence, and belongs in one of
 // these buckets with that evidence written beside it — never behind a webkit
 // skip.
+//
+// Still empty after #760, for the same reason `dockedOptionalIncomplete`
+// above states: that fix's `color-contrast` finding is not docked-only —
+// headless produces it identically, since this composition already forces
+// its control row into an overlaid position regardless of theme — so it is
+// pinned in the shared `knownIncomplete` list instead, on every state that
+// renders an active cue.
 const dockedKnownIncomplete: Readonly<Record<string, readonly string[]>> = {};
 
 for (const theme of themes) {

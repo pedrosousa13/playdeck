@@ -126,12 +126,16 @@ test('the caption cue paints above the control row', async ({ page }) => {
   await page.goto(story('reference-player--composition'));
   await expect(page.locator(part('caption-cue'))).toBeVisible();
 
-  // Measured: the cue's box (150x25 at y 403.78) sits inside the control row's
-  // vertical band (109px tall at y 339), so these two boxes overlap by design.
-  // What must hold is the paint order — `Captions` is composed *after*
-  // `Controls` precisely because they share z-index 20 and the later sibling
-  // wins the tie. Caption text under the control bar is a regression this repo
-  // has already had once.
+  // #760 lifted the cue clear of the row's vertical band while the row is
+  // shown (measured: the cue's box, 166x25 at y 285.78, sits well above the
+  // row's own 110px-tall band at y 338), so the two no longer overlap here by
+  // design the way they once did. The paint order this asserts is still
+  // real, not vestigial: `Captions` composes *after* `Controls` precisely
+  // because they share z-index 20 and the later sibling wins the tie, and
+  // that tie still has to resolve correctly for a `renderCue` consumer whose
+  // own box is taller than the lift clears, or for any state this fix's own
+  // clearance does not reach. Caption text under the control bar is a
+  // regression this repo has already had once.
   expect(await paintsAtItsCentre(page, part('caption-cue'))).toBe(true);
 
   const player = await boxOf(page, '.playdeck-example');
