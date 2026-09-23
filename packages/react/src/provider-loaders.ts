@@ -178,6 +178,14 @@ export type ProviderAdapterFactory<
  * registers: `detect` turns a URL into this kind's own source object, or
  * declines by returning `undefined`; `load` is the lazy factory above.
  *
+ * A `detect` that throws declines too, exactly as if it had returned
+ * `undefined` -- `detectSourceWithProviders` (below) catches it and moves on
+ * to the next registration. The throw is not lost: it is reported the same
+ * way a throwing subscriber already is elsewhere in this package
+ * (`notifySafely`, `@playdeck/core`), on a fresh task, so it is still visible
+ * without being able to escape render and reach a consumer's error boundary
+ * (#753).
+ *
  * `Source` types the object `detect` builds, which `loadProvider` later hands
  * unchanged to the loaded factory -- it must carry its own `type` literal so a
  * resolved source can be routed back to this registration by name, the way
@@ -607,7 +615,24 @@ export const detectSourceWithProviders = (
     }
     for (const [key, registration] of Object.entries(providers)) {
       if (RESERVED_PROVIDER_NAMES.includes(key)) continue;
-      const source = registration.detect(input);
+      // Contained the way `loadProvider`'s own dispatch already is at its
+      // call site (`use-activation.ts`'s `.catch` wraps `loadProvider(...)`):
+      // `detect` runs during render (`root.tsx`'s `useMemo`), where an
+      // uncontained throw would reach the nearest error boundary or unmount
+      // the root. Not `notifySafely` (`@playdeck/core`): it forces a `void`
+      // return, and this loop needs `detect`'s own return value back. A throw
+      // means the same as `undefined` -- `continue` takes the same
+      // fall-through -- and `queueMicrotask` reports it the way `notifySafely`
+      // reports a throwing subscriber (#753).
+      let source: unknown;
+      try {
+        source = registration.detect(input);
+      } catch (cause) {
+        queueMicrotask(() => {
+          throw cause;
+        });
+        continue;
+      }
       if (source && everyStringPermitted(source)) {
         return {
           status: 'success',
