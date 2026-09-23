@@ -129,6 +129,209 @@ test('mounts and loads a supplied kind from an explicit source object, end to en
   );
 });
 
+// The render-level counterpart of `provider-loaders.test.ts`'s "refuses a
+// source object whose own toJSON would throw" -- proven here through
+// `Player.Root` itself, which is where #754's defect 4 actually bit:
+// `use-activation.ts`'s `sourceKey` calls `JSON.stringify(source.source)`
+// during render, inside `Root`'s own `useMemo`. Before the copy in
+// `detectSourceWithProviders`'s explicit-object branch, a `toJSON` that
+// throws passed `everyStringPermitted` untouched -- a function value matches
+// neither of its two branches and falls through to its default `true` -- so
+// the unchanged source reached `sourceKey` and `JSON.stringify` threw
+// synchronously out of render. The copy now refuses the whole source before
+// `sourceKey` ever sees it, so this source is reported as an ordinary
+// refused source instead.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): against the unfixed
+// code, this test's own `waitFor` timed out -- `handle.current?.getState()`
+// never reached `activation: 'error'` -- because the render itself threw
+// inside `useActivation` (`TypeError: toJSON blew up` reached
+// `RecordingErrorBoundary`, and `getState()` kept reading the boundary's own
+// fallback `null` render instead), run with
+// `pnpm vitest run packages/react/test/supplied-provider.test.tsx -t "toJSON"`.
+test('a throwing toJSON on an explicit supplied-kind source object refuses the source instead of throwing out of render', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  const load = vi.fn();
+
+  render(
+    <RecordingErrorBoundary>
+      <Player.Root
+        loading="eager"
+        providers={{ acme: { detect: vi.fn(), load } }}
+        ref={handle}
+        source={
+          {
+            type: 'acme',
+            videoId: '1',
+            toJSON() {
+              throw new Error('toJSON blew up');
+            }
+          } as never
+        }
+      >
+        <Player.Viewport>
+          <Player.Media />
+        </Player.Viewport>
+      </Player.Root>
+    </RecordingErrorBoundary>
+  );
+
+  await waitFor(() =>
+    expect(handle.current?.getState()).toMatchObject({
+      activation: 'error',
+      error: { category: 'unsupported' }
+    })
+  );
+  expect(load).not.toHaveBeenCalled();
+  expect(document.querySelector('[data-playdeck-part="media"]')).toBeNull();
+});
+
+// The render-level counterpart of `provider-loaders.test.ts`'s own
+// throwing-getter test, and the reason #754's review asked for one: `Root`'s
+// `useMemo` reads fields off `source` during render (core's own
+// `detectSource`, then `detectSourceWithProviders`'s explicit-object
+// branch), so a getter that throws on an ordinary data property used to
+// throw synchronously out of render, before `copySuppliedSourceObject`'s own
+// `try`/`catch` (`provider-loaders.ts`) existed to catch it.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): against the unfixed
+// code, this test's own `waitFor` timed out -- `RecordingErrorBoundary`
+// caught the throw and `handle.current?.getState()` kept reading the
+// boundary's own fallback `null` render instead of ever reaching
+// `activation: 'error'` -- run with
+// `pnpm vitest run packages/react/test/supplied-provider.test.tsx -t "throwing getter"`.
+test('a throwing getter on an explicit supplied-kind source object refuses the source instead of throwing out of render', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  const load = vi.fn();
+  const source: Record<string, unknown> = { type: 'acme', videoId: '1' };
+  Object.defineProperty(source, 'url', {
+    enumerable: true,
+    get(): never {
+      throw new Error('getter blew up');
+    }
+  });
+
+  render(
+    <RecordingErrorBoundary>
+      <Player.Root
+        loading="eager"
+        providers={{ acme: { detect: vi.fn(), load } }}
+        ref={handle}
+        source={source as never}
+      >
+        <Player.Viewport>
+          <Player.Media />
+        </Player.Viewport>
+      </Player.Root>
+    </RecordingErrorBoundary>
+  );
+
+  await waitFor(() =>
+    expect(handle.current?.getState()).toMatchObject({
+      activation: 'error',
+      error: { category: 'unsupported' }
+    })
+  );
+  expect(load).not.toHaveBeenCalled();
+  expect(document.querySelector('[data-playdeck-part="media"]')).toBeNull();
+});
+
+// The render-level counterpart of `provider-loaders.test.ts`'s own
+// Map/Set/symbol/bigint sweep, proving the issue's own acceptance criterion
+// "including from sourceKey" against the real function rather than by
+// inspection: `use-activation.ts`'s `sourceKey` runs on whatever
+// `detectSourceWithProviders` returns on every real `Root` render, and a
+// refused result never reaches its `JSON.stringify` branch at all -- this is
+// what actually proves that, rather than reasoning about it.
+test('an explicit supplied-kind source object carrying a bigint refuses the source instead of throwing out of render', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  const load = vi.fn();
+
+  render(
+    <Player.Root
+      loading="eager"
+      providers={{ acme: { detect: vi.fn(), load } }}
+      ref={handle}
+      source={{ type: 'acme', videoId: '1', count: 1n } as never}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(handle.current?.getState()).toMatchObject({
+      activation: 'error',
+      error: { category: 'unsupported' }
+    })
+  );
+  expect(load).not.toHaveBeenCalled();
+  expect(document.querySelector('[data-playdeck-part="media"]')).toBeNull();
+});
+
+// The render-level counterpart of `provider-loaders.test.ts`'s own diamond
+// tests, and the reason the copy itself bounding its own total size (rather
+// than memoising a diamond's shared object) matters beyond the copy: a copy
+// that preserved a diamond's sharing would still reach `use-activation.ts`'s
+// `sourceKey`, which calls `JSON.stringify(source.source)` on every render,
+// and `JSON.stringify` does not deduplicate a shared reference -- it
+// serialises every path to it -- so the exponential cost the copy's own node
+// budget exists to avoid would simply move one call downstream, into render,
+// rather than disappear. A chain this deep is past that budget
+// (`MAX_SUPPLIED_SOURCE_NODES`, `provider-loaders.ts`), so it is refused --
+// the assertion here is that refusing it is prompt, not that it mounts.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): against f43c79b, whose
+// copy memoised a diamond's shared object instead of bounding total size,
+// this test hung for the entire run -- `Error: Test timed out in 5000ms.`,
+// reported only once the render's own synchronous work (inside
+// `JSON.stringify`, over the memoised, shared-reference copy) actually
+// finished and returned control, 32391ms in, run with
+// `pnpm vitest run packages/react/test/supplied-provider.test.tsx -t "diamond chain"`.
+// A second red, once the node budget alone had replaced the memo: this same
+// test failed with `RangeError: Invalid array length` thrown from
+// `echoSource` (`use-activation.ts`) -- the copy now correctly refused the
+// chain, but building the refusal's own message called `JSON.stringify` on
+// the caller's original, still fully shared, object, and the resulting
+// string was too long for `Array.from` to index by code point. Fixed by
+// bounding `echoSource`'s own `JSON.stringify` call with a node-counting
+// replacer, the same technique `copySuppliedSourceValue`'s budget uses.
+test('refuses an explicit source object whose nested object is a diamond chain past the node budget, promptly rather than after exponential blowup', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  const load = vi.fn();
+  const detect = vi.fn();
+
+  let next: Record<string, unknown> = { leaf: true };
+  for (let level = 0; level < 24; level++) {
+    next = { l: next, r: next };
+  }
+  const source = { type: 'acme', videoId: '1', chain: next };
+
+  render(
+    <Player.Root
+      loading="eager"
+      providers={{ acme: { detect, load } }}
+      ref={handle}
+      source={source as never}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(handle.current?.getState()).toMatchObject({
+      activation: 'error',
+      error: { category: 'unsupported' }
+    })
+  );
+  expect(detect).not.toHaveBeenCalled();
+  expect(load).not.toHaveBeenCalled();
+  expect(document.querySelector('[data-playdeck-part="media"]')).toBeNull();
+}, 2000);
+
 // The render-level counterpart of `provider-loaders.test.ts`'s
 // `refuses a detect return carrying a forbidden scheme nested inside it, and
 // continues to a later registration` -- proven here through `Player.Root`

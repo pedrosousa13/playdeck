@@ -356,20 +356,22 @@ export const libraries = [
     composition: 'core + native provider, no control parts',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 21796 bytes measured 2026-09-23 -- 21.28515625 KB, 21.29 KB to two
+    // 22134 bytes measured 2026-09-23 -- 21.615234375 KB, 21.62 KB to two
     // places, rounded up to the next 0.25 KB. See the `libraries` doc
     // comment above for what raising this means. What carried this row past
-    // 21.25 KB is #752's supplied-provider-options gate:
-    // `sanitizeSuppliedProviderOptions` and the `reportRefusedUrl` plumbing
-    // `loadProvider`'s supplied-kind branch gained (`provider-loaders.ts`),
-    // plus the new `providerOptions` `RefusedUrlSurface` member and its
-    // notice (`packages/core/src/types.ts`, `packages/core/src/safety.ts`).
-    // All of it sits in code every composition here reaches regardless of
-    // which parts it renders, so all four Playdeck rows moved together. The
-    // whole distance from the last committed figure is this issue's: that
-    // figure was 21.13 KB, measured the same day (2026-09-23) before this
-    // change, per `results.md` on `main`.
-    ceilingKb: 21.5
+    // 21.50 KB is #754's copy of a supplied-kind explicit source object:
+    // `copySuppliedSourceValue` and `copySuppliedSourceObject`
+    // (`provider-loaders.ts`) -- the depth cap, the `ancestors` cycle guard,
+    // the node budget that bounds the copy's own total size, the plain-value
+    // walk, and the `try`/`catch` that makes the whole copy throw-safe --
+    // plus `use-activation.ts`'s `echoSource` bounding its own
+    // `JSON.stringify` call the same way, for a refused source's own error
+    // message. All of it sits in code every composition here reaches
+    // regardless of which parts it renders, so all four Playdeck rows moved
+    // together. The whole distance from the last committed figure is this
+    // issue's: that figure was 21.29 KB, measured the same day (2026-09-23)
+    // before this change, per `results.md` on `main`.
+    ceilingKb: 21.75
   },
   {
     name: 'Playdeck',
@@ -378,12 +380,13 @@ export const libraries = [
     composition: 'core + primitives + native provider',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 22489 bytes measured 2026-09-23 -- 21.9619140625 KB, 21.96 KB to two
-    // places -- the same #752 change described on the "no parts" row above
-    // moved this row too, but not past its own 22.00 KB ceiling: main's last
-    // committed figure was 21.80 KB, measured the same day (2026-09-23)
-    // before this change. Recorded here without a raise.
-    ceilingKb: 22
+    // 22798 bytes measured 2026-09-23 -- 22.263671875 KB, 22.26 KB to two
+    // places, rounded up to the next 0.25 KB -- the same #754 change
+    // described on the "no parts" row above moved this row past its own
+    // 22.00 KB ceiling too. The whole distance from the last committed
+    // figure is this issue's: that figure was 21.96 KB, measured the same
+    // day (2026-09-23) before this change, per `results.md` on `main`.
+    ceilingKb: 22.5
   },
   {
     name: 'Playdeck (play-only)',
@@ -393,16 +396,14 @@ export const libraries = [
       'core + primitives + native provider + one control (PlayButton)',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 23599 bytes measured 2026-09-23 -- 23.0458984375 KB, 23.05 KB to two
+    // 23905 bytes measured 2026-09-23 -- 23.3447265625 KB, 23.34 KB to two
     // places, rounded up to the next 0.25 KB. What carried this row past
-    // 23.00 KB is #752's supplied-provider-options gate, the same change
-    // described on the "no parts" row above: it sits in code every
-    // composition here reaches regardless of which parts it renders, so all
-    // four Playdeck rows moved together. The whole distance from the last
-    // committed figure is this issue's: that figure was 22.88 KB, measured
-    // the same day (2026-09-23) before this change, per `results.md` on
-    // `main`.
-    ceilingKb: 23.25,
+    // 23.25 KB is #754's supplied-kind source copy, the same change
+    // described on the "no parts" row above. The whole distance from the
+    // last committed figure is this issue's: that figure was 23.05 KB,
+    // measured the same day (2026-09-23) before this change, per
+    // `results.md` on `main`.
+    ceilingKb: 23.5,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
@@ -413,14 +414,14 @@ export const libraries = [
       "core + primitives + native provider + control bar (5 of Media Chrome's 7 controls)",
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 26719 bytes measured 2026-09-23 -- 26.0927734375 KB, 26.09 KB to two
+    // 27026 bytes measured 2026-09-23 -- 26.392578125 KB, 26.39 KB to two
     // places, rounded up to the next 0.25 KB. What carried this row past
-    // 26.00 KB is #752's supplied-provider-options gate, the same change
+    // 26.25 KB is #754's supplied-kind source copy, the same change
     // described on the "no parts" row above. The whole distance from the
-    // last committed figure is this issue's: that figure was 25.92 KB,
+    // last committed figure is this issue's: that figure was 26.09 KB,
     // measured the same day (2026-09-23) before this change, per
     // `results.md` on `main`.
-    ceilingKb: 26.25
+    ceilingKb: 26.5
   },
   {
     name: 'react-player',

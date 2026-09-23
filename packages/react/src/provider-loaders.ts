@@ -567,6 +567,237 @@ const everyStringPermitted = (
   return true;
 };
 
+// The named depth cap `copySuppliedSourceValue` below refuses past: sized
+// generously above any legitimate supplied-kind shape -- the deepest built-in
+// source `sourceFromExplicitObject` accepts, `{ type: 'video', sources: [{
+// src, mimeType }] }`, is two levels deep -- while still bounding the
+// recursion a genuinely deep, narrow, acyclic object (say, one built by
+// looping `JSON.parse` output) could otherwise ask for before the node budget
+// below ever has a chance to. A true cycle is refused outright by the
+// ancestor check below, in O(1), without ever needing to reach this cap.
+const MAX_SUPPLIED_SOURCE_DEPTH = 32;
+
+// The total node budget `copySuppliedSourceValue` below refuses past: every
+// object, array and primitive the copy visits counts against it, whether or
+// not that value ends up admitted, and going over it refuses the whole
+// source. Sized generously above any legitimate supplied-kind shape -- a
+// realistic source carries tens of fields, not thousands -- while still
+// bounding the copy's own total size. That size bound is not a performance
+// nicety: it is what makes every later walk over the copy -- `sourceKey`'s
+// `JSON.stringify` (`use-activation.ts`), the factory's own reads -- linear
+// too, because none of them can visit more nodes than this copy was allowed
+// to have. See this function's own doc comment for why a diamond is admitted
+// as two independent copies, at the cost of this budget, rather than one
+// shared object counted once.
+const MAX_SUPPLIED_SOURCE_NODES = 10_000;
+
+// The plain, bounded value space `copySuppliedSourceValue` below builds --
+// deliberately narrower than "JSON-serialisable", so nothing in it can carry
+// a `toJSON` for `sourceKey`'s `JSON.stringify` (`use-activation.ts`,
+// `viewport-media.tsx`) to call, and deliberately narrower than "structurally
+// cloneable", so nothing in it can carry a `Map`, a `Set`, or a `bigint`
+// either.
+type SuppliedSourceValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | readonly SuppliedSourceValue[]
+  | { readonly [key: string]: SuppliedSourceValue };
+
+type SuppliedSourceCopyResult =
+  | { readonly ok: true; readonly value: SuppliedSourceValue }
+  | { readonly ok: false };
+
+// The one-shot structural copy `detectSourceWithProviders`'s explicit-object
+// branch below takes of a caller's own object before any validation runs over
+// it -- the fix for four related defects (#754), all tracing back to one
+// root: that branch used to return the caller's own object unchanged, and
+// `everyStringPermitted` walked that same live object rather than a value
+// this package controls.
+//
+// Each own enumerable string-keyed value is read through exactly one
+// `value[key]` access and never touched again -- what closes the getter
+// defect on its own, with no separate accessor detection needed: a `url`
+// getter that answers a permitted scheme on its first read and `javascript:`
+// on a second never gets a second read, so the copy carries whichever string
+// that one read produced, and that string is what a resolved source's
+// `source` field and the factory both see thereafter. Rejecting every
+// accessor outright was the other option the issue named; reading once is
+// simpler, because it is the same rule this function already needs for every
+// value, accessor or not. The shared allowlist (`isPermittedSourceUrl`) runs
+// on that same single read, right where the string is admitted into the
+// copy: a string is refused, not merely copied unchecked, so nothing further
+// has to re-walk the finished copy hunting for a forbidden scheme -- see why
+// that second walk would matter below, at `MAX_SUPPLIED_SOURCE_NODES`.
+//
+// A key is skipped, not refused, when it is own but non-enumerable:
+// `Object.keys` below already excludes it, so the copy never carries it, and
+// neither this function's caller nor the factory ever sees it -- closing the
+// same hole a symbol-keyed value opens, by omission rather than by
+// inspection. A symbol key is different only in that its whole object is
+// refused instead of just that one key: `Object.getOwnPropertySymbols` is
+// checked explicitly, because enumerating string keys alone would silently
+// skip a symbol the same way `Object.keys` silently skips a non-enumerable
+// string, and a shape this package cannot fully account for is refused
+// rather than partially admitted.
+//
+// "Plain" is `Object.prototype` or `null` as the value's own prototype --
+// what an object literal and `Object.create(null)` both produce, and what a
+// `Map`, a `Set`, a `Date`, or an instance of a class a provider author wrote
+// do not. Any of those is refused outright, at whatever depth it occurs,
+// rather than read as a value this walk would have to know how to open.
+//
+// `ancestors` holds every object still on the current recursion path;
+// hitting one already there is a genuine cycle (the value is its own
+// ancestor), refused in O(1) with no need to reach `MAX_SUPPLIED_SOURCE_DEPTH`
+// or `MAX_SUPPLIED_SOURCE_NODES` at all -- `{ type: 'acme', a: self, b: self
+// }` is refused after two calls.
+//
+// A diamond -- the same nested object reached through two sibling branches,
+// which is not a cycle, since neither branch is the other's ancestor -- is
+// copied independently for each branch rather than memoised into one shared
+// copy, deliberately: a memoised copy would still carry the diamond's shared
+// reference, and nothing downstream of this function walks the copy with any
+// memory of its own. `sourceKey` (`use-activation.ts`) calls
+// `JSON.stringify` on a resolved source during every render, and
+// `JSON.stringify` does not deduplicate a shared reference -- it serialises
+// every path to it -- so a copy that preserved a diamond's sharing would move
+// the exact exponential cost this function exists to avoid one call
+// downstream, into render, rather than remove it. `MAX_SUPPLIED_SOURCE_NODES`
+// is the actual guard against that: every value this function visits, valid
+// or not, counts against one shared budget, so a small diamond -- copied
+// twice, costing twice its own size -- is well within it, while a diamond
+// chain deep enough to double at every level exhausts the budget after a
+// small, fixed number of levels and refuses the whole source, promptly, the
+// same way a forbidden scheme does. Because the budget is shared across the
+// whole call and checked before any further work happens once it is spent,
+// going over it fails fast: the first value that trips it returns refused
+// immediately, which -- exactly like a cycle -- short-circuits every
+// enclosing object's own loop below, so the remaining, still-unexplored half
+// of an exponential shape is never actually walked.
+//
+// `everyStringPermitted` itself, and its own `WeakSet`-based cycle guard, are
+// unchanged: its one remaining call site -- a registration's own `detect`
+// return, in the string branch below -- gets no copy step, so it still walks
+// a live, potentially cyclic object directly and still needs a guard of its
+// own. Nothing about it needs a node budget of its own either, for the same
+// reason it needs no diamond memo: nothing calls it twice over the same
+// object the way a hypothetical second pass over this function's own copy
+// would.
+const copySuppliedSourceValue = (
+  value: unknown,
+  depth: number,
+  ancestors: Set<object>,
+  nodes: { count: number }
+): SuppliedSourceCopyResult => {
+  nodes.count += 1;
+  if (nodes.count > MAX_SUPPLIED_SOURCE_NODES) return { ok: false };
+
+  if (value === null || value === undefined) return { ok: true, value };
+  if (typeof value === 'string') {
+    return isPermittedSourceUrl(value, undefined)
+      ? { ok: true, value }
+      : { ok: false };
+  }
+  if (typeof value === 'boolean') return { ok: true, value };
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? { ok: true, value } : { ok: false };
+  }
+  if (typeof value !== 'object') {
+    // A function, a `bigint`, or a `symbol` value -- none of which any
+    // legitimate supplied-kind source shape carries.
+    return { ok: false };
+  }
+
+  if (ancestors.has(value)) return { ok: false };
+  if (depth > MAX_SUPPLIED_SOURCE_DEPTH) return { ok: false };
+  if (Object.getOwnPropertySymbols(value).length > 0) return { ok: false };
+
+  ancestors.add(value);
+  let result: SuppliedSourceCopyResult;
+  if (Array.isArray(value)) {
+    const copied: SuppliedSourceValue[] = [];
+    result = { ok: true, value: copied };
+    for (const item of value) {
+      const itemResult = copySuppliedSourceValue(
+        item,
+        depth + 1,
+        ancestors,
+        nodes
+      );
+      if (!itemResult.ok) {
+        result = itemResult;
+        break;
+      }
+      copied.push(itemResult.value);
+    }
+  } else {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      result = { ok: false };
+    } else {
+      const copied: Record<string, SuppliedSourceValue> = {};
+      result = { ok: true, value: copied };
+      for (const key of Object.keys(value)) {
+        const keyResult = copySuppliedSourceValue(
+          (value as Record<string, unknown>)[key],
+          depth + 1,
+          ancestors,
+          nodes
+        );
+        if (!keyResult.ok) {
+          result = keyResult;
+          break;
+        }
+        copied[key] = keyResult.value;
+      }
+    }
+  }
+  ancestors.delete(value);
+  return result;
+};
+
+// `detectSourceWithProviders`'s own entry point into the copy above: its
+// explicit-object branch already knows `input` is a non-null, non-array
+// object by the time it calls this, so the only way this can fail to produce
+// one is whatever `copySuppliedSourceValue` itself refused, or threw.
+// `ancestors` and `nodes` are created fresh here, once per call, rather than
+// shared across calls -- there is no reason to hold either past the one copy
+// they serve.
+//
+// The `try` is this function's own guard, not `copySuppliedSourceValue`'s:
+// every read that function makes -- `value[key]`, `Object.keys`,
+// `Object.getOwnPropertySymbols`, `Object.getPrototypeOf` -- can throw for an
+// object this package did not build, and none of the checks earlier in that
+// function can rule that out first. A plain object can declare an ordinary
+// data property as a throwing getter; a `Proxy` can make any one of those
+// four operations throw from its own trap. Catching here, once, after the
+// whole recursive copy either finishes or throws, is what "the copy must
+// still read each value only once" requires: a `catch` placed around an
+// individual read and retried would read that value a second time, which is
+// exactly the getter hazard this package's own single-read rule (this
+// function's own doc comment, above) exists to close. A throw part-way
+// through is treated the same as an ordinary refusal -- `invalid-source`,
+// never a throw out of `detectSourceWithProviders` -- because a value that
+// cannot even be read safely is refused for the same reason a `Map` or a
+// `bigint` is: this package cannot fully account for it.
+const copySuppliedSourceObject = (
+  input: Record<string, unknown>
+): Record<string, SuppliedSourceValue> | undefined => {
+  try {
+    const result = copySuppliedSourceValue(input, 0, new Set<object>(), {
+      count: 0
+    });
+    return result.ok
+      ? (result.value as Record<string, SuppliedSourceValue>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 // The five source-kind names `loadProvider` above dispatches to
 // unconditionally, ahead of ever consulting `providers`. A registration keyed
 // by one of these is skipped in both paths below -- before its `detect` is
@@ -625,14 +856,37 @@ const RESERVED_PROVIDER_NAMES: readonly string[] = [
 // `detect`: `detect` takes a URL string by contract, and an object arriving
 // here has already declared its own kind through its `type` field, the same
 // way `sourceFromExplicitObject` skips every built-in host detector and goes
-// straight to per-kind validation once `input.type` names one. So a record
+// straight to per-kind validation once `input.type` names one. `input` is
+// copied into a plain, bounded structure this package controls
+// (`copySuppliedSourceObject` above) before anything else runs -- never the
+// caller's own object. That copy closes #754's four original defects: a
+// depth cap together with an ancestor check rules out both a stack overflow
+// from a deep acyclic tree and a cycle (defect 1); reading each value
+// exactly once is what stops a getter answering the gate and the factory
+// differently (defect 2); refusing any shape (`Map`, `Set`, a `bigint`, a
+// symbol key, a class instance) this package cannot fully account for closes
+// the walk's own blind spot for a string it cannot see (defect 3); and
+// admitting only a value space `sourceKey`'s `JSON.stringify` can always
+// serialise -- a function, `toJSON` included, is one of the refused shapes --
+// is defect 4. Two further guards answer hazards outside that original four:
+// the node budget (`MAX_SUPPLIED_SOURCE_NODES`, above) is what keeps a
+// diamond -- copied independently per branch rather than merged into one
+// shared copy -- linear rather than exponential in its own depth
+// (`copySuppliedSourceValue`'s own doc comment has the full account), and
+// `copySuppliedSourceObject`'s own `try`/`catch` is what a throwing getter or
+// a hostile `Proxy` trap needs, since none of the above assumes a read can
+// fail outright. So a record
 // whose `type` is a non-empty string matching a registered `providers` key,
 // and not one of `RESERVED_PROVIDER_NAMES`, is accepted as that kind's
-// resolved source directly, once `everyStringPermitted` above has cleared
-// every string value nested anywhere inside it. A `type` matching no
-// registration, a reserved name, or a `type` that is not a string at all,
-// falls through to the built-in failure below unchanged -- there is nothing a
-// supplied kind could resolve it to.
+// resolved source once the copy above has succeeded -- the shared allowlist
+// already ran on every string the copy admitted, inside that same walk, so
+// there is nothing left for a further `everyStringPermitted` pass to check
+// here (unlike the detect-return branch above, which still calls it
+// directly, over a live object no copy step ever touches). A `type` matching
+// no registration, a reserved name, a `type` that is not a string at all, or
+// a copy that `copySuppliedSourceObject` itself refused, falls through to the
+// built-in failure below unchanged -- there is nothing a supplied kind could
+// resolve any of those to.
 //
 // Deliberately not done here: the built-in `video` and `hls` branches of
 // `sourceFromExplicitObject` also rewrite a protocol-relative `//host/...`
@@ -704,18 +958,22 @@ export const detectSourceWithProviders = (
   }
 
   if (typeof input === 'object' && input !== null && !Array.isArray(input)) {
-    const kind = (input as Record<string, unknown>).type;
+    const copy = copySuppliedSourceObject(input as Record<string, unknown>);
+    const kind = copy?.type;
     if (
+      copy &&
       typeof kind === 'string' &&
       kind !== '' &&
       !RESERVED_PROVIDER_NAMES.includes(kind) &&
-      providers[kind] &&
-      everyStringPermitted(input)
+      providers[kind]
     ) {
       return {
         status: 'success',
+        // `input` reports the caller's own object, the same convention core's
+        // own `detectSource` uses for its explicit-object success -- `source`
+        // is the copy.
         input: input as PlayerSource,
-        source: input as ResolvedPlayerSource
+        source: copy as ResolvedPlayerSource
       };
     }
   }

@@ -337,6 +337,19 @@ const unsupportedError = (message: string) => ({
 // button below a small viewport.
 const MAX_SOURCE_ECHO = 120;
 
+// The node budget `JSON.stringify`'s own replacer, below, bounds its
+// recursion to. A refused explicit source object can be a diamond -- the
+// same nested object reached through several sibling branches -- and
+// `JSON.stringify` does not deduplicate a shared reference: it re-visits and
+// re-serialises one in full for every path that reaches it, so a diamond
+// deep enough to still be within `provider-loaders.ts`'s own
+// `MAX_SUPPLIED_SOURCE_DEPTH` can cost time exponential in that depth to
+// stringify, well before this function ever gets to truncate the result.
+// Generous for any legitimate source -- the deepest one is a handful of
+// fields -- while still keeping that cost bounded regardless of how much an
+// arbitrary refused value shares with itself.
+const MAX_SOURCE_ECHO_NODES = 500;
+
 // The rejected value as a message can carry it. Echoed verbatim rather than
 // filtered: `ErrorDisplay` renders the message as a React text child
 // (`loading-error.tsx:318`, `:345`), which escapes it, so the value a consumer
@@ -349,9 +362,21 @@ const echoSource = (input: unknown): string => {
     rendered = input;
   } else {
     try {
-      // `undefined`, a function and a symbol all render as `undefined` here, so
-      // there is a fall-back for them as well as for a value that throws.
-      rendered = JSON.stringify(input) ?? `of type ${typeof input}`;
+      let nodes = 0;
+      // The replacer runs once per value `JSON.stringify` visits, at every
+      // depth, before deciding whether to recurse into it -- swapping a
+      // value for a placeholder once `nodes` is spent is what stops that
+      // recursion, the same way `copySuppliedSourceValue`'s own node budget
+      // (`provider-loaders.ts`) stops the copy's. Once one branch of a
+      // diamond has spent the whole budget, the very first call for its
+      // sibling branch already sees `nodes` over budget and is replaced
+      // immediately, so the second half of an exponential shape is never
+      // actually walked.
+      rendered =
+        JSON.stringify(input, (_key, value) => {
+          nodes += 1;
+          return nodes > MAX_SOURCE_ECHO_NODES ? '…' : value;
+        }) ?? `of type ${typeof input}`;
     } catch {
       // A `source` that cannot be rendered at all -- circular, or a hostile
       // `toJSON` -- still has to produce a message rather than throw out of the
@@ -359,10 +384,24 @@ const echoSource = (input: unknown): string => {
       rendered = `of type ${typeof input}`;
     }
   }
+  // Short-circuits before `Array.from` ever runs over the whole of `rendered`:
+  // cheap insurance alongside the node budget above, so this stays safe even
+  // for a `rendered` this function did not itself just build (the plain
+  // string branch above). `rendered.length` (UTF-16 units) is cheap to read
+  // regardless of that length, and never under-counts code points, so a
+  // `rendered` this short is never truncated and `Array.from` is never
+  // reached for it.
+  if (rendered.length <= MAX_SOURCE_ECHO) return rendered;
   // By code point, not by code unit: slicing a string at a UTF-16 boundary can
   // cut a surrogate pair in half, and the lone surrogate left behind renders as
   // U+FFFD. A source url can carry an astral character in a path or a query.
-  const points = Array.from(rendered);
+  // `Array.from` still runs by code point, but only over a bounded prefix --
+  // twice `MAX_SOURCE_ECHO` code units plus one, which covers at least that
+  // many code points even where every one of them is a surrogate pair -- so
+  // this remains cheap and safe for a `rendered` of any length, exactly the
+  // exponential case above included, rather than materialising every code
+  // point of it merely to throw the excess away a line later.
+  const points = Array.from(rendered.slice(0, (MAX_SOURCE_ECHO + 1) * 2));
   return points.length > MAX_SOURCE_ECHO
     ? `${points.slice(0, MAX_SOURCE_ECHO).join('')}…`
     : rendered;
