@@ -411,6 +411,15 @@ Deliberately not a link: this section is shared by every provider page, and
 provider and so carries no anchor on most of them (#528's link check is what
 catches that).
 
+Every string in a supplied kind's own `providerOptions` entry passes the same
+shared allowlist before `load`'s factory is ever called, exactly as the
+detected source already does. A refused value — `javascript:`, `data:`, or
+anything else [Shared rules for a source string](#shared-rules-for-a-source-string)
+refuses — is omitted from the bag the factory receives, exactly as if you had
+not set that option, and reported the same way any other refused prop is. A
+number or boolean option is never checked and always arrives untouched. Your
+registration's own factory is not expected to guard this itself.
+
 `controls`, `loop`, `startTime` and `endTime` reach a supplied kind not at all:
 `Root` folds each into whichever of the `youtube`, `vimeo` and `wistia` bags
 the detected source belongs to, and a supplied kind has none of those three, so
@@ -487,8 +496,11 @@ fires — no import from any `@playdeck/provider-*` package required, and none
 of the plumbing above changes to admit it. `clipId` only has to survive the
 round trip from `detect` back out to the factory: which file actually plays
 is `providerOptions`' own `src`, the same way `PlayerProviderOptions.hls`'s
-`build` carries a per-provider choice no source string could. Every
-capability this adapter does not implement is reported `unavailable` --
+`build` carries a per-provider choice no source string could. That `src`
+passes the shared allowlist too, exactly like the resolved source's own
+fields — see [Supplying your own provider](#supplying-your-own-provider)
+above. Every capability this adapter does not implement is reported
+`unavailable` --
 `provider` for what the adapter itself leaves out, `source` for
 `providerPoster`, since a raw file carries no poster to read -- rather than
 left for a consumer to discover by calling a command that silently does
@@ -622,6 +634,12 @@ export const createExampleFileAdapter: ProviderAdapterFactory<
   // happened.
   video.dataset.exampleFileClipId = source.clipId;
   const sourceElement = document.createElement('source');
+  // `options.src` already passed the shared allowlist before this factory was
+  // ever called: `loadProvider`'s supplied-kind branch (`@playdeck/react`)
+  // runs every string in `providerOptions['example-file']` through it and
+  // omits whatever it refuses, the same gate the detected source itself
+  // passes. A `javascript:` or `data:` value never reaches this write --
+  // this adapter is not expected to guard its own options (#752).
   sourceElement.src = options.src;
   video.append(sourceElement);
   mount.append(video);

@@ -356,25 +356,20 @@ export const libraries = [
     composition: 'core + native provider, no control parts',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 21520 bytes measured 2026-09-19 -- 21.015625 KB, 21.02 KB to two
+    // 21796 bytes measured 2026-09-23 -- 21.28515625 KB, 21.29 KB to two
     // places, rounded up to the next 0.25 KB. See the `libraries` doc
     // comment above for what raising this means. What carried this row past
-    // 21.00 KB is #673's loop-restart attribution: `restartFromBoundary`
-    // (`provider-native/src/playback.ts`) now marks its own `play` so the
-    // viewport's ownership survives a wrap, and the provider-event helper
-    // (`adapter-values.ts`) carries that origin through. Both sit in the
-    // native provider, which this composition includes by definition, so
-    // the cost lands here rather than only on the compositions that render
-    // parts. Only part of the distance from the last committed figure is
-    // this issue's: that figure was 21267 bytes measured 2026-09-15, and
-    // `results.md` on `main` last measured this row at 20.96 KB on
-    // 2026-09-17, so the rest accrued there without breaching. The
-    // 2026-09-15 raise was #662's provider seam:
-    // `detectSourceWithProviders`'s allowlist walk over a `detect` return
-    // (`everyStringPermitted`, `provider-loaders.ts`) and its cycle guard,
-    // which every composition below reaches regardless of which parts it
-    // renders.
-    ceilingKb: 21.25
+    // 21.25 KB is #752's supplied-provider-options gate:
+    // `sanitizeSuppliedProviderOptions` and the `reportRefusedUrl` plumbing
+    // `loadProvider`'s supplied-kind branch gained (`provider-loaders.ts`),
+    // plus the new `providerOptions` `RefusedUrlSurface` member and its
+    // notice (`packages/core/src/types.ts`, `packages/core/src/safety.ts`).
+    // All of it sits in code every composition here reaches regardless of
+    // which parts it renders, so all four Playdeck rows moved together. The
+    // whole distance from the last committed figure is this issue's: that
+    // figure was 21.13 KB, measured the same day (2026-09-23) before this
+    // change, per `results.md` on `main`.
+    ceilingKb: 21.5
   },
   {
     name: 'Playdeck',
@@ -383,21 +378,11 @@ export const libraries = [
     composition: 'core + primitives + native provider',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 22313 bytes measured 2026-09-19 -- 21.7900390625 KB, 21.79 KB to two
-    // places, rounded up to the next 0.25 KB. What carried this row past
-    // 21.75 KB is #681's notice replacement: `#registerNotice`
-    // (`packages/core/src/player-controller.ts`) now looks for an entry the
-    // incoming notice matches before registering, re-keys that entry in place
-    // when it finds one, and `noticesMatch` (`packages/core/src/safety.ts`) is
-    // the comparison it makes. All of it sits in core, which every composition
-    // here includes, so all four Playdeck rows moved by the same ~0.11 KB and
-    // this is the only one carried past its ceiling. The whole distance from
-    // the last committed figure is this change's: that figure was 22140 bytes
-    // measured 2026-09-17, `results.md` measured this row at 21.69 KB, and so
-    // did this branch with the two source files above stashed. The 2026-09-17
-    // raise was #180's live edge -- `deriveLiveState` carrying
-    // `offsetFromEdge`, the native provider answering `seekToLiveEdge` from
-    // its own seekable end, and `Time`'s live-aware branch.
+    // 22489 bytes measured 2026-09-23 -- 21.9619140625 KB, 21.96 KB to two
+    // places -- the same #752 change described on the "no parts" row above
+    // moved this row too, but not past its own 22.00 KB ceiling: main's last
+    // committed figure was 21.80 KB, measured the same day (2026-09-23)
+    // before this change. Recorded here without a raise.
     ceilingKb: 22
   },
   {
@@ -408,21 +393,16 @@ export const libraries = [
       'core + primitives + native provider + one control (PlayButton)',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 23302 bytes measured 2026-09-19 -- 22.755859375 KB, 22.76 KB to two
+    // 23599 bytes measured 2026-09-23 -- 23.0458984375 KB, 23.05 KB to two
     // places, rounded up to the next 0.25 KB. What carried this row past
-    // 22.75 KB is #673's loop-restart attribution, the same change described
-    // on the "no
-    // parts" row above: it lands in the native provider, which this
-    // composition also includes, so both rows move together. As there, only
-    // part of the distance from the last committed figure is this issue's
-    // -- that figure was 23046 bytes measured 2026-09-15, and `results.md`
-    // on `main` last measured this row at 22.69 KB on 2026-09-17. That row
-    // had held at 22.5 KB (#659's own committed figure): its earlier #662
-    // measurement, 23039 bytes, was 22.4990234375 KB, genuinely one byte
-    // under that ceiling despite `results.md` displaying both figures as
-    // "22.50", and the #662 cycle guard's `seen.delete` bookkeeping added
-    // the 7 bytes that crossed it.
-    ceilingKb: 23,
+    // 23.00 KB is #752's supplied-provider-options gate, the same change
+    // described on the "no parts" row above: it sits in code every
+    // composition here reaches regardless of which parts it renders, so all
+    // four Playdeck rows moved together. The whole distance from the last
+    // committed figure is this issue's: that figure was 22.88 KB, measured
+    // the same day (2026-09-23) before this change, per `results.md` on
+    // `main`.
+    ceilingKb: 23.25,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
@@ -433,32 +413,14 @@ export const libraries = [
       "core + primitives + native provider + control bar (5 of Media Chrome's 7 controls)",
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 26547 bytes measured 2026-09-21 -- 25.9248046875 KB, 25.92 KB to two
-    // places, rounded up to the next 0.25 KB. Lowered rather than raised,
-    // which is what #727 was for: the thumbnail preview is now a module
-    // `SeekSlider` reaches only through a dynamic `import()`, so a control
-    // bar that never sets `thumbnails` no longer carries the cue fetch, the
-    // cue lookup, the crop geometry or the part's JSX. It was 27659 bytes
-    // measured 2026-09-19 against a 27.25 KB ceiling, so this is 1112 bytes
-    // (1.09 KB) off the row.
-    //
-    // Both halves of that had to move, and only one of them is React's.
-    // `parseThumbnailCues` is `@playdeck/core`'s, and a React-side dynamic
-    // import could not reach it while core shipped as a single bundled
-    // module: the eager graph imports that module for other exports, so
-    // everything the lazy chunk referenced was emitted with it. #727 gives
-    // core a second export subpath (`@playdeck/core/thumbnails`), built as
-    // its own bundle, and the parser moves with it.
-    //
-    // The 1112-byte drop is not all of it this issue's, and the other three
-    // rows are what says so: 21643, 22329 and 23442 bytes in the same run,
-    // against the 21520, 22313 and 23302 their own entries above record for
-    // 2026-09-19. None of them renders a seek slider, so none was carrying
-    // the preview and none can have been relieved of it -- their +123, +16
-    // and +140 are drift accrued since that run, and this row carries the
-    // same drift under the saving. None of the three crosses a 0.25 KB step,
-    // so no other ceiling moves.
-    ceilingKb: 26
+    // 26719 bytes measured 2026-09-23 -- 26.0927734375 KB, 26.09 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 26.00 KB is #752's supplied-provider-options gate, the same change
+    // described on the "no parts" row above. The whole distance from the
+    // last committed figure is this issue's: that figure was 25.92 KB,
+    // measured the same day (2026-09-23) before this change, per
+    // `results.md` on `main`.
+    ceilingKb: 26.25
   },
   {
     name: 'react-player',

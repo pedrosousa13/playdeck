@@ -1,10 +1,14 @@
 // @vitest-environment happy-dom
 
 import { cleanup, render, waitFor } from '@testing-library/react';
-import { Component, type ReactNode } from 'react';
+import { Component, createRef, type ReactNode } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { captureRethrows } from '@playdeck/test-support/capture-rethrows';
 import * as Player from '../src/index';
+import {
+  INTERNAL_CONTROLLER,
+  type InternalControllerAccess
+} from '../src/internal-controller';
 import { createFakeProvider } from './fixtures/fake-provider';
 
 // A minimal boundary for the one test below that needs to prove no error
@@ -286,4 +290,173 @@ test('re-attaches a supplied kind when its own providerOptions key changes', asy
   await waitFor(() => expect(factory).toHaveBeenCalledTimes(2));
   expect(factory.mock.calls[1]![2]).toMatchObject({ quality: 'hd' });
   await waitFor(() => expect(fakes[0]!.counts().destroyCount).toBe(1));
+});
+
+// #752, end to end: a supplied kind's own `providerOptions` bag used to reach
+// the registration's factory unfiltered, so a `javascript:` value written
+// there -- exactly where `docs/provider-setup.md`'s worked example carries a
+// playback URL -- had no gate between an attacker-controlled field and
+// whatever the adapter does with it (an `iframe.src` write, for one, executes
+// in the embedding origin). Proven here through `Player.Root` itself, not
+// only at `provider-loaders.test.ts`'s unit level, so this is a claim about
+// what a consumer's own `providerOptions` prop actually reaches and what
+// `PlayerState.error` actually reports.
+test('reports a refused supplied-kind provider option through PlayerState.error while the factory still loads without it', async () => {
+  const fake = createFakeProvider({ provider: 'native' });
+  const factory = vi.fn(
+    (
+      mount: HTMLVideoElement | HTMLDivElement | null,
+      source: { type: 'acme'; videoId: string },
+      options?: { src?: string }
+    ) => {
+      void mount;
+      void source;
+      void options;
+      return fake.adapter;
+    }
+  );
+  const load = vi.fn(async () => factory);
+  const handle = createRef<Player.PlayerHandle>();
+
+  render(
+    <Player.Root
+      loading="eager"
+      providerOptions={{ acme: { src: 'javascript:alert(1)' } }}
+      providers={{ acme: { detect: vi.fn(), load } }}
+      ref={handle}
+      source={{ type: 'acme', videoId: '1' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() => expect(factory).toHaveBeenCalledOnce());
+  expect(factory.mock.calls[0]![2]).toEqual({});
+
+  const controller = (handle.current as unknown as InternalControllerAccess)[
+    INTERNAL_CONTROLLER
+  ];
+  await waitFor(() =>
+    expect(controller.getState().error?.message).toContain('providerOptions')
+  );
+});
+
+// #752's own notice-lifecycle guarantee: a `providerOptions` refusal is
+// withdrawn the way every other refused-URL notice is, not carried forever
+// (`useRefusedUrlReport`'s own doc comment, `player-context.ts`) -- fixing
+// the option a consumer set has to clear the operator-facing error. This
+// hook has no per-render boolean to key a `useRefusedUrlReport` call on (the
+// bag is only read inside the async load itself), so `use-activation.ts`
+// disposes its own registration by hand at the start of every load; this is
+// what proves that bookkeeping actually withdraws rather than leaking a
+// notice for a fixed value forever.
+test('clears the providerOptions notice once a refused option is replaced with a permitted one, on a later load', async () => {
+  const fakes: ReturnType<typeof createFakeProvider>[] = [];
+  const factory = vi.fn(
+    (
+      mount: HTMLVideoElement | HTMLDivElement | null,
+      source: { type: 'acme'; videoId: string },
+      options?: { src?: string }
+    ) => {
+      void mount;
+      void source;
+      void options;
+      const fake = createFakeProvider({ provider: 'native' });
+      fakes.push(fake);
+      return fake.adapter;
+    }
+  );
+  const load = vi.fn(async () => factory);
+  const handle = createRef<Player.PlayerHandle>();
+
+  const { rerender } = render(
+    <Player.Root
+      loading="eager"
+      providerOptions={{ acme: { src: 'javascript:alert(1)' } }}
+      providers={{ acme: { detect: vi.fn(), load } }}
+      ref={handle}
+      source={{ type: 'acme', videoId: '1' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  const controller = (handle.current as unknown as InternalControllerAccess)[
+    INTERNAL_CONTROLLER
+  ];
+  await waitFor(() => expect(factory).toHaveBeenCalledOnce());
+  await waitFor(() =>
+    expect(controller.getState().error?.message).toContain('providerOptions')
+  );
+
+  rerender(
+    <Player.Root
+      loading="eager"
+      providerOptions={{ acme: { src: 'https://good.example/clip.mp4' } }}
+      providers={{ acme: { detect: vi.fn(), load } }}
+      ref={handle}
+      source={{ type: 'acme', videoId: '1' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() => expect(factory).toHaveBeenCalledTimes(2));
+  expect(factory.mock.calls[1]![2]).toEqual({
+    src: 'https://good.example/clip.mp4'
+  });
+  await waitFor(() => expect(controller.getState().error).toBeNull());
+});
+
+// The other direction the same bookkeeping has to answer: a source change
+// away from the refusing supplied kind entirely, onto one of the five
+// built-in kinds, still starts a fresh load -- and every load disposes the
+// previous `providerOptions` registration unconditionally before deciding
+// whether to make a new one (`use-activation.ts`). A built-in kind's own
+// `loadProvider` branch never calls back into that registration at all, so
+// the notice has to come back to null rather than survive the switch.
+test('clears the providerOptions notice when the source changes to a built-in kind', async () => {
+  const factory = vi.fn(
+    () => createFakeProvider({ provider: 'native' }).adapter
+  );
+  const load = vi.fn(async () => factory);
+  const handle = createRef<Player.PlayerHandle>();
+
+  const { rerender } = render(
+    <Player.Root
+      loading="eager"
+      providerOptions={{ acme: { src: 'javascript:alert(1)' } }}
+      providers={{ acme: { detect: vi.fn(), load } }}
+      ref={handle}
+      source={{ type: 'acme', videoId: '1' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  const controller = (handle.current as unknown as InternalControllerAccess)[
+    INTERNAL_CONTROLLER
+  ];
+  await waitFor(() => expect(factory).toHaveBeenCalledOnce());
+  await waitFor(() =>
+    expect(controller.getState().error?.message).toContain('providerOptions')
+  );
+
+  rerender(
+    <Player.Root loading="eager" ref={handle} source="/tracer.mp4">
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() => expect(controller.getState().error).toBeNull());
 });

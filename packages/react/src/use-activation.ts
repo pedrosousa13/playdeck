@@ -544,6 +544,19 @@ export const useActivation = (
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const observerRef = useRef<ObserverRegistration | undefined>(undefined);
   const loadingGeneration = useRef<number | undefined>(undefined);
+  // Holds the standing registration `loadProvider`'s `reportRefusedUrl`
+  // callback below makes, the same shape `useRefusedUrlReport`
+  // (`player-context.ts`) holds through an effect's own cleanup -- this hook
+  // has no per-render boolean to key an effect on, since a supplied kind's
+  // own option bag is only ever read inside the async load itself, so the
+  // withdrawal has to be managed by hand instead. Disposed unconditionally at
+  // the start of every load (below) before a fresh one is made only if this
+  // load also refuses something, which is what lets a consumer who fixes the
+  // option clear the notice on the very next load rather than carry it
+  // forever (#752).
+  const suppliedProviderOptionDispose = useRef<(() => void) | undefined>(
+    undefined
+  );
   const [mediaVersion, setMediaVersion] = useState(0);
   const [viewportVersion, setViewportVersion] = useState(0);
   const [committedIdentity, setCommittedIdentity] = useState<
@@ -1161,11 +1174,28 @@ export const useActivation = (
     };
     loadOptions.prepareMedia(media);
     controller.setActivation({ activation: 'loading-provider' });
+    // Withdrawn unconditionally before every load, whether or not this one
+    // turns out to refuse anything: a fresh load answers the question fresh,
+    // and a notice this hook itself made is the only one it is safe to
+    // withdraw on nothing more than "a new load started" (#752).
+    suppliedProviderOptionDispose.current?.();
+    suppliedProviderOptionDispose.current = undefined;
     void loadProvider({
       media,
       nativeOptions,
       providerOptions,
       providers: loadOptions.providers,
+      // Stale by the time a superseded load's own `registration.load()`
+      // resolves, `isCurrentLoad()` guards it here too -- otherwise a load
+      // this hook has already moved on from could still plant a notice, and
+      // this hook's own dispose bookkeeping above would then be holding the
+      // wrong load's registration.
+      reportRefusedUrl: (surface) => {
+        if (!isCurrentLoad()) return () => undefined;
+        const dispose = controller.reportRefusedUrl(surface);
+        suppliedProviderOptionDispose.current = dispose;
+        return dispose;
+      },
       source: source.source as ResolvedPlayerSource<SuppliedProviderSource>
     })
       .then((adapter) => {
@@ -1274,6 +1304,14 @@ export const useActivation = (
       disconnectObserver(observerRef.current);
       observerRef.current = undefined;
       optionsRef.current.controller.setProvider(undefined);
+      // `setProvider(undefined)` above clears a `{ kind: 'provider' }` notice
+      // but deliberately leaves a `{ kind: 'refused-url' }` one standing
+      // (`player-controller.ts`) -- it describes a consumer prop no provider
+      // ever saw. This hook's own registration has to be withdrawn here
+      // instead, the same way `useRefusedUrlReport`'s effect cleanup
+      // withdraws one on unmount, or it would survive this hook after
+      // nothing is left to own it (#752).
+      suppliedProviderOptionDispose.current?.();
     },
     []
   );

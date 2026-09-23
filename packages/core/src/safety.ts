@@ -147,6 +147,13 @@ export const REFUSED_URL_NOTICES: Record<RefusedUrlSurface, PlayerError> = {
     recoverable: false,
     severity: 'protective',
     message: 'A thumbnails cue image URL was rejected, so that cue was dropped.'
+  }),
+  providerOptions: freezeError({
+    category: 'configuration',
+    fatal: false,
+    recoverable: false,
+    severity: 'protective',
+    message: 'A providerOptions URL was rejected, so that option was dropped.'
   })
 };
 
@@ -164,12 +171,13 @@ type RankOf<Surfaces, Each = Surfaces> = [Surfaces] extends [never]
     ? readonly [Each, ...RankOf<Exclude<Surfaces, Each>>]
     : never;
 
-// `thumbnails` and `thumbnails cue image` are appended at the end rather than
-// inserted alongside the surface they are closest in kind to: appending can
-// only ever add a new lowest-priority tie-break, so it cannot change which
-// notice wins for any pair of surfaces that already existed — inserting them
-// higher would have silently reworded what an existing consumer's error
-// already says whenever one of these ties against something above it.
+// `thumbnails`, `thumbnails cue image` and `providerOptions` are appended at
+// the end rather than inserted alongside the surface each is closest in kind
+// to: appending can only ever add a new lowest-priority tie-break, so it
+// cannot change which notice wins for any pair of surfaces that already
+// existed — inserting one higher would have silently reworded what an
+// existing consumer's error already says whenever it ties against something
+// above it.
 const REFUSED_URL_SURFACE_RANK = [
   'poster src',
   'poster srcSet',
@@ -177,7 +185,8 @@ const REFUSED_URL_SURFACE_RANK = [
   'textTracks src',
   'mediaSession artwork',
   'thumbnails',
-  'thumbnails cue image'
+  'thumbnails cue image',
+  'providerOptions'
 ] as const satisfies RankOf<RefusedUrlSurface>;
 
 // The notice the standing refusal registrations publish, or `undefined` when

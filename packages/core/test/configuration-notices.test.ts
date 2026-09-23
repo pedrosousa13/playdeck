@@ -492,7 +492,9 @@ const REFUSED_URL_MESSAGES: Record<RefusedUrlSurface, string> = {
   thumbnails:
     'The thumbnails URL was rejected, so no seek-preview thumbnails were requested.',
   'thumbnails cue image':
-    'A thumbnails cue image URL was rejected, so that cue was dropped.'
+    'A thumbnails cue image URL was rejected, so that cue was dropped.',
+  providerOptions:
+    'A providerOptions URL was rejected, so that option was dropped.'
 };
 
 // The prop the operator has to go and fix is in the message; the value that
