@@ -386,9 +386,27 @@ path detection. A `type` matching no registered `providers` key is refused,
 same as any other unrecognised source. Unlike the built-in `video` and `hls`
 kinds, a supplied kind's own values are never rewritten — there is no known
 field on an arbitrary shape to normalise a protocol-relative `//host/...`
-value on, so it reaches `load`'s factory exactly as given. If that form
-matters to your provider, normalise it yourself before handing the object to
-`Player.Root`.
+value on. If that form matters to your provider, normalise it yourself before
+handing the object to `Player.Root`.
+
+Before anything else runs, the object is copied into a plain structure this
+package builds itself, and `load`'s factory receives that copy rather than
+the object you passed. The copy takes every own, enumerable, string-keyed
+value your object carries — reading each one exactly once, so a getter cannot
+answer differently the second time it is read — at a nesting depth capped well
+past anything a real integration needs, and a total size capped the same way:
+if the same object is referenced from more than one place in your source, the
+copy carries it once per reference rather than once overall, so a shape that
+shares a lot of structure with itself counts against that total more than
+once. Only plain objects, arrays, strings, finite numbers, booleans, `null`
+and `undefined` are admitted: a `Map`, a `Set`, a `bigint`, a function, a
+class instance, a symbol-keyed field, nesting past the depth cap, or a source
+past the total size cap refuses the whole source as `invalid-source`, the
+same way an unrecognised `type` does, and never throws — nor does a value
+whose own shape makes reading it throw, such as a getter that throws or a
+`Proxy` with a hostile trap; that is refused the same way. A non-enumerable
+own property is silently left out of the copy rather than refusing the
+source — it never reaches `load`'s factory either way.
 
 The same shared allowlist runs ahead of every supplied `detect` and every
 explicit object of a supplied kind, exactly where it runs ahead of every

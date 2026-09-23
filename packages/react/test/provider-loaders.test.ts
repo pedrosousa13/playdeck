@@ -657,6 +657,404 @@ test('an explicit object of a registered supplied kind detects and dispatches to
   expect(factory).toHaveBeenCalledWith(media, explicitSource, undefined);
 });
 
+// #754: the explicit-object branch above used to hand `input` on unchanged --
+// `source: input as ResolvedPlayerSource` -- so the object `everyStringPermitted`
+// had just cleared was the very same object a getter could mutate before, and
+// the very same object the factory received. The fix copies `input` into a
+// plain structure this package controls before any validation runs, and this
+// is the one assertion every other test below rests on: the object the
+// factory receives is not the caller's own.
+test("does not hand the caller's own explicit source object on to the factory", async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  let receivedSource: unknown;
+  const factory = vi.fn(async (_media: unknown, source: unknown) => {
+    receivedSource = source;
+    return adapter;
+  });
+  const load = vi.fn(async () => factory);
+  const explicitSource = { type: 'acme', videoId: '1' };
+
+  const detected = detectSourceWithProviders(explicitSource, {
+    acme: { detect: vi.fn(), load }
+  });
+  if (detected.status !== 'success') throw new Error('expected a success');
+  expect(detected.source).not.toBe(explicitSource);
+  expect(detected.source).toEqual(explicitSource);
+
+  await loadProvider({
+    media: document.createElement('div'),
+    nativeOptions,
+    providers: { acme: { detect: vi.fn(), load } },
+    source: detected.source
+  });
+  expect(receivedSource).not.toBe(explicitSource);
+  expect(receivedSource).toEqual(explicitSource);
+});
+
+// Demonstrated red (docs/agents/demonstrated-red.md): against the unfixed
+// code (the explicit-object branch returning `input` unchanged),
+// `detectSourceWithProviders(source, ...)` still recurses `everyStringPermitted`
+// over `deep` -- 20,000 plain objects, well past what any JS engine's default
+// stack allows -- and threw `RangeError: Maximum call stack size exceeded`
+// rather than reaching either `expect` below, run with
+// `pnpm vitest run packages/react/test/provider-loaders.test.ts`.
+test('refuses a 20,000-deep acyclic explicit source object as invalid-source rather than overflowing the stack', () => {
+  let deep: Record<string, unknown> = { leaf: true };
+  for (let i = 0; i < 20_000; i++) {
+    deep = { nested: deep };
+  }
+  const source = { type: 'acme', deep };
+
+  let result: ReturnType<typeof detectSourceWithProviders>;
+  expect(() => {
+    result = detectSourceWithProviders(source, {
+      acme: { detect: vi.fn(), load: vi.fn() }
+    });
+  }).not.toThrow();
+  expect(result!.status).toBe('failure');
+  if (result!.status === 'failure')
+    expect(result!.reason).toBe('invalid-source');
+});
+
+// Demonstrated red: against the unfixed code, `everyStringPermitted` reads
+// `url` through `Object.values` for its own check, then the caller reads the
+// same live getter again through `detected.source.url` and again through
+// `factory.mock.calls[0][1].url` -- three reads of a getter written to answer
+// differently after the first. Run with
+// `pnpm vitest run packages/react/test/provider-loaders.test.ts -t "reads a getter"`,
+// `detected.source.url` read back `'javascript:alert(1)'` (the second read)
+// even though the walk that gated it saw only the first, permitted read.
+test('reads a getter exactly once, so a value that changes on a second read never reaches the factory', async () => {
+  let reads = 0;
+  const source = {
+    type: 'acme',
+    get url() {
+      reads += 1;
+      return reads === 1 ? 'https://ok.test/a' : 'javascript:alert(1)';
+    }
+  };
+
+  const detected = detectSourceWithProviders(source, {
+    acme: { detect: vi.fn(), load: vi.fn() }
+  });
+  if (detected.status !== 'success') throw new Error('expected a success');
+  expect((detected.source as unknown as { url: string }).url).toBe(
+    'https://ok.test/a'
+  );
+
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(async () => adapter);
+  const load = vi.fn(async () => factory);
+  await loadProvider({
+    media: document.createElement('div'),
+    nativeOptions,
+    providers: { acme: { detect: vi.fn(), load } },
+    source: detected.source
+  });
+
+  expect(factory).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({ url: 'https://ok.test/a' }),
+    undefined
+  );
+  expect(reads).toBe(1);
+});
+
+// #754's defect 3: a string `Object.values` never reaches -- inside a `Map`
+// or a `Set`, or filed under a symbol key -- was never checked by
+// `everyStringPermitted` at all. The fix does not teach the walk to reach
+// those shapes; it refuses the whole source rather than admit a shape it
+// cannot fully account for. A `bigint` is refused for the same reason
+// `sourceKey`'s `JSON.stringify` cannot serialise it (defect 4). A class
+// instance is not named as its own bullet in the issue's acceptance criteria,
+// but is the same "not a plain object" shape as the other three and is
+// included here for the same reason.
+test('refuses a source object carrying a Map, a Set, a symbol-keyed value, a bigint or a class instance, each as invalid-source with no throw', () => {
+  class Config {
+    url = 'https://ok.test';
+  }
+  const cases: readonly (() => Record<string, unknown>)[] = [
+    () => ({ type: 'acme', config: new Map([['a', 'b']]) }),
+    () => ({ type: 'acme', config: new Set(['a']) }),
+    () => ({ type: 'acme', [Symbol('secret')]: 'javascript:alert(1)' }),
+    () => ({ type: 'acme', count: 1n }),
+    () => ({ type: 'acme', config: new Config() })
+  ];
+
+  for (const build of cases) {
+    const source = build();
+    let result: ReturnType<typeof detectSourceWithProviders>;
+    expect(() => {
+      result = detectSourceWithProviders(source, {
+        acme: { detect: vi.fn(), load: vi.fn() }
+      });
+    }).not.toThrow();
+    expect(result!.status).toBe('failure');
+    if (result!.status === 'failure') {
+      expect(result!.reason).toBe('invalid-source');
+    }
+  }
+});
+
+// #754 review: "never a throw" did not yet hold for a value whose own shape
+// makes *reading* it throw, rather than merely making the read value
+// invalid. An ordinary data property can declare a throwing getter; a
+// `Proxy` can make any of the four operations `copySuppliedSourceValue`
+// performs -- `value[key]`, `Object.keys`, `Object.getOwnPropertySymbols`,
+// `Object.getPrototypeOf` -- throw from its own trap. None of that
+// function's earlier checks can rule either shape out first, so the fix is
+// the single `try`/`catch` `copySuppliedSourceObject` wraps around the whole
+// recursive copy, converting any throw into the same `invalid-source`
+// refusal a `Map` or a `bigint` already gets. Deliberately not a `try`/`catch`
+// around each individual read: retrying after catching one would read the
+// offending value a second time, exactly the getter hazard this package's
+// own single-read rule exists to close.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): against the unfixed
+// code (`copySuppliedSourceObject` calling `copySuppliedSourceValue` with no
+// `try`/`catch` around it), each case below threw synchronously out of
+// `detectSourceWithProviders` itself, caught only by this test's own
+// `expect(...).not.toThrow()` -- "Error: getter blew up" for the first,
+// "Error: getPrototypeOf blew up" for the second, "Error: ownKeys blew up"
+// for the third. All three pass once the `try`/`catch` was restored.
+test('refuses a source object with a throwing getter, or a Proxy whose getPrototypeOf or ownKeys trap throws, each with no throw', () => {
+  const throwingGetter: Record<string, unknown> = { type: 'acme' };
+  Object.defineProperty(throwingGetter, 'url', {
+    enumerable: true,
+    get(): never {
+      throw new Error('getter blew up');
+    }
+  });
+
+  const throwingGetPrototypeOf = new Proxy(
+    { type: 'acme' },
+    {
+      getPrototypeOf(): never {
+        throw new Error('getPrototypeOf blew up');
+      }
+    }
+  );
+
+  const throwingOwnKeys = new Proxy(
+    { type: 'acme' },
+    {
+      ownKeys(): never {
+        throw new Error('ownKeys blew up');
+      }
+    }
+  );
+
+  for (const source of [
+    throwingGetter,
+    throwingGetPrototypeOf,
+    throwingOwnKeys
+  ]) {
+    let result: ReturnType<typeof detectSourceWithProviders>;
+    expect(() => {
+      result = detectSourceWithProviders(source, {
+        acme: { detect: vi.fn(), load: vi.fn() }
+      });
+    }).not.toThrow();
+    expect(result!.status).toBe('failure');
+  }
+});
+
+// #754's defect 4: `sourceKey` (`use-activation.ts`) calls
+// `JSON.stringify(source.source)` during render, which invokes a `toJSON`
+// method were one to reach it. The copy refuses a `toJSON` property the same
+// way it refuses any other function value, before `sourceKey` is ever
+// reached -- confirmed end to end, through `Player.Root` itself, in
+// `supplied-provider.test.tsx`.
+test('refuses a source object whose own toJSON would throw, as invalid-source, before it can reach sourceKey', () => {
+  const source = {
+    type: 'acme',
+    toJSON() {
+      throw new Error('toJSON blew up');
+    }
+  };
+
+  let result: ReturnType<typeof detectSourceWithProviders>;
+  expect(() => {
+    result = detectSourceWithProviders(source, {
+      acme: { detect: vi.fn(), load: vi.fn() }
+    });
+  }).not.toThrow();
+  expect(result!.status).toBe('failure');
+});
+
+// A non-finite number is not one of the admitted primitives ("finite
+// numbers", the issue's own wording) -- `JSON.stringify` already turns `NaN`
+// and `Infinity` into `null`, silently changing what a consumer wrote, which
+// is the same kind of silent corruption the copy exists to refuse rather than
+// launder.
+test('refuses a source object carrying NaN or Infinity as invalid-source', () => {
+  for (const notFinite of [Number.NaN, Number.POSITIVE_INFINITY]) {
+    const result = detectSourceWithProviders(
+      { type: 'acme', n: notFinite },
+      { acme: { detect: vi.fn(), load: vi.fn() } }
+    );
+    expect(result.status).toBe('failure');
+  }
+});
+
+// A non-enumerable own string-keyed property is dropped from the copy rather
+// than refusing the whole source: `Object.keys` below already excludes it, so
+// the copy never carries it, and neither the allowlist walk nor the factory
+// ever sees it -- closing #754's defect 3 for this case by omission rather
+// than by inspection. Proven by a forbidden scheme hidden behind one: were it
+// walked at all, it would refuse the source, so its presence here having no
+// effect on the outcome is what shows it was never read.
+test('drops a non-enumerable own property from the copy instead of refusing the whole source', () => {
+  const source: Record<string, unknown> = { type: 'acme', videoId: '1' };
+  Object.defineProperty(source, 'hidden', {
+    value: 'javascript:alert(1)',
+    enumerable: false
+  });
+
+  const result = detectSourceWithProviders(source, {
+    acme: { detect: vi.fn(), load: vi.fn() }
+  });
+  expect(result).toMatchObject({ status: 'success' });
+  if (result.status !== 'success') throw new Error('expected a success');
+  expect(result.source).not.toHaveProperty('hidden');
+});
+
+// The explicit-object path's own counterpart to the detect-return path's
+// cycle and diamond tests above: this path had no cycle or sharing guard of
+// its own before #754 (`everyStringPermitted`'s `WeakSet` guard ran here too,
+// but over the caller's own live object), so the same two shapes are proven
+// against it. `copySuppliedSourceObject` tells a cycle apart from a diamond
+// the same way `everyStringPermitted` does -- an `ancestors` set of whatever
+// is still on the current recursion path, so a value reached through its own
+// descendant is refused outright. A diamond is not a cycle -- neither branch
+// is the other's ancestor -- and is copied independently for each branch
+// rather than reusing one shared copy: unlike the caller's own object, the
+// copy's shared identity is not preserved, which is what keeps a later walk
+// over it (`sourceKey`'s `JSON.stringify`) from re-discovering whatever a
+// diamond's sharing would otherwise let it reconstruct exponentially. See
+// `copySuppliedSourceValue`'s own doc comment for why, and
+// `MAX_SUPPLIED_SOURCE_NODES` for what actually bounds a diamond's total
+// cost instead.
+test('declines an explicit source object with a cyclic reference rather than overflowing the stack', () => {
+  const cyclic: { type: string; self?: unknown } = { type: 'acme' };
+  cyclic.self = cyclic;
+
+  let result: ReturnType<typeof detectSourceWithProviders>;
+  expect(() => {
+    result = detectSourceWithProviders(cyclic, {
+      acme: { detect: vi.fn(), load: vi.fn() }
+    });
+  }).not.toThrow();
+  expect(result!.status).toBe('failure');
+});
+
+test('accepts an explicit source object whose nested object is shared by two sibling branches, as two independent copies', () => {
+  const shared = { videoId: 'abc123' };
+  const diamond = { type: 'acme', a: shared, b: shared };
+
+  const result = detectSourceWithProviders(diamond, {
+    acme: { detect: vi.fn(), load: vi.fn() }
+  });
+  expect(result).toEqual({
+    status: 'success',
+    input: diamond,
+    source: diamond
+  });
+  if (result.status !== 'success') throw new Error('expected a success');
+  expect(result.source).not.toBe(diamond);
+  const source = result.source as unknown as { a: unknown; b: unknown };
+  // Not memoised into one shared copy: `a` and `b` are two separate objects,
+  // each `toEqual` the caller's own `shared`, neither `toBe` it or the other.
+  expect(source.a).not.toBe(shared);
+  expect(source.a).toEqual(shared);
+  expect(source.a).not.toBe(source.b);
+  expect(source.a).toEqual(source.b);
+});
+
+// A recursive copy that tells a cycle apart from a diamond by depth alone is
+// exponential rather than merely deep, because nothing stops it walking the
+// same shared object twice -- and memoising a diamond into one shared copy,
+// rather than fixing that, only moves the same exponential cost one call
+// downstream: `sourceKey`'s `JSON.stringify` does not deduplicate a shared
+// reference either, so it would still expand a memoised diamond's sharing
+// back out during every render (proven end to end, through `Player.Root`
+// itself, in `supplied-provider.test.tsx`). `MAX_SUPPLIED_SOURCE_NODES` is
+// what actually closes this: a shared budget every value the copy visits
+// counts against, so the copy's own total size -- and so every later walk
+// over it -- is bounded regardless of how much the source shares. The two
+// shapes below prove `ancestors` and that budget are both load-bearing, not
+// the depth cap alone -- each is given a short per-test timeout so a
+// regression here reports as a failed run instead of hanging the suite, and
+// each finishes in single-digit milliseconds once fixed.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): with `ancestors` and
+// the node budget reverted out of `copySuppliedSourceValue` (leaving only the
+// depth cap, `provider-loaders.ts` as committed in f116111), run with
+// `pnpm vitest run packages/react/test/provider-loaders.test.ts -t "sibling
+// branches sharing a self-cyclic|diamond chain 24 levels"`:
+//
+// "declines a source object with two sibling branches sharing a self-cyclic
+// reference" passed regardless, in under a second. Checked directly rather
+// than assumed: a direct self-reference means the same object recurs down
+// whichever key `Object.keys` tries first (`a`, here), which keeps failing
+// once past `MAX_SUPPLIED_SOURCE_DEPTH` -- so the very first key this loop
+// tries never succeeds, the object's own copy short-circuits on it every
+// time, and `b` is never reached at any level. That is not a guard against
+// the regression, only this one shape's own shallow, two-key symmetry
+// happening not to trigger it -- kept as a test regardless, since it is the
+// cheapest possible proof that a genuine cycle is refused, and the second
+// test below is what actually exercises the node budget.
+//
+// "declines a diamond chain 24 levels deep with two references per level,
+// promptly rather than after exponential blowup" failed: `Error: Test timed
+// out in 2000ms.`, reported only once the call actually returned, 16839ms in
+// -- vitest does not preempt a synchronous, CPU-bound test at its timeout, it
+// only compares the elapsed time once control comes back. 24 levels stays
+// inside the depth cap, so nothing fails early and both `l` and `r` are
+// walked at every level; with no bound on the copy's total size, walking `r`
+// redid the identical work `l` already did, and `2**24` such calls is what
+// took 16.8s. Both tests pass in single-digit milliseconds with `ancestors`
+// and the node budget restored -- the second now refusing the chain, rather
+// than hanging trying to accept it.
+test('declines a source object with two sibling branches sharing a self-cyclic reference', () => {
+  const cyclic: { type: string; a?: unknown; b?: unknown } = {
+    type: 'acme'
+  };
+  cyclic.a = cyclic;
+  cyclic.b = cyclic;
+
+  let result: ReturnType<typeof detectSourceWithProviders>;
+  expect(() => {
+    result = detectSourceWithProviders(cyclic, {
+      acme: { detect: vi.fn(), load: vi.fn() }
+    });
+  }).not.toThrow();
+  expect(result!.status).toBe('failure');
+}, 2000);
+
+test('declines a diamond chain 24 levels deep with two references per level, promptly rather than after exponential blowup', () => {
+  // 24 levels, not `MAX_SUPPLIED_SOURCE_DEPTH` (32) or beyond: this chain
+  // must stay inside the depth cap, so nothing fails for depth and this is a
+  // clean exercise of `MAX_SUPPLIED_SOURCE_NODES` alone. Without memoising a
+  // diamond's shared object, the total node count doubles at every level --
+  // `2**24`, tens of millions -- so the shared budget (10,000) is spent
+  // within the first dozen or so levels, refusing the whole source long
+  // before the walk could reach the chain's own base case.
+  let next: Record<string, unknown> = { leaf: true };
+  for (let level = 0; level < 24; level++) {
+    next = { l: next, r: next };
+  }
+  const source = { type: 'acme', chain: next };
+
+  let result: ReturnType<typeof detectSourceWithProviders>;
+  expect(() => {
+    result = detectSourceWithProviders(source, {
+      acme: { detect: vi.fn(), load: vi.fn() }
+    });
+  }).not.toThrow();
+  expect(result!.status).toBe('failure');
+}, 2000);
+
 test('dispatches a supplied kind to its own registration, with the mount, source and its own option bag', async () => {
   const adapter = { provider: 'native' } as unknown as ProviderAdapter;
   const factory = vi.fn(async () => adapter);
