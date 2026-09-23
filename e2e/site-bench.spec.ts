@@ -6,6 +6,7 @@ import {
   settingsMenu,
   settingsTrigger
 } from './locators';
+import { HIGHLIGHT_MS } from '../apps/site/src/components/highlight-ms';
 
 /**
  * The bench on `/`: the switches, and the composition they build.
@@ -295,6 +296,16 @@ test('docked.css is a real <link>, in the document, when pressed, and theme.css 
     .toEqual({ docked: true, theme: false });
 });
 
+// `CompositionPanel.tsx` clears the highlight `HIGHLIGHT_MS` after it is set,
+// and that timer restarts on every re-render of the panel by design (a second
+// flip cancels the pending clear and schedules a new one). This assertion is
+// checking that the highlight clears, not how fast, so its budget is a
+// multiple of the timer with real headroom over it -- a hand-picked literal a
+// few hundred ms over `HIGHLIGHT_MS` was tight enough to fail chromium and
+// firefox in CI on a commit that changed neither the panel nor the timer
+// (#744).
+const CHANGED_LINE_CLEAR_BUDGET_MS = HIGHLIGHT_MS * 5;
+
 test('a skin flip highlights the changed composition line, and the highlight clears', async ({
   page
 }) => {
@@ -309,7 +320,7 @@ test('a skin flip highlights the changed composition line, and the highlight cle
 
   await expect
     .poll(() => composition(page).locator('[data-changed]').count(), {
-      timeout: 1500
+      timeout: CHANGED_LINE_CLEAR_BUDGET_MS
     })
     .toBe(0);
 });

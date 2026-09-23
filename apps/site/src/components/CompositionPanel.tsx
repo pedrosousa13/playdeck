@@ -27,11 +27,10 @@
  * diff noisy. This component's only job with it is to stamp `data-changed`
  * on the matching `.line[data-line="N"]` spans Shiki's own `line` hook
  * already wrote `data-line` onto, and to clear it again after the
- * transition `base.css`'s `.line[data-changed]` rule declares -- 900ms,
- * read back off that rule's own literal rather than guessed at here would
- * be nicer, but CSS has no way to hand a duration to JavaScript, so the two
- * numbers are kept in sync by being next to each other in the two files'
- * comments instead.
+ * transition `base.css`'s `.line[data-changed]` rule declares --
+ * `HIGHLIGHT_MS`, in its own module (`highlight-ms.ts`) rather than a local
+ * const, since `e2e/site-bench.spec.ts` imports the same number for its own
+ * poll budget rather than retyping it.
  *
  * The timeout is cleared and restarted on every `html`/`changedLines`
  * change, which is what "a second flip restarts the highlight" means: a
@@ -39,6 +38,7 @@
  * clear and schedules a new one, rather than leaving two timers racing.
  */
 import { useEffect, useRef } from 'react';
+import { HIGHLIGHT_MS } from './highlight-ms';
 
 export type CompositionPanelProps = {
   /** One of `Bench.astro`'s four precomputed strings, picked by (source, skin). */
@@ -46,8 +46,6 @@ export type CompositionPanelProps = {
   /** The 1-indexed lines that changed since the previous composition. */
   readonly changedLines: readonly number[];
 };
-
-const HIGHLIGHT_MS = 900;
 
 export default function CompositionPanel({
   html,

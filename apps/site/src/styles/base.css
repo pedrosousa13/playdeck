@@ -143,8 +143,8 @@ pre {
 /* The changed-line highlight (2026-09-03): `CompositionPanel.tsx` stamps
  * `data-changed` on the `.line` Shiki's own `line` hook already wraps every
  * printed line in, for the lines a switch flip just moved, and clears it
- * again after 900ms -- keep that literal in sync with
- * `CompositionPanel.tsx`'s own `HIGHLIGHT_MS` if either changes.
+ * again after 900ms -- keep that literal in sync with `highlight-ms.ts`'s
+ * `HIGHLIGHT_MS` if either changes.
  *
  * No `prefers-reduced-motion` override here: this site's global reduced-
  * motion rule (below) already collapses every `transition-duration` to
