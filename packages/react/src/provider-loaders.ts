@@ -383,6 +383,23 @@ const sanitizeSuppliedProviderOptions = (
   return { options: sanitized, refused };
 };
 
+// The one shared lookup for every place this file resolves a consumer-shaped
+// map -- `providers`, `providerOptions` -- by a `type` string read off a
+// resolved source (#755). A bare `record[key]` resolves an inherited
+// `Object.prototype` member -- `toString`, `constructor`, `valueOf`,
+// `hasOwnProperty`, and `__proto__` (whose own accessor answers `record`'s
+// prototype itself, a plain object and so truthy) -- exactly as readily as a
+// real entry, and every one of those is truthy, so a `providers` map with no
+// matching registration at all can still read as a hit. `Object.hasOwn`
+// decides that before `record[key]` is read at all: a key that fails it never
+// triggers a property access on `record`, so there is nothing here for a
+// getter or a `Proxy` trap on an inherited member to run either.
+const ownEntry = <T>(
+  record: Record<string, T> | undefined,
+  key: string
+): T | undefined =>
+  record !== undefined && Object.hasOwn(record, key) ? record[key] : undefined;
+
 // The return type is `ProviderAdapter<SuppliedProviderSource['type']>`
 // (`SuppliedProviderSource['type']` is `string`), not the bare `ProviderAdapter`
 // every one of the five built-in branches below returns on its own: a
@@ -463,11 +480,11 @@ export const loadProvider = async ({
   // Not one of the five built-in kinds: a supplied kind, whose registration
   // `providers` looks up by the resolved source's own `type`, the same field
   // every branch above dispatches on. `providers` is `undefined` for a `Root`
-  // that never sets the prop, so this lookup is then `undefined?.[…]` --
-  // `undefined` -- and control falls straight through to the "no provider
-  // adapter" throw below, exactly as an unrecognised `source.type` already
-  // did before `providers` existed.
-  const registration = providers?.[source.type];
+  // that never sets the prop, so this lookup is then `ownEntry(undefined,
+  // …)` -- `undefined` -- and control falls straight through to the "no
+  // provider adapter" throw below, exactly as an unrecognised `source.type`
+  // already did before `providers` existed.
+  const registration = ownEntry(providers, source.type);
   if (registration) {
     const factory = await registration.load();
     // Gated here, in the library, rather than left to the registration's own
@@ -475,12 +492,16 @@ export const loadProvider = async ({
     // exactly the way the resolved source already does above, and a supplied
     // adapter is not expected to guard its own options any more than a
     // built-in one's own gate (Wistia's `poster`, YouTube's `host`) is
-    // reachable from outside this package (#752).
+    // reachable from outside this package (#752). Looked up through
+    // `ownEntry` for the same reason `providers` above is (#755): an
+    // inherited `Object.prototype` member would otherwise stand in for a bag
+    // nobody supplied.
     const { options, refused } = sanitizeSuppliedProviderOptions(
-      (
+      ownEntry(
         providerOptions as
-          Record<string, Record<string, PrimitiveOptionValue>> | undefined
-      )?.[source.type]
+          Record<string, Record<string, PrimitiveOptionValue>> | undefined,
+        source.type
+      )
     );
     if (refused) reportRefusedUrl?.('providerOptions');
     return factory(media, source, options);
@@ -965,7 +986,7 @@ export const detectSourceWithProviders = (
       typeof kind === 'string' &&
       kind !== '' &&
       !RESERVED_PROVIDER_NAMES.includes(kind) &&
-      providers[kind]
+      ownEntry(providers, kind)
     ) {
       return {
         status: 'success',

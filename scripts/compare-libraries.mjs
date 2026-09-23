@@ -356,9 +356,12 @@ export const libraries = [
     composition: 'core + native provider, no control parts',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 22134 bytes measured 2026-09-23 -- 21.615234375 KB, 21.62 KB to two
-    // places, rounded up to the next 0.25 KB. See the `libraries` doc
-    // comment above for what raising this means. What carried this row past
+    // 22162 bytes measured 2026-09-23 -- 21.642578125 KB, 21.64 KB to two
+    // places, rounded up to the next 0.25 KB. The few bytes past the
+    // previous 22134-byte figure are #755's shared own-property lookup
+    // (`ownEntry`, `provider-loaders.ts`), which the other three Playdeck
+    // rows below picked up the same way. See the `libraries` doc comment
+    // above for what raising this means. What carried this row past
     // 21.50 KB is #754's copy of a supplied-kind explicit source object:
     // `copySuppliedSourceValue` and `copySuppliedSourceObject`
     // (`provider-loaders.ts`) -- the depth cap, the `ancestors` cycle guard,
@@ -380,12 +383,14 @@ export const libraries = [
     composition: 'core + primitives + native provider',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 22798 bytes measured 2026-09-23 -- 22.263671875 KB, 22.26 KB to two
+    // 22825 bytes measured 2026-09-23 -- 22.2900390625 KB, 22.29 KB to two
     // places, rounded up to the next 0.25 KB -- the same #754 change
     // described on the "no parts" row above moved this row past its own
-    // 22.00 KB ceiling too. The whole distance from the last committed
-    // figure is this issue's: that figure was 21.96 KB, measured the same
-    // day (2026-09-23) before this change, per `results.md` on `main`.
+    // 22.00 KB ceiling too, and the same #755 own-property lookup described
+    // there accounts for the few bytes past the previous 22798-byte figure.
+    // The whole distance from the last committed figure is this issue's:
+    // that figure was 21.96 KB, measured the same day (2026-09-23) before
+    // this change, per `results.md` on `main`.
     ceilingKb: 22.5
   },
   {
@@ -396,13 +401,14 @@ export const libraries = [
       'core + primitives + native provider + one control (PlayButton)',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 23905 bytes measured 2026-09-23 -- 23.3447265625 KB, 23.34 KB to two
+    // 23933 bytes measured 2026-09-23 -- 23.3720703125 KB, 23.37 KB to two
     // places, rounded up to the next 0.25 KB. What carried this row past
     // 23.25 KB is #754's supplied-kind source copy, the same change
-    // described on the "no parts" row above. The whole distance from the
-    // last committed figure is this issue's: that figure was 23.05 KB,
-    // measured the same day (2026-09-23) before this change, per
-    // `results.md` on `main`.
+    // described on the "no parts" row above; the same row's #755
+    // own-property lookup accounts for the few bytes past the previous
+    // 23905-byte figure. The whole distance from the last committed figure
+    // is this issue's: that figure was 23.05 KB, measured the same day
+    // (2026-09-23) before this change, per `results.md` on `main`.
     ceilingKb: 23.5,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
@@ -414,13 +420,14 @@ export const libraries = [
       "core + primitives + native provider + control bar (5 of Media Chrome's 7 controls)",
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 27026 bytes measured 2026-09-23 -- 26.392578125 KB, 26.39 KB to two
+    // 27053 bytes measured 2026-09-23 -- 26.4189453125 KB, 26.42 KB to two
     // places, rounded up to the next 0.25 KB. What carried this row past
     // 26.25 KB is #754's supplied-kind source copy, the same change
-    // described on the "no parts" row above. The whole distance from the
-    // last committed figure is this issue's: that figure was 26.09 KB,
-    // measured the same day (2026-09-23) before this change, per
-    // `results.md` on `main`.
+    // described on the "no parts" row above; the same row's #755
+    // own-property lookup accounts for the few bytes past the previous
+    // 27026-byte figure. The whole distance from the last committed figure
+    // is this issue's: that figure was 26.09 KB, measured the same day
+    // (2026-09-23) before this change, per `results.md` on `main`.
     ceilingKb: 26.5
   },
   {
