@@ -400,6 +400,43 @@ test('a player resumed by re-entering the viewport still auto-pauses on the next
   page
 }) => {
   await page.goto(viewportScrollStory);
+  // TEMPORARY instrumentation for #746 (do not merge): records, with
+  // timestamps, the native <video> element's own play/playing/pause events
+  // alongside playdeckHandle's confirmed play/pause events (which carry the
+  // origin use-activation.ts's ownership tracker reads), so the order they
+  // arrive in around the second resume can be read back after the test.
+  await page.evaluate(() => {
+    const w = window as unknown as {
+      __log: Array<{ t: number; label: string; origin?: string }>;
+    };
+    w.__log = [];
+    const push =
+      (label: string) =>
+      (event?: { origin?: string }): void => {
+        w.__log.push({ t: performance.now(), label, origin: event?.origin });
+      };
+    let videoAttached = false;
+    let handleAttached = false;
+    const attach = (): void => {
+      if (!videoAttached) {
+        const video = document.querySelector('[data-playdeck-part="media"]');
+        if (video instanceof HTMLVideoElement) {
+          videoAttached = true;
+          video.addEventListener('play', () => push('video:play')());
+          video.addEventListener('playing', () => push('video:playing')());
+          video.addEventListener('pause', () => push('video:pause')());
+        }
+      }
+      if (!handleAttached && window.playdeckHandle) {
+        handleAttached = true;
+        window.playdeckHandle.on('play', push('handle:play'));
+        window.playdeckHandle.on('pause', push('handle:pause'));
+      }
+      if (videoAttached && handleAttached) clearInterval(interval);
+    };
+    const interval = setInterval(attach, 20);
+    attach();
+  });
   const play = await mountedPlayButton(page);
 
   await scrollPlayerIntoView(page);
@@ -411,6 +448,16 @@ test('a player resumed by re-entering the viewport still auto-pauses on the next
   await expect(play).toHaveAttribute('data-state', 'playing');
 
   await scrollPlayerOutOfView(page);
+  const log = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __log: Array<{ t: number; label: string; origin?: string }>;
+        }
+      ).__log
+  );
+  // eslint-disable-next-line no-console
+  console.log('EVENTLOG', JSON.stringify(log));
   await expect(play).toHaveAttribute('data-state', 'paused');
 });
 
