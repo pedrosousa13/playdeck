@@ -1273,3 +1273,76 @@ describe('docked.css phone sizing (not shared with theme.css)', () => {
     expect(body).toMatch(/display:\s*none;/);
   });
 });
+
+// The proof `e2e/a11y.spec.ts` points to for its docked and headless
+// `color-contrast`/`imgNode` pins (#760). Lifting the cue clear of the
+// control row moved it off the one opaque surface axe could resolve a
+// background against (the bar) and onto the picture, where axe-core has no
+// rule that rasterises a `<video>`/`<img>` behind translucent text and
+// reports `needs review` instead of a verdict. That is a real limit of the
+// tool, not evidence either way about the text -- so this checks the text
+// arithmetically, against the two ends of what a video frame behind it can
+// be, rather than assuming the `needs review` is safe to wave through.
+//
+// `--playdeck-caption-color` and `--playdeck-caption-background` are read
+// only inline, by `captionCueBoxStyle` in `captions.tsx` -- never by
+// `theme.css` or `docked.css` (confirmed here, not assumed: neither file's
+// text contains either name) -- so one default composite covers every
+// surface this package ships: unthemed, `theme.css` and `docked.css` alike.
+const captionsSource = await readFile(
+  new URL('../src/captions.tsx', import.meta.url),
+  'utf8'
+);
+
+describe('caption cue contrast against arbitrary video content (#760)', () => {
+  test('neither shipped stylesheet overrides the caption colour or background tokens', () => {
+    expect(themeSource).not.toMatch(/--playdeck-caption-(color|background)/);
+    expect(dockedSource).not.toMatch(/--playdeck-caption-(color|background)/);
+  });
+
+  const cueColor = parseColor(
+    tokenDefaultIn(captionsSource, '--playdeck-caption-color', 'captions.tsx')
+  );
+  const cueBackground = parseColor(
+    tokenDefaultIn(
+      captionsSource,
+      '--playdeck-caption-background',
+      'captions.tsx'
+    )
+  );
+
+  // `over` requires an opaque ground (contrast.ts), which a video frame
+  // always is -- these two are its ends, not a sample of it.
+  const videoExtremes = {
+    white: { red: 1, green: 1, blue: 1, alpha: 1 },
+    black: { red: 0, green: 0, blue: 0, alpha: 1 }
+  };
+
+  test.each(Object.entries(videoExtremes))(
+    'clears 4.5:1 over a %s video frame',
+    (_name, ground) => {
+      const composited = over(cueBackground, ground);
+      expect(contrast(cueColor, composited)).toBeGreaterThanOrEqual(4.5);
+    }
+  );
+
+  // Pinned so a token move has to restate what it did rather than quietly
+  // spending headroom, the same shape as `docked.css text contrast`'s own
+  // `states the ratio of every text pair`. A white video frame is the worse
+  // of the two by a wide margin -- 75% black over white composites to
+  // rgb(64, 64, 64), where white text still clears 4.5:1 with room to
+  // spare, and 75% black over black composites to black, where it clears by
+  // a wide margin instead of a comfortable one.
+  test('states the ratio for each end', () => {
+    const stated = Object.fromEntries(
+      Object.entries(videoExtremes).map(([name, ground]) => [
+        name,
+        `${contrast(cueColor, over(cueBackground, ground)).toFixed(2)}:1`
+      ])
+    );
+    expect(stated).toEqual({
+      white: '10.41:1',
+      black: '21.00:1'
+    });
+  });
+});

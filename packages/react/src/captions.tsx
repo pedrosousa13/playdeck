@@ -9,7 +9,10 @@ import {
   SettingsMenuContent,
   SettingsMenuTrigger
 } from './settings-menu.js';
+import { assignRef } from './viewport-media.js';
 import {
+  useCallback,
+  useLayoutEffect,
   useRef,
   type ComponentPropsWithRef,
   type CSSProperties,
@@ -71,9 +74,228 @@ const defaultCueRenderer = (cue: TextCue): ReactNode =>
     </div>
   ));
 
-export const Captions = ({ renderCue, style, ...props }: CaptionsProps) => {
+// The clearance between the lifted overlay and the control row's own top
+// edge (#760's "with a small gap"). A plain constant rather than a token: the
+// gap is not something a theme has ever needed to tune, and IDLE_DELAY_MS in
+// viewport-media.tsx makes the same call for the same reason.
+const CONTROLS_CLEARANCE_PX = 8;
+const CONTROLS_CLEARANCE_TRANSITION_MS = 150;
+
+// Read once per mount, matching player-controller.ts's own prefersReducedMotion:
+// a viewer who flips the OS setting mid-session is honoured by the next
+// player that mounts, not retroactively by one already running.
+const prefersReducedMotion = (): boolean => {
+  if (
+    typeof window === 'undefined' ||
+    typeof window.matchMedia !== 'function'
+  ) {
+    return false;
+  }
+  try {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
+};
+
+// Whether the control row is actually painted, read off the row itself
+// rather than inferred from `data-idle`. `data-idle` only ever means "no
+// pointer or keyboard input recently" (Contract.mdx's own wording) -- it says
+// nothing about whether anything is hiding the row on that basis, and
+// `docked.css` never reads it at all, so its bar stays fully opaque forever.
+// Inferring "hidden" from the attribute alone un-lifted the cue onto a
+// docked bar that had never actually faded, which is #760 all over again
+// under the one theme that never hides. Reading the row's own computed
+// style instead gives the right answer under all three cases this package
+// ships: always `true` for `docked.css` and for an unthemed row (neither
+// ever sets `opacity` or `visibility` off of `data-idle`), and exactly
+// `theme.css`'s own fade for the themed row, `:focus-within` override
+// included -- that CSS rule already decides visibility correctly, so this
+// reads its answer rather than re-deriving it.
+const isPainted = (element: HTMLElement): boolean => {
+  const style = getComputedStyle(element);
+  return style.opacity !== '0' && style.visibility !== 'hidden';
+};
+
+/**
+ * Lifts the whole cue overlay clear of the control row's own top edge while
+ * the row is shown, so an opaque cue background can never paint over a
+ * control, whatever that background is (#760, "lift the cue above the bar").
+ * The move is a plain `transform`, computed from the row's OWN measured
+ * rect rather than any fixed height, so it holds under either shipped theme,
+ * the headless reference composition, every viewport this package tests
+ * (including the phone media query, which shrinks the row) and however many
+ * lines the row wraps into.
+ *
+ * `Captions` and `Controls` are independent siblings wherever a consumer
+ * composes them -- neither primitive has a reference to the other -- so the
+ * control row is found by its part, through the nearest `viewport` ancestor
+ * both share. Absent either one, there is nothing to clear and the cue stays
+ * exactly where the CSS default (`captionsOverlayStyle`'s own
+ * `paddingBottom`) already puts it. A `MutationObserver` on the viewport's
+ * own child list keeps that true even when `Controls` is not there yet at
+ * mount, or is mounted and unmounted later: `attach`/`detach` run again
+ * whenever the row it finds changes, not only once at the top of the effect.
+ */
+const useLiftAboveControls = (
+  overlayRef: { readonly current: HTMLDivElement | null },
+  // Whether the overlay div is mounted this render -- `captionRendering ===
+  // 'custom'`. `overlayRef.current` itself is not a valid dependency (a ref
+  // mutation is not a re-render), so remounting is driven by this instead,
+  // the one thing that actually toggles the div in and out of the tree.
+  active: boolean
+): void => {
+  // A layout effect, not a passive one: this measures the row and paints a
+  // position from it, and `Root`'s own `armedAutoplayMode` effect makes the
+  // same call for the same reason -- a passive effect runs after the browser
+  // has already painted once, which is exactly the one frame a first-mount
+  // measurement must not show the cue sitting unlifted in.
+  useLayoutEffect(() => {
+    if (!active) return;
+    const overlay = overlayRef.current;
+    const viewport = overlay?.closest<HTMLElement>(
+      '[data-playdeck-part="viewport"]'
+    );
+    if (!overlay || !viewport) return;
+
+    // Bound to whichever row is currently attached, and rebuilt by `sync`
+    // below whenever that changes -- so a row that mounts after this effect,
+    // unmounts, or is replaced is always the one being measured.
+    let detach: (() => void) | undefined;
+    let attached: HTMLElement | undefined;
+
+    const attachTo = (controls: HTMLElement): (() => void) => {
+      const update = (): void => {
+        if (!isPainted(controls)) {
+          overlay.style.transform = '';
+          return;
+        }
+        const controlsRect = controls.getBoundingClientRect();
+        if (controlsRect.width === 0 || controlsRect.height === 0) {
+          overlay.style.transform = '';
+          return;
+        }
+        const viewportRect = viewport.getBoundingClientRect();
+        const shift =
+          viewportRect.bottom - controlsRect.top + CONTROLS_CLEARANCE_PX;
+        overlay.style.transform = shift > 0 ? `translateY(${-shift}px)` : '';
+      };
+
+      // Placed once with no transition registered yet, and the transition
+      // is enabled only after: a fresh attachment has no prior position to
+      // move from, and setting `transition` and `transform` together in the
+      // same style recalculation animates from the implicit `none`, which is
+      // a flaky, partial lift rather than an instant, correct one.
+      update();
+      overlay.style.transition = `transform ${
+        prefersReducedMotion()
+          ? '0.01ms'
+          : `${CONTROLS_CLEARANCE_TRANSITION_MS}ms`
+      } ease`;
+
+      const resizeObserver =
+        typeof ResizeObserver === 'function'
+          ? new ResizeObserver(update)
+          : undefined;
+      resizeObserver?.observe(controls);
+      // `data-idle` flipping is what starts (or, read directly, IS) a themed
+      // row's own opacity change, so reacting to it here catches a fade-out
+      // as soon as it begins: `getComputedStyle` read synchronously at that
+      // point still reports the pre-transition value (still visible), which
+      // is the right, conservative answer for the whole of that fade -- the
+      // lift only has to let go once the row has actually finished fading,
+      // which `transitionend` below reports.
+      const idleObserver =
+        typeof MutationObserver === 'function'
+          ? new MutationObserver(update)
+          : undefined;
+      idleObserver?.observe(viewport, {
+        attributes: true,
+        attributeFilter: ['data-idle']
+      });
+      // A fade-IN reads the opposite way at the same instant: synchronously
+      // at `transitionrun`, `getComputedStyle` still reports the PRE-
+      // transition value too, which for that direction is the wrong,
+      // still-hidden answer. Deferred one animation frame, the row has
+      // actually started animating and reads a non-zero opacity, so the lift
+      // catches up within a frame instead of waiting the whole fade out.
+      // `transitionend` needs no such defer: it already fires after the
+      // browser has committed the transition's final value.
+      const onTransitionRun = (): void => {
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(update);
+        } else {
+          update();
+        }
+      };
+      controls.addEventListener('transitionrun', onTransitionRun);
+      controls.addEventListener('transitionend', update);
+      viewport.addEventListener('focusin', update);
+      viewport.addEventListener('focusout', update);
+      return () => {
+        resizeObserver?.disconnect();
+        idleObserver?.disconnect();
+        controls.removeEventListener('transitionrun', onTransitionRun);
+        controls.removeEventListener('transitionend', update);
+        viewport.removeEventListener('focusin', update);
+        viewport.removeEventListener('focusout', update);
+      };
+    };
+
+    const sync = (): void => {
+      const found =
+        viewport.querySelector<HTMLElement>(
+          '[data-playdeck-part="controls"]'
+        ) ?? undefined;
+      if (found === attached) return;
+      detach?.();
+      detach = undefined;
+      attached = found;
+      if (found) {
+        detach = attachTo(found);
+      } else {
+        overlay.style.transform = '';
+      }
+    };
+
+    sync();
+    // `subtree: true` because `Controls` is not guaranteed to be a direct
+    // child of `Viewport` -- a consumer's own wrapper is enough to miss it
+    // under `childList` alone. The callback itself stays cheap (one
+    // `querySelector` plus a reference check that bails immediately once
+    // attached), so the extra mutations this also sees -- a cue's own text
+    // updates elsewhere in the same viewport -- cost one comparison each,
+    // not a re-measure.
+    const mountObserver =
+      typeof MutationObserver === 'function'
+        ? new MutationObserver(sync)
+        : undefined;
+    mountObserver?.observe(viewport, { childList: true, subtree: true });
+
+    return () => {
+      mountObserver?.disconnect();
+      detach?.();
+    };
+  }, [active, overlayRef]);
+};
+
+export const Captions = ({
+  ref,
+  renderCue,
+  style,
+  ...props
+}: CaptionsProps) => {
   const captionRendering = usePlayerState((state) => state.captionRendering);
   const cues = useActiveCues();
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  const setRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      overlayRef.current = node;
+      return assignRef(ref, node);
+    },
+    [ref]
+  );
+  useLiftAboveControls(overlayRef, captionRendering === 'custom');
   if (captionRendering !== 'custom') return null;
 
   return (
@@ -81,6 +303,7 @@ export const Captions = ({ renderCue, style, ...props }: CaptionsProps) => {
       {...props}
       data-playdeck-part="captions"
       data-state="custom"
+      ref={setRef}
       style={{ ...captionsOverlayStyle, ...style }}
     >
       {cues.filter(isRenderableCue).map((cue, index) => {
