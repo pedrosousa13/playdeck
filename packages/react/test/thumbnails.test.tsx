@@ -7,7 +7,7 @@ import {
   render,
   waitFor
 } from '@testing-library/react';
-import { createRef, type ReactNode } from 'react';
+import { createRef, Profiler, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type {
   Availability,
@@ -23,7 +23,11 @@ import {
   type InternalControllerAccess
 } from '../src/internal-controller';
 import * as Player from '../src/index';
-import { thumbnailLeftStyle } from '../src/thumbnails';
+import {
+  thumbnailLeftStyle,
+  THUMBNAILS_FETCH_BYTE_CAP,
+  THUMBNAILS_FETCH_TIMEOUT_MS
+} from '../src/thumbnails';
 
 const available: Availability = { status: 'available' };
 const notReady: Availability = { status: 'unknown', reason: 'not-ready' };
@@ -201,6 +205,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe('SeekSlider thumbnails', () => {
@@ -435,6 +440,155 @@ describe('SeekSlider thumbnails', () => {
       2,
       'https://cdn.example.test/other.vtt',
       expect.anything()
+    );
+  });
+
+  // #749: mirrors the deadline `OEMBED_REQUEST_TIMEOUT_MS`
+  // (provider-vimeo/src/oembed-availability.ts) and `POSTER_PROBE_TIMEOUT_MS`
+  // (provider-wistia/src/poster-availability.ts) already give their own
+  // fetches, and reports it the way an unparseable file already does --
+  // rather than the silent path an unmount's or a url change's own abort
+  // still takes.
+  //
+  // The commit-count assertion at the end is what makes that second half
+  // discriminating rather than vacuous: `cues` was already `EMPTY_CUES` and
+  // `data-state` was already `hidden` before the deadline ever fired, so
+  // asserting either by itself would pass whether or not the deadline
+  // publishes anything at all (docs/agents/demonstrated-red.md's "reads a
+  // default as a result"). A `Profiler` around the slider makes the
+  // publish's own re-render commit observable instead.
+  //
+  // Demonstrated red (docs/agents/demonstrated-red.md), two substitute
+  // mutations:
+  //
+  // 1. The timer's own `controller.abort()` call removed, leaving
+  //    `deadlineExpired` set but nothing aborted -- `expect(capturedSignal
+  //    ?.aborted).toBe(true)` received `false`.
+  //
+  // 2. Reverted, then `if (deadlineExpired) publishCues(EMPTY_CUES);`
+  //    commented out of `.catch()`, leaving it silent again -- the
+  //    commit-count assertion failed: `expected 4 to be greater than 4` (no
+  //    additional commit followed the deadline, only the abort).
+  //
+  // Both reverted, and the test passed again.
+  test('aborts the fetch at its own deadline, and reports it the way an unparseable file already does', async () => {
+    vi.useFakeTimers();
+    let capturedSignal: AbortSignal | undefined;
+    stubFetch((_url, init) => {
+      const signal = init?.signal;
+      capturedSignal = signal ?? undefined;
+      // Never resolves on its own, but rejects on abort -- the way a real
+      // fetch() does -- since this test needs the effect's own `.catch()` to
+      // actually run once the deadline aborts it, not just the signal's own
+      // `aborted` flag to flip.
+      return new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => {
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+        });
+      });
+    });
+    const onRender = vi.fn();
+    renderWithPlayer(
+      <Profiler id="thumbnail-probe" onRender={onRender}>
+        <Player.SeekSlider thumbnails="https://cdn.example.test/thumbs.vtt" />
+      </Profiler>
+    );
+    hoverAt(50);
+    // Flushes the dynamic import the hover armed, and the effect it lets run,
+    // without advancing real (or, here, fake) time.
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(capturedSignal?.aborted).toBe(false);
+    const commitsBeforeDeadline = onRender.mock.calls.length;
+
+    await act(() => vi.advanceTimersByTimeAsync(THUMBNAILS_FETCH_TIMEOUT_MS));
+    expect(capturedSignal?.aborted).toBe(true);
+    expect(attr(getThumbnail(), 'data-state')).toBe('hidden');
+    expect(onRender.mock.calls.length).toBeGreaterThan(commitsBeforeDeadline);
+  });
+
+  // #749: `Content-Length` is not trusted on its own -- this stream carries
+  // none at all -- so the cap is enforced by counting bytes as they arrive.
+  //
+  // Red, natural (with `response.text()` in place of `readCappedBody`):
+  // `expect(cancelled).toBe(true)` timed out still `false` -- the whole
+  // stream is read to completion (`response.text()` never cancels it)
+  // rather than stopping at the cap.
+  test('a body larger than the byte cap yields no thumbnails, and reading stops at the cap', async () => {
+    let cancelled = false;
+    stubFetch(
+      async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              // One chunk already past the cap: enough on its own to prove
+              // reading stops there rather than after the whole body.
+              controller.enqueue(new Uint8Array(THUMBNAILS_FETCH_BYTE_CAP + 1));
+            },
+            cancel() {
+              cancelled = true;
+            }
+          }),
+          { status: 200 }
+        )
+    );
+    const { controller } = renderWithPlayer(
+      <Player.SeekSlider thumbnails="https://cdn.example.test/thumbs.vtt" />
+    );
+    hoverAt(50);
+    await waitFor(() => expect(cancelled).toBe(true));
+
+    expect(attr(getThumbnail(), 'data-state')).toBe('hidden');
+    expect(controller.getState().error).toBeNull();
+  });
+
+  // #749: `{ stream: true }` deliberately withholds an incomplete trailing
+  // multi-byte sequence across `decode()` calls, expecting a later chunk to
+  // complete it. When none ever arrives -- the stream closes with a lead
+  // byte and its continuation byte still held internally -- those bytes
+  // must still surface as the replacement character a final decode
+  // produces for them, not vanish.
+  //
+  // Red, natural (with the trailing `text += decoder.decode();` flush
+  // removed from readCappedBody): the cue's own url read back as
+  // 'thumb-a' -- the withheld bytes silently dropped rather than resolving
+  // to 'thumb-a�'.
+  test('flushes the decoder so a multi-byte character split across the final two chunks is not silently dropped', async () => {
+    const prefixBytes = new TextEncoder().encode(
+      ['WEBVTT', '', '00:00:00.000 --> 00:00:05.000', 'thumb-a'].join('\n')
+    );
+    // '𝄞' (U+1D11E) encodes to 4 UTF-8 bytes ([0xF0, 0x9D, 0x84, 0x9E]).
+    // Only the first 3 are ever sent -- one at the end of the first chunk,
+    // two making up the whole of the second and final one -- so the
+    // sequence never completes.
+    const clefBytes = new TextEncoder().encode('\u{1D11E}');
+    const chunk1 = new Uint8Array([...prefixBytes, clefBytes[0]]);
+    const chunk2 = clefBytes.slice(1, 3);
+    stubFetch(
+      async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(chunk1);
+              controller.enqueue(chunk2);
+              controller.close();
+            }
+          }),
+          { status: 200 }
+        )
+    );
+    renderWithPlayer(
+      <Player.SeekSlider thumbnails="https://cdn.example.test/thumbs.vtt" />
+    );
+    hoverAt(5); // fraction 0.025, time 2.5 -> inside the [0, 5) cue
+    await waitFor(() =>
+      expect(attr(getThumbnail(), 'data-state')).toBe('visible')
+    );
+    // getAttribute, not the `.src` property: the latter resolves the value
+    // against the document's base URL and percent-encodes it, which would
+    // obscure the literal character this test is about.
+    expect(getThumbnail()!.querySelector('img')!.getAttribute('src')).toBe(
+      'thumb-a�'
     );
   });
 });

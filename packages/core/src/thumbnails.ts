@@ -158,6 +158,23 @@ const parseCueBlock = (block: readonly string[]): ThumbnailCue | null => {
   return { startTime, endTime, url, region };
 };
 
+// A cap on the cues `parseThumbnailCues` will publish, so a hostile or
+// merely malformed WebVTT file cannot make this module hand the caller an
+// arbitrarily large array. Sized well above any real sprite VTT: a 3-hour
+// film at one cue per second is about 10,800 cues, and this is roughly ten
+// times that. A file whose cue count would exceed it is treated exactly like
+// a file that fails to parse -- no thumbnails, no throw -- since a consumer
+// cannot act on a file this malformed any more usefully than on one that
+// isn't WebVTT at all.
+//
+// Deliberately not exported: `./thumbnails` is a published subpath
+// (`package.json`'s `exports`), built as its own bundle, so anything
+// exported from this file -- unlike a plain internal module reached only
+// through a package's main entry -- ships in `dist/thumbnails.js` and
+// becomes part of the public API. This cap is an implementation detail, not
+// a promise to consumers.
+const THUMBNAIL_CUE_CAP = 100_000;
+
 // Turns a WebVTT sprite-cue file into the published, ordered collection.
 //
 // A body whose first line is not `WEBVTT` (once a leading BOM is stripped)
@@ -167,7 +184,10 @@ const parseCueBlock = (block: readonly string[]): ThumbnailCue | null => {
 // pointed `thumbnails` at the wrong file, or at a server's HTML error page,
 // gets the same "no thumbnails" result a consumer who never set the prop
 // gets, with nothing here escalating that into an exception the caller has
-// to guard against.
+// to guard against. A file past `THUMBNAIL_CUE_CAP` gets the same treatment:
+// parsing stops the moment the cap is passed, rather than finishing the walk
+// only to discard the result, and the file publishes no cues at all rather
+// than the cues found before the cap.
 export const parseThumbnailCues = (vtt: string): readonly ThumbnailCue[] => {
   const withoutBom = vtt.charCodeAt(0) === 0xfeff ? vtt.slice(1) : vtt;
   const lines = withoutBom.split(/\r\n|\r|\n/);
@@ -190,7 +210,10 @@ export const parseThumbnailCues = (vtt: string): readonly ThumbnailCue[] => {
       continue;
     }
     const cue = parseCueBlock(block);
-    if (cue !== null) cues.push(cue);
+    if (cue !== null) {
+      cues.push(cue);
+      if (cues.length > THUMBNAIL_CUE_CAP) return Object.freeze([]);
+    }
   }
 
   return Object.freeze(
@@ -200,8 +223,63 @@ export const parseThumbnailCues = (vtt: string): readonly ThumbnailCue[] => {
   );
 };
 
+// Per-array cache of the running maximum `endTime` up to and including each
+// cue, in the cues' own `startTime`-sorted order -- what makes
+// `thumbnailCueAt` below a genuine binary search despite `endTime` not
+// itself being sorted (see that function's own comment for why the running
+// maximum is enough). Built once per distinct `cues` array and reused by
+// identity through a `WeakMap`: the caller (`useThumbnailCues`,
+// `@playdeck/react`) holds one frozen array per fetched file and calls
+// `thumbnailCueAt` against that same reference on every `pointermove`, so an
+// unmoving thumbnails track pays the one-time `O(n)` build once rather than
+// on every lookup.
+const maxEndCache = new WeakMap<readonly ThumbnailCue[], readonly number[]>();
+
+const maxEndUpTo = (cues: readonly ThumbnailCue[]): readonly number[] => {
+  const cached = maxEndCache.get(cues);
+  if (cached !== undefined) return cached;
+  const maxEnd: number[] = [];
+  let running = Number.NEGATIVE_INFINITY;
+  for (const cue of cues) {
+    running = Math.max(running, cue.endTime);
+    maxEnd.push(running);
+  }
+  maxEndCache.set(cues, maxEnd);
+  return maxEnd;
+};
+
+// A binary search over `cues` (sorted ascending by `startTime`) returning
+// exactly what the linear `cues.find((cue) => time >= cue.startTime && time
+// < cue.endTime)` this replaces would return -- the first, lowest-index cue
+// whose half-open span contains `time`, including when cues share a
+// `startTime` or overlap outright.
+//
+// `endTime` is not itself sorted, so a plain binary search on `endTime`
+// cannot be correct in general -- but `maxEndUpTo`'s running maximum is
+// sorted (non-decreasing, by construction), and the smallest index where it
+// first exceeds `time` is provably the answer: every earlier index has a
+// running maximum at or below `time`, and a running maximum bounds every
+// value that fed it, so every cue up to and including that index also has
+// `endTime` at or below `time` -- none of them is the cue `find` was
+// looking for. The running maximum only crosses `time` at the index it does
+// because that cue's own `endTime` is what pushes it over, since everything
+// before was already accounted for and insufficient. That index is then
+// discarded (`null`) if its own `startTime` is still after `time`:
+// `startTime` genuinely is sorted ascending, so once one cue starts after
+// `time`, every cue from there on does too, and no cue anywhere in the array
+// can contain it.
 export const thumbnailCueAt = (
   cues: readonly ThumbnailCue[],
   time: number
-): ThumbnailCue | null =>
-  cues.find((cue) => time >= cue.startTime && time < cue.endTime) ?? null;
+): ThumbnailCue | null => {
+  const maxEnd = maxEndUpTo(cues);
+  let low = 0;
+  let high = cues.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (maxEnd[mid] > time) high = mid;
+    else low = mid + 1;
+  }
+  const cue = cues[low];
+  return cue !== undefined && cue.startTime <= time ? cue : null;
+};

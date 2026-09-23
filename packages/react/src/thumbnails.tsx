@@ -46,6 +46,61 @@ import {
 // implementation -- only the reference travels), and the refusal
 // registration written out below against `controller` directly.
 
+// The fetch's own deadline, in the same shape and order of magnitude as the
+// other two fetches this library makes on its own initiative --
+// `OEMBED_REQUEST_TIMEOUT_MS` (`packages/provider-vimeo/src/oembed-availability.ts`)
+// and `POSTER_PROBE_TIMEOUT_MS` (`packages/provider-wistia/src/poster-availability.ts`).
+// A WebVTT host that is malicious or merely compromised must not be able to
+// hold this fetch open indefinitely.
+export const THUMBNAILS_FETCH_TIMEOUT_MS = 4000;
+
+// A cap on the bytes this module will read out of the fetched body.
+// `Content-Length` is not trustworthy on its own -- a response can omit it,
+// or understate it -- so the body is read through a counting stream reader
+// (`readCappedBody`, below) rather than `response.text()`, and abandoned the
+// moment the running count passes this. Sized well above any real sprite
+// VTT: `@playdeck/core/thumbnails`'s own cue cap is roughly ten times the
+// ~10,800 cues a 3-hour film produces at one cue per second, and a real
+// cue's own timing-plus-payload lines run to well under 100 bytes, so this
+// leaves comparable headroom measured in bytes.
+export const THUMBNAILS_FETCH_BYTE_CAP = 10_000_000;
+
+// Reads a fetched thumbnails body through a counting stream reader rather
+// than `response.text()`, so a response whose `Content-Length` is absent,
+// understated or simply not trusted still cannot make this module hold an
+// arbitrarily large string. Reading stops -- and the stream is cancelled --
+// the moment the running byte count passes `THUMBNAILS_FETCH_BYTE_CAP`, and
+// this resolves to `undefined`: the same result a refused (`!response.ok`)
+// response already produces below, so a body over the cap yields no
+// thumbnails rather than a parse of a truncated file.
+const readCappedBody = async (
+  response: Response
+): Promise<string | undefined> => {
+  const body = response.body;
+  if (body === null) return undefined;
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let text = '';
+  let bytesRead = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytesRead += value.byteLength;
+    if (bytesRead > THUMBNAILS_FETCH_BYTE_CAP) {
+      await reader.cancel();
+      return undefined;
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  // Flushes whatever trailing bytes `{ stream: true }` held back waiting for
+  // a continuation that never came -- a response cut off mid multi-byte
+  // sequence, whether by a truncating host or an ordinary network fault.
+  // Without this, those bytes are silently dropped rather than resolving to
+  // the U+FFFD replacement character a final decode produces for them.
+  text += decoder.decode();
+  return text;
+};
+
 const EMPTY_CUES: readonly ThumbnailCue[] = Object.freeze([]);
 
 type CuesState = {
@@ -131,22 +186,49 @@ export const useThumbnailCues = (
     stateRef.current = { ...stateRef.current, armed: true };
     const controller = new AbortController();
     abortRef.current = controller;
+    // Set only by the deadline's own callback below, never by an unmount's
+    // or a url change's abort -- what lets `.catch()` tell the three apart:
+    // those two must stay silent, and this one must not.
+    let deadlineExpired = false;
+    // The deadline: aborts the same signal a url change or unmount already
+    // aborts, so a host that never answers cannot hold this open forever.
+    const timer = setTimeout(() => {
+      deadlineExpired = true;
+      controller.abort();
+    }, THUMBNAILS_FETCH_TIMEOUT_MS);
+    // Publishes `cues` for `url`, unless a later `url` change has already
+    // moved this instance on to a different fetch this result must not
+    // overwrite. Shared by the two branches below that both resolve to a
+    // published result: a valid (or empty) parse, and -- now -- a deadline
+    // that expired before either arrived.
+    const publishCues = (cues: readonly ThumbnailCue[]): void => {
+      if (stateRef.current.url !== url) return;
+      stateRef.current = { url, cues, armed: true };
+      rerender((value) => value + 1);
+    };
     fetch(url, { signal: controller.signal })
-      .then((response) => (response.ok ? response.text() : undefined))
+      .then((response) => (response.ok ? readCappedBody(response) : undefined))
       .then((text) => {
-        // Stale if aborted, or if a `url` change has since moved this
-        // instance on to a different fetch this result must not overwrite.
-        if (controller.signal.aborted || stateRef.current.url !== url) return;
-        stateRef.current = {
-          url,
-          cues: text === undefined ? EMPTY_CUES : parseThumbnailCues(text),
-          armed: true
-        };
-        rerender((value) => value + 1);
+        // Stale if aborted before a response arrived to read at all -- a
+        // narrow race between the fetch settling and this callback running.
+        if (controller.signal.aborted) return;
+        publishCues(text === undefined ? EMPTY_CUES : parseThumbnailCues(text));
       })
       .catch(() => {
-        // A network failure -- including this fetch's own abort -- is silent,
-        // same as a fetch that resolves but fails: no thumbnails, no notice.
+        // A network failure is silent, same as a fetch that resolves but
+        // fails: no thumbnails, no notice. An abort from unmount or a url
+        // change stays silent the same way -- the instance is gone, or has
+        // already moved on to a different fetch neither should touch. Only
+        // the deadline is treated like the unparseable-file result above:
+        // reported the way that path already reports, via the same
+        // `publishCues`.
+        if (deadlineExpired) publishCues(EMPTY_CUES);
+      })
+      .finally(() => {
+        // Runs on every path above, including ordinary success -- not only
+        // the three aborts -- so the timer never outlives the fetch it
+        // guards.
+        clearTimeout(timer);
       });
   }, [armed, url]);
 
