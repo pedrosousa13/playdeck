@@ -1103,13 +1103,11 @@ export const useActivation = (
     const controller = options.controller;
     const unsubscribePlay = controller.on('play', (event) => {
       if (event.origin === 'system') return;
-      const engineResumedOwnPause =
-        event.origin === 'provider' &&
-        session.current.playbackOwnership === 'auto-paused';
+      // TEMPORARY, for #746's diagnostic (do not merge): #696's
+      // `engineResumedOwnPause` carve-out removed, isolating whether this
+      // run's flake rate is the same defect #696 addressed.
       session.current.playbackOwnership =
-        event.origin === 'autoplay' || engineResumedOwnPause
-          ? 'autoplaying'
-          : 'none';
+        event.origin === 'autoplay' ? 'autoplaying' : 'none';
     });
     const unsubscribePause = controller.on('pause', (event) => {
       session.current.playbackOwnership =
