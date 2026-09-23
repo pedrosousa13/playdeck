@@ -14,6 +14,7 @@ import type { WistiaProviderOptions } from '@playdeck/provider-wistia';
 import type { YouTubeProviderOptions } from '@playdeck/provider-youtube';
 import type {
   PlayerProviderOptions,
+  PlayerProviders,
   PrimitiveOptionBag,
   ProviderAdapterFactory,
   ProviderRegistration,
@@ -620,6 +621,47 @@ test('refuses an explicit object whose type matches no registered provider', () 
   expect(result.status).toBe('failure');
 });
 
+// #755: the explicit-object branch used to index `providers[kind]` directly,
+// so with `providers` set to anything -- `{}` included -- a `type` naming an
+// inherited `Object.prototype` member (`toString`, `constructor`, `valueOf`,
+// `hasOwnProperty`) resolved that member instead of a real registration, and
+// every one of those is truthy. `__proto__` is the sharpest case: read
+// through a bracket-style index, it resolves `Object.prototype`'s own
+// `__proto__` accessor, which answers `{}`'s prototype itself -- a plain
+// object, and so truthy too. `ownEntry`'s `Object.hasOwn` check is what makes
+// every one of these five read exactly like a name nothing registered at
+// all -- the same `invalid-source` failure a plain unregistered name
+// produces, asserted on both here rather than comparing the two results
+// against each other, since each carries back its own `input` and so is
+// never itself deep-equal to the other's.
+//
+// Red: reverting `ownEntry(providers, kind)` to the bare `providers[kind]`
+// this replaced failed all five at the `inherited` assertion -- each came
+// back `status: 'success'` (`source` a copy of the caller's own object)
+// instead of the `status: 'failure', reason: 'invalid-source'` expected.
+test.each([
+  'toString',
+  'constructor',
+  'valueOf',
+  'hasOwnProperty',
+  '__proto__'
+])('treats an inherited %s as an unregistered provider name', (key) => {
+  const unregistered = detectSourceWithProviders(
+    { type: 'unregistered-name', id: '1' },
+    {}
+  );
+  expect(unregistered).toMatchObject({
+    status: 'failure',
+    reason: 'invalid-source'
+  });
+
+  const inherited = detectSourceWithProviders({ type: key, id: '1' }, {});
+  expect(inherited).toMatchObject({
+    status: 'failure',
+    reason: 'invalid-source'
+  });
+});
+
 test('still resolves an explicit object of a built-in kind through core, unaffected by a registered providers map', () => {
   const detect = vi.fn();
   const builtinSource = { type: 'youtube', videoId: 'dQw4w9WgXcQ' };
@@ -1075,6 +1117,39 @@ test('dispatches a supplied kind to its own registration, with the mount, source
   expect(factory).toHaveBeenCalledWith(media, source, { quality: 'hd' });
 });
 
+// #755: the third call site `ownEntry` gates -- `loadProvider`'s own
+// `providerOptions[source.type]` read, the same defect as `providers[kind]`
+// and `providers[source.type]` above. `Object.create` puts a same-shaped
+// `acme` bag on `providerOptions`'s own prototype rather than on
+// `providerOptions` itself, so `Object.hasOwn(providerOptions, 'acme')`
+// reads false and the factory must receive `undefined` rather than the
+// inherited bag -- never the bag's own values, sanitised or not.
+//
+// Red: reverting that one `ownEntry` call to the bare
+// `providerOptions[source.type]` this replaced handed the inherited bag to
+// `sanitizeSuppliedProviderOptions`, and `factory` was called with
+// `{ src: 'https://x.test/a' }` instead of `undefined`.
+test("passes undefined options to the factory when a supplied kind's own providerOptions bag is only inherited", async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(async () => adapter);
+  const load = vi.fn(async () => factory);
+  const media = document.createElement('div');
+  const source: AcmeSource = { type: 'acme', videoId: '1' };
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providerOptions: Object.create({
+        acme: { src: 'https://x.test/a' }
+      }) as never,
+      providers: { acme: { detect: vi.fn(), load } },
+      source
+    })
+  ).resolves.toBe(adapter);
+  expect(factory).toHaveBeenCalledWith(media, source, undefined);
+});
+
 // #752: `loadProvider`'s supplied-kind branch used to hand
 // `providerOptions[source.type]` straight to the factory, so a `javascript:`
 // or `data:` value written there reached provider-authored code with no gate
@@ -1209,6 +1284,54 @@ test('reports a supplied kind with no matching registration the same way as an u
       source: { type: 'acme' } as unknown as ResolvedPlayerSource
     })
   ).rejects.toThrow('No provider adapter is installed for acme.');
+});
+
+// #755: `loadProvider`'s dispatch used to index `providers[source.type]`
+// directly, the same defect as the detection-side test above. `proto` builds
+// a registration keyed by each inherited member's own name -- using a
+// computed key (`{ [key]: … }`), never the object-literal `__proto__: …`
+// form, which would set `proto`'s own prototype instead of giving it an own
+// property actually named `__proto__` -- and puts it on `providers`'s
+// prototype rather than on `providers` itself, so `Object.hasOwn(providers,
+// key)` reads false for every one of these while a bare index would still
+// resolve `proto`'s entry through the chain. `inheritedLoad` proves the
+// prototype-member registration is never reached at all, not merely that its
+// result is discarded.
+//
+// Red: reverting `ownEntry(providers, source.type)` to
+// `providers?.[source.type]` failed all five, at `expect(inheritedLoad
+// ).not.toHaveBeenCalled()` -- "expected "vi.fn()" to not be called at all,
+// but actually been called 1 times" -- for every key including `__proto__`,
+// proving the prototype-member registration's own `load` really was invoked
+// before falling through to a rejection.
+test.each([
+  'toString',
+  'constructor',
+  'valueOf',
+  'hasOwnProperty',
+  '__proto__'
+])('loadProvider never calls into an inherited %s member', async (key) => {
+  const inheritedLoad = vi.fn();
+  const proto = { [key]: { detect: vi.fn(), load: inheritedLoad } };
+  const providers = Object.create(proto) as PlayerProviders;
+
+  let error: unknown;
+  try {
+    await loadProvider({
+      media: null,
+      nativeOptions,
+      providers,
+      source: { type: key } as unknown as ResolvedPlayerSource
+    });
+  } catch (caught) {
+    error = caught;
+  }
+
+  expect(inheritedLoad).not.toHaveBeenCalled();
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).toBe(
+    `No provider adapter is installed for ${key}.`
+  );
 });
 
 // One half of the inertness `provider-loaders.ts`'s own comment on
