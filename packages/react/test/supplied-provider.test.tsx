@@ -1,9 +1,29 @@
 // @vitest-environment happy-dom
 
 import { cleanup, render, waitFor } from '@testing-library/react';
+import { Component, type ReactNode } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
+import { captureRethrows } from '@playdeck/test-support/capture-rethrows';
 import * as Player from '../src/index';
 import { createFakeProvider } from './fixtures/fake-provider';
+
+// A minimal boundary for the one test below that needs to prove no error
+// reaches it: `getDerivedStateFromError` is the only way to observe that
+// React actually caught something, and rendering `null` once it has is what
+// keeps a caught error from also failing the test through an unrelated
+// console assertion.
+class RecordingErrorBoundary extends Component<
+  { children: ReactNode },
+  { caught: boolean }
+> {
+  state: { caught: boolean } = { caught: false };
+  static getDerivedStateFromError(): { caught: boolean } {
+    return { caught: true };
+  }
+  render(): ReactNode {
+    return this.state.caught ? null : this.props.children;
+  }
+}
 
 afterEach(() => cleanup());
 
@@ -148,6 +168,59 @@ test('skips a registration whose detect returns a forbidden nested scheme and mo
   await waitFor(() =>
     expect(fake.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
   );
+});
+
+// The render-level counterpart of `provider-loaders.test.ts`'s
+// `treats a detect that throws as a decline and continues to the next
+// registration`: `detectSourceWithProviders` runs inside `root.tsx`'s own
+// `useMemo`, so an uncontained throw there would escape render and reach the
+// nearest error boundary, or unmount the whole root, on every keystroke of a
+// URL an attacker can put in `source` (#753). `RecordingErrorBoundary` proves
+// the boundary is never even reached: the player still mounts and loads
+// through the second, honest registration.
+test('treats a supplied detect that throws as a decline: the player renders and no error reaches an error boundary', async () => {
+  const rethrows = captureRethrows();
+  const fake = createFakeProvider({ provider: 'native' });
+  const boom = new Error('detect blew up');
+  const thrower = vi.fn(() => {
+    throw boom;
+  });
+  const honestLoad = vi.fn(async () => () => fake.adapter);
+  const honest = vi.fn(() => ({ type: 'other', videoId: '1' }) as const);
+
+  render(
+    <RecordingErrorBoundary>
+      <Player.Root
+        loading="eager"
+        providers={{
+          acme: { detect: thrower, load: vi.fn() },
+          other: { detect: honest, load: honestLoad }
+        }}
+        source="https://example.com/media/1"
+      >
+        <Player.Viewport>
+          <Player.Media />
+        </Player.Viewport>
+      </Player.Root>
+    </RecordingErrorBoundary>
+  );
+
+  await waitFor(() => {
+    const node = document.querySelector('[data-playdeck-part="media"]');
+    expect(node).not.toBeNull();
+  });
+
+  expect(thrower).toHaveBeenCalledWith('https://example.com/media/1');
+  expect(honest).toHaveBeenCalledWith('https://example.com/media/1');
+  await waitFor(() => expect(honestLoad).toHaveBeenCalledOnce());
+  await waitFor(() =>
+    expect(fake.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
+  );
+  expect(document.querySelector('[data-playdeck-part="media"]')).not.toBeNull();
+
+  // Not silently lost even here, end to end through `Player.Root`.
+  await Promise.resolve();
+  expect(rethrows).toEqual([boom]);
 });
 
 // A supplied kind's own providerOptions bag is compared the same way the

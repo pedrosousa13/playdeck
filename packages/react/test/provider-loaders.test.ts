@@ -7,6 +7,7 @@ import {
   type ProviderAdapter,
   type ResolvedPlayerSource
 } from '@playdeck/core';
+import { captureRethrows } from '@playdeck/test-support/capture-rethrows';
 import type { HlsProviderOptions } from '@playdeck/provider-hls';
 import type { VimeoProviderOptions } from '@playdeck/provider-vimeo';
 import type { WistiaProviderOptions } from '@playdeck/provider-wistia';
@@ -415,6 +416,65 @@ test('still resolves a detect return that carries no forbidden scheme, unchanged
     input: 'https://example.com/media/1',
     source: { type: 'acme', videoId: 'abc123' }
   });
+});
+
+// A throw is exactly as arbitrary a failure mode as any other provider-authored
+// bug, and `loadProvider`'s own dispatch is already contained at its call site
+// (`use-activation.ts`'s `.catch` wraps `loadProvider(...)`) -- `detect` gets
+// the same treatment: a throw means the same as `detect` returning
+// `undefined`, so the loop below keeps walking the remaining registrations
+// rather than letting the throw escape `detectSourceWithProviders` (#753).
+test('treats a detect that throws as a decline and continues to the next registration', async () => {
+  const rethrows = captureRethrows();
+  const url = 'https://example.com/media/42';
+  const boom = new Error('detect blew up');
+  const thrower = vi.fn(() => {
+    throw boom;
+  });
+  const honest = vi.fn(() => ({ type: 'other', id: '42' }) as const);
+
+  const result = detectSourceWithProviders(url, {
+    acme: { detect: thrower, load: vi.fn() },
+    other: { detect: honest, load: vi.fn() }
+  });
+
+  expect(thrower).toHaveBeenCalledWith(url);
+  expect(honest).toHaveBeenCalledWith(url);
+  expect(result).toMatchObject({
+    status: 'success',
+    source: { type: 'other', id: '42' }
+  });
+
+  // Not silently lost: reported the same way a throwing subscriber already is
+  // elsewhere in this codebase (`notifySafely`, `@playdeck/core`) -- on a
+  // fresh task, so an adapter author can still see their own bug.
+  await Promise.resolve();
+  expect(rethrows).toEqual([boom]);
+});
+
+// The only-registration case: with nothing left to try, the outcome must be
+// identical to no supplied provider matching at all, and the throw must not
+// reach the caller synchronously.
+test('treats a detect that throws as a decline when it is the only registration, matching the no-match result', () => {
+  captureRethrows();
+  const url = 'https://example.com/media/1';
+  const thrower = vi.fn(() => {
+    throw new Error('detect blew up');
+  });
+
+  let result: ReturnType<typeof detectSourceWithProviders>;
+  expect(() => {
+    result = detectSourceWithProviders(url, {
+      acme: { detect: thrower, load: vi.fn() }
+    });
+  }).not.toThrow();
+
+  expect(thrower).toHaveBeenCalledWith(url);
+  expect(result!).toEqual(
+    detectSourceWithProviders(url, {
+      acme: { detect: () => undefined, load: vi.fn() }
+    })
+  );
 });
 
 // Provider-authored shapes are arbitrary by design, which is the premise the

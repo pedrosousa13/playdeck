@@ -356,6 +356,16 @@ that builds and returns the running `ProviderAdapter` — the same interface
 [`@playdeck/core`](../packages/core) documents, and every built-in loader
 already produces.
 
+A `detect` that throws declines too, exactly as if it had returned
+`undefined`: the throw is caught, treated as this registration declining, and
+detection moves on to the next one. It is not silently lost — it is reported
+asynchronously, the same way a throwing subscriber already is elsewhere in
+this package, so it stays visible without being able to escape render and
+reach your own error boundary. Write `detect` defensively regardless — for
+example, `new URL(url).pathname` throws for a value that is not a valid URL —
+but a bug there degrades to that source going undetected rather than crashing
+the player.
+
 Detection tries the five built-in kinds first — a supplied kind can never
 intercept a URL, or an explicit object, a built-in host already claims — and
 only on a built-in refusal walks `providers`' own entries, in the order they
