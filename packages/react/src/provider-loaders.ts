@@ -1,6 +1,7 @@
 import type {
   PlayerSource,
   ProviderAdapter,
+  RefusedUrlSurface,
   ResolvedPlayerSource
 } from '@playdeck/core';
 import { detectSource, isPermittedSourceUrl } from '@playdeck/core';
@@ -332,6 +333,54 @@ export type ProviderLoaderRequest = {
   // per-kind `Source`/`Options` typing lives at `Root`'s own boundary
   // (`root.tsx`'s generic `RootProps<P>`), not here.
   readonly providers?: PlayerProviders;
+  // `PlayerController.reportRefusedUrl`'s own signature, taken structurally
+  // rather than importing the controller itself: `loadProvider` gates a
+  // supplied kind's own option bag (below) but has no controller of its own
+  // to report through, and no lifecycle across calls to hold the disposer
+  // this returns -- the caller does (`use-activation.ts`), which is who
+  // passes this in and who owns disposing what it hands back. Optional for
+  // the same reason `useRefusedUrlReport`'s own `controller` parameter is
+  // (`player-context.ts`): this function is also called directly, in tests
+  // and by any caller with nothing to report to, and refusing there must
+  // still omit the value rather than throw (#752).
+  readonly reportRefusedUrl?: (surface: RefusedUrlSurface) => () => void;
+};
+
+// The supplied-kind counterpart of `everyStringPermitted` further down: a
+// flat check rather than a recursive one, because `PrimitiveOptionBag`'s own
+// contract (above) keeps every provider option bag flat -- string, number,
+// boolean or absent, never a nested object or array -- so there is nothing
+// underneath a bag's own values for a recursive walk to find. A refused
+// string is dropped from the bag entirely, the same way an absent option
+// would be, rather than replaced with anything: the factory this bag reaches
+// must never see a value the allowlist refused, and omission is the one
+// substitute this package already uses everywhere else it refuses a
+// consumer-supplied URL (#752).
+//
+// Guards against a non-object arriving despite what `PrimitiveOptionBag`
+// promises -- a consumer bypassing the type, or simply an absent bag -- by
+// handing it back unchanged rather than throwing: `Object.entries` on
+// anything else would either throw (`null`) or read no own keys worth
+// walking, and this function's own contract is that it never throws.
+const sanitizeSuppliedProviderOptions = (
+  options: Record<string, PrimitiveOptionValue> | undefined
+): {
+  readonly options: Record<string, PrimitiveOptionValue> | undefined;
+  readonly refused: boolean;
+} => {
+  if (typeof options !== 'object' || options === null) {
+    return { options, refused: false };
+  }
+  let refused = false;
+  const sanitized: Record<string, PrimitiveOptionValue> = {};
+  for (const [key, value] of Object.entries(options)) {
+    if (typeof value === 'string' && !isPermittedSourceUrl(value, undefined)) {
+      refused = true;
+      continue;
+    }
+    sanitized[key] = value;
+  }
+  return { options: sanitized, refused };
 };
 
 // The return type is `ProviderAdapter<SuppliedProviderSource['type']>`
@@ -346,6 +395,7 @@ export const loadProvider = async ({
   nativeOptions,
   providerOptions,
   providers,
+  reportRefusedUrl,
   source
 }: ProviderLoaderRequest): Promise<
   ProviderAdapter<SuppliedProviderSource['type']>
@@ -420,11 +470,20 @@ export const loadProvider = async ({
   const registration = providers?.[source.type];
   if (registration) {
     const factory = await registration.load();
-    return factory(
-      media,
-      source,
-      (providerOptions as Record<string, unknown> | undefined)?.[source.type]
+    // Gated here, in the library, rather than left to the registration's own
+    // factory: `providerOptions[source.type]` reaches provider-authored code
+    // exactly the way the resolved source already does above, and a supplied
+    // adapter is not expected to guard its own options any more than a
+    // built-in one's own gate (Wistia's `poster`, YouTube's `host`) is
+    // reachable from outside this package (#752).
+    const { options, refused } = sanitizeSuppliedProviderOptions(
+      (
+        providerOptions as
+          Record<string, Record<string, PrimitiveOptionValue>> | undefined
+      )?.[source.type]
     );
+    if (refused) reportRefusedUrl?.('providerOptions');
+    return factory(media, source, options);
   }
   throw new Error(`No provider adapter is installed for ${source.type}.`);
 };

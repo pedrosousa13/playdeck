@@ -47,9 +47,10 @@ export type PlayerError = {
 // The consumer-supplied URL props the shared allowlist governs outside a
 // provider: the five surfaces #320 routed through `isPermittedSourceUrl` and
 // left silent, plus `thumbnails` and `thumbnails cue image`, added when the
-// seek-preview VTT parser gained its own URLs to check. Named for the prop
-// the consumer wrote, because the prop is what the operator has to go and
-// fix.
+// seek-preview VTT parser gained its own URLs to check, and `providerOptions`,
+// added when a supplied kind's own option bag gained the same gate its
+// resolved source already had (#752). Named for the prop the consumer wrote,
+// because the prop is what the operator has to go and fix.
 //
 // A closed union rather than a `string`, deliberately. `reportRefusedUrl` is
 // reached from React components holding the value that was just refused, and a
@@ -65,7 +66,8 @@ export type RefusedUrlSurface =
   | 'textTracks src'
   | 'mediaSession artwork'
   | 'thumbnails'
-  | 'thumbnails cue image';
+  | 'thumbnails cue image'
+  | 'providerOptions';
 
 export type TextTrackKind = 'subtitles' | 'captions';
 export type TextTrackReadiness = 'idle' | 'loading' | 'loaded' | 'error';

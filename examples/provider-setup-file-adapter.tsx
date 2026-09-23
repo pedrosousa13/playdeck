@@ -123,6 +123,12 @@ export const createExampleFileAdapter: ProviderAdapterFactory<
   // happened.
   video.dataset.exampleFileClipId = source.clipId;
   const sourceElement = document.createElement('source');
+  // `options.src` already passed the shared allowlist before this factory was
+  // ever called: `loadProvider`'s supplied-kind branch (`@playdeck/react`)
+  // runs every string in `providerOptions['example-file']` through it and
+  // omits whatever it refuses, the same gate the detected source itself
+  // passes. A `javascript:` or `data:` value never reaches this write --
+  // this adapter is not expected to guard its own options (#752).
   sourceElement.src = options.src;
   video.append(sourceElement);
   mount.append(video);

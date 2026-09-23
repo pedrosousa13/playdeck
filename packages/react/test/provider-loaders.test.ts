@@ -677,6 +677,131 @@ test('dispatches a supplied kind to its own registration, with the mount, source
   expect(factory).toHaveBeenCalledWith(media, source, { quality: 'hd' });
 });
 
+// #752: `loadProvider`'s supplied-kind branch used to hand
+// `providerOptions[source.type]` straight to the factory, so a `javascript:`
+// or `data:` value written there reached provider-authored code with no gate
+// at all -- unlike the resolved source itself, which `everyStringPermitted`
+// already walks. The fix runs the same shared allowlist
+// (`isPermittedSourceUrl`) over every string in the bag before the factory is
+// called, omitting whatever it refuses exactly as an absent option would be,
+// and reports the refusal through `reportRefusedUrl` the same way every other
+// refused prop is, under the `providerOptions` surface.
+test("omits a refused javascript: option from a supplied kind's own bag before calling the factory, and reports the refusal", async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(async () => adapter);
+  const load = vi.fn(async () => factory);
+  const media = document.createElement('div');
+  const source: AcmeSource = { type: 'acme', videoId: '1' };
+  const reportRefusedUrl = vi.fn(() => vi.fn());
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providerOptions: { acme: { src: 'javascript:alert(1)' } } as never,
+      providers: { acme: { detect: vi.fn(), load } },
+      reportRefusedUrl,
+      source
+    })
+  ).resolves.toBe(adapter);
+
+  expect(factory).toHaveBeenCalledWith(media, source, {});
+  expect(reportRefusedUrl).toHaveBeenCalledWith('providerOptions');
+});
+
+// The `data:` counterpart, alongside a `file:` sibling -- a second scheme the
+// allowlist refuses, distinct from the `javascript:` and `data:` cases above
+// -- a permitted `https:` value under `src` itself, and two non-string
+// options. Proves in one bag that only the two refused strings are dropped,
+// the permitted `src` and the non-string options arrive unchanged, and one
+// bag with two refusals still reports once.
+test('omits refused data: and file: options while keeping a permitted https: src and non-string options unchanged', async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(async () => adapter);
+  const load = vi.fn(async () => factory);
+  const media = document.createElement('div');
+  const source: AcmeSource = { type: 'acme', videoId: '1' };
+  const reportRefusedUrl = vi.fn(() => vi.fn());
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providerOptions: {
+        acme: {
+          src: 'https://good.example/clip.mp4',
+          poster: 'data:text/html,<script>alert(1)</script>',
+          thumbnail: 'file:///etc/passwd',
+          muted: true,
+          volume: 5
+        }
+      } as never,
+      providers: { acme: { detect: vi.fn(), load } },
+      reportRefusedUrl,
+      source
+    })
+  ).resolves.toBe(adapter);
+
+  expect(factory).toHaveBeenCalledWith(media, source, {
+    src: 'https://good.example/clip.mp4',
+    muted: true,
+    volume: 5
+  });
+  expect(reportRefusedUrl).toHaveBeenCalledWith('providerOptions');
+});
+
+// The other direction: a bag with nothing to refuse -- including a plain,
+// non-URL string, `quality: 'hd'` -- never calls `reportRefusedUrl` and passes
+// every value through exactly as `dispatches a supplied kind to its own
+// registration` already proved, before this fix existed.
+test("never calls reportRefusedUrl when a supplied kind's own bag has nothing to refuse", async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(async () => adapter);
+  const load = vi.fn(async () => factory);
+  const media = document.createElement('div');
+  const source: AcmeSource = { type: 'acme', videoId: '1' };
+  const reportRefusedUrl = vi.fn(() => vi.fn());
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providerOptions: { acme: { quality: 'hd' } } as never,
+      providers: { acme: { detect: vi.fn(), load } },
+      reportRefusedUrl,
+      source
+    })
+  ).resolves.toBe(adapter);
+
+  expect(factory).toHaveBeenCalledWith(media, source, { quality: 'hd' });
+  expect(reportRefusedUrl).not.toHaveBeenCalled();
+});
+
+// `reportRefusedUrl` is optional -- `loadProvider` is called directly in
+// tests above with no such field, and a real caller with no controller to
+// report to (the same reason `useRefusedUrlReport`'s own `controller`
+// parameter is optional) must not crash either. Never a throw, per the
+// allowlist's own rule (`CONTEXT.md`'s "Shared allowlist" entry).
+test('omits a refused option without throwing when no reportRefusedUrl is supplied', async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(async () => adapter);
+  const load = vi.fn(async () => factory);
+  const media = document.createElement('div');
+  const source: AcmeSource = { type: 'acme', videoId: '1' };
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providerOptions: { acme: { src: 'javascript:alert(1)' } } as never,
+      providers: { acme: { detect: vi.fn(), load } },
+      source
+    })
+  ).resolves.toBe(adapter);
+
+  expect(factory).toHaveBeenCalledWith(media, source, {});
+});
+
 test('reports a supplied kind with no matching registration the same way as an unrecognised type', async () => {
   await expect(
     loadProvider({

@@ -104,7 +104,8 @@ _Avoid_: capability state, capability status, support level
 The name of one consumer-supplied URL prop the shared allowlist can refuse
 outside a provider, published as the closed union `RefusedUrlSurface`:
 `poster src`, `poster srcSet`, `nativePoster`, `textTracks src`,
-`mediaSession artwork`, `thumbnails` and `thumbnails cue image`. A surface
+`mediaSession artwork`, `thumbnails`, `thumbnails cue image` and
+`providerOptions`. A surface
 names the prop an operator has to go and fix and never the value that was
 refused, so a Notice built from one carries no consumer text at all. It is a
 prop name, not a component instance: several instances can refuse the same
