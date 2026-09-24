@@ -623,7 +623,7 @@ section. `test/tokens.contract.test.ts` derives both sides from source —
 `theme.css`, `docked.css` and every primitive in `packages/react/src` — and
 fails on a token missing from the table, a row nothing reads, or a Parts
 column that disagrees with the rules (ADR-0008). Not `theme.css`'s own header
-comment, an older, shorter list nothing checks against either side.
+comment, which only points a reader at this table (#734).
 _Avoid_: token table, theme docs
 
 **Starter theme**:

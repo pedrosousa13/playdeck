@@ -39,17 +39,18 @@ workbench at all.
 
 ## What is not the canonical copy
 
-`theme.css`'s own header comment carries a second, shorter token list — names
-and defaults only, no role or parts column. It predates this decision, it
-answers a different question ("what does this file ship with no import"
-inside the file itself), and nothing checks it against the README's table or
-against the file's own rules: it is already missing the four
-`--playdeck-caption-*` tokens and already wrong about `--playdeck-radius`
+`theme.css`'s own header comment used to carry a second, shorter token list —
+names and defaults only, no role or parts column. It predated this decision,
+answered a different question ("what does this file ship with no import"
+inside the file itself), and nothing checked it against the README's table or
+against the file's own rules: it was missing the four
+`--playdeck-caption-*` tokens and wrong about `--playdeck-radius`
 (`packages/react/README.md`'s own row on that token records the mismatch).
-Nothing here retires it or asks it to agree — an untested second copy inside a
-file that ships to every consumer already, its cost is a known, recorded gap
-rather than a new one, and closing it is a separate change to `theme.css`
-this repository is not making alongside a documentation move.
+Nothing here retired it — an untested second copy inside a file that ships to
+every consumer already, its cost was a known, recorded gap rather than a new
+one, and closing it was a separate change to `theme.css` this repository was
+not making alongside this documentation move. #734 later made that change,
+deleting the list and leaving the header pointing at this table instead.
 
 ## Consequences
 
