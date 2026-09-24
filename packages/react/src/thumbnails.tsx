@@ -206,7 +206,15 @@ export const useThumbnailCues = (
       stateRef.current = { url, cues, armed: true };
       rerender((value) => value + 1);
     };
-    fetch(url, { signal: controller.signal })
+    fetch(url, {
+      signal: controller.signal,
+      // Unlike the Vimeo oEmbed fetch (`provider-vimeo/src/oembed-availability.ts`),
+      // no domain-restriction check anywhere reads this request's referrer, and
+      // a consumer's own sprite host has no reason to learn what page embedded
+      // it -- so this drops the referrer entirely rather than narrowing it to
+      // the origin the way that fetch does.
+      referrerPolicy: 'no-referrer'
+    })
       .then((response) => (response.ok ? readCappedBody(response) : undefined))
       .then((text) => {
         // Stale if aborted before a response arrived to read at all -- a
@@ -396,6 +404,10 @@ export const ThumbnailPreview = ({
       {image === null ? null : (
         <img
           alt=""
+          // Same reasoning as the fetch this cue's url came through, above in
+          // this file: the sprite host has no reason to learn the page, and no
+          // domain-restriction check needs the origin the way Vimeo's does.
+          referrerPolicy="no-referrer"
           src={image.url}
           style={
             image.region

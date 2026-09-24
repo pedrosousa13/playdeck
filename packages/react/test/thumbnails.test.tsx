@@ -238,7 +238,10 @@ describe('SeekSlider thumbnails', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(fetchMock).toHaveBeenCalledWith(
       'https://cdn.example.test/thumbs.vtt',
-      expect.objectContaining({ signal: expect.anything() })
+      expect.objectContaining({
+        signal: expect.anything(),
+        referrerPolicy: 'no-referrer'
+      })
     );
 
     hoverAt(30);
@@ -265,6 +268,7 @@ describe('SeekSlider thumbnails', () => {
     const thumbnail = getThumbnail();
     const image = thumbnail!.querySelector('img')!;
     expect(image.src).toBe('https://cdn.example.test/sprite.jpg');
+    expect(image.getAttribute('referrerpolicy')).toBe('no-referrer');
     expect(image.style.left).toBe('0px');
     expect(image.style.top).toBe('0px');
     expect((thumbnail as HTMLElement).style.width).toBe('160px');

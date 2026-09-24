@@ -744,7 +744,10 @@ test('resolves its own poster from the oEmbed thumbnail once resolvePoster is re
   );
   expect(fetchMock).toHaveBeenCalledWith(
     'https://fast.wistia.com/oembed?url=https%3A%2F%2Fhome.wistia.com%2Fmedias%2Foifkgmxnkb&format=json',
-    { signal: expect.any(AbortSignal) }
+    {
+      signal: expect.any(AbortSignal),
+      referrerPolicy: 'strict-origin-when-cross-origin'
+    }
   );
 });
 

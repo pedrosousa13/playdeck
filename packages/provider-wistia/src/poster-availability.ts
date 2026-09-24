@@ -36,7 +36,13 @@ const resolveWistiaPoster = async (
       `https://fast.wistia.com/oembed?url=${encodeURIComponent(
         wistiaMediaUrl(mediaId)
       )}&format=json`,
-      { signal }
+      // The same reasoning as the Vimeo oEmbed fetch (#334,
+      // `provider-vimeo/src/oembed-availability.ts`): an init-level policy
+      // overrides the document's the way a frame's attribute does, and
+      // without one this request travels under whatever the consumer's page
+      // declares -- the full URL, path and query included, to Wistia on a
+      // page declaring something wider than the modern browser default.
+      { signal, referrerPolicy: 'strict-origin-when-cross-origin' }
     );
     if (!response.ok) return unresolved;
     const data: unknown = await response.json();
