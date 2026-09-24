@@ -356,25 +356,18 @@ export const libraries = [
     composition: 'core + native provider, no control parts',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 22162 bytes measured 2026-09-23 -- 21.642578125 KB, 21.64 KB to two
-    // places, rounded up to the next 0.25 KB. The few bytes past the
-    // previous 22134-byte figure are #755's shared own-property lookup
-    // (`ownEntry`, `provider-loaders.ts`), which the other three Playdeck
-    // rows below picked up the same way. See the `libraries` doc comment
-    // above for what raising this means. What carried this row past
-    // 21.50 KB is #754's copy of a supplied-kind explicit source object:
-    // `copySuppliedSourceValue` and `copySuppliedSourceObject`
-    // (`provider-loaders.ts`) -- the depth cap, the `ancestors` cycle guard,
-    // the node budget that bounds the copy's own total size, the plain-value
-    // walk, and the `try`/`catch` that makes the whole copy throw-safe --
-    // plus `use-activation.ts`'s `echoSource` bounding its own
-    // `JSON.stringify` call the same way, for a refused source's own error
-    // message. All of it sits in code every composition here reaches
-    // regardless of which parts it renders, so all four Playdeck rows moved
-    // together. The whole distance from the last committed figure is this
-    // issue's: that figure was 21.29 KB, measured the same day (2026-09-23)
-    // before this change, per `results.md` on `main`.
-    ceilingKb: 21.75
+    // 22292 bytes measured 2026-09-24 -- 21.76953125 KB, 21.77 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 21.75 KB is #746's viewport re-sync backstop in `use-activation.ts`:
+    // the `resyncTimeout` ref, the `resyncViewportObserver` callback and the
+    // scheduling it adds to the ownership listener's `play` handler. That
+    // code sits in every composition here reaches regardless of which parts
+    // it renders, so all four Playdeck rows moved together (the "Playdeck"
+    // row below grew too, from 22.29 KB to 22.43 KB, without needing its own
+    // ceiling raised). The whole distance from the last committed figure is
+    // this issue's: that figure was 21.64 KB (22160 bytes), measured the
+    // same day (2026-09-24) before this change, per `results.md` on `main`.
+    ceilingKb: 22
   },
   {
     name: 'Playdeck',
@@ -391,6 +384,11 @@ export const libraries = [
     // The whole distance from the last committed figure is this issue's:
     // that figure was 21.96 KB, measured the same day (2026-09-23) before
     // this change, per `results.md` on `main`.
+    //
+    // Still measures 22.43 KB after #746's viewport re-sync backstop
+    // (`use-activation.ts`) -- up from 22.29 KB the same day, per the "no
+    // parts" row's comment above -- which stays under this ceiling with no
+    // raise needed.
     ceilingKb: 22.5
   },
   {
@@ -401,15 +399,15 @@ export const libraries = [
       'core + primitives + native provider + one control (PlayButton)',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 23933 bytes measured 2026-09-23 -- 23.3720703125 KB, 23.37 KB to two
-    // places, rounded up to the next 0.25 KB. What carried this row past
-    // 23.25 KB is #754's supplied-kind source copy, the same change
-    // described on the "no parts" row above; the same row's #755
-    // own-property lookup accounts for the few bytes past the previous
-    // 23905-byte figure. The whole distance from the last committed figure
-    // is this issue's: that figure was 23.05 KB, measured the same day
-    // (2026-09-23) before this change, per `results.md` on `main`.
-    ceilingKb: 23.5,
+    // 24066 bytes measured 2026-09-24 -- 23.501953125 KB, 23.50 KB to two
+    // places, rounded up to the next 0.25 KB (23.50 itself is not far
+    // enough: the row is 2 bytes past 23.5 KB exactly). What carried this
+    // row past 23.5 KB is #746's viewport re-sync backstop, the same change
+    // described on the "no parts" row above. The whole distance from the
+    // last committed figure is this issue's: that figure was 23.37 KB
+    // (23929 bytes), measured the same day (2026-09-24) before this change,
+    // per `results.md` on `main`.
+    ceilingKb: 23.75,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
@@ -420,15 +418,14 @@ export const libraries = [
       "core + primitives + native provider + control bar (5 of Media Chrome's 7 controls)",
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 27053 bytes measured 2026-09-23 -- 26.4189453125 KB, 26.42 KB to two
+    // 27187 bytes measured 2026-09-24 -- 26.5498046875 KB, 26.55 KB to two
     // places, rounded up to the next 0.25 KB. What carried this row past
-    // 26.25 KB is #754's supplied-kind source copy, the same change
-    // described on the "no parts" row above; the same row's #755
-    // own-property lookup accounts for the few bytes past the previous
-    // 27026-byte figure. The whole distance from the last committed figure
-    // is this issue's: that figure was 26.09 KB, measured the same day
-    // (2026-09-23) before this change, per `results.md` on `main`.
-    ceilingKb: 26.5
+    // 26.5 KB is #746's viewport re-sync backstop, the same change described
+    // on the "no parts" row above. The whole distance from the last
+    // committed figure is this issue's: that figure was 26.42 KB
+    // (27057 bytes), measured the same day (2026-09-24) before this change,
+    // per `results.md` on `main`.
+    ceilingKb: 26.75
   },
   {
     name: 'react-player',
