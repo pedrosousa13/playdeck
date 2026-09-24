@@ -60,7 +60,10 @@ test('reads the thumbnail url from the oEmbed record for the media id', async ()
   });
   expect(fetchMock).toHaveBeenCalledWith(
     'https://fast.wistia.com/oembed?url=https%3A%2F%2Fhome.wistia.com%2Fmedias%2Fe4a27b971d&format=json',
-    { signal: expect.any(AbortSignal) }
+    {
+      signal: expect.any(AbortSignal),
+      referrerPolicy: 'strict-origin-when-cross-origin'
+    }
   );
 });
 
