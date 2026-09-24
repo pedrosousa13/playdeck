@@ -9,18 +9,34 @@ to any of them. The source allowlist decides **schemes** — `http:`, `https:`, 
 
 Three reasons. Each is sufficient on its own.
 
-**Playdeck never fetches a consumer-supplied URL.** The library makes exactly one
-request of its own initiative: Vimeo's oEmbed endpoint, a hardcoded
+**Every request Playdeck issues itself, whichever URL it targets, still comes
+from the end user's browser.** The library issues three requests itself with
+`fetch`, none of them from a server it runs: Vimeo's oEmbed probe
+(`packages/provider-vimeo/src/oembed-availability.ts`), a hardcoded
 `https://vimeo.com/api/oembed.json` carrying a video id already validated as
-digits, and only when a consumer opts into chromeless playback. Every other load
-is issued by the browser from markup Playdeck renders — `<source src>`,
-`<video poster>`, `<track src>`, `<img src>`, `<iframe src>` — or by hls.js
-fetching its own manifest and segments in the page.
+digits, fired when a consumer opts into chromeless playback or into resolving
+Vimeo's own poster; Wistia's poster probe
+(`packages/provider-wistia/src/poster-availability.ts`), a hardcoded
+`https://fast.wistia.com/oembed`, fired only when a consumer opts into
+`resolvePoster`; and the thumbnails fetch (`packages/react/src/thumbnails.tsx`),
+which does target a consumer-supplied URL — the `thumbnails` prop's own WebVTT
+file, fetched lazily from JS once a pointer or keyboard focus arms the seek
+preview. Everything else Playdeck causes to load is a load the browser issues
+from an element Playdeck renders or injects — `<source src>`, `<video poster>`,
+`<track src>`, `<img src>`, `<script src>`, `<iframe src>` — or by hls.js
+fetching its own manifest and segments in the page; arriving through an element
+rather than a `fetch` call does not make any of that any less Playdeck's doing.
 
-That is what makes the SSRF framing the wrong shape. Server-side request forgery
-is a server issuing requests to addresses it can reach and the attacker cannot.
-Here the request comes from the end user's browser, on the end user's network. A
-source pointed at `169.254.169.254` reaches that user's own link-local address,
+That is what makes the SSRF framing the wrong shape, and it holds for the
+thumbnails fetch exactly as it holds for the other two and for every
+markup-issued load: whether the browser is told to load a URL through an
+element's attribute or told to fetch it from a line of JS makes no difference to
+where the request originates. Server-side request forgery is a server issuing
+requests to addresses it can reach and the attacker cannot. Here the request
+comes from the end user's browser, on the end user's network — Playdeck runs no
+server, so there is no server-side network position for a forged request to
+borrow, regardless of which of these it is or what issued it. A source pointed
+at `169.254.169.254` reaches that user's own link-local address,
 not a cloud metadata service — the metadata case only exists where the player is
 running _inside_ a cloud instance, in a headless browser doing SSR, screenshots
 or thumbnails. That is a real deployment, but one where network egress is the
@@ -71,6 +87,12 @@ request — raise it as that.
 
 ## Prior requests
 
+- [#751](https://github.com/pedrosousa13/playdeck/issues/751) — the thumbnails
+  feature (#658) made reason 1's premise false: the library now fetches a
+  consumer-supplied URL from JS, and there are three such requests, not the one
+  reason 1 used to name. Revisited by the maintainer on 2026-09-23; the ruling
+  was confirmed and reason 1 above was rewritten to argue from the premise that
+  still holds rather than the one #658 broke.
 - [#246](https://github.com/pedrosousa13/playdeck/issues/246) — Private, loopback
   and link-local media URLs are permitted, so a source can reach the cloud
   metadata service.
