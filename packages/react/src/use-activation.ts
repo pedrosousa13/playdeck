@@ -534,6 +534,17 @@ const disconnectObserver = (
   }
 };
 
+// How long after an owned resume the viewport observer re-sync below runs, in
+// milliseconds (#746). Zero: the re-sync only needs to run on a later task
+// than the `play` event that granted ownership, not after any particular
+// wall-clock delay, so the shortest boundary the platform offers is enough.
+// `setTimeout` rather than `requestAnimationFrame`: a player that autoplayed
+// before its tab lost visibility can still be scrolled -- by a viewer
+// returning to it, or by a layout shift -- while the tab is hidden, and a
+// hidden document's `requestAnimationFrame` callbacks are throttled or
+// suspended where a macrotask timer still runs.
+const OBSERVER_RESYNC_DELAY_MS = 0;
+
 export const useActivation = (
   options: UseActivationOptions
 ): ActivationBindings => {
@@ -582,6 +593,16 @@ export const useActivation = (
   const mediaRef = useRef<PlayerMediaMount | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const observerRef = useRef<ObserverRegistration | undefined>(undefined);
+  // Set only by the ownership listener effect below, on an owned resume, and
+  // cleared once `resyncViewportObserver` (below) has run or the observation
+  // it would resync is no longer current (#746). At most one pending: a
+  // resume that lands while an earlier one's re-check is still pending needs
+  // no second timer, because the callback re-reads ownership and the
+  // registration when it actually runs rather than at the time it was
+  // scheduled.
+  const resyncTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined
+  );
   const loadingGeneration = useRef<number | undefined>(undefined);
   // Holds the standing registration `loadProvider`'s `reportRefusedUrl`
   // callback below makes, the same shape `useRefusedUrlReport`
@@ -757,8 +778,77 @@ export const useActivation = (
       disconnectObserver(registration);
       observerRef.current = undefined;
     }
+    // A registration change: whatever the re-sync below was scheduled to
+    // resync is no longer the current one, so the timer is withdrawn rather
+    // than left to find that out for itself when it fires (#746).
+    if (resyncTimeout.current !== undefined) {
+      clearTimeout(resyncTimeout.current);
+      resyncTimeout.current = undefined;
+    }
     viewportRef.current = viewport;
     setViewportVersion((version) => version + 1);
+  }, []);
+
+  // The backstop #746 diagnosed WebKit needing: while ownership is
+  // `'autoplaying'`, auto-pause has so far depended entirely on the observer
+  // callback below delivering an exit crossing. The diagnosis found that on
+  // WebKit under load, the crossing that follows an engine-driven resume --
+  // WebKit resumes muted autoplaying video on its own re-entry, confirmed by
+  // #695's `engineResumedOwnPause` carve-out in the ownership listener below
+  // -- is sometimes never delivered to *any* `IntersectionObserver` watching
+  // the target, even a second, independent one instrumented alongside the
+  // real one. When that happens the observer's own last-reported state stays
+  // stuck at "out", so the exit that follows is not a crossing from its point
+  // of view either, and nothing ever pauses.
+  //
+  // Re-observing forces a fresh read rather than waiting on one. Per the
+  // IntersectionObserver spec, a target that is freshly `observe()`d is
+  // always queued an initial notification carrying its actual current
+  // geometry, with no "last reported" state of its own to be stuck --
+  // unlike a target that has been watched continuously, which the browser
+  // reports only on a genuine change from what it last reported. `unobserve`
+  // then `observe` on the same target, same observer, produces exactly that
+  // fresh notification: if the target is still in view, this only re-arms the
+  // observer's crossing state with nothing else changing; if it is already
+  // out of view -- the case this backstop exists for -- the fresh entry runs
+  // through the very same callback, so the very same `meetsThreshold` rule
+  // and the very same `'autoplaying'` ownership guard the callback already
+  // applies to a delivered exit pause it exactly as that exit would have.
+  //
+  // Bounded to the one re-check scheduled per owned resume (the `play`
+  // listener below), never a loop: nothing here re-arms itself, and the
+  // guards below -- ownership, plus the same identity checks
+  // `isCurrentObservation` inside the observer effect makes -- are what stop
+  // a re-check that outlives what it was scheduled for from doing anything.
+  const resyncViewportObserver = useCallback(() => {
+    resyncTimeout.current = undefined;
+    const active = session.current;
+    // Never for a pause or a playback this hook does not own -- the same
+    // restriction the observer callback's own exit branch applies. A viewer
+    // or a consumer who has since taken ownership must never be paused by a
+    // re-check this hook scheduled for playback it used to own.
+    if (active.playbackOwnership !== 'autoplaying') return;
+    const registration = observerRef.current;
+    const inputs = latestInputsRef.current;
+    if (
+      !registration ||
+      viewportRef.current !== registration.target ||
+      active.sourceKey !== registration.sourceKey ||
+      active.loading !== registration.loading ||
+      active.configuration !== registration.configuration ||
+      inputs.sourceKey !== registration.sourceKey ||
+      inputs.loading !== registration.loading ||
+      inputs.configuration !== registration.configuration
+    ) {
+      return;
+    }
+    try {
+      registration.observer.unobserve(registration.target);
+      registration.observer.observe(registration.target);
+    } catch {
+      // The observer callback remains the primary signal either way; an
+      // observer that refuses to be re-armed is no worse off than it was.
+    }
   }, []);
 
   const activateFromInteraction = useCallback(() => {
@@ -1150,6 +1240,15 @@ export const useActivation = (
   // Only the `play` listener has this case. `'system'` is emitted at exactly
   // one site (`playback.ts`'s `onPlay`), so no `'system'` pause exists for
   // the `pause` listener below to leave alone, and none is anticipated here.
+  //
+  // A `play` that grants `'autoplaying'` ownership -- a first autoplay start
+  // as much as a re-entry resume, engine-driven or not -- also schedules
+  // `resyncViewportObserver` (#746), the one place ownership actually
+  // transitions into `'autoplaying'` and so the one place the backstop can be
+  // scheduled from, independent of whether the observer's own crossing ever
+  // arrives to report the exit that follows. One pending timer at a time:
+  // see `resyncTimeout`'s own comment above for why a second scheduled while
+  // one is already pending is redundant rather than useful.
   useEffect(() => {
     if (options.loading !== 'viewport') return;
     const controller = options.controller;
@@ -1158,10 +1257,14 @@ export const useActivation = (
       const engineResumedOwnPause =
         event.origin === 'provider' &&
         session.current.playbackOwnership === 'auto-paused';
-      session.current.playbackOwnership =
-        event.origin === 'autoplay' || engineResumedOwnPause
-          ? 'autoplaying'
-          : 'none';
+      const owned = event.origin === 'autoplay' || engineResumedOwnPause;
+      session.current.playbackOwnership = owned ? 'autoplaying' : 'none';
+      if (owned && resyncTimeout.current === undefined) {
+        resyncTimeout.current = setTimeout(
+          resyncViewportObserver,
+          OBSERVER_RESYNC_DELAY_MS
+        );
+      }
     });
     const unsubscribePause = controller.on('pause', (event) => {
       session.current.playbackOwnership =
@@ -1174,8 +1277,12 @@ export const useActivation = (
       unsubscribePlay();
       unsubscribePause();
       unsubscribeEnded();
+      if (resyncTimeout.current !== undefined) {
+        clearTimeout(resyncTimeout.current);
+        resyncTimeout.current = undefined;
+      }
     };
-  }, [options.controller, options.loading]);
+  }, [options.controller, options.loading, resyncViewportObserver]);
 
   useEffect(() => {
     const active = session.current;
