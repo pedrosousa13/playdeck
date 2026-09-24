@@ -6,10 +6,21 @@ const DOUBLE_TAP_WINDOW_MS = 300;
 
 /**
  * Full-bleed gesture layer (`position: absolute; inset: 0`) with no
- * z-index. It must be placed BEFORE (as an earlier sibling of)
- * interactive layers like `Controls`/`ActivationButton` so those paint
- * on top and stay clickable — placed after them, it will cover and
- * block them.
+ * z-index. Place it BEFORE (as an earlier sibling of) interactive layers
+ * like `Controls`/`ActivationButton` — but tree order alone only decides
+ * paint order among *positioned* siblings. A positioned, `z-index: auto`
+ * sibling paints above non-positioned in-flow content regardless of where
+ * either sits in the tree, so a later sibling stays clickable only if it is
+ * itself positioned. `ActivationButton` already positions itself inline;
+ * neither shipped stylesheet (`theme.css`, `docked.css`) positions
+ * `controls`, so a composition that pairs this layer with one of them must
+ * position the bar itself. `[data-playdeck-part="controls"] { position:
+ * relative; }` is the general fix — it satisfies the rule without moving
+ * the bar from where the stylesheet laid it out. A composition that
+ * overlays the bar on the picture, the way theme.css's own look does,
+ * already positions it absolutely (e.g. `position: absolute; inset: auto 0
+ * 0 0`), which satisfies the same rule. Skip both and this layer covers the
+ * unpositioned bar and swallows its clicks, even placed first.
  */
 export type GesturesProps = ComponentPropsWithRef<'div'> & {
   readonly doubleTapSeek?: boolean;
