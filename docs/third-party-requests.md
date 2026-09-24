@@ -598,27 +598,29 @@ here beside them.
   `/` renders YouTube and Vimeo sources — and its own deployment sends exactly
   that header, for every path: `apps/site/public/_headers` sets
   `Referrer-Policy: strict-origin-when-cross-origin`.
-- **YouTube's API script** — nothing Playdeck sets. The `<script>`
-  `packages/provider-youtube/src/loader.ts` builds for
-  `https://www.youtube.com/iframe_api` carries no `referrerPolicy`, so it
-  follows the embedding page's own policy, the same as Wistia's frame above.
-  Choosing one is not done here.
-- **Wistia's player script** — the same gap, for the same reason: the
-  `<script>` `packages/provider-wistia/src/loader.ts` builds for
-  `https://fast.wistia.com/player.js` sets no `referrerPolicy` either, and
-  follows the embedding page's own policy. Choosing one is not done here.
-- **The poster still** — nothing Playdeck sets. The `<img>`
-  `packages/react/src/poster.tsx` renders for a resolved `poster="provider"`
-  still carries no `referrerPolicy`, so it follows the embedding page's own
-  policy, the same as the two scripts above. A consumer who renders
-  `Player.PosterImage` directly, with their own `src`, can set
-  `referrerPolicy` on it — the prop passes straight through to the `<img>`,
-  unfiltered — but that path is not this one: the automatic `poster="provider"`
-  still is resolved internally and handed to `PosterImage` as a plain
-  `{ src, srcSet, ... }` object with no `referrerPolicy` field, and
+- **YouTube's API script** — `strict-origin-when-cross-origin`, set by Playdeck
+  on the `<script>` `packages/provider-youtube/src/loader.ts:179` builds for
+  `https://www.youtube.com/iframe_api`, before the append at `:180`. Matches
+  the Vimeo oEmbed decision (#334, ruled again for this element by #775): the
+  request leaves the moment the element enters the document, so the policy has
+  to be on it first, and without one it would follow whatever the embedding
+  page declares — the full URL, path and query included, to YouTube on a page
+  declaring something wider than the modern browser default.
+- **Wistia's player script** — the same policy, set the same way and for the
+  same reason: `packages/provider-wistia/src/loader.ts:189` sets
+  `referrerPolicy` on the `<script>` it builds for
+  `https://fast.wistia.com/player.js`, before the append at `:190` (#775).
+- **The poster still** — `strict-origin-when-cross-origin`, defaulted by
+  `PosterImage` (`packages/react/src/poster.tsx:223`) on every `<img>` it
+  renders, the automatic `poster="provider"` still included (#775). A consumer
+  who renders `Player.PosterImage` directly with their own `referrerPolicy`
+  still overrides it — the prop is destructured with this value as its default
+  rather than left to flow through unmodified, which is what lets a supplied
+  value win the way every other destructured default does. The automatic path
+  has no such override available: the resolved still reaches `PosterImage` as
+  a plain `{ src, srcSet, ... }` object with no `referrerPolicy` field, and
   `Player.Poster`'s own props land on the `<div>` it wraps the image in, not on
-  the image itself. Choosing a default for the automatic path is not done
-  here.
+  the image itself, so the default is what that path always gets.
 - **Wistia's poster probe** — the same policy as Vimeo's oEmbed probe, and for
   the same reason: `referrerPolicy: 'strict-origin-when-cross-origin'` on the
   `fetch` init in `provider-wistia/src/poster-availability.ts`, matching the
@@ -648,25 +650,30 @@ One thing tempers most of them, and it is worth knowing before treating any of
 this as load-bearing: browsers have defaulted to `strict-origin-when-cross-origin`
 for some years (Chrome 85, Firefox 87), so on a page that declares no policy of
 its own the entries set to that value — Vimeo's frame, Vimeo's oEmbed probe,
-YouTube's frame, and Wistia's poster probe — match the default rather than
-narrow past it. They earn their place on a page that declares something wider
-— `unsafe-url` or `no-referrer-when-downgrade`, whether by header or by
+YouTube's frame, Wistia's poster probe, YouTube's API script, Wistia's player
+script, and the poster still — match the default rather than narrow past it.
+They earn their place on a page that declares something wider —
+`unsafe-url` or `no-referrer-when-downgrade`, whether by header or by
 `<meta name="referrer">` — because a frame's own attribute overrides the
-document's policy, and a `fetch` init's `referrerPolicy` overrides it the same
-way, while Wistia's frame, the Vimeo SDK's own oEmbed request, YouTube's API
-script, Wistia's player script and the poster still all follow it instead —
-none of those five sets anything, so all five ride whatever the page declares,
-narrower default or not. The thumbnails fetch and its cue image are different
-again: `no-referrer` narrows past the default unconditionally, on every page,
-because it is stricter than anything a browser defaults to. That default is
-read off the specification and the browsers' release notes, not verified here
-— and neither is the narrowing itself. What the tests check is that the
-**declaration** is made, where one is: `e2e/youtube-real.spec.ts` reads the
-`referrerpolicy` attribute off a real player's frame, each fetch's own unit
-suite reads the key off the init it was handed, and
+document's policy, a `fetch` init's `referrerPolicy` overrides it the same way,
+and a script or image element's property does too, while Wistia's frame and
+the Vimeo SDK's own oEmbed request still follow it instead — neither has a
+referrer-policy knob at all (see the Wistia and Vimeo notes above), so both
+ride whatever the page declares, narrower default or not. The thumbnails fetch
+and its cue image are different again: `no-referrer` narrows past the default
+unconditionally, on every page, because it is stricter than anything a browser
+defaults to. That default is read off the specification and the browsers'
+release notes, not verified here — and neither is the narrowing itself. What
+the tests check is that the **declaration** is made, where one is:
+`e2e/youtube-real.spec.ts` reads the `referrerpolicy` attribute off a real
+player's frame, each fetch's own unit suite reads the key off the init it was
+handed, each script loader's own unit suite reads `referrerPolicy` off the
+injected element, `packages/react/test/index.test.tsx` and
+`packages/react/test/poster-provider.test.tsx` read the `referrerpolicy`
+attribute off the rendered poster `<img>`, and
 `packages/react/test/thumbnails.test.tsx` reads the `referrerpolicy` attribute
 off the rendered cue `<img>` directly. No test anywhere observes the `Referer`
-header that results, and nothing tests the five that declare nothing — there is
+header that results, and nothing tests the two that declare nothing — there is
 no declaration there to read. That declaring a policy narrows the header is the
 platform's behaviour, relied on here rather than measured here.
 
@@ -834,12 +841,12 @@ anything shaped to answer `typeof … === 'function'` with a function, because
 no structural test can. Once adopted, the object is memoised into the
 module-global `sharedLoad` (`:92`) and handed back unchanged to every later
 call on the page. That memo has exactly one clearer: the exported
-`resetYouTubeIframeApiLoader` (`:185-187`). `fail()`'s clearing (`:145-146`,
+`resetYouTubeIframeApiLoader` (`:191-193`). `fail()`'s clearing (`:145-146`,
 and even there conditional on `sharedLoad === load`) belongs to the fetch
 path's own promise executor, which a bare `Promise.resolve` adoption never
 enters, so nothing on that path ever runs against an adopted memo. And
 `resetYouTubeIframeApiLoader` is a test seam, not a runtime one: every call
-site is a test (`packages/provider-youtube/test/loader.test.ts:263`, `:281`)
+site is a test (`packages/provider-youtube/test/loader.test.ts:272`, `:290`)
 or this package's own example harness (`examples/provider-youtube.ts:24`),
 the README tables it as such ("for tests that need a clean load",
 `packages/provider-youtube/README.md:82`), and the changeset that introduced

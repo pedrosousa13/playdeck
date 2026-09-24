@@ -182,6 +182,11 @@ const injectWistiaScript: WistiaScriptInjector = (src) => {
   const script = document.createElement('script');
   script.src = src;
   script.async = true;
+  // Set before the append below: the request leaves the moment the element
+  // enters the document, so a policy written afterward would be too late to
+  // narrow it. Without this, the script follows the embedding page's own
+  // policy, the same exposure #334 closed for the Vimeo oEmbed fetch (#775).
+  script.referrerPolicy = 'strict-origin-when-cross-origin';
   (document.head ?? document.documentElement).appendChild(script);
   return script;
 };

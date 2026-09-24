@@ -1691,6 +1691,19 @@ test('tracks poster image request state and preserves its explicit image attribu
   expect(onError).toHaveBeenCalledOnce();
 });
 
+test('defaults the poster image to strict-origin-when-cross-origin, and lets a consumer override it', () => {
+  const { PosterImage } = posterPrimitives;
+  const { container, rerender } = render(<PosterImage src="/poster.jpg" />);
+  const image = container.querySelector('img')!;
+
+  expect(image.getAttribute('referrerpolicy')).toBe(
+    'strict-origin-when-cross-origin'
+  );
+
+  rerender(<PosterImage referrerPolicy="no-referrer" src="/poster.jpg" />);
+  expect(image.getAttribute('referrerpolicy')).toBe('no-referrer');
+});
+
 test('rejects an unsafe poster image src exactly as an absent prop, and permits every safe form', () => {
   const { PosterImage } = posterPrimitives;
   const { container, rerender } = render(

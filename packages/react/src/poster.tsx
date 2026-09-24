@@ -214,6 +214,13 @@ export const PosterImage = ({
   onLoad,
   onError,
   style,
+  // Defaulted below rather than left in `...safeRest`, so it is set on the
+  // automatic `poster="provider"` path -- which hands this component a plain
+  // `{ src, srcSet, ... }` object with no `referrerPolicy` field of its own
+  // -- while a consumer who renders `PosterImage` directly with their own
+  // value still overrides it, the same as any other destructured default
+  // (#775).
+  referrerPolicy = 'strict-origin-when-cross-origin',
   ...safeRest
 }: PosterImageProps) => {
   // Filtered before `posterRequestKey` and `initialPosterImageState`, which
@@ -301,6 +308,7 @@ export const PosterImage = ({
         updateState('loaded');
         onLoad?.(event);
       }}
+      referrerPolicy={referrerPolicy}
       sizes={sizes}
       src={src}
       srcSet={srcSet}
