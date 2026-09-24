@@ -499,7 +499,10 @@ jobs:
       - uses: ./.github/actions/sprite-fright-media
       # pnpm appends extra CLI args to the end of a compound script rather than
       # inserting a `--` separator, so this lands on the `playwright test` half.
-      - run: pnpm test:e2e --project=${{ matrix.browser }}
+      # TEMPORARY, for #746's after-fix measurement -- do not merge: narrowed
+      # to the same two tests #746's base-rate run named and repeated 20
+      # times each so a per-engine pass rate can be read off this job's log.
+      - run: pnpm test:e2e --project=${{ matrix.browser }} --repeat-each=20 -g "a player resumed by re-entering the viewport still auto-pauses on the next exit|at 1440px, the themed bar overlays the picture and the docked bar sits below it"
 
   # Chromium only, and its own job rather than a leg of the `e2e` matrix: the
   # PNG baselines in `e2e/__screenshots__` are generated on this runner image
