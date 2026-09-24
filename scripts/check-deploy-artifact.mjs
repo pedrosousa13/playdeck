@@ -103,6 +103,111 @@ const matchRedirect = (rules, pathname) => {
 };
 
 /**
+ * The five headers `apps/site/public/_headers` promises for every path, and
+ * the exact value each one has to carry (#758's ruling: the cheap headers,
+ * no CSP — a `script-src`/`default-src` would have to trust
+ * `analytics.pedrosousa.me`, and trusting it does nothing to stop a
+ * compromised analytics script from rewriting the page, which is the threat
+ * that matters here; a strict policy also risks breaking the bench's embeds in
+ * ways that would only show up after a deploy). The reason lives beside the
+ * file it describes, in `apps/site/public/_headers` itself.
+ * @type {readonly { name: string; value: string }[]}
+ */
+export const REQUIRED_HEADERS = [
+  { name: 'X-Content-Type-Options', value: 'nosniff' },
+  { name: 'X-Frame-Options', value: 'SAMEORIGIN' },
+  { name: 'Content-Security-Policy', value: "frame-ancestors 'self'" },
+  { name: 'Strict-Transport-Security', value: 'max-age=31536000' },
+  { name: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' }
+];
+
+/**
+ * `apps/site/public/_headers`, parsed the way Cloudflare Workers static
+ * assets read it: an unindented, non-comment, non-blank line names a rule's
+ * path, and every indented `Name: Value` line under it is one header that
+ * rule applies. Blank lines and `#` comments are skipped, the same subset
+ * `loadRedirects` above already uses for `_redirects`. Only the shape this
+ * artifact's own `_headers` uses — one path, its headers indented under it —
+ * is parsed; Cloudflare's fuller syntax (globs other than a trailing `/*`,
+ * `!`-negated values, per-header modifiers) is out of scope, exactly as
+ * `matchRedirect` above only understands the `_redirects` shapes this repo
+ * writes.
+ * @param {string} text
+ * @returns {{ path: string; headers: { name: string; value: string }[] }[]}
+ */
+export const parseHeaders = (text) => {
+  /** @type {{ path: string; headers: { name: string; value: string }[] }[]} */
+  const rules = [];
+  /** @type {{ path: string; headers: { name: string; value: string }[] } | undefined} */
+  let current;
+
+  for (const rawLine of text.split('\n')) {
+    if (rawLine.trim() === '' || /^\s*#/.test(rawLine)) continue;
+
+    if (/^\s/.test(rawLine)) {
+      const line = rawLine.trim();
+      const colon = line.indexOf(':');
+      if (current && colon !== -1) {
+        current.headers.push({
+          name: line.slice(0, colon).trim(),
+          value: line.slice(colon + 1).trim()
+        });
+      }
+      continue;
+    }
+
+    current = { path: rawLine.trim(), headers: [] };
+    rules.push(current);
+  }
+
+  return rules;
+};
+
+/**
+ * Which of `REQUIRED_HEADERS` a `/*` rule's own headers fail to carry —
+ * missing entirely, or present with a different value. Names compared
+ * case-insensitively, since header names are, and values compared exactly,
+ * since a header's value is not.
+ * @param {readonly { name: string; value: string }[]} headers
+ * @returns {string[]}
+ */
+export const missingHeaders = (headers) => {
+  const byLowerName = new Map(
+    headers.map((header) => [header.name.toLowerCase(), header.value])
+  );
+  return REQUIRED_HEADERS.filter(
+    (required) =>
+      byLowerName.get(required.name.toLowerCase()) !== required.value
+  ).map((required) => required.name);
+};
+
+/**
+ * Every reason `_headers`, as read from the artifact, does not carry #758's
+ * five headers on `/*` — `text` is `null` when the file is missing, which
+ * `readFile(...).catch(() => null)` at the call site produces. Pure and
+ * exported so the parsing above and the artifact/browser plumbing below can
+ * be tested apart: a decoding bug here should not need a built site to
+ * reproduce, the same reasoning `scripts/check-rendered-fences.mjs` gives for
+ * exporting its own parsing functions.
+ * @param {string | null} text
+ * @returns {string[]}
+ */
+export const evaluateHeaders = (text) => {
+  if (text === null) {
+    return ['_headers is missing from the artifact.'];
+  }
+
+  const rule = parseHeaders(text).find((candidate) => candidate.path === '/*');
+  if (!rule) {
+    return ["_headers carries no '/*' rule."];
+  }
+
+  return missingHeaders(rule.headers).map(
+    (name) => `/* is missing or has the wrong value for ${name}.`
+  );
+};
+
+/**
  * Serves the assembled artifact at the origin root, which is what the Worker
  * does with the directory `wrangler.jsonc` names. The 404 is load-bearing
  * rather than incidental: `not_found_handling` is `"none"` precisely so a miss
@@ -198,6 +303,28 @@ const recordFailures = (page, failures, name) => {
   page.on('pageerror', (error) => {
     failures.push(`${name}: uncaught ${error.message}`);
   });
+};
+
+/**
+ * `apps/site/public/_headers`, read straight off the artifact directory
+ * rather than through `origin`: `serveArtifact` above answers a request with
+ * whatever `_redirects` says and the file on disk, and applies no header —
+ * unlike the Worker `wrangler.jsonc` names, which reads `_headers` itself and
+ * needs no code here to do it. So a check of what a response over `origin`
+ * carries would prove nothing about the header, only about this harness's own
+ * server. What is checked instead, with `evaluateHeaders` above, is what the
+ * artifact promises: that `_headers` is there, and that its `/*` rule carries
+ * #758's five headers.
+ * @param {string} directory
+ * @param {string[]} failures
+ */
+const checkHeaders = async (directory, failures) => {
+  const text = await readFile(join(directory, '_headers'), 'utf8').catch(
+    () => null
+  );
+  for (const problem of evaluateHeaders(text)) {
+    failures.push(`headers: ${problem}`);
+  }
 };
 
 /**
@@ -311,71 +438,84 @@ const checkSite = async (browser, origin, failures) => {
   }
 };
 
-const shouldBuild = !process.argv.includes('--no-build');
-if (shouldBuild) {
-  // The site is built the way `.github/workflows/deploy-site.yml` builds it.
-  // Nothing has to be stripped from the environment to make that true: the
-  // site's prefix is the literal `base: '/'` in `apps/site/astro.config.ts`,
-  // and no part of the site build reads an environment variable to find it.
-  //
-  // The packages come first, and they are a prerequisite rather than something
-  // served: the site's landing page renders the gzipped size of every bundle
-  // `pnpm test:budgets` reports, measured at build time from the module that
-  // script measures with, and that module reads build output. Building them here is
-  // what makes `pnpm test:deploy` prove the tree under test rather than
-  // whichever `dist/` happened to be lying around. `deploy-site.yml` runs the
-  // same filter for the same reason, and `pnpm run` resolves it
-  // topologically, so a package is built after the packages it depends on.
-  console.log('--- Building the packages the site measures ---');
-  execFileSync('pnpm', ['--filter', './packages/*', 'build'], {
-    cwd: repoRoot,
-    stdio: 'inherit'
-  });
+async function main() {
+  const shouldBuild = !process.argv.includes('--no-build');
+  if (shouldBuild) {
+    // The site is built the way `.github/workflows/deploy-site.yml` builds it.
+    // Nothing has to be stripped from the environment to make that true: the
+    // site's prefix is the literal `base: '/'` in `apps/site/astro.config.ts`,
+    // and no part of the site build reads an environment variable to find it.
+    //
+    // The packages come first, and they are a prerequisite rather than something
+    // served: the site's landing page renders the gzipped size of every bundle
+    // `pnpm test:budgets` reports, measured at build time from the module that
+    // script measures with, and that module reads build output. Building them here is
+    // what makes `pnpm test:deploy` prove the tree under test rather than
+    // whichever `dist/` happened to be lying around. `deploy-site.yml` runs the
+    // same filter for the same reason, and `pnpm run` resolves it
+    // topologically, so a package is built after the packages it depends on.
+    console.log('--- Building the packages the site measures ---');
+    execFileSync('pnpm', ['--filter', './packages/*', 'build'], {
+      cwd: repoRoot,
+      stdio: 'inherit'
+    });
 
-  console.log(`--- Building @playdeck/site for ${sitePath} ---`);
-  execFileSync('pnpm', ['--filter', '@playdeck/site', 'build'], {
-    cwd: repoRoot,
-    stdio: 'inherit'
-  });
+    console.log(`--- Building @playdeck/site for ${sitePath} ---`);
+    execFileSync('pnpm', ['--filter', '@playdeck/site', 'build'], {
+      cwd: repoRoot,
+      stdio: 'inherit'
+    });
 
-  // The deploy's own assembly, imported rather than restated: two copies would
-  // drift, and a harness that went green against a shape the deploy no longer
-  // produces is worse than no harness.
-  await assembleDeploy(artifactDir);
-  console.log(`--- Assembled the artifact at ${artifactDir} ---`);
-} else {
-  console.log(`--- Reusing the artifact at ${artifactDir} (--no-build) ---`);
-}
-
-const { origin, close } = await serveArtifact(resolve(artifactDir));
-/** @type {string[]} */
-const failures = [];
-/** @type {import('@playwright/test').Browser | undefined} */
-let browser;
-try {
-  browser = await chromium.launch({ headless: true });
-  console.log(`--- Visiting ${origin}${sitePath} ---`);
-  await checkSite(browser, origin, failures);
-  await checkRedirect(browser, origin, failures);
-} catch (error) {
-  // A thrown navigation or a locator that timed out is itself a failure, and
-  // reporting it beside the recorded ones keeps the run to one report.
-  failures.push(error instanceof Error ? error.message : String(error));
-} finally {
-  try {
-    await browser?.close();
-  } finally {
-    await close();
+    // The deploy's own assembly, imported rather than restated: two copies would
+    // drift, and a harness that went green against a shape the deploy no longer
+    // produces is worse than no harness.
+    await assembleDeploy(artifactDir);
+    console.log(`--- Assembled the artifact at ${artifactDir} ---`);
+  } else {
+    console.log(`--- Reusing the artifact at ${artifactDir} (--no-build) ---`);
   }
+
+  const { origin, close } = await serveArtifact(resolve(artifactDir));
+  /** @type {string[]} */
+  const failures = [];
+  /** @type {import('@playwright/test').Browser | undefined} */
+  let browser;
+  try {
+    console.log(`--- Checking ${artifactDir}/_headers ---`);
+    await checkHeaders(resolve(artifactDir), failures);
+
+    browser = await chromium.launch({ headless: true });
+    console.log(`--- Visiting ${origin}${sitePath} ---`);
+    await checkSite(browser, origin, failures);
+    await checkRedirect(browser, origin, failures);
+  } catch (error) {
+    // A thrown navigation or a locator that timed out is itself a failure, and
+    // reporting it beside the recorded ones keeps the run to one report.
+    failures.push(error instanceof Error ? error.message : String(error));
+  } finally {
+    try {
+      await browser?.close();
+    } finally {
+      await close();
+    }
+  }
+
+  if (failures.length > 0) {
+    console.error(
+      `\nThe deployed artifact does not work as served (#519):\n${failures
+        .map((failure) => `  ${failure}`)
+        .join('\n')}`
+    );
+    process.exit(1);
+  }
+
+  console.log(`\nThe site loads correctly at ${sitePath}.`);
 }
 
-if (failures.length > 0) {
-  console.error(
-    `\nThe deployed artifact does not work as served (#519):\n${failures
-      .map((failure) => `  ${failure}`)
-      .join('\n')}`
-  );
-  process.exit(1);
+// Only when run as a command, the same guard `scripts/assemble-deploy.mjs`
+// uses and for the reason it gives: `scripts/check-deploy-artifact.test.mjs`
+// imports the parsing functions above, and an import must not build the site,
+// launch a browser or exit the process as a side effect.
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  await main();
 }
-
-console.log(`\nThe site loads correctly at ${sitePath}.`);
