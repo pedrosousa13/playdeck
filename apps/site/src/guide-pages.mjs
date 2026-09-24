@@ -50,21 +50,27 @@ import { getCollection } from 'astro:content';
  * The documents that get a page, in the order a reader meets them.
  *
  * Contract first because it is the one every other page assumes: a headless
- * library's parts are its whole styling surface. Then what each provider can
- * actually do, then the three selection menus built over that capability data
- * (captions, then quality, then playback rate), then the optional
- * stylesheet — which is the last in the list because it is the only one a
- * consumer can decline entirely.
+ * library's parts are its whole styling surface. `IconsAndLayout.mdx` next,
+ * because it is the same kind of guidance — composing icons and layout over
+ * those parts — read right after the contract they compose over. Then what
+ * each provider can actually do, then the three selection menus built over
+ * that capability data (captions, then quality, then playback rate), then the
+ * optional stylesheet — which is the last in the list because it is the only
+ * one a consumer can decline entirely.
  *
- * The `Overview/*` documents that are **not** here are absent by decision
- * rather than by oversight, and the decision is the same for both: their
- * subject is the workbench and not the library. `Introduction.mdx` documents
- * how to write a story — the mock decorator, `stories/support.tsx`, the axe
- * setting in `.storybook/preview.tsx`; `reference/Reference.mdx` documents a
- * story mounting, the ESLint rule scoped to `stories/reference/**`, and which
- * spec file runs which check. Both are read by somebody working in this
- * repository with the workbench running, which is where they stay. `README.md`
- * linked to each of them and no longer does.
+ * `IconsAndLayout.mdx` was sliced out of `reference/Reference.mdx` rather than
+ * written new (#561): three of that file's sections were consumer guidance
+ * with no counterpart anywhere else, reachable only by cloning the repository
+ * and running the workbench. The rest of that file stayed behind, and the
+ * `Overview/*` documents that are **not** here remain absent by decision
+ * rather than by oversight, and the decision is the same for both:
+ * `Introduction.mdx` documents how to write a story — the mock decorator,
+ * `stories/support.tsx`, the axe setting in `.storybook/preview.tsx`; what is
+ * left of `reference/Reference.mdx` documents a story mounting, the ESLint
+ * rule scoped to `stories/reference/**`, and which spec file runs which check.
+ * Both are read by somebody working in this repository with the workbench
+ * running, which is where they stay. `README.md` linked to each of them and no
+ * longer does.
  *
  * `slug` is written here rather than derived from the document's title, which
  * is the opposite of what `src/provider-pages.mjs` does and for a reason that
@@ -78,6 +84,10 @@ import { getCollection } from 'astro:content';
  */
 export const GUIDES = [
   { file: 'apps/storybook/stories/Contract.mdx', slug: 'contract' },
+  {
+    file: 'apps/storybook/stories/IconsAndLayout.mdx',
+    slug: 'icons-and-layout'
+  },
   {
     file: 'apps/storybook/stories/CapabilitiesMatrix.mdx',
     slug: 'capabilities-matrix'
