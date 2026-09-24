@@ -485,6 +485,16 @@ Notes, per row:
   the oEmbed record; recorded examples put that on `embed-ssl.wistia.com`,
   already in the table's `img-src` cell for the reasons above.
 
+The table above is per provider, and the thumbnails feature (`SeekSlider`'s
+`thumbnails` prop, `packages/react/src/thumbnails.tsx`) is not one — it is
+available under any provider and reaches a host none of those rows name.
+`connect-src` needs whatever host serves the WebVTT file a consumer points
+`thumbnails` at, and `img-src` needs whatever host serves the cue images that
+file names, which need not be the same host. Both are **your own host, not
+Playdeck's** — the same exclusion the Native row above makes for its media
+source — so there is no table row for it, only this paragraph. See "When each
+request happens" below for when it fires and what bounds it.
+
 ## What referrer each request sends
 
 Three providers load a third-party iframe, and a frame's first request carries
@@ -747,6 +757,26 @@ Mapped onto the origins above:
   sequence can start but not whether they happen. What decides that is Wistia's
   own visitor-tracking state, which is not a `Player.Root` prop and which no
   `loading` setting suppresses — see the per-provider note above.
+- **The thumbnails fetch** does not fire at attach at all, and no `loading`
+  setting decides whether it happens: nothing is fetched until a pointer moves
+  over the seek slider or its input holds keyboard focus, which arms
+  `useThumbnailCues` (`packages/react/src/thumbnails.tsx`) — so a consumer who
+  sets `thumbnails` but whose viewer never hovers or tabs to the control never
+  costs this request, whatever `loading` is set to, and a viewer who does can
+  trigger it long after — or well before — any provider's own attach-time
+  requests above have fired. Once armed it fetches the URL a consumer names in
+  the `thumbnails` prop, one request per resolved url, bounded by its own
+  `THUMBNAILS_FETCH_TIMEOUT_MS` deadline (4 seconds) and a
+  `THUMBNAILS_FETCH_BYTE_CAP` on the bytes it reads out of the body
+  (10,000,000) — both declared in `packages/react/src/thumbnails.tsx` and both
+  from #749, alongside `@playdeck/core/thumbnails`'s own `THUMBNAIL_CUE_CAP`
+  (100,000 cues, declared in `packages/core/src/thumbnails.ts`), which bounds
+  the parsed file regardless of what the body contained. `SeekSlider`
+  resolves that url, and `ThumbnailPreview` resolves each cue's own image url,
+  through the same `permittedUrl` scheme allowlist
+  (`packages/react/src/permitted-url.ts`) every other consumer-supplied url in
+  this package goes through — `http:`/`https:` only, no opinion on the host or
+  address behind them.
 - **The storybook wrapper's** oEmbed lookup is independent of `loading`
   entirely: `useVideoThumbnail` fires its `fetch` once at mount, whenever it is
   given a URL and no `placeholderImageSrc` — the cover has to be ready before
@@ -1320,3 +1350,9 @@ suffixes stay out of this union for the same reason the Wistia canary does —
 nothing in Playdeck reaches them; see the per-provider note. None of this needs
 `'unsafe-inline'` or `'unsafe-eval'` in `script-src` — every provider here is a
 script or iframe load, not inline code.
+
+None of the above accounts for the `thumbnails` prop, because it has nothing to
+do with which provider is on the page: a page using it needs `connect-src` and
+`img-src` to carry whichever host or hosts serve the WebVTT file and its cue
+images — your own host, not Playdeck's, so there is no origin this document can
+name for you in advance. See the per-provider section's own note on it above.
