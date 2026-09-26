@@ -56,6 +56,10 @@ import { getCollection } from 'astro:content';
  * each provider can actually do, then the selection menus built over that
  * capability data — captions, then quality, then playback rate, then
  * chapters, then audio tracks, added once `AudioTrackMenu` shipped (#724) —
+ * then `Live.mdx`, placed right after that run rather than inside it: it
+ * reports a capability area the way `CapabilitiesMatrix.mdx` does, not a
+ * selection menu, so it sits beside the menus rather than among them, closest
+ * to the audio-tracks entry it otherwise most resembles in shape (#786) —
  * then the optional stylesheet, which is the last in the list because it is
  * the only one a consumer can decline entirely.
  *
@@ -98,6 +102,7 @@ export const GUIDES = [
   { file: 'apps/storybook/stories/PlaybackRate.mdx', slug: 'playback-rate' },
   { file: 'apps/storybook/stories/Chapters.mdx', slug: 'chapters' },
   { file: 'apps/storybook/stories/AudioTracks.mdx', slug: 'audio-tracks' },
+  { file: 'apps/storybook/stories/Live.mdx', slug: 'live' },
   {
     file: 'apps/storybook/stories/BehaviourPlugins.mdx',
     slug: 'behaviour-plugins'
