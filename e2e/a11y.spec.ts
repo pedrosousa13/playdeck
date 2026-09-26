@@ -325,10 +325,16 @@ const scan = async (page: Page) => {
 // ships, and what this file has always scanned — and once with `docked.css`
 // mounted, through the same `theme` toolbar global
 // `apps/storybook/.storybook/theme.tsx` already uses to mount `theme.css`.
-// `theme.css` gets no third pass: its own overlay behaviour is covered by
-// `e2e/theme-idle.spec.ts`, and on this composition an unlayered `layoutCss`
-// beats both theme files for every property it sets, so a themed sweep would
-// be scanning the same tree twice for the same answer.
+// `theme.css` gets no third sweep of THIS composition: on it, an unlayered
+// `layoutCss` beats both theme files for every property it sets, so a themed
+// sweep here would be scanning the same tree twice for the same answer.
+// `theme.css` does get its own axe pass, in `e2e/theme-a11y.spec.ts` (#599) --
+// scoped to the states the stylesheet itself adds (the idle fade, the volume
+// slider's hover/focus reveal, the narrow-viewport fallback) and run against
+// `Theme/Theme` (`apps/storybook/stories/theme.stories.tsx`), the one
+// composition with no unlayered CSS in the way. `e2e/theme-idle.spec.ts`
+// covers the idle fade's behaviour (the timer and the CSS timing); it runs no
+// axe.
 //
 // The `docked` pass appends to the URL `state.url` already carries rather than
 // rebuilding a story id out of `state.name`: only four of the nine names are
