@@ -96,14 +96,19 @@ const expectControlsFit = async (controls: HTMLElement) => {
   );
 };
 
-const fullyCapable = ready({
+// Named separately from `fullyCapable` below so `Playing` can reuse the same
+// capability set with a different `player.state` patch, rather than
+// re-listing every capability a second time.
+const fullyCapableCapabilities = {
   seek: available,
   setVolume: available,
   selectTextTrack: available,
   pictureInPicture: available,
   airPlay: available,
   fullscreen: available
-});
+};
+
+const fullyCapable = ready(fullyCapableCapabilities);
 
 const meta = {
   title: 'Theme/Theme',
@@ -158,6 +163,29 @@ export const Default: Story = {
       name: 'Video player controls'
     });
     await expectControlsFit(controls);
+  }
+};
+
+/**
+ * `Default` staged with a genuine `playback: 'playing'` state, which is what
+ * arms the auto-hide timer in `viewport-media.tsx` (`IDLE_DELAY_MS`, 2.5s) --
+ * a story parked in `paused` never arms it, and the timer is the only thing
+ * that can write `data-idle`. This story exists to hand `e2e/theme-a11y.spec.ts`
+ * a real playing player to scan the auto-hide states against; it does not wait
+ * out the delay itself. `e2e/theme-idle.spec.ts` already proves the timer and
+ * the CSS timing, so the play function below only asserts the state this
+ * story is staged for: rendering at full opacity immediately after mount,
+ * well inside the 2.5s delay.
+ */
+export const Playing: Story = {
+  parameters: ready(fullyCapableCapabilities, { playback: 'playing' }),
+  play: async ({ canvas }) => {
+    // 'Pause', not 'Play': `PlayButton`'s own label follows `isPlaying`
+    // (`transport-controls.tsx`), and this story stages a genuinely playing
+    // player.
+    const pause = await canvas.findByRole('button', { name: 'Pause' });
+    const controls = pause.closest('[data-playdeck-part="controls"]')!;
+    await expect(globalThis.getComputedStyle(controls).opacity).toBe('1');
   }
 };
 
