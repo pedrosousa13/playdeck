@@ -652,14 +652,11 @@ const streamingCss = `
   margin: 0;
   color: #9d97c4;
   font-size: 0.75rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 .stream-title {
   margin: 0;
   font-size: clamp(1.75rem, 7cqw, 3.5rem);
   font-weight: 600;
-  letter-spacing: -0.02em;
   line-height: 1.05;
 }
 .stream-blurb {
@@ -838,11 +835,7 @@ const streamingCss = `
   display: inline-flex;
   gap: 0.35rem;
   align-items: baseline;
-  padding: 0.2rem 0.5rem;
-  border-radius: 0.375rem;
-  background-color: rgb(236 233 245 / 0.08);
   font-size: 0.6875rem;
-  letter-spacing: 0.02em;
 }
 .stream-mode__label {
   color: #8f89b4;
@@ -1794,7 +1787,6 @@ const courseCss = `
   margin: 0;
   font-size: 1.25rem;
   font-weight: 600;
-  letter-spacing: -0.01em;
 }
 .study-progress {
   margin: 0;
@@ -1825,8 +1817,6 @@ const courseCss = `
   color: #55555e;
   font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 .study-glyph {
   width: 1rem;
@@ -1871,7 +1861,10 @@ const courseCss = `
 .study-section--static {
   cursor: default;
 }
-.study-section:hover {
+/* Not .study-section:hover: the static span shares the base class, and a
+   hover highlight with no click behind it is a lie a cursor: default nearby
+   does not undo. */
+button.study-section:hover {
   background-color: #ebe7dc;
 }
 /* The section being played. Marked three ways — a weight, a rule and the

@@ -824,7 +824,6 @@ const courseCss = `
   margin: 0;
   font-size: 1.25rem;
   font-weight: 600;
-  letter-spacing: -0.01em;
 }
 .study-progress {
   margin: 0;
@@ -855,8 +854,6 @@ const courseCss = `
   color: #55555e;
   font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 .study-glyph {
   width: 1rem;
@@ -901,7 +898,10 @@ const courseCss = `
 .study-section--static {
   cursor: default;
 }
-.study-section:hover {
+/* Not .study-section:hover: the static span shares the base class, and a
+   hover highlight with no click behind it is a lie a cursor: default nearby
+   does not undo. */
+button.study-section:hover {
   background-color: #ebe7dc;
 }
 /* The section being played. Marked three ways — a weight, a rule and the
