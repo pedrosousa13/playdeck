@@ -1,0 +1,140 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title="Overview/Live" />
+
+# Live
+
+Playdeck reports whether the active source is live on `PlayerState.live`, and
+offers one command to catch up to its edge, `seekToLiveEdge`. The two are
+gated separately: knowing a source is live and being able to seek to its edge
+are different facts, and a provider can have the first without the second.
+`capabilities.liveEdge` says whether the second exists per source, and
+`Player.LiveIndicator` is the one part built over both — see the **Contract**
+guide's `live` entry for its data attributes, and the **Capabilities matrix**
+guide for the general capability-gating shape this bends.
+
+## The state
+
+Two things to read, and they answer different questions:
+
+- **`live`**, a `PlayerLiveState`: `null` while the source is not live or its
+  liveness is not yet known, otherwise `{ isLive, atLiveEdge, offsetFromEdge }`.
+  `isLive` is `true` whenever the value is non-null — the shared derivation
+  never publishes `isLive: false`, so there is no third, reachable "known not
+  live" case beyond `null` itself. `atLiveEdge` marks playback within ten
+  seconds of the provider's own edge, the tolerance every adapter measures
+  against. `offsetFromEdge` is how far behind that edge playback has fallen,
+  in whole seconds and never negative — `0` at or ahead of it. It is rounded
+  deliberately: an unrounded float would differ on nearly every `timeupdate`,
+  and whole seconds is what `Player.Time` renders at besides.
+- **`capabilities.liveEdge`**, an `Availability`: whether the provider can
+  report a live edge to seek to at all, told apart the way `chapters` is —
+  `unavailable`/`provider` means the provider has no way to answer this for
+  any source, `unavailable`/`source` means this particular source is not
+  live.
+
+The two are independent facts. A source can be known live (`live` non-null)
+while there is nothing to seek to — see Wistia below.
+
+## Which providers can report it
+
+| Provider                   | `live`                                                                                                                                                                                                                                       | `liveEdge`                                                                                                                   |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| native, native-HLS engines | Derived from the element's own raw `duration` and moving `seekable` window                                                                                                                                                                   | `available` once live and the seekable window has a finite end; `unavailable`/`source` otherwise                             |
+| hls.js engine              | The same derivation, with hls.js's own live flag taken as an authoritative hint over the raw duration                                                                                                                                        | `available` once hls.js reports a finite `liveSyncPosition` over a live, scrubbable window; `unavailable`/`source` otherwise |
+| vimeo                      | Never populated — `@vimeo/player` has no live concept anywhere in its type definitions or its shipped code, so `live` stays `null` on a live-shaped embed                                                                                    | Fixed `unavailable`/`provider`                                                                                               |
+| youtube                    | Never populated — the adapter recognises `/live/<id>`, the canonical URL for a broadcast, at the source-detection stage (**Provider setup**), but reports nothing about liveness once attached, so `live` stays `null` for the whole session | Fixed `unavailable`/`provider`                                                                                               |
+| wistia                     | Derived from the embed's own `mediaData.mediaType`, `"LiveStream"` being the one live value; `duration()` stands in for the edge, since `PublicApi` has no seekable-range accessor                                                           | Fixed `unavailable`/`provider`                                                                                               |
+
+Wistia is the instructive middle case: it can tell you the stream is live and
+how far behind its own notion of the edge playback is, and still cannot
+honour `seekToLiveEdge` — `PublicApi` gives this adapter neither a seekable
+range nor a dedicated live-edge member to build a real target from.
+`Player.LiveIndicator` renders there as a permanently disabled badge, never a
+button.
+
+## `seekToLiveEdge`
+
+One command, issued through `controller.seekToLiveEdge()` directly, or
+through `Player.LiveIndicator`'s own click handler. It is gated ahead of
+dispatch rather than left to fail once issued: unlike every other command on
+`PlayerController`, there is no controller-computed fallback position, so a
+provider that cannot answer is refused before ever being asked —
+`capabilities.liveEdge` not `available`, or no `seekToLiveEdge` method on the
+active provider, both refuse the same way.
+
+Where it lands is the provider's own notion of the edge, never one the
+controller computes: hls.js's `liveSyncPosition`, deliberately behind the raw
+seekable end, on the hls.js engine; the raw seekable end itself — the only
+notion of an edge a plain media element has — on the native and native-HLS
+engines. hls.js also withholds `liveEdge` while its seekable window is too
+narrow to be worth scrubbing — the same width check that, on a narrow live
+window, takes `seek` itself back to `unavailable`/`source`.
+
+## `Player.LiveIndicator`
+
+Unlike every other capability-gated part in this package, `LiveIndicator`
+does not vanish when its gating capability is unavailable — a deliberate,
+named exception, because it reports a property of the stream (`live`) rather
+than offering a control (`seekToLiveEdge`), and being live is true whether or
+not a seek-to-edge command exists on the active provider:
+
+- Renders nothing while `live` is `null`.
+- Otherwise always renders `data-playdeck-part="live"`, with `data-state`
+  `"at-edge"` or `"behind-edge"` from `live.atLiveEdge`.
+- `disabled` reflects `capabilities.liveEdge` rather than `live` — set
+  whenever `liveEdge` is not `available`, so Wistia's badge stays permanently
+  non-interactive while the same badge over a native or hls.js source becomes
+  a real button once `liveEdge` resolves.
+- Clicking it issues `controller.seekToLiveEdge()`, only where it is not
+  `disabled`.
+- The default `aria-label` is `"Go to live"` only where pressing it would act
+  — `liveEdge` seekable and behind the edge — and `"Live"` in every other
+  reachable state, including at the edge with seeking available. A consumer
+  `aria-label` always wins, in every state.
+
+It renders no other `data-playdeck-part`: `live` is the whole of its own
+contract, documented alongside every other part's in the **Contract** guide.
+
+## The control bar on a live source
+
+`Player.SeekSlider` and `Player.Time` both take a live source with no special
+prop for it, and each reads a different slice of state to do it.
+
+`SeekSlider` never reads `live` at all — it infers a scrubbable window purely
+from `duration` and `seekable`: `[0, duration]` for a source with one, or the
+extent of `seekable` where there is none, which is what a live source with a
+moving seekable window publishes instead. Where neither exists yet — a live stream
+reporting no seekable window at all — there is nothing to scrub, and the
+slider carries `data-state="idle"` rather than a range that cannot move; the
+**Contract** guide's own styling example for the part covers exactly that
+state.
+
+`Player.Time` does read `live` directly, and reports something different for
+`type="current"` on a live source: not elapsed time, but
+`live.offsetFromEdge` — how far behind the edge playback is — displaying the
+word `LIVE` (overridable through the `liveLabel` prop) once `live.atLiveEdge`,
+or a negative offset (`-0:42`) while behind it. `type="duration"` and
+`type="remaining"` have no total to report on a live source, since its
+`duration` is never a finite number, and display no text of their own — the
+untimed `<span>` the **Contract** guide's `time` entry documents, rather than
+a `0:00` that would misstate a live stream as a zero-length video.
+
+## Accessibility
+
+`Player.LiveIndicator`'s trigger is a real `<button>` in both its states,
+`disabled` rather than `aria-disabled` where `liveEdge` is unavailable — out
+of the tab order and announced unavailable rather than merely styled that
+way. Its label follows the rule above, and satisfies WCAG 2.5.3 _Label in
+Name_ the same way every other stateful control in this package does: the
+visible text stays `"Live"` throughout, and `"Go to live"` contains it.
+
+## Out of scope
+
+A standalone live-edge button, outside `LiveIndicator`, does not exist —
+`seekToLiveEdge` is issued through its click handler or through
+`controller.seekToLiveEdge()` directly, with no dedicated menu or slider
+affordance of its own. Markers on the seek slider for the live edge, or for
+how much of the seekable window is scrubbable versus already lost, do not
+exist either; a consumer composes those over `Player.SeekSlider`'s own
+`seekable`-derived geometry.

@@ -36,8 +36,9 @@ full styling contract ([**Contract**](https://playdeck.video/guides/contract/)),
 the caption guidance ([**Captions**](https://playdeck.video/guides/captions/)),
 the quality-selection guidance ([**Quality**](https://playdeck.video/guides/quality/)),
 the playback-rate guidance ([**Playback rate**](https://playdeck.video/guides/playback-rate/)),
-the chapters guidance ([**Chapters**](https://playdeck.video/guides/chapters/))
-and the audio-track guidance ([**Audio tracks**](https://playdeck.video/guides/audio-tracks/)).
+the chapters guidance ([**Chapters**](https://playdeck.video/guides/chapters/)),
+the audio-track guidance ([**Audio tracks**](https://playdeck.video/guides/audio-tracks/))
+and the live-playback guidance ([**Live**](https://playdeck.video/guides/live/)).
 Every primitive below is also staged, running, in this repository's Storybook
 workbench, which is a development tool rather than a published surface.
 
@@ -341,7 +342,9 @@ Each overlay renders only when its own state calls for it — nothing is drawn
 disabled, with one exception: `LiveIndicator` stays mounted where its
 `liveEdge` capability is unavailable, as a disabled badge rather than an
 active button, for the reason given beside the capability-gating rule above
-(see the comment in the example below):
+(see the comment in the example below). `LiveIndicator`'s data attributes,
+`PlayerState.live` and which providers can report it are covered in
+[**Live**](https://playdeck.video/guides/live/):
 
 <!-- example:react-overlays -->
 
