@@ -35,8 +35,9 @@ The guides at [playdeck.video/guides](https://playdeck.video/guides/) carry the
 full styling contract ([**Contract**](https://playdeck.video/guides/contract/)),
 the caption guidance ([**Captions**](https://playdeck.video/guides/captions/)),
 the quality-selection guidance ([**Quality**](https://playdeck.video/guides/quality/)),
-the playback-rate guidance ([**Playback rate**](https://playdeck.video/guides/playback-rate/))
-and the chapters guidance ([**Chapters**](https://playdeck.video/guides/chapters/)).
+the playback-rate guidance ([**Playback rate**](https://playdeck.video/guides/playback-rate/)),
+the chapters guidance ([**Chapters**](https://playdeck.video/guides/chapters/))
+and the audio-track guidance ([**Audio tracks**](https://playdeck.video/guides/audio-tracks/)).
 Every primitive below is also staged, running, in this repository's Storybook
 workbench, which is a development tool rather than a published surface.
 
@@ -587,10 +588,12 @@ consumer who wants one on its own, the same way `CaptionsMenu` is for
 captions — covered in [**Quality**](https://playdeck.video/guides/quality/),
 [**Playback rate**](https://playdeck.video/guides/playback-rate/) and
 [**Chapters**](https://playdeck.video/guides/chapters/). `AudioTrackMenu` is
-the same shape for `state.audioTracks`: it lists a rung per published track
-and marks whichever one carries `active: true` — there is no "Auto" row and
-no sibling selection field, since an audio track carries its own selection
-(see the **Audio track** glossary entry in `CONTEXT.md`).
+the same shape for `state.audioTracks`, covered in
+[**Audio tracks**](https://playdeck.video/guides/audio-tracks/). It lists a
+rung per published track and marks whichever one carries `active: true`.
+There is no "Auto" row and no sibling selection field, since an audio track
+carries its own selection (see the **Audio track** glossary entry in
+`CONTEXT.md`).
 
 <!-- example:react-menus -->
 

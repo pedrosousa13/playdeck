@@ -53,10 +53,11 @@ import { getCollection } from 'astro:content';
  * library's parts are its whole styling surface. `IconsAndLayout.mdx` next,
  * because it is the same kind of guidance — composing icons and layout over
  * those parts — read right after the contract they compose over. Then what
- * each provider can actually do, then the three selection menus built over
- * that capability data (captions, then quality, then playback rate), then the
- * optional stylesheet — which is the last in the list because it is the only
- * one a consumer can decline entirely.
+ * each provider can actually do, then the selection menus built over that
+ * capability data — captions, then quality, then playback rate, then
+ * chapters, then audio tracks, added once `AudioTrackMenu` shipped (#724) —
+ * then the optional stylesheet, which is the last in the list because it is
+ * the only one a consumer can decline entirely.
  *
  * `IconsAndLayout.mdx` was sliced out of `reference/Reference.mdx` rather than
  * written new (#561): three of that file's sections were consumer guidance
@@ -96,6 +97,7 @@ export const GUIDES = [
   { file: 'apps/storybook/stories/Quality.mdx', slug: 'quality' },
   { file: 'apps/storybook/stories/PlaybackRate.mdx', slug: 'playback-rate' },
   { file: 'apps/storybook/stories/Chapters.mdx', slug: 'chapters' },
+  { file: 'apps/storybook/stories/AudioTracks.mdx', slug: 'audio-tracks' },
   {
     file: 'apps/storybook/stories/BehaviourPlugins.mdx',
     slug: 'behaviour-plugins'
