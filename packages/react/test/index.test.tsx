@@ -177,6 +177,15 @@ const confirmMetadataReady = (media: HTMLVideoElement): void => {
   fireEvent.loadedMetadata(media);
 };
 
+// Core calls `provider.load()` one microtask after `attach()`, not
+// synchronously, so an assertion made right after `render`/`fireEvent` would
+// pass whether or not a reload actually happened. Drains enough microtasks to
+// clear that queue, then one macrotask for good measure.
+const flush = async (): Promise<void> => {
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+};
+
 test('exposes playback preferences without accepting a playing prop', () => {
   const onMutedChange = vi.fn();
   const onVolumeChange = vi.fn();
@@ -2762,8 +2771,10 @@ test('sizes the native video to fill its viewport and letterbox by default', () 
   expect(video.style.objectFit).toBe('contain');
 });
 
-test('an inline ref on Media does not reload the provider on parent re-renders', () => {
-  const loadSpy = vi.spyOn(HTMLMediaElement.prototype, 'load');
+test('an inline ref on Media does not reload the provider on parent re-renders', async () => {
+  const loadSpy = vi
+    .spyOn(HTMLMediaElement.prototype, 'load')
+    .mockImplementation(() => undefined);
   const Harness = () => {
     const [tick, setTick] = useState(0);
     return (
@@ -2776,15 +2787,55 @@ test('an inline ref on Media does not reload the provider on parent re-renders',
     );
   };
   const { getByText } = render(<Harness />);
+  await flush();
   const loadsAfterMount = loadSpy.mock.calls.length;
 
   fireEvent.click(getByText('tick'));
+  await flush();
   fireEvent.click(getByText('tick'));
+  await flush();
   fireEvent.click(getByText('tick'));
+  await flush();
 
   // A volatile consumer ref must not churn the internal media registration,
   // which would tear down and reload the provider on every render.
   expect(loadSpy.mock.calls.length).toBe(loadsAfterMount);
+});
+
+test('forwards an object ref on Media to the native video element, and null on unmount', async () => {
+  const ref = createRef<HTMLVideoElement>();
+  const { unmount } = render(
+    <LegacyRoot source="/clip.mp4">
+      <Player.Media ref={ref} />
+    </LegacyRoot>
+  );
+  await flush();
+
+  expect(ref.current?.tagName).toBe('VIDEO');
+
+  unmount();
+
+  expect(ref.current).toBeNull();
+});
+
+test('forwards a callback ref on Media to the native video element, and null on unmount', async () => {
+  const consumerRef = vi.fn();
+  const { unmount } = render(
+    <LegacyRoot source="/clip.mp4">
+      <Player.Media ref={consumerRef} />
+    </LegacyRoot>
+  );
+  await flush();
+
+  expect(consumerRef).toHaveBeenCalledOnce();
+  expect(consumerRef.mock.calls[0][0]?.tagName).toBe('VIDEO');
+
+  unmount();
+
+  // No cleanup returned from the callback above, so detaching calls it again
+  // with `null` rather than invoking a returned cleanup.
+  expect(consumerRef).toHaveBeenCalledTimes(2);
+  expect(consumerRef.mock.calls[1][0]).toBeNull();
 });
 
 test('forwards a ref to the poster container', () => {
