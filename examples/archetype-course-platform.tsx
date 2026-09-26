@@ -9,49 +9,39 @@ import {
 /*
  * The course-platform archetype: a layout for studying rather than watching.
  *
- * Named for the job, like its sibling, and for the same reason — a demo
- * labelled with a company's name makes a claim about a brand nobody here owns
- * and goes stale the day that company redesigns. No logo, no company name, no
- * brand colour, and the two glyphs below are drawn in this file.
+ * Named for the job, like its sibling — no logo, company name or brand
+ * colour, and the two glyphs below are drawn in this file rather than
+ * borrowed.
  *
  * ---- what makes this the OTHER archetype ------------------------------------
  *
  * `examples/archetype-streaming-service.tsx` is the same primitives arranged
  * for someone who has sat down in front of a film. Four differences are
  * structural rather than cosmetic, and they are the whole reason both files
- * exist:
+ * exist — remove them and this would be the first archetype with different
+ * colours:
  *
- * 1. **The video is not the only thing on screen.** This is a two-column study
- *    page — the lesson beside the picture, not under it and not behind it —
- *    and the picture gives up width to make room for it.
+ * 1. **The video is not the only thing on screen.** A two-column study page —
+ *    the lesson beside the picture — with the picture giving up width for it.
  * 2. **The chrome is docked, not overlaid.** The transport sits under the
- *    picture in normal flow, so nothing ever covers what is being studied and
- *    nothing has to auto-hide. The streaming layout puts the same commands on
- *    top of the picture, which is the posture of a film.
- * 3. **Speed is a first-class control.** Somebody studying changes rate
- *    constantly and should not open a menu to do it, so the rates are a visible
- *    segmented group. The streaming layout does not offer the command at all:
- *    a viewer watching a film has no use for it, and giving it to both files
- *    would blur the one line this pair exists to draw.
- * 4. **Navigation is by outline.** Real buttons that seek to a section, with
- *    the one being played marked. The streaming layout draws its chapters as
- *    ticks on the scrubber — a hint while scrubbing, not a way to get around.
- *
- * If those four were removed this would be the first archetype with different
- * colours, which is the one thing it must not be.
+ *    picture in normal flow rather than on top of it, so nothing auto-hides.
+ * 3. **Speed is a first-class control**, a visible segmented group rather
+ *    than a menu item, because somebody studying changes rate constantly. The
+ *    streaming layout omits it: a viewer watching a film has no use for it.
+ * 4. **Navigation is by outline** — real buttons that seek to a section, the
+ *    one playing marked — where the streaming layout draws chapters as ticks
+ *    on the scrubber, a hint while scrubbing rather than a way to get around.
  */
 
 /*
- * The clip. The Big Buck Bunny trailer, from the Blender Foundation's own
- * download host, standing in for a lesson recording. CC-BY 3.0, credited under
- * the player and on every page that mounts this file.
+ * The clip: the Big Buck Bunny trailer, standing in for a lesson recording.
+ * CC-BY 3.0, credited under the player and on every page that mounts this
+ * file.
  *
- * Two containers, and the ordering is load-bearing rather than tidy: the first
- * is an MPEG-4 file the host serves as `video/x-m4v`, which not every engine
- * accepts, and the Theora file behind it is what those engines take instead of
- * failing source selection outright. Declaring a `<source>` set is the API for
- * saying that; a bare URL string would offer one candidate and some engines
- * would have nothing to fall back to.
+ * Two containers, and the order is load-bearing: the first is an MPEG-4 file
+ * the host serves as `video/x-m4v`, which not every engine accepts, and the
+ * Theora file behind it is what those engines take instead of failing source
+ * selection outright.
  */
 const bigBuckBunnyTrailer = {
   type: 'video',
@@ -68,20 +58,15 @@ const bigBuckBunnyTrailer = {
 } as const satisfies Player.RootProps['source'];
 
 /*
- * The recording AND everything the lesson says about it, as one value.
+ * The recording AND everything the lesson says about it, as one value —
+ * overridable together through the `media` prop below, so a page that serves
+ * its own recording (e.g. because it makes no cross-origin request) can
+ * replace it.
  *
- * This is what the composition plays and says unless a surface hands it
- * something else through the `media` prop below. A surface needs that: a page
- * whose own claim is that it makes no cross-origin request has to point this at
- * a recording it serves itself, and a default that could not be replaced would
- * make that page choose between the archetype and its own rule.
- *
- * The clip and the copy are one object because this file has already been
- * caught with them apart. When only the source could be replaced, a page
- * pointed it at its own test pattern and the lesson heading, the note and the
- * credit went on describing a Blender open movie that was not playing. Bundled,
- * a surface cannot swap the recording without being handed the three places
- * this layout talks about it.
+ * One object because this file has already been caught with the two apart:
+ * with only the source replaceable, a page pointed it at its own test
+ * pattern and the heading, note and credit went on describing a Blender
+ * movie that was not playing.
  */
 const openMovieLesson = {
   source: bigBuckBunnyTrailer,
@@ -91,25 +76,16 @@ const openMovieLesson = {
 } as const;
 
 /*
- * The lesson outline.
+ * The lesson outline: deliberately the course's own data, not read from the
+ * media — a course platform knows its structure because it authored it,
+ * where the streaming archetype prefers whatever chapters the provider
+ * publishes. The titles are fixture text marking time in the clip, not a
+ * claim about the film.
  *
- * It is the course's own data and deliberately not read from the media. A
- * course platform knows its structure because it authored it — the sections
- * exist in the syllabus before anybody records anything — so this is a prop of
- * the lesson rather than metadata this layout goes looking for. The streaming
- * archetype does the opposite, preferring whatever chapters the provider
- * publishes, and the difference is real: one is a document's structure, the
- * other is a title's.
- *
- * The titles below are the example's own fixture text. They mark time in the
- * clip and make no claim about the film, which the note under the player says
- * outright.
- *
- * The times are spaced to land inside the trailer above, which is a short one —
- * a section that started after the last frame would be a button that seeks to
- * the end and a step of the progress readout nobody could ever reach. Pointing
- * this composition at a longer recording means respacing these, and that is the
- * cost of an outline being the course's data rather than the media's.
+ * The times are spaced to land inside the trailer above; a section starting
+ * after its last frame would be an unreachable button and progress step.
+ * Pointing this at a longer recording means respacing these — the cost of an
+ * outline being the course's data rather than the media's.
  */
 const outline = [
   { id: 's1', title: 'Introduction', startTime: 0 },
@@ -169,19 +145,14 @@ const ResumeGlyph = (): ReactElement => (
 );
 
 /**
- * The playback-rate control, and the reason it is a row of buttons rather than
- * a menu.
+ * The playback-rate control. Gated on `setPlaybackRate` reading `available`
+ * — absent where the provider will not honour the command, never present and
+ * disabled. The checked rung follows `PlayerState.playbackRate` rather than a
+ * local copy, so a rate the provider declined to apply cannot show selected.
  *
- * Gated on `setPlaybackRate` reading `available`, which is this file exercising
- * the same rule the library's own controls apply to themselves — the group is
- * absent where the provider will not honour the command, never present and
- * disabled. The checked rung follows `PlayerState.playbackRate` and never a
- * local copy of it, so a rate the provider declined to apply cannot show as
- * selected.
- *
- * `aria-pressed` on plain buttons rather than a radio group: this is a toolbar
- * of toggles operated by Tab and Enter, which is what someone reaching for
- * 1.25× repeatedly wants, and a radio group would trade that for arrow-key
+ * `aria-pressed` on plain buttons rather than a radio group: a toolbar of
+ * toggles operated by Tab and Enter is what someone reaching for 1.25×
+ * repeatedly wants, where a radio group would trade that for arrow-key
  * roving inside one stop.
  */
 const RateControl = (): ReactElement | null => {
@@ -214,28 +185,20 @@ const RateControl = (): ReactElement | null => {
 };
 
 /**
- * The outline, and the study layout's way of getting around.
+ * The outline: every entry a real button that seeks, gated as a set on
+ * `capabilities.seek` — where seeking is not `available` the same list
+ * renders as plain text, so nothing offers an action that cannot be taken.
  *
- * Every entry is a real button that seeks, gated as a set on
- * `capabilities.seek`: anywhere seeking is not `available` the same list is
- * rendered as plain text, so the structure is still readable and nothing
- * offers an action that cannot be taken. That is the library's rule applied to
- * a control the library does not ship.
+ * `unavailable` and `unknown` get different treatment, not just two cases
+ * collapsed to one: `unknown` is what every capability reads before a
+ * provider has attached, which this `loading="interaction"` player's visitor
+ * meets first, and printing a refusal there would be false about a source
+ * that simply hasn't answered yet. So the hint is bound to `unavailable`
+ * alone.
  *
- * All three states, and not two. `unavailable` is a refusal and says so;
- * `unknown` is undecided — which is what every capability reads before a
- * provider has attached, and this player is `loading="interaction"`, so it is
- * the state a visitor meets first. Printing the refusal there would state
- * something false about the source on the page whose argument is that this
- * distinction is the product. So the hint is bound to `unavailable` alone, and
- * `unknown` renders the list without a claim about why — the library's own
- * "a control reading `unknown` renders nothing" applied to the sentence rather
- * than to the control.
- *
- * The section being played is marked with `aria-current`, which is the
- * attribute for "the one of these you are on" and is what a screen reader
- * announces; the visible marker beside it is a shape and a weight rather than
- * colour alone.
+ * The section being played is marked with `aria-current`, what a screen
+ * reader announces; the visible marker beside it is a shape and a weight
+ * rather than colour alone.
  */
 const Outline = (): ReactElement => {
   const { currentTime, seekStatus } = Player.usePlayerState((state) => ({
@@ -315,23 +278,15 @@ const Progress = (): ReactElement => {
 };
 
 /*
- * What it takes to put `Player.ActivationButton` in normal flow.
+ * Undoes `ActivationButton`'s full-bleed overlay style (`position`, `inset`,
+ * `margin`, `z-index` — see `loading-error.tsx`), so the resume banner below
+ * gets an ordinary button in a row of text instead. `margin: 0` matters here
+ * specifically: once this box is a flex item, an auto margin absorbs free
+ * space in its line.
  *
- * The library ships that part as a full-bleed overlay — `position: absolute`,
- * four zero offsets, `margin: auto`, `z-index: 30` — written as an inline style
- * on the element, which no stylesheet can outrank. The resume banner below
- * wants an ordinary button in a row of text, so all four are undone here.
- *
- * `margin` is the one worth naming: it is a deliberate no-op on the library's
- * own path, where four zero offsets and an auto size resolve auto margins to
- * zero, and it stops being one the moment the box becomes a flex item, whose
- * auto margins absorb the free space in its line.
- *
- * The picture's own start affordance a few lines down does NOT take this: its
- * POSITIONING is left exactly as the library ships it, because there the
- * full-bleed overlay is the design. `.study-start` in the stylesheet gives it a
- * look — a centring grid, no border, no radius, no background — and touches
- * none of the four properties above.
+ * The picture's own start affordance below does NOT take this — its
+ * positioning is left exactly as the library ships it, because there the
+ * full-bleed overlay is the design; `.study-start` only gives it a look.
  */
 const inFlow: CSSProperties = {
   position: 'static',
@@ -355,18 +310,14 @@ export type CoursePlatformPlayerProps = {
    */
   readonly resumeAt?: number | null;
   /**
-   * The recording to play, and what the lesson says about it. Defaults to the
-   * trailer above with the copy that describes it, so a consumer who copies
-   * this file and passes nothing gets the whole archetype from one paste.
-   *
-   * The four fields are one prop because they are one claim: `source` is the
-   * recording, `title` is the lesson heading over it, `note` is the first
-   * paragraph of the notes panel beside it, and `credit` is the attribution
-   * line under those notes. A surface that replaced the recording and not the
-   * words would be teaching a lesson about something it is not playing.
+   * The recording to play, and what the lesson says about it — `source` the
+   * recording, `title` the heading, `note` the notes panel's first
+   * paragraph, `credit` the attribution line (see `openMovieLesson` for why
+   * the four travel together). Defaults to the trailer above, so a consumer
+   * who passes nothing gets the whole archetype from one paste.
    *
    * The outline above is spaced for a recording at least as long as the
-   * trailer, and a much shorter one would leave sections nobody could reach.
+   * trailer; a much shorter one would leave sections nobody could reach.
    */
   readonly media?: {
     readonly source: Player.RootProps['source'];
@@ -399,21 +350,14 @@ export const CoursePlatformPlayer = ({
 );
 
 /**
- * Everything inside `Player.Root`, and the half of the archetype that has to be
- * separable from it: every hook below reads the player, and a hook can only
- * reach one from inside the root.
+ * Everything inside `Player.Root` — separable because every hook below reads
+ * the player, and a hook can only reach one from inside the root.
  *
  * Exported so a workbench story can supply its own root and dial the
- * capabilities in — which is the only way to see the whole control surface
- * without media and without a network — while `CoursePlatformPlayer` mounts the
- * recording.
- *
- * It takes the same `media` prop and reads every field of it except `source`:
- * the heading, the note and the credit are drawn here, the recording is mounted
- * by the root above. That is why the two are one object — split across the two
- * components as separate props they would be two decisions, and two decisions
- * drift. A story that supplies its own root and passes no `media` gets the
- * default bundle, so the workbench shows the lesson the file ships with.
+ * capabilities in, the only way to see the whole control surface with no
+ * media and no network, while `CoursePlatformPlayer` mounts the recording. It
+ * reads every field of `media` except `source`, which the root above mounts —
+ * see the comment on `openMovieLesson` for why the two travel together.
  */
 export const CoursePlatformSurface = ({
   captionsSrc,
@@ -431,21 +375,18 @@ export const CoursePlatformSurface = ({
   const actions = Player.usePlayerActions();
 
   /*
-   * The resume decision, carried from the press to the moment there is a player
-   * to act on. A ref rather than state: nothing renders from it, and the
-   * affordance that writes it unmounts as soon as the player is ready. The
-   * effect clears the flag, so a later source swap cannot silently seek
+   * The resume decision, carried from the press to the moment there is a
+   * player to act on. A ref rather than state: nothing renders from it, and
+   * the affordance that writes it unmounts as soon as the player is ready.
+   * The effect clears the flag so a later source swap cannot silently seek
    * somewhere nobody asked for.
    *
-   * The effect does NOT fire as soon as activation reads `ready` — that only
-   * means there is a picture. The native provider publishes it from inside
-   * `attach()`, and `attach()` returning is also the moment a `load()` gets
-   * queued that calls the element's own `load()` and empties it, so a seek
-   * issued right there can land on an element about to be destroyed and vanish
-   * under it. `commandsReady` is the provider's own signal that a command
-   * issued now is accepted and will not be undone by a load that has yet to
-   * run (`PlayerState.commandsReady`), which is what the seek below waits for
-   * instead (#551).
+   * Gated on `commandsReady` rather than `activation === 'ready'`: the latter
+   * only means there is a picture, and a seek issued right there can land on
+   * an element a queued `load()` is about to empty. `commandsReady` is the
+   * provider's signal that a command now will stick
+   * (`PlayerState.commandsReady`) — gating on it is what keeps the resume
+   * position from being silently lost (#551).
    */
   const resumeRequested = useRef(false);
   const ready = state.activation === 'ready';
@@ -457,13 +398,11 @@ export const CoursePlatformSurface = ({
   }, [actions, state.commandsReady, resumeAt]);
 
   /*
-   * The transport is docked below the picture rather than laid over it, so
-   * nothing here is competing with an overlay for the same pixels — but the
-   * accessibility problem an overlay creates is the same one either way. While
-   * `Player.ActivationButton` or `Player.ErrorDisplay` owns the picture, the
-   * commands under it act on a player that does not exist yet, so the row is
-   * taken out of layout, out of the accessibility tree and out of the tab order
-   * with `hidden` rather than merely dimmed.
+   * The transport is docked below the picture, not overlaid, but the
+   * accessibility problem is the same one either way: while
+   * `ActivationButton` or `ErrorDisplay` owns the picture, the commands under
+   * it act on a player that does not exist yet, so `hidden` takes the row
+   * out of layout and the accessibility tree rather than merely dimming it.
    */
   const notReady = !ready || state.errored;
 
@@ -521,13 +460,10 @@ export const CoursePlatformSurface = ({
                 </>
               )}
             </Player.ErrorDisplay>
-            {/* The library ships this part full-bleed with auto margins, so
-                left at its own size it is the whole picture — one control, one
-                accessible name, and a press anywhere on the frame starts the
-                lesson. The badge inside it is one `aria-hidden` span rather
-                than an image or a second control: it is the button's mark, not
-                a target of its own, so it adds nothing to the tab order and
-                nothing to the accessible name above. */}
+            {/* Left at its own full-bleed size, this is the whole picture —
+                one control, and a press anywhere starts the lesson. The
+                badge inside is an `aria-hidden` span, not a second control,
+                so it adds nothing to the tab order or accessible name. */}
             <Player.ActivationButton
               aria-label="Start the lesson"
               className="study-start"
@@ -605,19 +541,16 @@ export const CoursePlatformSurface = ({
 };
 
 /*
- * The archetype's appearance, travelling with the composition for the reason
- * the streaming file gives: a headless library ships no look, so an archetype
- * that borrowed one from the page around it would be proving something about
- * that page. Both surfaces mount this file and get the same lesson.
+ * The archetype's appearance, inline — see `streamingCss` in the sibling file
+ * for why it travels with the composition rather than importing a stylesheet.
  *
  * Container queries rather than viewport media queries: what decides whether
  * the rail sits beside the picture is how much room this component was given,
  * not how wide the window is.
  *
- * The whole of it is one template literal, so a backtick anywhere inside —
- * code-quoting in a comment included — closes the string early and turns the
- * rest of the stylesheet into JavaScript. The comments below use no quoting for
- * that reason.
+ * One template literal, so a backtick anywhere inside — including
+ * code-quoting in a comment — closes the string early. The comments below use
+ * no quoting for that reason.
  */
 const courseCss = `
 .study {
@@ -659,13 +592,9 @@ const courseCss = `
   font-size: 0.875rem;
 }
 .study-resume__button {
-  /* ActivationButton writes background-color and border of its own as an
-     inline style, reading --playdeck-activation-fill and
-     --playdeck-activation-border (default transparent / 0) — an inline
-     declaration outranks the background-color below however it is written,
-     so left unset this button renders fully transparent and its near-white
-     text sits unreadable on the banner's own light ground. Setting the two
-     tokens is how a consumer's stylesheet reaches this part at all. */
+  /* Set alongside the plain background/border they duplicate: the button
+     also writes those two as an inline style reading these tokens
+     (loading-error.tsx), which outranks anything set here otherwise. */
   --playdeck-activation-fill: #1f6f63;
   --playdeck-activation-border: 0;
   display: inline-flex;
@@ -895,7 +824,6 @@ const courseCss = `
   margin: 0;
   font-size: 1.25rem;
   font-weight: 600;
-  letter-spacing: -0.01em;
 }
 .study-progress {
   margin: 0;
@@ -926,8 +854,6 @@ const courseCss = `
   color: #55555e;
   font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 .study-glyph {
   width: 1rem;
@@ -972,7 +898,10 @@ const courseCss = `
 .study-section--static {
   cursor: default;
 }
-.study-section:hover {
+/* Not .study-section:hover: the static span shares the base class, and a
+   hover highlight with no click behind it is a lie a cursor: default nearby
+   does not undo. */
+button.study-section:hover {
   background-color: #ebe7dc;
 }
 /* The section being played. Marked three ways — a weight, a rule and the
