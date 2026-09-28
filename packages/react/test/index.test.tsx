@@ -1807,12 +1807,10 @@ test('drops rejected srcSet candidates and keeps the surviving ones, permitting 
   );
   expect(image.getAttribute('srcset')).toBe('/good-2x.jpg 2x');
 
-  // A `data:` URI's syntax requires a comma before its payload, so splitting
-  // on the comma (rather than running a full srcset parser) breaks this
-  // single candidate into two pieces -- but both happen to carry a refused
-  // scheme (`data:` and `javascript:`), so the candidate still contributes
-  // no survivor. That is the fail-closed trade-off the comma split accepts
-  // (#236), demonstrated rather than merely asserted.
+  // A `data:` URI's syntax requires a comma before its payload, which stays
+  // inside this one candidate's URL (the comma is not whitespace, so it
+  // never ends the URL run) -- the whole candidate is refused as one
+  // `data:`-scheme value, not split into pieces first.
   rerender(
     <PosterImage srcSet="data:text/plain,javascript:evil 1x, /good-2x.jpg 2x" />
   );
@@ -1836,6 +1834,73 @@ test('drops rejected srcSet candidates and keeps the surviving ones, permitting 
   rerender(<PosterImage srcSet="javascript:alert(1) 1x, blob:whatever 2x" />);
   expect(image.getAttribute('srcset')).toBeNull();
   expect(image.getAttribute('data-state')).toBe('idle');
+});
+
+test('keeps a single srcSet candidate whose URL contains a comma unsplit and unmodified', () => {
+  const { PosterImage } = posterPrimitives;
+  const { container } = render(
+    <PosterImage srcSet="https://res.cloudinary.com/d/image/upload/w_400,c_fill/a.jpg 400w" />
+  );
+  const image = container.querySelector('img')!;
+  expect(image.getAttribute('srcset')).toBe(
+    'https://res.cloudinary.com/d/image/upload/w_400,c_fill/a.jpg 400w'
+  );
+});
+
+test('parses a multi-candidate srcSet with a comma inside one URL into the right count, URL and descriptor per candidate', () => {
+  const { PosterImage } = posterPrimitives;
+  const { container } = render(
+    <PosterImage srcSet="https://res.cloudinary.com/d/image/upload/w_400,c_fill/a.jpg 400w, /narrow.jpg 200w" />
+  );
+  const image = container.querySelector('img')!;
+  expect(image.getAttribute('srcset')).toBe(
+    'https://res.cloudinary.com/d/image/upload/w_400,c_fill/a.jpg 400w, /narrow.jpg 200w'
+  );
+});
+
+test('ends a candidate at its own trailing comma with no descriptor, and still parses the candidate after it on its own', () => {
+  const { PosterImage } = posterPrimitives;
+  const { container } = render(
+    <PosterImage srcSet="/a.jpg, //example.com/b.jpg 400w" />
+  );
+  const image = container.querySelector('img')!;
+  // The second candidate's leading `//` is resolved on its own -- proof it
+  // was parsed apart from the first, not carried along as one string: a
+  // `//` in the middle of a combined string would not start it and so would
+  // never reach `resolveNetworkPath`'s rewrite.
+  expect(image.getAttribute('srcset')).toBe(
+    '/a.jpg, https://example.com/b.jpg 400w'
+  );
+});
+
+test('tolerates extra whitespace around candidate separators', () => {
+  const { PosterImage } = posterPrimitives;
+  const { container } = render(
+    <PosterImage srcSet="  //example.com/a.jpg 1x  ,  /b.jpg 2x  " />
+  );
+  const image = container.querySelector('img')!;
+  expect(image.getAttribute('srcset')).toBe(
+    'https://example.com/a.jpg 1x, /b.jpg 2x'
+  );
+});
+
+test('treats a second open-paren met while already inside parens as ordinary text, not nested depth, when scanning a descriptor', () => {
+  const { PosterImage } = posterPrimitives;
+  const { container } = render(
+    <PosterImage srcSet="/a.jpg x((y),z), //example.com/b.jpg 2x" />
+  );
+  const image = container.querySelector('img')!;
+  // The spec's descriptor tokenizer has a boolean "in parens" state: the
+  // first `)` always exits it, so the candidate boundary is the comma right
+  // after `y)`, not the one after the second, unmatched `z)`. A balanced
+  // nesting counter would instead treat that first `)` as only closing one
+  // level of two, carry the comma after it into the same descriptor, and
+  // end up with one candidate fewer -- observable here because it also
+  // swallows the leading `//` of the next URL into the same raw string,
+  // which never reaches `resolveNetworkPath`'s rewrite from there.
+  expect(image.getAttribute('srcset')).toBe(
+    '/a.jpg x((y), z), https://example.com/b.jpg 2x'
+  );
 });
 
 test('settles a poster image given only rejected src and srcSet in idle, and never validates sizes', () => {
