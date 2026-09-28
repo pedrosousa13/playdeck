@@ -376,6 +376,13 @@ export const libraries = [
     // passthrough. The whole distance from the last committed figure is
     // this issue's: that figure was 22.00 KB (22526 bytes), measured the
     // same day (2026-09-28) before this change, per `results.md` on `main`.
+    //
+    // Measures 22.19 KB (22724 bytes) after #802's fix leaving arrow keys to
+    // a widget outside the player that answers them itself -- up from
+    // 22.05 KB (22581 bytes) the same day (2026-09-28), per `results.md` on
+    // `main` -- which stays under this ceiling with no raise needed. The
+    // growth is `controls.tsx`'s own new role list and containment check,
+    // part of every composition here regardless of which parts it renders.
     ceilingKb: 22.25
   },
   {
@@ -435,6 +442,12 @@ export const libraries = [
     // figure is this issue's: that figure was 22.74 KB (23289 bytes),
     // measured the same day (2026-09-28) before this change, per
     // `results.md` on `main`.
+    //
+    // Measures 22.84 KB (23393 bytes) after #802's fix leaving arrow keys to
+    // a widget outside the player that answers them itself, the same
+    // change described on the "no parts" row above -- up from 22.78 KB
+    // (23327 bytes) the same day (2026-09-28), per `results.md` on `main`
+    // -- which stays under this ceiling with no raise needed.
     ceilingKb: 23
   },
   {
@@ -462,7 +475,19 @@ export const libraries = [
     // passthrough. The whole distance from the last committed figure is this
     // issue's: that figure was 23.64 KB (24203 bytes), measured the same day
     // (2026-09-28) before this change, per `results.md` on `main`.
-    ceilingKb: 24,
+    //
+    // 24644 bytes measured 2026-09-28 -- 24.06640625 KB, 24.07 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 24 KB is #802's fix leaving arrow keys to a widget outside the player
+    // that answers them itself: `handleShortcut`'s new containment-gated
+    // check, the role list it closes against, the native radio/range check
+    // beside it, and the viewport-boundary lookup the containment check
+    // runs against, all reach every composition that renders
+    // `Player.Controls`, this one's `PlayButton` included. The whole
+    // distance from the last committed figure is this issue's: that figure
+    // was 23.90 KB (24471 bytes), measured the same day (2026-09-28) before
+    // this change, per `results.md` on `main`.
+    ceilingKb: 24.25,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
@@ -489,7 +514,15 @@ export const libraries = [
     // last committed figure is this issue's: that figure was 26.70 KB
     // (27341 bytes), measured the same day (2026-09-28) before this change,
     // per `results.md` on `main`.
-    ceilingKb: 27
+    //
+    // 27771 bytes measured 2026-09-28 -- 27.1201171875 KB, 27.12 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 27 KB is #802's arrow-key exemption, the same change described on the
+    // "play-only" row above, which this composition's control bar reaches
+    // the same way. The whole distance from the last committed figure is
+    // this issue's: that figure was 26.96 KB (27612 bytes), measured the
+    // same day (2026-09-28) before this change, per `results.md` on `main`.
+    ceilingKb: 27.25
   },
   {
     name: 'react-player',

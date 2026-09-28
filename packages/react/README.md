@@ -568,6 +568,20 @@ Text entry (a text `<input>`, `<textarea>`, `<select>` or content-editable
 region) still swallows every key, and a focused button, link or checkbox keeps
 Space and `Enter` for itself.
 
+In `global` mode, an arrow key leaves a widget outside the player alone when
+that widget answers arrows itself: a native radio or range input, or anything
+inside an element carrying one of the WAI-ARIA composite-widget roles that
+navigate with arrows — `radiogroup`, `tablist`, `slider`, `spinbutton`,
+`listbox`, `menu`, `menubar`, `tree`, `treegrid`, `grid` or `toolbar`. Neither
+the bound shortcut nor `preventDefault()` runs there, so a radio group, a
+tab strip or a slider elsewhere on the page keeps its own roving-focus
+navigation instead of losing it to volume or seek. The exemption only ever
+applies outside the player: `Player.Viewport`'s own DOM node where the
+region renders inside one, this region's own node otherwise. An arrow key
+still belongs to the layer wherever focus sits inside that boundary, its own
+sliders included and a consumer's own control composed elsewhere in the same
+viewport included, and still fires normally on any other page content.
+
 `shortcuts` controls the layer. `shortcuts={false}` turns it off entirely — in
 `global` mode no `document` listener is attached at all. An object is a partial
 override map of action to a `KeyboardEvent.key` value, an array of them, or

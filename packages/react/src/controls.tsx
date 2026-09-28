@@ -79,6 +79,73 @@ const ownsActivationKeys = (node: EventTarget | null): boolean =>
   node.closest(`${nativeActivationSelector}, ${activationInputSelector}`) !==
     null;
 
+// WAI-ARIA APG composite-widget roles that answer the arrow keys with their
+// own navigation. One list drives the check below, so a role that owns
+// arrows outside the player is added or removed in one place. `menu`,
+// `menubar` and `listbox` also silence the whole layer through
+// `isInOpenMenu` above; they are named here too because this list answers a
+// narrower question — "does this widget use arrows itself" — that stands on
+// its own regardless of what else exempts it.
+const arrowKeyRoles = [
+  'radiogroup',
+  'tablist',
+  'slider',
+  'spinbutton',
+  'listbox',
+  'menu',
+  'menubar',
+  'tree',
+  'treegrid',
+  'grid',
+  'toolbar'
+] as const;
+
+const arrowKeyRoleSelector = arrowKeyRoles
+  .map((role) => `[role="${role}"]`)
+  .join(', ');
+
+// Native `<input>` types that step or move on the arrow keys by themselves,
+// outside any role above: a radio moves within its name group, a range
+// steps its value.
+const arrowKeyInputTypes = new Set<string>(['radio', 'range']);
+
+const isArrowKey = (key: string): boolean =>
+  key === 'ArrowUp' ||
+  key === 'ArrowDown' ||
+  key === 'ArrowLeft' ||
+  key === 'ArrowRight';
+
+// True for a target that answers arrow keys on its own — a native radio or
+// range input, or anything inside one of the composite roles above. A
+// `<select>` needs no entry here: `isTextEntryTarget` already silences the
+// whole layer for one, arrows included, before this runs. Says nothing about
+// whether the target sits inside this player; the caller checks that
+// separately, against `arrowKeyOwnershipBoundary` below, so a slider or
+// radiogroup the player itself renders keeps the layer's ownership of its
+// arrows unchanged (ADR-0005).
+const ownsArrowKeysTarget = (node: EventTarget | null): boolean => {
+  if (!(node instanceof HTMLElement)) return false;
+  if (node instanceof HTMLInputElement && arrowKeyInputTypes.has(node.type))
+    return true;
+  return node.closest(arrowKeyRoleSelector) !== null;
+};
+
+// What "outside the player" is checked against: `Player.Viewport`'s own DOM
+// node -- the player's own bounding box (CONTEXT.md's "Viewport" entry) --
+// when this region sits inside one, the same viewport part
+// `useLiftAboveControls` (`captions.tsx`) already reaches through to find
+// `Controls` from outside it. A consumer's own widget composed elsewhere in
+// that box, a `SeekSlider` moved outside `Controls` included, is still part
+// of this player and keeps the layer's ownership of its arrows, even though
+// it sits outside this region's own DOM node. Falls back to the region
+// itself where no viewport ancestor exists, which is the boundary this
+// check used before a viewport was part of it.
+const arrowKeyOwnershipBoundary = (
+  region: HTMLElement | null
+): HTMLElement | null =>
+  region &&
+  (region.closest<HTMLElement>('[data-playdeck-part="viewport"]') ?? region);
+
 // Every action the layer knows, and — because one key can reach two of them —
 // the order a key resolves in: the first match here wins, whatever order a
 // consumer wrote their bindings object in. The union below is derived from
@@ -242,6 +309,23 @@ export const Controls = ({
       if (event.altKey || event.ctrlKey || event.metaKey) return;
       const target = event.target;
       if (isTextEntryTarget(target) || isInOpenMenu(target)) return;
+      // Arrow keys only, and only outside the player: a widget elsewhere on
+      // the page that answers arrows itself keeps them, the same way the
+      // region's own range inputs keep every other key while the layer
+      // takes theirs (ADR-0005). Inside the player the layer still owns
+      // every arrow, its own sliders included and a consumer's own widget
+      // composed outside this region but still inside `Player.Viewport`
+      // included, which is why this checks `arrowKeyOwnershipBoundary`
+      // rather than this region's own containment.
+      const boundary = arrowKeyOwnershipBoundary(containerRef.current);
+      if (
+        isArrowKey(event.key) &&
+        target instanceof HTMLElement &&
+        boundary &&
+        !boundary.contains(target) &&
+        ownsArrowKeysTarget(target)
+      )
+        return;
       const action = resolveShortcutAction(shortcuts, event.key);
       if (action === null) return;
       if (
