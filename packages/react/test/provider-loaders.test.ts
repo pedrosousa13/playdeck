@@ -313,6 +313,21 @@ test('reports source types without an installed adapter', async () => {
 //   resolve an explicit object whose type is a reserved built-in name
 //   through the supplied path", "never lets a providers entry keyed by a
 //   built-in name intercept the built-in dispatch".
+// - The reserved-type check on the copy's own `kind` in the string branch,
+//   replaced with a bare `true` (the copy step and `everyStringPermitted`
+//   left in place), failed 1: "declines a detect return whose type names a
+//   reserved built-in kind, and continues to a later registration" -- the
+//   dishonest registration's own resolved source won outright and the
+//   later, honest registration was never reached.
+// - The copy step itself dropped from the string branch (`detected` checked
+//   and returned directly, the way `source` was before this fix), failed 2:
+//   "does not let a detect result's type getter answer safely for the
+//   reserved-name check and differently once loadProvider reads it again"
+//   -- `createHlsProvider` was called once, with the dishonest object, and
+//   the `acme` registration's own factory was never reached -- and
+//   "declines a detect return carrying a bigint field rather than
+//   resolving a source that would crash JSON.stringify" -- `result.status`
+//   was `'success'` rather than `'failure'`.
 // - `SuppliedSource` (below) collapsed to `never` for every key, dropping
 //   its derivation of a registration's own `Source`, made `pnpm typecheck`
 //   report TS2344 at "a supplied kind types its own source shape and its own
@@ -545,6 +560,121 @@ test('never calls detect for a registration keyed by a reserved built-in name', 
   });
   expect(hlsDetect).not.toHaveBeenCalled();
   expect(youtubeDetect).not.toHaveBeenCalled();
+  expect(result.status).toBe('failure');
+});
+
+// The other half of the same guarantee: a registration keyed honestly (not
+// one of the five names above) can still have its own `detect` claim a
+// built-in kind through the shape it returns, rather than through its key.
+// Treated exactly like a decline, so the loop keeps walking the remaining
+// registrations -- the same fall-through the forbidden-scheme test above
+// proves for a nested URL, applied here to the `type` field itself.
+test('declines a detect return whose type names a reserved built-in kind, and continues to a later registration', () => {
+  const dishonest = vi.fn(
+    () =>
+      ({
+        type: 'hls',
+        src: 'https://evil.test/injected.m3u8',
+        engine: 'bogus'
+      }) as const
+  );
+  const honest = vi.fn(() => ({ type: 'other', id: '1' }) as const);
+
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    acme: { detect: dishonest, load: vi.fn() },
+    other: { detect: honest, load: vi.fn() }
+  });
+
+  expect(dishonest).toHaveBeenCalledWith('https://example.com/media/1');
+  expect(honest).toHaveBeenCalledWith('https://example.com/media/1');
+  expect(result).toMatchObject({
+    status: 'success',
+    source: { type: 'other', id: '1' }
+  });
+});
+
+// The bypass the fix above closes: `source` used to be the caller's own
+// live `detect` return, read once by `everyStringPermitted`'s enumeration
+// and once by the reserved-type check, then handed on unchanged. A `type`
+// getter that answers safely for exactly those two reads and a built-in
+// kind's own name on every read after slips both checks and is still live
+// when `loadProvider` reads `.type` again to dispatch -- proven end to end
+// below, through the same `createHlsProvider` mock the dispatch tests above
+// use.
+//
+// Demonstrated red, run with
+// `pnpm vitest run packages/react/test/provider-loaders.test.ts -t "does
+// not let a detect result's type getter"` against the commit that added
+// the reserved-type check but read `source.type` directly rather than
+// through a copy: `createHlsProvider` was called once, with `[<video />,
+// { type: 'hls', src: 'https://evil.test/injected.m3u8', engine: 'bogus'
+// }, {}]`, and the `acme` registration's own factory was never reached.
+test("does not let a detect result's type getter answer safely for the reserved-name check and differently once loadProvider reads it again", async () => {
+  const { createHlsProvider } = await import('@playdeck/provider-hls');
+  // Shared with every other test in this file through the module-level
+  // `vi.mock` above -- cleared here so an earlier test's own calls cannot
+  // hide a real call this one makes.
+  vi.mocked(createHlsProvider).mockClear();
+  const media = document.createElement('video');
+  let reads = 0;
+  const dishonest = vi.fn(() => ({
+    get type() {
+      reads += 1;
+      return reads <= 2 ? 'acme' : 'hls';
+    },
+    src: 'https://evil.test/injected.m3u8',
+    engine: 'bogus'
+  }));
+  const adapter = { provider: 'acme' } as unknown as ProviderAdapter;
+  const factory = vi.fn(() => adapter);
+  const acme = {
+    detect: dishonest,
+    load: vi.fn(() => Promise.resolve(factory))
+  };
+
+  const detected = detectSourceWithProviders('https://example.com/media/1', {
+    acme
+  });
+  if (detected.status !== 'success') {
+    throw new Error(`expected success, got ${detected.status}`);
+  }
+
+  await loadProvider({
+    media,
+    nativeOptions: {},
+    providers: { acme },
+    source: detected.source
+  });
+
+  expect(createHlsProvider).not.toHaveBeenCalled();
+  expect(factory).toHaveBeenCalledWith(media, detected.source, undefined);
+});
+
+// #808's second half ("copy detect results"), satisfied here alongside
+// #800: the copy step above refuses any shape it cannot fully account for,
+// a `bigint` field included, the same way `copySuppliedSourceObject`
+// already refuses one on the explicit-object path. Before this, a `detect`
+// return carrying one resolved successfully and would have gone on to
+// crash `sourceKey`'s `JSON.stringify` (`use-activation.ts`) the first time
+// render reached it, rather than being declined here where the source it
+// came from is still known.
+//
+// Demonstrated red, run with the same command against main (591b836,
+// before this fix, `packages/react/src/provider-loaders.ts` swapped back
+// to that commit's copy): `result.status` was `'success'` rather than
+// `'failure'`, and `JSON.stringify(result.source)` -- what
+// `use-activation.ts`'s `sourceKey` would have done next -- throws
+// `TypeError: Do not know how to serialize a BigInt` for exactly this
+// shape, confirmed separately with `node -e`.
+test('declines a detect return carrying a bigint field rather than resolving a source that would crash JSON.stringify', () => {
+  const detect = vi.fn(
+    () => ({ type: 'acme', big: 10n }) as unknown as { type: string }
+  );
+
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    acme: { detect, load: vi.fn() }
+  });
+
   expect(result.status).toBe('failure');
 });
 

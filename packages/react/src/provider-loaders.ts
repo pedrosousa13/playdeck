@@ -834,9 +834,14 @@ const copySuppliedSourceObject = (
 // branch, which builds the adapter from it directly and never runs it through
 // `sourceFromExplicitObject`'s own per-kind validation (`isPermittedSourceUrl`
 // against `src`, `packages/core/src/source-detection.ts`). Skipping the
-// registration here, before either path can call it, closes that: a
-// registration cannot masquerade as a built-in kind's own resolved source by
-// returning one shaped like it.
+// registration here, before either path can call it, closes only that one
+// case -- a registration whose own key already named a built-in kind. A
+// registration keyed honestly can still claim a built-in kind through what
+// `detect` returns, or through an explicit object's own `type` field, and
+// that is closed separately, in `detectSourceWithProviders` below: by
+// copying the returned or handed-in value first (`copySuppliedSourceObject`)
+// and checking the copy's own `type` against this same list, so nothing a
+// registration merely names can stand in for what it actually resolves to.
 const RESERVED_PROVIDER_NAMES: readonly string[] = [
   'hls',
   'video',
@@ -857,21 +862,42 @@ const RESERVED_PROVIDER_NAMES: readonly string[] = [
 // object's own enumeration order -- insertion order for the string keys this
 // map is ever given, the one order property enumeration guarantees (ECMA-262
 // `OwnPropertyKeys`), which is declaration order as `Root`'s own doc comment
-// on `providers` promises -- using the first whose `detect` both accepts the
-// string and returns a value `everyStringPermitted` clears. That walk is the
-// same one the explicit-object path below applies to an object handed in
-// directly -- a `detect` return is exactly as arbitrary a shape, so it is
-// exactly as capable of hiding a forbidden scheme a level or more down, and
-// proven so by the same probe `RESERVED_PROVIDER_NAMES` above cites: a
-// registration whose `detect` returned `{ type: 'acme', config: { url:
-// 'javascript:alert(1)' } }` used to have that value accepted outright,
-// because only the explicit-object path had ever run this walk. A `detect`
-// return that fails it is treated as a decline, not as a reason to fail
-// detection outright: the loop below simply keeps walking the remaining
-// registrations, exactly as it already does when `detect` itself returns
-// `undefined`, because one registration returning a value this package
-// refuses to trust is not grounds to veto a later registration that would
-// have matched honestly.
+// on `providers` promises -- using the first whose `detect` accepts the
+// string and returns an object. That object is copied through the same
+// `copySuppliedSourceObject` the explicit-object path below applies to a
+// caller's own object, before anything else about it is trusted -- a
+// `detect` return is exactly as arbitrary a shape, and exactly as live, as
+// an explicit object is: a getter can answer one way while this loop still
+// holds the value and a different way once a resolved source built from it
+// has been handed onward, which is exactly the hazard reading each value
+// exactly once (the explicit-object path's own defect 2, below) closes here
+// too. Proven by two probes against the uncopied return this loop used to
+// walk directly: a registration whose `detect` returned `{ type: 'acme',
+// config: { url: 'javascript:alert(1)' } }` had that value accepted
+// outright, because only the explicit-object path had ever copied first;
+// and a registration whose `detect` returned an object with a `type`
+// getter that answered a name of its own for exactly as many reads as this
+// loop and `everyStringPermitted` together made, and a built-in kind's own
+// name on every read after, had that same object routed straight to
+// `loadProvider`'s matching built-in branch once resolution handed it on
+// unchanged -- the getter, still live, answered differently for that later
+// reader than it had for this one. Every check after the copy step --
+// `everyStringPermitted`, and the copy's own `type` against
+// `RESERVED_PROVIDER_NAMES` (the same reserved-name check the loop already
+// applies to a registration's own key, applied a second time because a
+// registration keyed honestly can still claim a built-in kind by return
+// value alone) -- reads the copy, and the copy, never `detect`'s own live
+// return, is what a successful resolution reports back. A `detect` return
+// that fails any of that -- the copy step itself included, which refuses a
+// shape (`Map`, `Set`, a `bigint`, a symbol key, a class instance) this
+// package cannot fully account for rather than resolving a source that
+// would go on to crash `sourceKey`'s `JSON.stringify`
+// (`use-activation.ts`) once render reached it -- is treated as a decline,
+// not as a reason to fail detection outright: the loop below simply keeps
+// walking the remaining registrations, exactly as it already does when
+// `detect` itself returns `undefined`, because one registration returning
+// a value this package refuses to trust is not grounds to veto a later
+// registration that would have matched honestly.
 //
 // An explicit object is resolved without ever calling a registration's
 // `detect`: `detect` takes a URL string by contract, and an object arriving
@@ -902,8 +928,9 @@ const RESERVED_PROVIDER_NAMES: readonly string[] = [
 // resolved source once the copy above has succeeded -- the shared allowlist
 // already ran on every string the copy admitted, inside that same walk, so
 // there is nothing left for a further `everyStringPermitted` pass to check
-// here (unlike the detect-return branch above, which still calls it
-// directly, over a live object no copy step ever touches). A `type` matching
+// here. The detect-return branch above copies its own input the same way
+// now, and calls `everyStringPermitted` over that copy anyway -- see that
+// branch's own comment for why the redundancy is kept there. A `type` matching
 // no registration, a reserved name, a `type` that is not a string at all, or
 // a copy that `copySuppliedSourceObject` itself refused, falls through to the
 // built-in failure below unchanged -- there is nothing a supplied kind could
@@ -958,20 +985,72 @@ export const detectSourceWithProviders = (
       // means the same as `undefined` -- `continue` takes the same
       // fall-through -- and `queueMicrotask` reports it the way `notifySafely`
       // reports a throwing subscriber (#753).
-      let source: unknown;
+      let detected: unknown;
       try {
-        source = registration.detect(input);
+        detected = registration.detect(input);
       } catch (cause) {
         queueMicrotask(() => {
           throw cause;
         });
         continue;
       }
-      if (source && everyStringPermitted(source)) {
+      // Not a plain object (or an array, or `null`): `detect`'s own contract
+      // is `Source | undefined`, and a `Source` is an object carrying at
+      // least `type` (`SuppliedProviderSource`), so anything else is refused
+      // the same way `copySuppliedSourceObject` below refuses every other
+      // shape it cannot fully account for -- there is no copy step to run it
+      // through otherwise.
+      if (
+        typeof detected !== 'object' ||
+        detected === null ||
+        Array.isArray(detected)
+      ) {
+        continue;
+      }
+      // `detected` is `detect`'s own live return, not a value this package
+      // controls -- a getter can answer one way while this loop still holds
+      // it and a different way once it has been handed onward, the same
+      // hazard `copySuppliedSourceObject` was built to close for the
+      // explicit-object path below (#754's defect 2). Copying it first, and
+      // checking and returning the copy rather than `detected` itself,
+      // closes it here too: every value the copy admits was read exactly
+      // once, so nothing downstream -- this check, `everyStringPermitted`,
+      // or `loadProvider`'s own dispatch on the resolved source -- can see a
+      // `type` (or any other field) different from what was already
+      // checked. The same copy is what refuses a shape it cannot fully
+      // account for at all -- a `Map`, a `Set`, a `bigint`, a symbol key, a
+      // class instance -- rather than resolving a source that would go on to
+      // crash `sourceKey`'s `JSON.stringify` (`use-activation.ts`) once
+      // render reached it.
+      const copy = copySuppliedSourceObject(
+        detected as Record<string, unknown>
+      );
+      const kind = copy?.type;
+      if (
+        copy &&
+        // The key check above only refuses a registration that named a
+        // built-in kind up front -- it says nothing about what `detect`
+        // actually handed back. A registration keyed honestly can still
+        // claim a built-in kind through its return value alone, which would
+        // route straight to `loadProvider`'s matching built-in branch and
+        // skip that branch's own validation entirely. Refused here the same
+        // way a forbidden scheme is: as a decline, so the loop keeps walking
+        // the remaining registrations rather than trusting this one.
+        !(typeof kind === 'string' && RESERVED_PROVIDER_NAMES.includes(kind)) &&
+        // Already redundant against the copy on its own terms -- every
+        // string it admitted already cleared `isPermittedSourceUrl` during
+        // that same walk (`copySuppliedSourceValue`'s own doc comment), the
+        // reason the explicit-object path below runs no equivalent pass of
+        // its own. Kept here anyway: it costs nothing against a value this
+        // package already knows is clean, and it is what would still catch
+        // a future change to the copy step that stopped enforcing that
+        // guarantee.
+        everyStringPermitted(copy)
+      ) {
         return {
           status: 'success',
           input,
-          source: source as ResolvedPlayerSource
+          source: copy as ResolvedPlayerSource
         };
       }
     }
