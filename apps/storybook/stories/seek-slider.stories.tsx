@@ -355,7 +355,10 @@ export const WithThumbnails: Story = {
       { timeout: 2_000 }
     );
     const img = thumbnail.querySelector('img') as HTMLImageElement;
-    await expect(img).toHaveAttribute('src', assetUrl('thumbnails-sprite.svg'));
+    await expect(img).toHaveAttribute(
+      'src',
+      new URL(assetUrl('thumbnails-sprite.svg'), document.baseURI).href
+    );
     // The crop offset: `-x`/`-y` of tile 2's region (x=320, y=0).
     expect(img.style.left).toBe('-320px');
     expect(img.style.top).toBe('0px');
