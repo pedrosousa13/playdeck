@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { createRef } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { createYouTubeProvider } from '@playdeck/provider-youtube';
 import * as Player from '../src/index';
@@ -370,6 +371,46 @@ test('replays desired preferences once the YouTube provider is ready', async () 
       volumeCount: 1
     })
   );
+});
+
+test('does not publish a refusedCommand for a controlled preference while the embed is not yet ready', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  render(
+    <Player.Root
+      loading="eager"
+      muted
+      playbackRate={1.5}
+      ref={handle}
+      source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
+      volume={0.5}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  // Read synchronously, before the mocked lazy `createYouTubeProvider`
+  // import resolves: no provider is attached yet at this point, which is
+  // exactly when a command issued against one would be refused.
+  expect(handle.current?.getState().refusedCommand).toBeNull();
+
+  await waitFor(() =>
+    expect(mockedCreateYouTubeProvider).toHaveBeenCalledTimes(1)
+  );
+  expect(handle.current?.getState().refusedCommand).toBeNull();
+
+  const fake = harness.fakes[0]!;
+  emitYouTubeReady(fake);
+
+  await waitFor(() =>
+    expect(fake.counts()).toMatchObject({
+      muteCount: 1,
+      playbackRateCount: 1,
+      volumeCount: 1
+    })
+  );
+  expect(handle.current?.getState().refusedCommand).toBeNull();
 });
 
 test('replays uncontrolled default preferences once the provider is ready', async () => {

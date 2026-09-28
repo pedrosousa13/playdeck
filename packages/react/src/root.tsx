@@ -946,6 +946,14 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
     controller.setCaptionRenderer(captionRenderer ?? 'custom');
   }, [captionRenderer, controller]);
 
+  // The next three effects each guard their reconcile call the same way:
+  // no provider attached yet is not a mismatch for them to act on. An
+  // unattached prop change is left for `prepareMedia` to deliver instead --
+  // it reads these same live `controlledMuted`/`controlledVolume`/
+  // `controlledPlaybackRate` refs, direct to the media element for native
+  // or through its own ready-gated seed for an embed, and it runs
+  // immediately before `useActivation` calls `setProvider`. Issuing the
+  // command here as well would only reach `#refuseCommand`.
   useEffect(() => {
     if (muted === undefined) {
       pendingMuted.current = undefined;
@@ -961,7 +969,10 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
       supersededMuted.current.push(pendingMuted.current);
       pendingMuted.current = undefined;
     }
-    if (controller.getState().muted !== muted) {
+    if (
+      controller.getState().provider !== null &&
+      controller.getState().muted !== muted
+    ) {
       reconcileMuted(muted);
     }
   }, [controller, muted, reconcileMuted]);
@@ -984,7 +995,12 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
       supersededVolume.current.push(pendingVolume.current);
       pendingVolume.current = undefined;
     }
-    if (!Object.is(controller.getState().volume, volume)) {
+    // See the muted effect above: an unattached prop change is left to
+    // `prepareMedia`, not reconciled here.
+    if (
+      controller.getState().provider !== null &&
+      !Object.is(controller.getState().volume, volume)
+    ) {
       reconcileVolume(volume);
     }
   }, [controller, reconcileVolume, volume]);
@@ -1007,7 +1023,12 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
       supersededPlaybackRate.current.push(pendingPlaybackRate.current);
       pendingPlaybackRate.current = undefined;
     }
-    if (!Object.is(controller.getState().playbackRate, playbackRate)) {
+    // See the muted effect above: an unattached prop change is left to
+    // `prepareMedia`, not reconciled here.
+    if (
+      controller.getState().provider !== null &&
+      !Object.is(controller.getState().playbackRate, playbackRate)
+    ) {
       reconcilePlaybackRate(playbackRate);
     }
   }, [controller, playbackRate, reconcilePlaybackRate]);
