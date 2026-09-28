@@ -333,4 +333,22 @@ describe('Player.QualityMenu', () => {
     );
     expect(trigger?.getAttribute('aria-label')).toBe('Quality');
   });
+
+  // The preset spreads its own props straight into `SettingsMenu`, so this
+  // exercises the same forwarding path `settings-menu.test.tsx` covers
+  // directly on `SettingsMenu` -- proof the pass-through reaches a consumer
+  // through the preset too.
+  test('forwards a ref to the SettingsMenu root', () => {
+    const ref = createRef<HTMLDivElement>();
+    const { container, emitState } = renderWithPlayer(
+      <Player.QualityMenu ref={ref} />
+    );
+    emitState({
+      capabilities: withSelectQuality(available),
+      qualities: [p1080, p720]
+    });
+    expect(ref.current).toBe(
+      container.querySelector('[data-playdeck-part="settings-menu-root"]')
+    );
+  });
 });

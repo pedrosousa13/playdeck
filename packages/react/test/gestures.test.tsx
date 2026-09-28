@@ -214,4 +214,49 @@ describe('Gestures', () => {
     act(() => vi.advanceTimersByTime(320));
     expect(onToggle).not.toHaveBeenCalled();
   });
+
+  test('forwards an object ref to the gesture layer element', () => {
+    const ref = createRef<HTMLDivElement>();
+    renderGestures(
+      <Player.Viewport>
+        <Player.Gestures ref={ref} />
+      </Player.Viewport>
+    );
+    expect(ref.current).toBe(getLayer());
+  });
+
+  test('forwards a callback ref to the gesture layer element, and null on unmount', () => {
+    const consumerRef = vi.fn();
+    const { unmount } = renderGestures(
+      <Player.Viewport>
+        <Player.Gestures ref={consumerRef} />
+      </Player.Viewport>
+    );
+    const layer = getLayer();
+    expect(consumerRef).toHaveBeenCalledExactlyOnceWith(layer);
+
+    unmount();
+
+    expect(consumerRef).toHaveBeenCalledTimes(2);
+    expect(consumerRef.mock.calls[1][0]).toBeNull();
+  });
+
+  // React 19 runs a callback ref's own returned cleanup on detach instead of
+  // calling the callback again with `null` -- so a naive merge that just
+  // returns that cleanup upward never sees a `null` call itself, either.
+  test('respects a callback ref that returns its own cleanup, and does not call it again with null', () => {
+    const cleanup = vi.fn();
+    const consumerRef = vi.fn(() => cleanup);
+    const { unmount } = renderGestures(
+      <Player.Viewport>
+        <Player.Gestures ref={consumerRef} />
+      </Player.Viewport>
+    );
+    expect(consumerRef).toHaveBeenCalledExactlyOnceWith(getLayer());
+
+    unmount();
+
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(consumerRef).toHaveBeenCalledOnce();
+  });
 });

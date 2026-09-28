@@ -1,6 +1,12 @@
 import { isNativeActivationTarget } from './controls.js';
 import { usePlayer } from './player-context.js';
-import { useEffect, useRef, type ComponentPropsWithRef } from 'react';
+import { assignRef } from './viewport-media.js';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  type ComponentPropsWithRef
+} from 'react';
 
 const DOUBLE_TAP_WINDOW_MS = 300;
 
@@ -36,12 +42,32 @@ export const Gestures = ({
   onSeek,
   children,
   onPointerUp,
+  ref,
   style,
   ...props
 }: GesturesProps) => {
   const { controller } = usePlayer();
   const layerRef = useRef<HTMLDivElement | null>(null);
   const pendingTap = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // `...props` carries the consumer's `ref` too (React 19 treats it as a
+  // plain prop), so this merges it with `layerRef` rather than letting the
+  // internal `ref` below win by attaching last. The cleanup this returns
+  // clears `layerRef` itself rather than trusting a second call with `null`:
+  // if the consumer's own ref is a callback that returns a cleanup, React
+  // runs only that cleanup on detach and never calls this function again.
+  const setRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      layerRef.current = node;
+      const consumerCleanup = assignRef(ref, node);
+      if (!node) return;
+      return () => {
+        layerRef.current = null;
+        if (consumerCleanup) consumerCleanup();
+        else assignRef(ref, null);
+      };
+    },
+    [ref]
+  );
 
   useEffect(() => {
     return () => {
@@ -90,7 +116,7 @@ export const Gestures = ({
           onToggleControls?.();
         }, DOUBLE_TAP_WINDOW_MS);
       }}
-      ref={layerRef}
+      ref={setRef}
       style={{ position: 'absolute', inset: 0, ...style }}
     >
       {children}
