@@ -8,7 +8,7 @@ import type {
   TextTrack,
   TextTrackKind
 } from '@playdeck/core';
-import { notifySafely, textTrackLabel } from '@playdeck/core';
+import { notifySafely, plainCueText, textTrackLabel } from '@playdeck/core';
 import {
   asRecord,
   available,
@@ -124,33 +124,14 @@ const vimeoCaptionRendering = (
       : 'provider';
 
 // Vimeo's cue payload is markup, not plain text: WebVTT tags survive in the
-// `text` property (their own docs' example contains `<i>`), lines are joined
-// with U+21B5 instead of a newline, and WebVTT requires `&`/`<`/`>` in cue
-// text to arrive escaped. `TextCue.text` is plain text with real newlines, so
-// this is a parse rather than a passthrough -- handing `text` straight through
-// would render literal tags in the overlay.
-// Exactly the six escapes the WebVTT cue-text grammar defines, and no more:
-// anything else (`&quot;`, numeric references) is not required to be escaped in
-// cue text, so passing it through matches what the other providers do with the
-// same file rather than inventing a Vimeo-only decode.
-const decodeCueEntities = (text: string): string =>
-  text
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    // A no-break space, not a plain one: captions use `&nbsp;` precisely to
-    // stop the overlay breaking a line there.
-    .replace(/&nbsp;/g, '\u00a0')
-    // Bidi marks — the whole reason they are escapable is that right-to-left
-    // subtitles need them, so leaving them literal breaks exactly the tracks
-    // that use them.
-    .replace(/&lrm;/g, '\u200e')
-    .replace(/&rlm;/g, '\u200f')
-    // `&amp;` last, so an escaped entity like `&amp;lt;` survives as `&lt;`
-    // instead of being decoded twice into `<`.
-    .replace(/&amp;/g, '&');
-
+// `text` property (their own docs' example contains `<i>`), and lines are
+// joined with U+21B5 instead of a newline -- `TextCue.text` is plain text
+// with real newlines, so that substitution is Vimeo's own and stays here.
+// Stripping the tags and decoding the WebVTT entities is `@playdeck/core`'s
+// `plainCueText`, shared with the native and HLS providers rather than
+// parsed a third and fourth time (#797).
 const vimeoCueText = (text: string): string =>
-  decodeCueEntities(text.replace(/↵/g, '\n').replace(/<[^>]*>/g, ''));
+  plainCueText(text.replace(/↵/g, '\n'));
 
 // The slice of the player this seam drives: track discovery and the two
 // enable/disable calls, nothing else.

@@ -14,6 +14,11 @@ import {
   type TextCue,
   type TextTrack
 } from '@playdeck/core';
+import { createNativeProvider } from '@playdeck/provider-native';
+import {
+  createFakeTrack,
+  createFakeTrackList
+} from '@playdeck/test-support/fake-text-tracks';
 import {
   INTERNAL_CONTROLLER,
   type InternalControllerAccess
@@ -78,6 +83,31 @@ const renderWithPlayer = (ui: ReactNode) => {
     emitCues: (cues: readonly TextCue[]) => act(() => mock.emitCues(cues)),
     emitState: (patch: ProviderStatePatch) => act(() => mock.emitState(patch))
   };
+};
+
+// Same shape as `renderWithPlayer`, but swaps in the real native provider
+// (over a caller-supplied media element and its own fake `TextTrackList`)
+// instead of the mock adapter above -- for the one test that needs a real
+// provider's own cue decoding in the loop rather than a cue fixture that
+// already reads as plain text.
+const renderWithRealNativeProvider = (
+  ui: ReactNode,
+  media: HTMLVideoElement
+) => {
+  const handle = createRef<Player.PlayerHandle>();
+  const utils = render(
+    <Player.Root loading="interaction" ref={handle} source="/tracer.mp4">
+      {ui}
+    </Player.Root>
+  );
+  const controller = (handle.current as unknown as InternalControllerAccess)[
+    INTERNAL_CONTROLLER
+  ];
+  const adapter = createNativeProvider(media);
+  act(() => {
+    controller.setProvider(adapter);
+  });
+  return { ...utils, controller, adapter };
 };
 
 const notReadyAvailability: Availability = {
@@ -231,6 +261,58 @@ describe('Player.Captions', () => {
     expect(Object.keys(received[0] as object).sort()).toEqual(
       ['endTime', 'id', 'startTime', 'text'].sort()
     );
+  });
+
+  // #797's acceptance criterion: a consumer's own renderCue must see the same
+  // cleaned text the default renderer does. Unlike the fixture above, this
+  // goes through the real native provider -- decoding happens at the
+  // provider boundary, not in Captions itself, so a fixture that already
+  // reads as plain text cannot tell the two apart.
+  test('renderCue receives the decoded text for a native cue carrying WebVTT markup', () => {
+    const media = document.createElement('video');
+    const trackList = createFakeTrackList([]);
+    const fakeTrack = createFakeTrack(
+      { kind: 'captions', label: 'English', language: 'en', id: 't1' },
+      () => trackList.dispatch('change')
+    );
+    trackList.push(fakeTrack);
+    Object.defineProperty(media, 'textTracks', {
+      configurable: true,
+      value: trackList
+    });
+
+    const received: TextCue[] = [];
+    const { adapter } = renderWithRealNativeProvider(
+      <Player.Captions
+        renderCue={(cue) => {
+          received.push(cue);
+          return <span data-testid="custom-cue">{cue.text}</span>;
+        }}
+      />,
+      media
+    );
+
+    act(() => {
+      adapter.attach();
+    });
+    act(() => {
+      void adapter.selectTextTrack?.('t1');
+    });
+    act(() => {
+      fakeTrack.activeCues = [
+        {
+          id: 'cue-1',
+          startTime: 0,
+          endTime: 1,
+          text: '<v Bob><i>Look out</i> &amp; run'
+        }
+      ];
+      fakeTrack.dispatch('cuechange');
+    });
+
+    expect(received).toEqual([
+      { id: 'cue-1', startTime: 0, endTime: 1, text: 'Look out & run' }
+    ]);
   });
 
   test('has no aria-live attribute on the overlay', () => {
