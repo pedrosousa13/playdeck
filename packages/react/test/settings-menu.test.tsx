@@ -7,7 +7,8 @@ import {
   screen,
   waitFor
 } from '@testing-library/react';
-import { afterEach, describe, expect, test } from 'vitest';
+import { createRef } from 'react';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import * as Player from '../src/index';
 
 afterEach(cleanup);
@@ -225,6 +226,178 @@ describe('SettingsMenu', () => {
     expect(item.style.minHeight).toBe(
       'var(--playdeck-control-min-size, 2.75rem)'
     );
+  });
+});
+
+describe('ref forwarding', () => {
+  test('forwards an object ref on SettingsMenu to its root element', () => {
+    const ref = createRef<HTMLDivElement>();
+    render(<Player.SettingsMenu ref={ref} />);
+    expect(ref.current).toBe(
+      document.querySelector('[data-playdeck-part="settings-menu-root"]')
+    );
+  });
+
+  test('forwards a callback ref on SettingsMenu to its root element, and null on unmount', () => {
+    const consumerRef = vi.fn();
+    const { unmount } = render(<Player.SettingsMenu ref={consumerRef} />);
+    const root = document.querySelector(
+      '[data-playdeck-part="settings-menu-root"]'
+    );
+    expect(consumerRef).toHaveBeenCalledExactlyOnceWith(root);
+
+    unmount();
+
+    expect(consumerRef).toHaveBeenCalledTimes(2);
+    expect(consumerRef.mock.calls[1][0]).toBeNull();
+  });
+
+  test('forwards an object ref on SettingsMenuTrigger to the trigger button', () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(
+      <Player.SettingsMenu>
+        <Player.SettingsMenuTrigger ref={ref} />
+      </Player.SettingsMenu>
+    );
+    expect(ref.current).toBe(screen.getByRole('button', { name: 'Settings' }));
+  });
+
+  test('forwards a callback ref on SettingsMenuTrigger to the trigger button, and null on unmount', () => {
+    const consumerRef = vi.fn();
+    const { unmount } = render(
+      <Player.SettingsMenu>
+        <Player.SettingsMenuTrigger ref={consumerRef} />
+      </Player.SettingsMenu>
+    );
+    const trigger = screen.getByRole('button', { name: 'Settings' });
+    expect(consumerRef).toHaveBeenCalledExactlyOnceWith(trigger);
+
+    unmount();
+
+    expect(consumerRef).toHaveBeenCalledTimes(2);
+    expect(consumerRef.mock.calls[1][0]).toBeNull();
+  });
+
+  test('forwards an object ref on SettingsMenuContent to the menu element', () => {
+    const ref = createRef<HTMLDivElement>();
+    render(
+      <Player.SettingsMenu>
+        <Player.SettingsMenuTrigger />
+        <Player.SettingsMenuContent ref={ref}>
+          <Player.MenuItem>Quality</Player.MenuItem>
+        </Player.SettingsMenuContent>
+      </Player.SettingsMenu>
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(ref.current).toBe(screen.getByRole('menu'));
+  });
+
+  test('forwards a callback ref on SettingsMenuContent to the menu element, and null on close', () => {
+    const consumerRef = vi.fn();
+    render(
+      <Player.SettingsMenu>
+        <Player.SettingsMenuTrigger />
+        <Player.SettingsMenuContent ref={consumerRef}>
+          <Player.MenuItem>Quality</Player.MenuItem>
+        </Player.SettingsMenuContent>
+      </Player.SettingsMenu>
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const menu = screen.getByRole('menu');
+    expect(consumerRef).toHaveBeenCalledExactlyOnceWith(menu);
+
+    // SettingsMenuContent unmounts itself (returns null) once closed, rather
+    // than the test unmounting the tree.
+    fireEvent.keyDown(menu, { key: 'Escape' });
+
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(consumerRef).toHaveBeenCalledTimes(2);
+    expect(consumerRef.mock.calls[1][0]).toBeNull();
+  });
+
+  // React 19 runs a callback ref's own returned cleanup on detach instead of
+  // calling the callback again with `null` -- so a naive merge that just
+  // returns that cleanup upward never sees a `null` call itself, either.
+  test('SettingsMenu respects a callback ref that returns its own cleanup, and does not call it again with null', () => {
+    const cleanup = vi.fn();
+    const consumerRef = vi.fn(() => cleanup);
+    const { unmount } = render(<Player.SettingsMenu ref={consumerRef} />);
+    const root = document.querySelector(
+      '[data-playdeck-part="settings-menu-root"]'
+    );
+    expect(consumerRef).toHaveBeenCalledExactlyOnceWith(root);
+
+    unmount();
+
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(consumerRef).toHaveBeenCalledOnce();
+  });
+
+  test('SettingsMenuTrigger respects a callback ref that returns its own cleanup, and does not call it again with null', () => {
+    const cleanup = vi.fn();
+    const consumerRef = vi.fn(() => cleanup);
+    const { unmount } = render(
+      <Player.SettingsMenu>
+        <Player.SettingsMenuTrigger ref={consumerRef} />
+      </Player.SettingsMenu>
+    );
+    const trigger = screen.getByRole('button', { name: 'Settings' });
+    expect(consumerRef).toHaveBeenCalledExactlyOnceWith(trigger);
+
+    unmount();
+
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(consumerRef).toHaveBeenCalledOnce();
+  });
+
+  // Reproduces the bug directly: `close()` reads `triggerRef` from context,
+  // not from this trigger's own props, so it can run after the trigger that
+  // set it has unmounted while `SettingsMenu` itself stays mounted. If the
+  // merge above only forwards the consumer's own cleanup on detach without
+  // also releasing `triggerRef`, `triggerRef.current` keeps pointing at the
+  // detached button and `close()` calls `.focus()` on it.
+  test('unmounting SettingsMenuTrigger releases its internal ref, so Escape does not focus the detached button', async () => {
+    const consumerRef = () => () => {};
+    const Harness = ({ showTrigger }: { showTrigger: boolean }) => (
+      <Player.SettingsMenu>
+        {showTrigger && <Player.SettingsMenuTrigger ref={consumerRef} />}
+        <Player.SettingsMenuContent>
+          <Player.MenuItem>Quality</Player.MenuItem>
+        </Player.SettingsMenuContent>
+      </Player.SettingsMenu>
+    );
+    const { rerender } = render(<Harness showTrigger />);
+    const trigger = screen.getByRole('button', { name: 'Settings' });
+    const focusSpy = vi.spyOn(trigger, 'focus');
+    fireEvent.click(trigger);
+    await waitFor(() => expect(screen.getByRole('menu')).toBeTruthy());
+
+    rerender(<Harness showTrigger={false} />);
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+
+    expect(focusSpy).not.toHaveBeenCalled();
+  });
+
+  test('SettingsMenuContent respects a callback ref that returns its own cleanup, and does not call it again with null', () => {
+    const cleanup = vi.fn();
+    const consumerRef = vi.fn(() => cleanup);
+    render(
+      <Player.SettingsMenu>
+        <Player.SettingsMenuTrigger />
+        <Player.SettingsMenuContent ref={consumerRef}>
+          <Player.MenuItem>Quality</Player.MenuItem>
+        </Player.SettingsMenuContent>
+      </Player.SettingsMenu>
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const menu = screen.getByRole('menu');
+    expect(consumerRef).toHaveBeenCalledExactlyOnceWith(menu);
+
+    fireEvent.keyDown(menu, { key: 'Escape' });
+
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(consumerRef).toHaveBeenCalledOnce();
   });
 });
 

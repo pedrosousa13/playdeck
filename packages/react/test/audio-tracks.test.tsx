@@ -260,6 +260,24 @@ describe('Player.AudioTrackMenu', () => {
     );
     expect(trigger?.getAttribute('aria-label')).toBe('Audio track');
   });
+
+  // The preset spreads its own props straight into `SettingsMenu`, so this
+  // exercises the same forwarding path `settings-menu.test.tsx` covers
+  // directly on `SettingsMenu` -- proof the pass-through reaches a consumer
+  // through the preset too.
+  test('forwards a ref to the SettingsMenu root', () => {
+    const ref = createRef<HTMLDivElement>();
+    const { container, emitState } = renderWithPlayer(
+      <Player.AudioTrackMenu ref={ref} />
+    );
+    emitState({
+      capabilities: withSelectAudioTrack(available),
+      audioTracks: [english, spanish]
+    });
+    expect(ref.current).toBe(
+      container.querySelector('[data-playdeck-part="settings-menu-root"]')
+    );
+  });
 });
 
 // Keyboard operability itself -- ArrowDown opening the menu onto its first

@@ -227,4 +227,22 @@ describe('Player.PlaybackRateMenu', () => {
     );
     expect(trigger?.getAttribute('aria-label')).toBe('Playback rate');
   });
+
+  // The preset spreads its own props straight into `SettingsMenu`, so this
+  // exercises the same forwarding path `settings-menu.test.tsx` covers
+  // directly on `SettingsMenu` -- proof the pass-through reaches a consumer
+  // through the preset too.
+  test('forwards a ref to the SettingsMenu root', () => {
+    const ref = createRef<HTMLDivElement>();
+    const { container, emitState } = renderWithPlayer(
+      <Player.PlaybackRateMenu ref={ref} />
+    );
+    emitState({
+      capabilities: withSetPlaybackRate(available),
+      playbackRate: 1
+    });
+    expect(ref.current).toBe(
+      container.querySelector('[data-playdeck-part="settings-menu-root"]')
+    );
+  });
 });

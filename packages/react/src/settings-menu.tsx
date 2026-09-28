@@ -1,5 +1,6 @@
 import { CheckIcon, SettingsIcon } from './icons.js';
 import { controlTargetStyle } from './loading-error.js';
+import { assignRef } from './viewport-media.js';
 import {
   createContext,
   useCallback,
@@ -59,6 +60,7 @@ export type SettingsMenuProps = ComponentPropsWithRef<'div'>;
 
 export const SettingsMenu = ({
   children,
+  ref,
   style,
   ...props
 }: SettingsMenuProps) => {
@@ -79,13 +81,32 @@ export const SettingsMenu = ({
     triggerId: `${baseId}-trigger`,
     contentId: `${baseId}-content`
   };
+  // `...props` carries the consumer's `ref` too (React 19 treats it as a
+  // plain prop), so this merges it with `rootRef` rather than letting the
+  // internal `ref` below win by attaching last. The cleanup this returns
+  // clears `rootRef` itself rather than trusting a second call with `null`:
+  // if the consumer's own ref is a callback that returns a cleanup, React
+  // runs only that cleanup on detach and never calls this function again.
+  const setRootRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      rootRef.current = node;
+      const consumerCleanup = assignRef(ref, node);
+      if (!node) return;
+      return () => {
+        rootRef.current = null;
+        if (consumerCleanup) consumerCleanup();
+        else assignRef(ref, null);
+      };
+    },
+    [ref]
+  );
   return (
     <SettingsMenuContext.Provider value={value}>
       <div
         {...props}
         data-playdeck-part="settings-menu-root"
         data-state={open ? 'open' : 'closed'}
-        ref={rootRef}
+        ref={setRootRef}
         style={{ position: 'relative', ...style }}
       >
         {children}
@@ -100,10 +121,31 @@ export const SettingsMenuTrigger = ({
   children,
   onClick,
   onKeyDown,
+  ref,
   style,
   ...props
 }: SettingsMenuTriggerProps) => {
   const { open, setOpen, triggerRef, triggerId, contentId } = useSettingsMenu();
+  // Merges the consumer's `ref` (arriving through `...props` below) with
+  // `triggerRef`, which `close()` reads from context to restore focus -- so a
+  // stale `triggerRef` here would point `close()` at a detached button after
+  // this trigger unmounts while `SettingsMenu` and `SettingsMenuContent`
+  // stay mounted. See the `setRootRef` comment above for why the cleanup
+  // below clears `triggerRef` itself rather than trusting a second call with
+  // `null`.
+  const setTriggerRef = useCallback(
+    (node: HTMLButtonElement | null) => {
+      triggerRef.current = node;
+      const consumerCleanup = assignRef(ref, node);
+      if (!node) return;
+      return () => {
+        triggerRef.current = null;
+        if (consumerCleanup) consumerCleanup();
+        else assignRef(ref, null);
+      };
+    },
+    [ref, triggerRef]
+  );
   return (
     <button
       {...props}
@@ -127,7 +169,7 @@ export const SettingsMenuTrigger = ({
           setOpen(true); // Content autofocuses its first item on open
         }
       }}
-      ref={triggerRef}
+      ref={setTriggerRef}
       style={{ ...controlTargetStyle, ...style }}
       type="button"
     >
@@ -141,6 +183,7 @@ export type SettingsMenuContentProps = ComponentPropsWithRef<'div'>;
 export const SettingsMenuContent = ({
   children,
   onKeyDown,
+  ref,
   style,
   tabIndex,
   ...props
@@ -148,6 +191,24 @@ export const SettingsMenuContent = ({
   const { open, close, setOpen, rootRef, triggerId, contentId } =
     useSettingsMenu();
   const contentRef = useRef<HTMLDivElement | null>(null);
+  // Merges the consumer's `ref` (arriving through `...props` below) with
+  // `contentRef`, which the autofocus effect below and the keyboard handlers
+  // further below both need for roving focus -- see the `setRootRef` comment
+  // above for why the cleanup below clears `contentRef` itself rather than
+  // trusting a second call with `null`.
+  const setContentRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      contentRef.current = node;
+      const consumerCleanup = assignRef(ref, node);
+      if (!node) return;
+      return () => {
+        contentRef.current = null;
+        if (consumerCleanup) consumerCleanup();
+        else assignRef(ref, null);
+      };
+    },
+    [ref]
+  );
 
   // Autofocus the first item when the menu opens.
   useEffect(() => {
@@ -231,7 +292,7 @@ export const SettingsMenuContent = ({
             return;
         }
       }}
-      ref={contentRef}
+      ref={setContentRef}
       role="menu"
       style={style}
       // Deliberately a default, not a fixed value: a bounded menu is a
