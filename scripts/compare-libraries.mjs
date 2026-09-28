@@ -419,7 +419,23 @@ export const libraries = [
     // each function to the real adapter, which this row's own bundle
     // reaches the same way every other row here reaches the rest of
     // `@playdeck/react`.
-    ceilingKb: 22.75
+    //
+    // 23327 bytes measured 2026-09-28 -- 22.7802734375 KB, 22.78 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 22.75 KB is #800's fix for a supplied registration's `detect` result
+    // claiming a built-in source type: `detectSourceWithProviders`'s
+    // string branch now copies `detect`'s own return through
+    // `copySuppliedSourceObject` before trusting anything about it -- the
+    // same copy the explicit-object path already ran, closing a getter
+    // that could answer one way to the check below and a different way to
+    // `loadProvider`'s later dispatch -- and checks the copy's own `type`
+    // against the reserved-name list, alongside the registration-key check
+    // already there. Both reach every composition this fixture builds
+    // regardless of provider. The whole distance from the last committed
+    // figure is this issue's: that figure was 22.74 KB (23289 bytes),
+    // measured the same day (2026-09-28) before this change, per
+    // `results.md` on `main`.
+    ceilingKb: 23
   },
   {
     name: 'Playdeck (play-only)',
