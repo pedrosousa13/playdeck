@@ -135,29 +135,79 @@ const initialPosterImageState = (
   srcSet?: string
 ): PosterImageState => (src || srcSet ? 'loading' : 'idle');
 
-// `srcSet` is a comma-separated list of `url [descriptor]` candidates. This
-// splits on the comma rather than running a full HTML srcset parser, so a
-// candidate URL containing a literal comma splits into two halves that are
-// then validated independently -- `"/a,b.jpg 1x"` splits into `/a` and
-// `b.jpg 1x`, both scheme-less, both permitted, and both are written into the
-// output as two wrong candidates. No scheme escalation is possible this way:
-// a dangerous scheme surviving the split still fails its own check on
-// whichever half carries it. This is list grammar, not URL policy -- the
-// candidate is corrupted by the split, not dropped by it (#236).
+const isAsciiWhitespace = (char: string): boolean =>
+  char === ' ' ||
+  char === '\t' ||
+  char === '\n' ||
+  char === '\f' ||
+  char === '\r';
+
+// `srcSet` is a comma-separated list of `url [descriptor]` candidates, scanned
+// the way the HTML spec's "parse a srcset attribute" does: a candidate's URL
+// runs up to the next ASCII whitespace, not the next comma, so a URL
+// containing a literal comma -- an image-transformation service's
+// `w_400,c_fill` segment, say -- stays one candidate rather than splitting
+// into two. A URL that itself ends in one or more commas has those commas
+// stripped and carries no descriptor (the spec's own edge case for a
+// comma-terminated candidate); otherwise the descriptor runs from there to
+// the next comma that is not nested inside parentheses.
 //
-// Each trimmed candidate -- its URL and any trailing descriptor together --
-// is passed to `permittedUrl` (`permitted-url.ts`), this package's one
-// check-then-resolve helper against the shared allowlist, as one string
-// rather than split apart first. `resolveNetworkPath` only ever rewrites a
-// leading `//`, so it leaves a trailing descriptor untouched, and a
-// descriptor's own leading space is not a scheme delimiter, so it cannot
-// forge one. Splitting the candidate first to isolate "the URL" would
-// instead search for the first whitespace character to find that split
-// point -- and a raw tab is whitespace, so `java<TAB>script:alert(1) 1x`
-// would truncate to the harmless-looking `java` before ever reaching the
-// scheme check, silently defeating it (#219, #236). Validating the whole
-// candidate closes that gap: the embedded tab is still there for
-// `isPermittedSourceUrl`'s own check to catch.
+// Each returned candidate is a raw slice of `srcSet` -- its URL and any
+// trailing descriptor together, exactly as written -- trimmed, never
+// reconstructed from its parts. That is what keeps closed the gap a
+// whitespace-first split would open: isolating "the URL" by cutting at the
+// first whitespace and validating only that piece would let
+// `java<TAB>script:alert(1) 1x` truncate to the harmless-looking `java`
+// before ever reaching the scheme check, since a raw tab is whitespace too
+// (#219, #236). A raw slice keeps that embedded tab in view for whichever
+// check `permittedPosterSrcSet` below runs against it.
+const scanSrcSetCandidates = (srcSet: string): string[] => {
+  const candidates: string[] = [];
+  const { length } = srcSet;
+  let position = 0;
+  while (position < length) {
+    while (
+      position < length &&
+      (isAsciiWhitespace(srcSet[position]!) || srcSet[position] === ',')
+    ) {
+      position++;
+    }
+    if (position >= length) break;
+    const urlStart = position;
+    while (position < length && !isAsciiWhitespace(srcSet[position]!)) {
+      position++;
+    }
+    const url = srcSet.slice(urlStart, position);
+    if (url.endsWith(',')) {
+      candidates.push(url.replace(/,+$/, ''));
+      continue;
+    }
+    while (position < length && isAsciiWhitespace(srcSet[position]!)) {
+      position++;
+    }
+    // Boolean, not a nesting counter: the spec's descriptor tokenizer has a
+    // single "in parens" state. Entering it takes one `(`; a second `(` met
+    // while already inside it is ordinary text, not a deeper level, and the
+    // very next `)` always leaves it, however many `(` came before.
+    let inParens = false;
+    while (position < length) {
+      const char = srcSet[position]!;
+      if (char === '(' && !inParens) inParens = true;
+      else if (char === ')' && inParens) inParens = false;
+      else if (char === ',' && !inParens) break;
+      position++;
+    }
+    candidates.push(srcSet.slice(urlStart, position).trim());
+  }
+  return candidates;
+};
+
+// Each candidate from `scanSrcSetCandidates` above is passed to `permittedUrl`
+// (`permitted-url.ts`), this package's one check-then-resolve helper against
+// the shared allowlist, as one string rather than split apart first --
+// `resolveNetworkPath` only ever rewrites a leading `//`, so it leaves a
+// trailing descriptor untouched, and a descriptor's own leading space is not
+// a scheme delimiter, so it cannot forge one.
 //
 // Each surviving candidate's own text is still exactly what was validated --
 // that property matters and holds here same as everywhere else the shared
@@ -171,19 +221,16 @@ const initialPosterImageState = (
 // truthy-adjacent enough to be a trap.
 //
 // `refused` rides along rather than being recomputed by a second pass over the
-// list: the split is this function's own grammar (see above), and a caller
-// re-deriving "was anything dropped" would have to repeat it and could then
-// disagree with it. It is one flag for the whole list, not one per candidate --
-// the notice slot holds one notice, and an operator with a poisoned `srcSet`
-// has the same one field to go and clean either way (#330).
+// list: the scan is `scanSrcSetCandidates`'s own grammar (see above), and a
+// caller re-deriving "was anything dropped" would have to repeat it and could
+// then disagree with it. It is one flag for the whole list, not one per
+// candidate -- the notice slot holds one notice, and an operator with a
+// poisoned `srcSet` has the same one field to go and clean either way (#330).
 const permittedPosterSrcSet = (
   srcSet: string | undefined
 ): { readonly value: string | undefined; readonly refused: boolean } => {
   if (srcSet === undefined) return { value: undefined, refused: false };
-  const candidates = srcSet
-    .split(',')
-    .map((candidate) => candidate.trim())
-    .filter((candidate) => candidate.length > 0);
+  const candidates = scanSrcSetCandidates(srcSet);
   const survivors = candidates.flatMap((candidate) => {
     const resolved = permittedUrl(candidate);
     return resolved !== undefined ? [resolved] : [];
