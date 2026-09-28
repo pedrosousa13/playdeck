@@ -1,8 +1,15 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { Component, createRef, type ReactNode } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
+import type {
+  CommandResult,
+  ProviderAdapter,
+  ProviderEvent,
+  ProviderStateListener,
+  ProviderStatePatch
+} from '@playdeck/core';
 import { captureRethrows } from '@playdeck/test-support/capture-rethrows';
 import * as Player from '../src/index';
 import {
@@ -10,6 +17,204 @@ import {
   type InternalControllerAccess
 } from '../src/internal-controller';
 import { createFakeProvider } from './fixtures/fake-provider';
+
+// A supplied kind's factory can return a class instance -- `ProviderAdapter`
+// is structural, so nothing forbids it (#799). `#playCount` is a genuine
+// private instance field, readable only through `this` inside `play()`, so
+// this class stands in for the shape the issue is about: a method that
+// throws unless it runs with the exact instance that declared the field as
+// its receiver, whether or not the object reaching it still has that method
+// at all.
+class ClassAdapter {
+  readonly provider = 'native' as const;
+  attachCount = 0;
+  loadCount = 0;
+  #listeners = new Set<ProviderStateListener>();
+  #playCount = 0;
+  #destroyCount = 0;
+  #muted = false;
+  #volume = 1;
+  #playbackRate = 1;
+
+  attach(): void {
+    this.attachCount += 1;
+  }
+
+  load(): void {
+    this.loadCount += 1;
+  }
+
+  destroy(): void {
+    this.#destroyCount += 1;
+  }
+
+  subscribe(listener: ProviderStateListener): () => void {
+    this.#listeners.add(listener);
+    return () => this.#listeners.delete(listener);
+  }
+
+  async play(): Promise<CommandResult> {
+    this.#playCount += 1;
+    return { ok: true };
+  }
+
+  async mute(): Promise<CommandResult> {
+    this.#muted = true;
+    return { ok: true };
+  }
+
+  async unmute(): Promise<CommandResult> {
+    this.#muted = false;
+    return { ok: true };
+  }
+
+  async setVolume(volume: number): Promise<CommandResult> {
+    this.#volume = volume;
+    return { ok: true };
+  }
+
+  async setPlaybackRate(rate: number): Promise<CommandResult> {
+    this.#playbackRate = rate;
+    return { ok: true };
+  }
+
+  get playCount(): number {
+    return this.#playCount;
+  }
+
+  get destroyCount(): number {
+    return this.#destroyCount;
+  }
+
+  get muted(): boolean {
+    return this.#muted;
+  }
+
+  get volume(): number {
+    return this.#volume;
+  }
+
+  get playbackRate(): number {
+    return this.#playbackRate;
+  }
+
+  emit(patch: ProviderStatePatch, event?: ProviderEvent): void {
+    this.#listeners.forEach((listener) => listener(patch, event));
+  }
+}
+
+// A frozen adapter is a plausible consumer pattern -- `Object.freeze` over
+// the returned object literal, the way a factory guarding against a caller
+// mutating its adapter after the fact would write it. Every own property of
+// a frozen object is non-configurable and non-writable, which is a
+// different constraint than `ClassAdapter`'s prototype methods above: a
+// `Proxy` whose target is the frozen adapter itself is bound by the spec to
+// report exactly that property's own value back, and a bound function is
+// never that same value, however faithfully it behaves.
+const createFrozenAdapter = () => {
+  let attachCount = 0;
+  let loadCount = 0;
+  let playCount = 0;
+  const listeners = new Set<ProviderStateListener>();
+  const adapter: ProviderAdapter = Object.freeze({
+    provider: 'native' as const,
+    attach: () => {
+      attachCount += 1;
+    },
+    load: () => {
+      loadCount += 1;
+    },
+    destroy: () => undefined,
+    subscribe: (listener: ProviderStateListener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    play: async (): Promise<CommandResult> => {
+      playCount += 1;
+      return { ok: true };
+    }
+  });
+  return {
+    adapter,
+    counts: () => ({ attachCount, loadCount, playCount }),
+    emit: (patch: ProviderStatePatch, event?: ProviderEvent): void => {
+      listeners.forEach((listener) => listener(patch, event));
+    }
+  };
+};
+
+// Drives a fresh `ClassAdapter` instance through attach, load, ready, every
+// optional command the brief names (play, mute, unmute, setVolume,
+// setPlaybackRate) and unmount, under either loading strategy -- so the two
+// tests that call this differ only in how each reaches `ready` and issues
+// `play`, and share every other assertion, which is what proves parity
+// between the queued-play branch (`loading="interaction"`) and the
+// unwrapped one (`loading="eager"`) rather than merely asserting each in
+// isolation.
+const driveClassAdapterLifecycle = async (
+  loading: 'eager' | 'interaction'
+): Promise<void> => {
+  const instance = new ClassAdapter();
+  const load = vi.fn(async () => () => instance);
+  const handle = createRef<Player.PlayerHandle>();
+
+  const { unmount } = render(
+    <Player.Root
+      loading={loading}
+      providers={{ acme: { detect: vi.fn(), load } }}
+      ref={handle}
+      source={{ type: 'acme', videoId: '1' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  if (loading === 'interaction') {
+    act(() => handle.current?.activateFromInteraction());
+  }
+
+  await waitFor(() => expect(instance.attachCount).toBe(1));
+  await waitFor(() => expect(instance.loadCount).toBe(1));
+
+  act(() => instance.emit({ activation: 'ready', lifecycle: 'ready' }));
+
+  if (loading === 'interaction') {
+    // The queued play `activateFromInteraction` armed fires on its own once
+    // `load()` and readiness both land, so `play` is proven by that alone --
+    // an explicit call here would double it up.
+    await waitFor(() => expect(instance.playCount).toBe(1));
+  } else {
+    await act(async () => {
+      await handle.current?.play();
+    });
+    await waitFor(() => expect(instance.playCount).toBe(1));
+  }
+
+  await act(async () => {
+    await handle.current?.mute();
+  });
+  await waitFor(() => expect(instance.muted).toBe(true));
+
+  await act(async () => {
+    await handle.current?.unmute();
+  });
+  await waitFor(() => expect(instance.muted).toBe(false));
+
+  await act(async () => {
+    await handle.current?.setVolume(0.4);
+  });
+  await waitFor(() => expect(instance.volume).toBe(0.4));
+
+  await act(async () => {
+    await handle.current?.setPlaybackRate(1.5);
+  });
+  await waitFor(() => expect(instance.playbackRate).toBe(1.5));
+
+  act(() => unmount());
+  expect(instance.destroyCount).toBe(1);
+};
 
 // A minimal boundary for the one test below that needs to prove no error
 // reaches it: `getDerivedStateFromError` is the only way to observe that
@@ -662,4 +867,159 @@ test('clears the providerOptions notice when the source changes to a built-in ki
   );
 
   await waitFor(() => expect(controller.getState().error).toBeNull());
+});
+
+// #799: the queued-play branch -- taken here because `activateFromInteraction`
+// queues a play the way a click on `Player.ActivationButton` does -- used to
+// hand `setProvider` `{ ...adapter, load: ... }`. A class instance's own
+// methods live on its prototype, which a spread never copies, so `attach`,
+// `destroy`, `subscribe` and every optional command were silently absent
+// from the copy whenever a supplied kind's factory returned an instance of
+// `ClassAdapter` instead of an object literal. `instance.playCount`,
+// `.muted`, `.volume` and `.playbackRate` only change if their method ran
+// with `instance` itself as `this`, which is what a fix has to preserve to
+// read or write a `#private` field at all -- not merely reattach a
+// same-named method, which throws on that read from any other receiver.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): against the unfixed
+// `{ ...adapter, load: ... }`, this test's first `waitFor` timed out --
+// `instance.attachCount` stayed `0` -- because `PlayerController.setProvider`
+// (`player-controller.ts`) calls `provider.subscribe(...)` before it ever
+// calls `attach()`, and the copy's missing `subscribe` threw
+// `TypeError: provider.subscribe is not a function` there first, caught by
+// `setProvider`'s own `try`/`catch` and turned into
+// `activation: 'error'` without `attach` ever being reached. Run with
+// `pnpm vitest run packages/react/test/supplied-provider.test.tsx -t "class-based"`.
+//
+// The per-method claim -- that each one has to run with `adapter` itself as
+// `this`, not merely with some receiver that has the same method -- is
+// proven by a named mutation on the fix rather than by this red, which
+// cannot tell a correctly-bound method from an incorrectly-bound one: with
+// the proxy's `get` trap changed to skip binding just `play` (returning
+// `Reflect.get(adapter, property, adapter)` unbound instead of
+// `.bind(adapter)`), this test's `attachCount`/`loadCount` waits still
+// passed, but the `playCount` wait that follows timed out. Confirmed why by
+// spying on `playWithOrigin` (`INTERNAL_CONTROLLER`, the way
+// `activation.test.tsx` does) and awaiting its resolved `CommandResult`,
+// since neither `getState().error` nor `getState().refusedPlay` carries a
+// provider's own message: `player-controller.ts`'s `#providerCommand` calls
+// the unbound `play` with `.call(provider, value)`, `provider` being the
+// proxy itself, and reading `this.#playCount` inside `play()` against that
+// receiver resolved `{ ok: false, reason: 'provider-error', error: {
+// message: "Cannot read private member #playCount from an object whose
+// class did not declare it", ... } }` rather than settling the command.
+// Reverted afterward.
+test("keeps a class-based supplied adapter's prototype methods and private state working on the queued-play path", async () => {
+  await driveClassAdapterLifecycle('interaction');
+});
+
+// The eager counterpart of the test above, proving parity rather than a
+// regression: the non-queued branch passes `adapter` to `setProvider`
+// unchanged, so it was never touched by the copy this issue is about, and
+// every assertion below is the same set the queued-play test makes.
+//
+// This path has no unfixed state of its own to run red against -- it
+// already passes on main. Substitute mutation instead (demonstrated-red.md's
+// fallback): with the non-queued branch's `controller.setProvider(adapter as
+// ProviderAdapter)` changed to spread `adapter` the same way the queued-play
+// branch used to (`controller.setProvider({ ...adapter } as
+// ProviderAdapter)`), this test's first `waitFor` timed out the same way the
+// queued-play test's unfixed red did -- `instance.attachCount` stayed `0`,
+// `provider.subscribe is not a function` -- confirming this test would have
+// caught the same defect had it reached the eager branch instead. Reverted
+// afterward.
+test("keeps the same class-based supplied adapter's methods and private state working under eager loading", async () => {
+  await driveClassAdapterLifecycle('eager');
+});
+
+// #799's brief also names the interaction-activation retry path: an error,
+// then `activateFromInteraction` retrying, which re-enters
+// `activateFromInteraction`'s own `activation === 'error'` branch rather
+// than its `dormant` one -- a second, independent way this hook arrives at
+// the same queued-play branch, on a fresh generation and a freshly loaded
+// instance of the same adapter.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): against the unfixed
+// `{ ...adapter, load: ... }`, this test's first `waitFor` timed out the
+// same way the queued-play test's did -- `instance.attachCount` stayed `0`
+// on the very first attempt, before the retry this test is actually about
+// was ever reached, because every queued-play attempt (a first activation or
+// a retry alike) took the same broken branch. Run with `pnpm vitest run
+// packages/react/test/supplied-provider.test.tsx -t "retries"`.
+test("retries a class-based supplied adapter's load after an error, still keeping its methods on the queued-play path", async () => {
+  const instance = new ClassAdapter();
+  const load = vi.fn(async () => () => instance);
+  const handle = createRef<Player.PlayerHandle>();
+
+  render(
+    <Player.Root
+      loading="interaction"
+      providers={{ acme: { detect: vi.fn(), load } }}
+      ref={handle}
+      source={{ type: 'acme', videoId: '1' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  act(() => handle.current?.activateFromInteraction());
+
+  await waitFor(() => expect(instance.attachCount).toBe(1));
+  await waitFor(() => expect(instance.loadCount).toBe(1));
+
+  act(() => instance.emit({ activation: 'error', lifecycle: 'error' }));
+  await waitFor(() =>
+    expect(handle.current?.getState().activation).toBe('error')
+  );
+
+  act(() => handle.current?.activateFromInteraction());
+
+  await waitFor(() => expect(instance.attachCount).toBe(2));
+  await waitFor(() => expect(instance.loadCount).toBe(2));
+
+  act(() => instance.emit({ activation: 'ready', lifecycle: 'ready' }));
+
+  await waitFor(() => expect(instance.playCount).toBe(1));
+});
+
+// Demonstrated red (docs/agents/demonstrated-red.md): with the proxy's
+// target still `adapter` itself, this test's first `waitFor` timed out --
+// `frozen.counts().attachCount` stayed `0` -- because reading
+// `provider.subscribe` inside `PlayerController.setProvider`
+// (`player-controller.ts`) tripped the proxy invariant for a frozen
+// target's own property: `TypeError: 'get' on proxy: property 'subscribe'
+// is a read-only and non-configurable data property on the proxy target
+// but the proxy did not return its actual value`. Caught by
+// `setProvider`'s own `try`/`catch` and turned into `activation: 'error'`,
+// the same way the class-based test's red was, confirmed the same way
+// (a diagnostic read of `getState().error`). Run with
+// `pnpm vitest run packages/react/test/supplied-provider.test.tsx -t "frozen"`.
+test('keeps a frozen object-literal adapter callable on the queued-play path', async () => {
+  const frozen = createFrozenAdapter();
+  const load = vi.fn(async () => () => frozen.adapter);
+  const handle = createRef<Player.PlayerHandle>();
+
+  render(
+    <Player.Root
+      loading="interaction"
+      providers={{ acme: { detect: vi.fn(), load } }}
+      ref={handle}
+      source={{ type: 'acme', videoId: '1' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  act(() => handle.current?.activateFromInteraction());
+
+  await waitFor(() => expect(frozen.counts().attachCount).toBe(1));
+  await waitFor(() => expect(frozen.counts().loadCount).toBe(1));
+
+  act(() => frozen.emit({ activation: 'ready', lifecycle: 'ready' }));
+
+  await waitFor(() => expect(frozen.counts().playCount).toBe(1));
 });

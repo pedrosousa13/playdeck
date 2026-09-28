@@ -407,6 +407,18 @@ export const libraries = [
     // last committed figure is this issue's: that figure was 22.45 KB
     // (22986 bytes), measured the same day (2026-09-28) before this change,
     // per `results.md` on `main`.
+    //
+    // Measures 22.74 KB (23289 bytes) after #799's fix for a class-based or
+    // frozen supplied adapter losing its own methods on the queued-play
+    // path -- up from 22.70 KB (23240 bytes) the same day (2026-09-28), per
+    // `results.md` on `main` -- which stays under this ceiling with no
+    // raise needed. The growth is `use-activation.ts`'s own queued-play
+    // branch, part of every composition this fixture builds regardless of
+    // provider: the copy-free `Proxy` that replaces the old `{ ...adapter,
+    // load: ... }` reads every property through `Reflect.get` and binds
+    // each function to the real adapter, which this row's own bundle
+    // reaches the same way every other row here reaches the rest of
+    // `@playdeck/react`.
     ceilingKb: 22.75
   },
   {

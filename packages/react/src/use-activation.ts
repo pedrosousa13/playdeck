@@ -1403,23 +1403,45 @@ export const useActivation = (
           dispose();
           void controller.playWithOrigin('user');
         };
-        // Same cast, same reason, as the other `setProvider` call above.
-        controller.setProvider({
-          ...adapter,
-          load: () => {
-            const result = adapter.load();
-            if (
-              !isCurrentLoad() ||
-              controller.getState().activation === 'error'
-            ) {
-              dispose();
-              return result;
+        // The proxy's target is an empty object, never `adapter` itself: a
+        // frozen adapter -- `Object.freeze` over the returned object
+        // literal, a plausible factory pattern -- makes every own property
+        // non-configurable and non-writable, and the spec requires a `get`
+        // trap to report such a property's exact own value back. A bound
+        // function is never that value, so a proxy targeting the frozen
+        // adapter throws on the very first property read. An empty target
+        // owns no property for that invariant to pin a forwarded value
+        // against -- every read below goes through `get` instead.
+        //
+        // Every property but `load` reads through to `adapter`, bound to it
+        // before it is returned: a method reading a `#private` field checks
+        // the exact instance that declared it, not what is reachable
+        // through a prototype chain, so it has to run with `adapter` itself
+        // as `this` regardless of what reached it. `load` is the one
+        // property this proxy replaces outright, to insert the queued-play
+        // hook below.
+        const wrappedAdapter = new Proxy({} as ProviderAdapter, {
+          get: (_target, property) => {
+            if (property === 'load') {
+              return () => {
+                const result = adapter.load();
+                if (
+                  !isCurrentLoad() ||
+                  controller.getState().activation === 'error'
+                ) {
+                  dispose();
+                  return result;
+                }
+                loaded = true;
+                playWhenLoaded();
+                return result;
+              };
             }
-            loaded = true;
-            playWhenLoaded();
-            return result;
+            const value = Reflect.get(adapter, property, adapter);
+            return typeof value === 'function' ? value.bind(adapter) : value;
           }
-        } as ProviderAdapter);
+        });
+        controller.setProvider(wrappedAdapter);
         subscription.unsubscribe = controller.subscribe((state) => {
           if (disposed) return;
           if (!isCurrentLoad() || state.activation === 'error') {
