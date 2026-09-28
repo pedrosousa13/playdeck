@@ -411,6 +411,22 @@ export const ThumbnailFollowsKeyboardFocus: Story = {
 };
 
 /**
+ * A nonzero `currentTime`, a buffered range and `thumbnails` together, so one
+ * fixture has a fill, a buffered range and a preview cue all measurable at
+ * once — what `e2e/seek-bar-rtl.spec.ts` compares between a `dir="rtl"` and a
+ * `dir="ltr"` ancestor. `currentTime: 3` is `thumbnails.vtt`'s 2-4s cue (tile
+ * 1, green, the same fixture value `ThumbnailFollowsKeyboardFocus` above
+ * uses); the buffered range covers the first 6 of the 10s window.
+ */
+export const WithBufferedAndThumbnails: Story = {
+  parameters: ready(
+    { seek: available },
+    { currentTime: 3, duration: 10, buffered: [{ start: 0, end: 6 }] }
+  ),
+  render: renderWithThumbnails
+};
+
+/**
  * A seek window short enough that a 1s step could only express its two ends —
  * the ~1s reference clip is one — showing a position between them.
  *
