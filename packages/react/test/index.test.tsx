@@ -407,6 +407,37 @@ test('reconciles controlled preferences without reporting prop-driven confirmati
   expect(onPlaybackRateChange).not.toHaveBeenCalled();
 });
 
+test('does not refuse a controlled preference before any provider attaches, and still seeds it once one does', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  const player = (muted: boolean, volume: number, playbackRate: number) => (
+    <LegacyRoot
+      loading="interaction"
+      muted={muted}
+      playbackRate={playbackRate}
+      ref={handle}
+      source="/tracer.mp4"
+      volume={volume}
+    >
+      <Player.Media />
+    </LegacyRoot>
+  );
+  const { rerender } = render(player(true, 0.4, 1.5));
+
+  expect(handle.current?.getState().refusedCommand).toBeNull();
+
+  rerender(player(false, 0.8, 1.75));
+
+  expect(handle.current?.getState().refusedCommand).toBeNull();
+
+  act(() => handle.current?.activateFromInteraction());
+  const media =
+    await screen.findByLabelText<HTMLVideoElement>('Playdeck media');
+  await waitFor(() => expect(media.muted).toBe(false));
+  expect(media.volume).toBe(0.8);
+  expect(media.playbackRate).toBe(1.75);
+  expect(handle.current?.getState().refusedCommand).toBeNull();
+});
+
 test('supersedes a delayed muted confirmation after a rapid controlled reversal', () => {
   const onMutedChange = vi.fn();
   const handle = createRef<Player.PlayerHandle>();
