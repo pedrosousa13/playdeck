@@ -776,13 +776,20 @@ Mapped onto the origins above:
   costs this request, whatever `loading` is set to, and a viewer who does can
   trigger it long after — or well before — any provider's own attach-time
   requests above have fired. Once armed it fetches the URL a consumer names in
-  the `thumbnails` prop, one request per resolved url, bounded by its own
-  `THUMBNAILS_FETCH_TIMEOUT_MS` deadline (4 seconds) and a
-  `THUMBNAILS_FETCH_BYTE_CAP` on the bytes it reads out of the body
-  (10,000,000) — both declared in `packages/react/src/thumbnails.tsx` and both
-  from #749, alongside `@playdeck/core/thumbnails`'s own `THUMBNAIL_CUE_CAP`
-  (100,000 cues, declared in `packages/core/src/thumbnails.ts`), which bounds
-  the parsed file regardless of what the body contained. `SeekSlider`
+  the `thumbnails` prop, one request per resolved url, its wait for a response
+  bounded by `THUMBNAILS_FETCH_TIMEOUT_MS` (4 seconds) and the body read that
+  follows bounded separately by `THUMBNAILS_BODY_READ_TIMEOUT_MS` (20
+  seconds), plus a `THUMBNAILS_FETCH_BYTE_CAP` on the bytes it reads out of
+  the body (10,000,000) — all three declared in
+  `packages/react/src/thumbnails.tsx`, alongside `@playdeck/core/thumbnails`'s
+  own `THUMBNAIL_CUE_CAP` (100,000 cues, declared in
+  `packages/core/src/thumbnails.ts`), which bounds the parsed file regardless
+  of what the body contained. A fetch that fails — network error, a non-ok
+  response, or either deadline — is retried once `THUMBNAILS_RETRY_BACKOFF_MS`
+  (5 seconds) has passed, whether the pointer stayed over the slider (or the
+  input kept keyboard focus) the whole time or only arrives again afterward,
+  so a host that keeps failing is retried at most once per backoff rather
+  than on every pointer movement. `SeekSlider`
   resolves that url, and `ThumbnailPreview` resolves each cue's own image url,
   through the same `permittedUrl` scheme allowlist
   (`packages/react/src/permitted-url.ts`) every other consumer-supplied url in
