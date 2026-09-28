@@ -3570,6 +3570,11 @@ describe('Controls container and scoped shortcuts', () => {
     expect(spies.mute).not.toHaveBeenCalled();
   });
 
+  // This test fires no blur at all before the capability transition
+  // unmounts the button, matching Firefox's own ordering: a Playwright
+  // probe of the bundled Firefox (151.0) on 2026-09-28 found that focusing
+  // a `<button>` and then removing it fires no blur or focusout on it at
+  // all.
   test('restores focus to the region when a focused control unmounts', async () => {
     const { container, emit } = renderWithPlayer(
       <Player.Controls>
@@ -3577,6 +3582,10 @@ describe('Controls container and scoped shortcuts', () => {
       </Player.Controls>,
       controlsState({ fullscreen: false })
     );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    const focusSpy = vi.spyOn(region, 'focus');
     const button = screen.getByRole('button', { name: 'Enter fullscreen' });
     button.focus();
     expect(document.activeElement).toBe(button);
@@ -3587,14 +3596,49 @@ describe('Controls container and scoped shortcuts', () => {
         fullscreen: unavailable
       })
     );
+    await waitFor(() => expect(document.activeElement).toBe(region));
+    expect(document.activeElement).not.toBe(document.body);
+    // A legitimate restore must not scroll the page to bring the region
+    // into view.
+    expect(focusSpy).toHaveBeenCalledWith({ preventScroll: true });
+  });
+
+  test('restores focus to the region when the browser blurs the control before removing it', async () => {
+    // A Playwright probe of the bundled Chromium (149.0.7827.55) on
+    // 2026-09-28 found that focusing a `<button>` and then removing it
+    // fires `blur`/`focusout` on it with `relatedTarget: null`, with
+    // `isConnected` reading `true` if checked synchronously inside the
+    // listener. This test reproduces that ordering directly: it blurs the
+    // still-mounted button, then unmounts it via the capability transition
+    // with no time for the deferred check to run in between. By the time
+    // that check actually runs (a microtask later), the unmount below has
+    // already completed, so it correctly finds the button disconnected and
+    // leaves the restore flag set.
+    const { container, emit } = renderWithPlayer(
+      <Player.Controls>
+        <Player.FullscreenButton />
+      </Player.Controls>,
+      controlsState({ fullscreen: false })
+    );
     const region = container.querySelector<HTMLElement>(
       '[data-playdeck-part="controls"]'
     )!;
+    const button = screen.getByRole('button', { name: 'Enter fullscreen' });
+    button.focus();
+    expect(document.activeElement).toBe(button);
+    button.blur();
+    expect(button.isConnected).toBe(true);
+    emit(
+      capabilities({
+        seek: available,
+        setVolume: available,
+        fullscreen: unavailable
+      })
+    );
     await waitFor(() => expect(document.activeElement).toBe(region));
-    expect(document.activeElement).not.toBe(document.body);
   });
 
-  test('does not re-steal focus after an outside click drops focus to body', () => {
+  test('does not re-steal focus after an outside click drops focus to body', async () => {
     const { container, emit } = renderWithPlayer(
       <Player.Controls>
         <Player.FullscreenButton />
@@ -3607,6 +3651,10 @@ describe('Controls container and scoped shortcuts', () => {
     // Clicking empty page area drops focus to <body> with no capability change.
     button.blur();
     expect(document.activeElement).toBe(document.body);
+    // Let the blur's deferred check run and see the button still connected
+    // -- the fix's own signal that this was a genuine abandonment, not a
+    // control being removed.
+    await Promise.resolve();
     // Frequent non-capability ticks (volume, currentTime) must not yank focus
     // back into the region.
     emit({ volume: 0.6 });
@@ -3616,5 +3664,83 @@ describe('Controls container and scoped shortcuts', () => {
     )!;
     expect(document.activeElement).toBe(document.body);
     expect(document.activeElement).not.toBe(region);
+    // A capability transition -- the trigger the restore effect actually
+    // watches for -- fires after the same blur, and must not re-steal
+    // focus either.
+    emit(
+      capabilities({
+        seek: unavailable,
+        setVolume: available,
+        fullscreen: available
+      })
+    );
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  test('does not restore focus when a genuinely abandoned control later unmounts for an unrelated reason', async () => {
+    const { emit } = renderWithPlayer(
+      <Player.Controls>
+        <Player.FullscreenButton />
+      </Player.Controls>,
+      controlsState({ fullscreen: false })
+    );
+    const button = screen.getByRole('button', { name: 'Enter fullscreen' });
+    button.focus();
+    expect(document.activeElement).toBe(button);
+    // A click on non-focusable content: blur fires with relatedTarget null
+    // while the button stays connected and mounted.
+    button.blur();
+    expect(button.isConnected).toBe(true);
+    // Let the deferred check settle before anything else happens, so it
+    // reads the abandonment correctly instead of racing the unmount below.
+    await Promise.resolve();
+    expect(document.activeElement).toBe(document.body);
+    // The same control the user already left now unmounts, for an
+    // unrelated reason (its own capability going unavailable). Focus was
+    // already abandoned, so this must not steal it back into the region.
+    emit(
+      capabilities({
+        seek: available,
+        setVolume: available,
+        fullscreen: unavailable
+      })
+    );
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  test('a re-focus inside the region overrides a stale blur, so the region still restores focus when that control unmounts', async () => {
+    const { container, emit } = renderWithPlayer(
+      <Player.Controls>
+        <Player.FullscreenButton />
+      </Player.Controls>,
+      controlsState({ fullscreen: false })
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    const button = screen.getByRole('button', { name: 'Enter fullscreen' });
+    button.focus();
+    // A click-away blurs the button with relatedTarget null while it is
+    // still connected -- ordinarily read as abandonment once the deferred
+    // check below runs.
+    button.blur();
+    // The user comes straight back before that check has had a chance to
+    // run.
+    button.focus();
+    expect(document.activeElement).toBe(button);
+    // Let the stale blur's deferred check run; it must not undo the
+    // re-focus.
+    await Promise.resolve();
+    expect(document.activeElement).toBe(button);
+    // The same control now unmounts while legitimately focused -- the
+    // region must still restore focus.
+    emit(
+      capabilities({
+        seek: available,
+        setVolume: available,
+        fullscreen: unavailable
+      })
+    );
+    await waitFor(() => expect(document.activeElement).toBe(region));
   });
 });
