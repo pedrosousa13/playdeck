@@ -732,6 +732,30 @@ turn a percentage into pixels — is left on the URL, with `region: null`. A
 file that does not start `WEBVTT`, or a block this parser does not recognise
 as a cue, contributes no cue rather than throwing.
 
+`parseThumbnailCues` takes a second argument, `baseUrl`: each cue's `url` is
+resolved against it the same way a browser resolves a relative URL found
+inside any other fetched document — against that document's own final
+address, not the page that requested it. This is what lets a sprite
+generator's ordinary relative image paths (`sprite-0.jpg`, or even
+`//other-host/sprite-0.jpg`) resolve against the thumbnails file itself
+rather than 404ing against the page. A caller that fetched the VTT file
+itself should pass the response's own final address, not the URL it
+requested the file with — those differ across a redirect, and it is the
+response's address a browser resolves a fetched document's own relative URLs
+against. Omit `baseUrl` and every cue's `url` publishes exactly as the file
+wrote it, relative forms included.
+
+A cue's `url` is left unresolved rather than dropping the cue whenever
+resolution cannot answer for it cleanly: `baseUrl` was omitted; `baseUrl` is
+not itself a valid absolute URL; `baseUrl` uses a non-hierarchical scheme
+such as `data:` or `blob:`, which has no path a relative reference can
+resolve against; or the cue's own URL contains a raw tab, newline or other
+C0 control character. That last case exists because the URL parser removes
+such characters while resolving, so resolving first and checking the result
+after would let a cue's raw string smuggle a character the allowlist's own
+whitespace rule is designed to catch — `parseThumbnailCues` leaves that URL
+exactly as written instead, so the allowlist's verdict on it is unchanged.
+
 `thumbnailCueAt` finds the cue covering a given time, matched half-open —
 `[startTime, endTime)` — so a boundary belongs to the cue it starts, not the
 one it ends. Playdeck publishes the parser and draws none of it itself:

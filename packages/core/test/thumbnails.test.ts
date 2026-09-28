@@ -1,6 +1,10 @@
 import { expect, test } from 'vitest';
 import type { ThumbnailCue } from '@playdeck/core';
-import { parseThumbnailCues, thumbnailCueAt } from '@playdeck/core';
+import {
+  isPermittedSourceUrl,
+  parseThumbnailCues,
+  thumbnailCueAt
+} from '@playdeck/core';
 
 test('parses a cue whose payload carries a pixel xywh region', () => {
   const vtt = [
@@ -77,6 +81,122 @@ test('leaves a payload URL with no xywh fragment untouched, with no region', () 
   const [cue] = parseThumbnailCues(vtt);
   expect(cue?.region).toBeNull();
   expect(cue?.url).toBe('thumb-0.jpg');
+});
+
+// #798: `baseUrl` resolves each cue's URL against a caller-supplied
+// address the same way a browser resolves a relative URL found inside any
+// other fetched document: against that document's own address, not the
+// page that embeds it.
+test('resolves a relative cue URL against the given base', () => {
+  const vtt = [
+    'WEBVTT',
+    '',
+    '00:00:00.000 --> 00:00:05.000',
+    'sprite-0.jpg#xywh=0,0,160,90'
+  ].join('\n');
+
+  const [cue] = parseThumbnailCues(vtt, 'https://cdn.example/v/1/sprites.vtt');
+  expect(cue?.url).toBe('https://cdn.example/v/1/sprite-0.jpg');
+  expect(cue?.region).toEqual({ x: 0, y: 0, width: 160, height: 90 });
+});
+
+// Demonstrated red (docs/agents/demonstrated-red.md), substitute mutation:
+// this passes on main, since main has no `baseUrl` argument to alter this
+// cue's already-absolute `url` at all. `resolveCueUrl`'s `new URL(url,
+// baseUrl).href` mutated to the naive `baseUrl + url` concatenation --
+// still resolving unconditionally, but wrongly -- failed this test:
+//
+//   Expected: "https://other.example/sprite.jpg"
+//   Received: "https://cdn.example/v/1/sprites.vtthttps://other.example/sprite.jpg"
+//
+// Reverted, and the test passed again.
+test('leaves an already-absolute cue URL unaffected by base', () => {
+  const vtt = [
+    'WEBVTT',
+    '',
+    '00:00:00.000 --> 00:00:05.000',
+    'https://other.example/sprite.jpg'
+  ].join('\n');
+
+  const [cue] = parseThumbnailCues(vtt, 'https://cdn.example/v/1/sprites.vtt');
+  expect(cue?.url).toBe('https://other.example/sprite.jpg');
+});
+
+test('resolves a protocol-relative cue URL, combining it with base', () => {
+  const vtt = [
+    'WEBVTT',
+    '',
+    '00:00:00.000 --> 00:00:05.000',
+    '//other.example/sprite.jpg'
+  ].join('\n');
+
+  const [cue] = parseThumbnailCues(vtt, 'https://cdn.example/v/1/sprites.vtt');
+  expect(cue?.url).toBe('https://other.example/sprite.jpg');
+});
+
+// Demonstrated red (docs/agents/demonstrated-red.md), substitute mutation:
+// this passes on main, since main has no `baseUrl` argument and so no catch
+// to falsify. `resolveCueUrl`'s `catch { return url; }` mutated to `catch
+// (error) { throw error; }` -- rethrowing instead of falling back -- failed
+// this test, uncaught:
+//
+//   TypeError: Invalid URL
+//    at new URL ...
+//    at resolveCueUrl packages/core/src/thumbnails.ts
+//
+// Reverted, and the test passed again.
+test('leaves the cue URL unresolved, without throwing, when baseUrl is not a valid absolute URL', () => {
+  const vtt = [
+    'WEBVTT',
+    '',
+    '00:00:00.000 --> 00:00:05.000',
+    'sprite-0.jpg'
+  ].join('\n');
+
+  const [cue] = parseThumbnailCues(vtt, 'not a valid url');
+  expect(cue?.url).toBe('sprite-0.jpg');
+});
+
+// The reason resolution has to happen before the allowlist check, rather
+// than after: the raw relative string is scheme-less, and
+// `isPermittedSourceUrl` permits every scheme-less form unconditionally
+// (`source-detection.ts`) -- so a caller that ran the allowlist against the
+// unresolved cue url would wrongly permit it, whatever host or scheme it
+// resolves to. Resolving first makes the allowlist judge the address a
+// consumer's `<img>` will actually request.
+test('a relative cue URL that resolves to a disallowed scheme is refused once resolved, though the raw form would have passed', () => {
+  const vtt = [
+    'WEBVTT',
+    '',
+    '00:00:00.000 --> 00:00:05.000',
+    'sprite-0.jpg'
+  ].join('\n');
+
+  const [cue] = parseThumbnailCues(vtt, 'ftp://cdn.example/v/1/sprites.vtt');
+  expect(cue?.url).toBe('ftp://cdn.example/v/1/sprite-0.jpg');
+  expect(isPermittedSourceUrl(cue!.url, undefined)).toBe(false);
+  expect(isPermittedSourceUrl('sprite-0.jpg', undefined)).toBe(true);
+});
+
+// The WHATWG URL parser removes an ASCII tab or newline from anywhere in
+// its input before parsing, so resolving first and then checking the
+// result would let a cue smuggle a control character past the allowlist's
+// own whitespace rule (`parserStrippedWhitespace`, `source-detection.ts`):
+// `isPermittedSourceUrl` already refuses this cue's raw, unresolved url
+// outright, on the tab alone -- but a naive resolve-then-check ordering
+// would clean the tab away first, leaving the unremarkable
+// `http://evil.example/x.jpg`, which the allowlist would wrongly permit.
+test('leaves a cue URL containing a control character unresolved, so the allowlist refuses it exactly as before', () => {
+  const vtt = [
+    'WEBVTT',
+    '',
+    '00:00:00.000 --> 00:00:05.000',
+    'htt\tp://evil.example/x.jpg'
+  ].join('\n');
+
+  const [cue] = parseThumbnailCues(vtt, 'https://cdn.example/v/1/sprites.vtt');
+  expect(cue?.url).toBe('htt\tp://evil.example/x.jpg');
+  expect(isPermittedSourceUrl(cue!.url, undefined)).toBe(false);
 });
 
 test('sorts published cues ascending by startTime regardless of file order', () => {
