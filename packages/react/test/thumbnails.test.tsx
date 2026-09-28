@@ -25,8 +25,10 @@ import {
 import * as Player from '../src/index';
 import {
   thumbnailLeftStyle,
+  THUMBNAILS_BODY_READ_TIMEOUT_MS,
   THUMBNAILS_FETCH_BYTE_CAP,
-  THUMBNAILS_FETCH_TIMEOUT_MS
+  THUMBNAILS_FETCH_TIMEOUT_MS,
+  THUMBNAILS_RETRY_BACKOFF_MS
 } from '../src/thumbnails';
 
 const available: Availability = { status: 'available' };
@@ -359,6 +361,386 @@ describe('SeekSlider thumbnails', () => {
 
     expect(attr(getThumbnail(), 'data-state')).toBe('hidden');
     expect(controller.getState().error).toBeNull();
+  });
+
+  // A fetch that fails once must not leave the preview empty forever -- a
+  // later arm (here, leaving and re-entering the slider) retries the same
+  // url, and a retry that succeeds shows the thumbnails the first attempt
+  // never got to parse.
+  test('a fetch that fails once is retried on a later arm, and thumbnails that were empty now show', async () => {
+    vi.useFakeTimers();
+    let attempt = 0;
+    stubFetch(async () => {
+      attempt += 1;
+      if (attempt === 1) throw new Error('network down');
+      return okTextResponse(twoCueVtt);
+    });
+    const { controller } = renderWithPlayer(
+      <Player.SeekSlider thumbnails="https://cdn.example.test/thumbs.vtt" />
+    );
+    hoverAt(50);
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(attr(getThumbnail(), 'data-state')).toBe('hidden');
+    expect(controller.getState().error).toBeNull();
+
+    await act(() => vi.advanceTimersByTimeAsync(THUMBNAILS_RETRY_BACKOFF_MS));
+    fireEvent.pointerLeave(getSlider());
+    hoverAt(50);
+    await act(() => vi.advanceTimersByTimeAsync(0));
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(attr(getThumbnail(), 'data-state')).toBe('visible');
+  });
+
+  // A retry only fires on a later arm -- `armed` toggling, which re-runs the
+  // fetch effect. A pointer that never leaves the slider (or keyboard focus
+  // that never blurs) holds `armed` at `true` for the whole backoff, so
+  // nothing re-runs the effect on its own; the retry has to be scheduled
+  // directly against the failure's own `retryAt`, not left for a re-arm that
+  // may never come.
+  test('a fetch that fails once is retried while the pointer never leaves the slider, once the backoff ends', async () => {
+    vi.useFakeTimers();
+    let attempt = 0;
+    stubFetch(async () => {
+      attempt += 1;
+      if (attempt === 1) throw new Error('network down');
+      return okTextResponse(twoCueVtt);
+    });
+    renderWithPlayer(
+      <Player.SeekSlider thumbnails="https://cdn.example.test/thumbs.vtt" />
+    );
+    hoverAt(50);
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(attr(getThumbnail(), 'data-state')).toBe('hidden');
+
+    // Short of the backoff: no retry yet, and the pointer has not moved.
+    await act(() =>
+      vi.advanceTimersByTimeAsync(THUMBNAILS_RETRY_BACKOFF_MS - 1)
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // The backoff elapses with the pointer still over the slider.
+    await act(() => vi.advanceTimersByTimeAsync(1));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(attr(getThumbnail(), 'data-state')).toBe('visible');
+  });
+
+  test('a host that keeps failing while the pointer never leaves is retried at most once per backoff, not in a tight loop', async () => {
+    vi.useFakeTimers();
+    stubFetch(async () => {
+      throw new Error('network down');
+    });
+    renderWithPlayer(
+      <Player.SeekSlider thumbnails="https://cdn.example.test/thumbs.vtt" />
+    );
+    hoverAt(50);
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Three full backoff windows with the pointer never leaving: exactly
+    // one retry per window, not a burst within it.
+    await act(() => vi.advanceTimersByTimeAsync(THUMBNAILS_RETRY_BACKOFF_MS));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await act(() => vi.advanceTimersByTimeAsync(THUMBNAILS_RETRY_BACKOFF_MS));
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    await act(() => vi.advanceTimersByTimeAsync(THUMBNAILS_RETRY_BACKOFF_MS));
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  // The fetch itself is decoupled from arm/disarm -- leaving the slider
+  // while a fetch is still in flight does not cancel it, only the effect
+  // run that started it. If that failure's own retry got scheduled by that
+  // same, by-then-cleaned-up run, nothing left mounted owns the timer, and
+  // it fires anyway once the backoff ends, even though nothing is armed any
+  // more.
+  test('does not schedule a stray retry from a fetch that outlives its own arm (disarmed before it fails)', async () => {
+    vi.useFakeTimers();
+    let reject: ((reason: unknown) => void) | undefined;
+    stubFetch(
+      () =>
+        new Promise<Response>((_resolve, rejectFn) => {
+          reject = rejectFn;
+        })
+    );
+    renderWithPlayer(
+      <Player.SeekSlider thumbnails="https://cdn.example.test/thumbs.vtt" />
+    );
+    hoverAt(50);
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Leaves while the fetch above is still in flight: this arm's own
+    // effect run is cleaned up, but the fetch it started keeps running.
+    fireEvent.pointerLeave(getSlider());
+    await act(() => vi.advanceTimersByTimeAsync(0));
+
+    // Fails only now, after the run that started it is already gone.
+    reject!(new Error('network down'));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+
+    // Well past the backoff, with the pointer never having come back.
+    await act(() =>
+      vi.advanceTimersByTimeAsync(THUMBNAILS_RETRY_BACKOFF_MS * 3)
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('retries once the backoff ends after a re-arm while the original fetch was still in flight', async () => {
+    vi.useFakeTimers();
+    let attempt = 0;
+    let firstReject: ((reason: unknown) => void) | undefined;
+    stubFetch(async () => {
+      attempt += 1;
+      if (attempt === 1) {
+        return new Promise<Response>((_resolve, rejectFn) => {
+          firstReject = rejectFn;
+        });
+      }
+      return okTextResponse(twoCueVtt);
+    });
+    renderWithPlayer(
+      <Player.SeekSlider thumbnails="https://cdn.example.test/thumbs.vtt" />
+    );
+    hoverAt(50);
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Leaves and re-enters while the first attempt is still pending: a new
+    // effect run starts, finds a fetch already in flight and does nothing
+    // -- the original run's own fetch is what eventually fails.
+    fireEvent.pointerLeave(getSlider());
+    hoverAt(50);
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    firstReject!(new Error('network down'));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(attr(getThumbnail(), 'data-state')).toBe('hidden');
+
+    // Stays hovered for the whole backoff -- the retry has to belong to
+    // the CURRENT arm, not the one that started the failed fetch.
+    await act(() => vi.advanceTimersByTimeAsync(THUMBNAILS_RETRY_BACKOFF_MS));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(attr(getThumbnail(), 'data-state')).toBe('visible');
+  });
+
+  test('does not fetch again after unmount, even when the pending retry belonged to an earlier, already-cleaned-up arm', async () => {
+    vi.useFakeTimers();
+    let attempt = 0;
+    let firstReject: ((reason: unknown) => void) | undefined;
+    stubFetch(async () => {
+      attempt += 1;
+      if (attempt === 1) {
+        return new Promise<Response>((_resolve, rejectFn) => {
+          firstReject = rejectFn;
+        });
+      }
+      return okTextResponse(twoCueVtt);
+    });
+    const { unmount } = renderWithPlayer(
+      <Player.SeekSlider thumbnails="https://cdn.example.test/thumbs.vtt" />
+    );
+    hoverAt(50);
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Re-arms while the first attempt is still in flight, so its later
+    // failure belongs to an effect run this instance has already moved
+    // past.
+    fireEvent.pointerLeave(getSlider());
+    hoverAt(50);
+    await act(() => vi.advanceTimersByTimeAsync(0));
+
+    firstReject!(new Error('network down'));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+
+    unmount();
+    await act(() =>
+      vi.advanceTimersByTimeAsync(THUMBNAILS_RETRY_BACKOFF_MS * 3)
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  // A non-ok response counts as a failure the same way a rejected fetch
+  // does, eligible for the same retry -- not the "no thumbnails, no notice"
+  // treatment an ok-but-unparseable body gets below.
+  test('a non-ok response is retried on a later arm', async () => {
+    vi.useFakeTimers();
+    let attempt = 0;
+    stubFetch(async () => {
+      attempt += 1;
+      return attempt === 1
+        ? new Response('nope', { status: 500 })
+        : okTextResponse(twoCueVtt);
+    });
+    renderWithPlayer(
+      <Player.SeekSlider thumbnails="https://cdn.example.test/thumbs.vtt" />
+    );
+    hoverAt(50);
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(attr(getThumbnail(), 'data-state')).toBe('hidden');
+
+    await act(() => vi.advanceTimersByTimeAsync(THUMBNAILS_RETRY_BACKOFF_MS));
+    fireEvent.pointerLeave(getSlider());
+    hoverAt(50);
+    await act(() => vi.advanceTimersByTimeAsync(0));
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(attr(getThumbnail(), 'data-state')).toBe('visible');
+  });
+
+  test('a repeated re-arm while a failure is still within its backoff does not retry', async () => {
+    vi.useFakeTimers();
+    stubFetch(async () => {
+      throw new Error('network down');
+    });
+    renderWithPlayer(
+      <Player.SeekSlider thumbnails="https://cdn.example.test/thumbs.vtt" />
+    );
+    hoverAt(50);
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Five more arms, all inside the backoff window -- none of them should
+    // reach the network.
+    for (let i = 0; i < 5; i += 1) {
+      fireEvent.pointerLeave(getSlider());
+      hoverAt(50);
+    }
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await act(() => vi.advanceTimersByTimeAsync(THUMBNAILS_RETRY_BACKOFF_MS));
+    fireEvent.pointerLeave(getSlider());
+    hoverAt(50);
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('a URL that already fetched successfully is not refetched on a later arm', async () => {
+    renderWithPlayer(
+      <Player.SeekSlider thumbnails="https://cdn.example.test/thumbs.vtt" />
+    );
+    hoverAt(50);
+    await waitFor(() =>
+      expect(attr(getThumbnail(), 'data-state')).toBe('visible')
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    fireEvent.pointerLeave(getSlider());
+    hoverAt(50);
+    fireEvent.pointerLeave(getSlider());
+    hoverAt(50);
+    await flushMicrotasks();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  // A response whose body keeps delivering bytes past the headers deadline
+  // -- merely slow, not stalled -- must still be read to completion: the
+  // headers deadline only ever bounded the wait for `fetch()` itself to
+  // settle, which already happened here.
+  test('a body that arrives slowly but steadily, past the headers deadline, still shows its thumbnails', async () => {
+    vi.useFakeTimers();
+    const vttBytes = new TextEncoder().encode(twoCueVtt);
+    const half = Math.ceil(vttBytes.length / 2);
+    stubFetch(
+      async (_url, init) =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(vttBytes.slice(0, half));
+              const rest = setTimeout(() => {
+                controller.enqueue(vttBytes.slice(half));
+                controller.close();
+              }, THUMBNAILS_FETCH_TIMEOUT_MS * 2);
+              // Mirrors what a real fetch does to its response body's
+              // stream once the request is aborted -- needed here because
+              // this hand-built stream has no fetch layer of its own to do
+              // it automatically.
+              init?.signal?.addEventListener('abort', () => {
+                clearTimeout(rest);
+                controller.error(
+                  new DOMException('The operation was aborted.', 'AbortError')
+                );
+              });
+            }
+          }),
+          { status: 200 }
+        )
+    );
+    renderWithPlayer(
+      <Player.SeekSlider thumbnails="https://cdn.example.test/thumbs.vtt" />
+    );
+    hoverAt(50);
+    // A first flush at 0 to let the dynamic import and the effect it
+    // arms run before the real advance below starts: scheduling `rest`
+    // (above) partway into a single large jump lands it later than
+    // intended, the same reason the deadline test further down splits its
+    // own advance the same way.
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    await act(() =>
+      vi.advanceTimersByTimeAsync(THUMBNAILS_FETCH_TIMEOUT_MS * 2)
+    );
+    expect(attr(getThumbnail(), 'data-state')).toBe('visible');
+    expect(getThumbnail()!.querySelector('img')!.src).toBe(
+      'https://cdn.example.test/sprite.jpg'
+    );
+  });
+
+  // A body that stops delivering bytes partway through -- no network error,
+  // no close, nothing -- must still end as a failure, bounded by its own
+  // deadline rather than hanging forever; and, like any other failure, be
+  // eligible for a retry on a later arm.
+  test('a body that stalls partway fails at its own deadline, and a later arm retries it', async () => {
+    vi.useFakeTimers();
+    const vttBytes = new TextEncoder().encode(twoCueVtt);
+    let attempt = 0;
+    stubFetch(async (_url, init) => {
+      attempt += 1;
+      const succeeds = attempt === 2;
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(vttBytes.slice(0, 10));
+            if (succeeds) {
+              controller.enqueue(vttBytes.slice(10));
+              controller.close();
+            }
+            // Mirrors real fetch's own abort-to-stream-error behaviour --
+            // see the slow-body test above for why this is needed on a
+            // hand-built stream.
+            init?.signal?.addEventListener('abort', () => {
+              controller.error(
+                new DOMException('The operation was aborted.', 'AbortError')
+              );
+            });
+          }
+        }),
+        { status: 200 }
+      );
+    });
+    renderWithPlayer(
+      <Player.SeekSlider thumbnails="https://cdn.example.test/thumbs.vtt" />
+    );
+    hoverAt(50);
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await act(() =>
+      vi.advanceTimersByTimeAsync(THUMBNAILS_BODY_READ_TIMEOUT_MS)
+    );
+    expect(attr(getThumbnail(), 'data-state')).toBe('hidden');
+
+    await act(() => vi.advanceTimersByTimeAsync(THUMBNAILS_RETRY_BACKOFF_MS));
+    fireEvent.pointerLeave(getSlider());
+    hoverAt(50);
+    await act(() => vi.advanceTimersByTimeAsync(0));
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(attr(getThumbnail(), 'data-state')).toBe('visible');
   });
 
   test('a malformed body that parses to no cues renders no thumbnail and publishes no notice', async () => {

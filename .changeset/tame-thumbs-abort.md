@@ -3,14 +3,29 @@
 '@playdeck/react': patch
 ---
 
-Give the thumbnails fetch a deadline, a byte cap and a cue cap, and binary-search cue lookup
+Give the thumbnails fetch deadlines, a retry, a byte cap and a cue cap, and binary-search cue lookup
 
 The React thumbnails loader's fetch (`packages/react/src/thumbnails.tsx`) now
-carries a 4000ms deadline (`THUMBNAILS_FETCH_TIMEOUT_MS`), the same figure and
-shape `OEMBED_REQUEST_TIMEOUT_MS` (`@playdeck/provider-vimeo`) and
+carries two deadlines. `THUMBNAILS_FETCH_TIMEOUT_MS` (4000ms, the same figure
+and shape `OEMBED_REQUEST_TIMEOUT_MS` (`@playdeck/provider-vimeo`) and
 `POSTER_PROBE_TIMEOUT_MS` (`@playdeck/provider-wistia`) already give their own
-fetches: a WebVTT host that is malicious or merely compromised can no longer
-hold it open indefinitely.
+fetches) bounds only the wait for a response's headers: a WebVTT host that is
+malicious or merely compromised can no longer hold it open indefinitely by
+never answering at all. Once headers arrive, `THUMBNAILS_BODY_READ_TIMEOUT_MS`
+(20000ms) separately bounds the body read that follows, so a large sprite VTT
+on a slow connection is given time to finish downloading instead of being cut
+off by a budget sized for "is anything answering at all" -- a body that stops
+delivering bytes partway through still ends as a failure once this second
+deadline elapses.
+
+A fetch that fails -- a network error, a non-ok response, or either deadline
+-- is retried once `THUMBNAILS_RETRY_BACKOFF_MS` (5000ms) has passed, rather
+than staying failed for the rest of the URL's life: whether that backoff ends
+while the pointer is still hovering the seek slider (or its input still holds
+keyboard focus) or only once a later hover or focus arrives, either way
+triggers the retry. A host that keeps failing is retried at most once per
+backoff, not on every pointer movement in between. A URL that already
+fetched successfully is still fetched only once.
 
 The response body is read through a counting stream reader
 (`readCappedBody`) rather than `response.text()`, and abandoned -- the stream
@@ -33,7 +48,8 @@ and becomes public API, which this internal limit is not meant to be.
 track. It returns exactly what the linear scan returned, including when
 cues share a `startTime` or overlap.
 
-No public API changes beyond two new constants on the React side
-(`THUMBNAILS_FETCH_TIMEOUT_MS`, `THUMBNAILS_FETCH_BYTE_CAP`), neither
-re-exported from `@playdeck/react`'s main entry point -- the same treatment
+No public API changes beyond four new constants on the React side
+(`THUMBNAILS_FETCH_TIMEOUT_MS`, `THUMBNAILS_BODY_READ_TIMEOUT_MS`,
+`THUMBNAILS_RETRY_BACKOFF_MS`, `THUMBNAILS_FETCH_BYTE_CAP`), none re-exported
+from `@playdeck/react`'s main entry point -- the same treatment
 `OEMBED_REQUEST_TIMEOUT_MS` and `POSTER_PROBE_TIMEOUT_MS` already get.
