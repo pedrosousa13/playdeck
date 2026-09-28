@@ -101,6 +101,35 @@ const readCappedBody = async (
   return text;
 };
 
+// `response.url`, when a real fetch produced `response`, is the address the
+// browser ultimately requested -- across any redirect -- which is the base
+// each cue's own URL should resolve against (`parseThumbnailCues`'s
+// `baseUrl`). It reads `''` for a `Response` this module did not itself
+// receive from a real network fetch: a hand-built `Response` (this
+// package's own tests construct exactly one this way), and some fetch
+// polyfills and opaque-response cases do the same. Falling back to
+// `requestUrl` -- the address this fetch was actually made with -- resolved
+// against the document's own base URL recovers the same final address a
+// populated `response.url` would have reported, since that resolution is
+// exactly what the browser already did to turn `requestUrl` into the
+// request it sent. No `document` at all (server-side rendering, or any
+// other non-DOM environment) leaves nothing to resolve `requestUrl`
+// against, so this falls through to `undefined`: cues then publish
+// unresolved, the same as every other missing-`baseUrl` case
+// `parseThumbnailCues` already handles.
+const responseBaseUrl = (
+  response: Response,
+  requestUrl: string
+): string | undefined => {
+  if (response.url !== '') return response.url;
+  if (typeof document === 'undefined') return undefined;
+  try {
+    return new URL(requestUrl, document.baseURI).href;
+  } catch {
+    return undefined;
+  }
+};
+
 const EMPTY_CUES: readonly ThumbnailCue[] = Object.freeze([]);
 
 type CuesState = {
@@ -215,12 +244,28 @@ export const useThumbnailCues = (
       // the origin the way that fetch does.
       referrerPolicy: 'no-referrer'
     })
-      .then((response) => (response.ok ? readCappedBody(response) : undefined))
-      .then((text) => {
+      .then((response) =>
+        response.ok
+          ? readCappedBody(response).then((text) => ({
+              text,
+              // See `responseBaseUrl`'s own comment for why this is not
+              // simply `response.url`. Threaded through so a cue payload
+              // naming a relative image path resolves against the VTT
+              // file's own address rather than the page's, which is what
+              // `parseThumbnailCues`'s `baseUrl` argument is for.
+              baseUrl: responseBaseUrl(response, url)
+            }))
+          : undefined
+      )
+      .then((result) => {
         // Stale if aborted before a response arrived to read at all -- a
         // narrow race between the fetch settling and this callback running.
         if (controller.signal.aborted) return;
-        publishCues(text === undefined ? EMPTY_CUES : parseThumbnailCues(text));
+        publishCues(
+          result === undefined || result.text === undefined
+            ? EMPTY_CUES
+            : parseThumbnailCues(result.text, result.baseUrl)
+        );
       })
       .catch(() => {
         // A network failure is silent, same as a fetch that resolves but

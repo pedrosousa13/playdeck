@@ -486,9 +486,15 @@ Video.js all read, so an existing sprite-generation pipeline needs no change.
 The file is fetched once, lazily, on the first hover or the first keyboard
 focus of the input — never at mount — and, once loaded, `SeekSlider` renders a
 `thumbnail` part cropped to the cue for the pointer or focus position, above
-the track. Without the prop, nothing extra renders. Every cue's image URL
-passes through the same allowlist every other URL in the player does; a
-refused `thumbnails` URL or a refused cue image publishes the same
+the track. Without the prop, nothing extra renders. A relative cue image
+URL — the ordinary output of a sprite generator — resolves against the VTT
+file's own final address, not the page's, before it ever reaches the
+allowlist below, so the allowlist judges the same address the `<img>` will
+actually request
+(`@playdeck/core`'s [`parseThumbnailCues`](https://github.com/pedrosousa13/playdeck/blob/main/packages/core/README.md#thumbnail-preview)).
+Every cue's image URL passes through the same allowlist every other URL in
+the player does; a refused `thumbnails` URL or a refused cue image publishes
+the same
 [A URL prop the allowlist refused](https://github.com/pedrosousa13/playdeck/blob/main/packages/core/README.md#a-url-prop-the-allowlist-refused)
 notice `mediaMetadata`'s artwork does. The part's name and its `data-state`
 values are documented in the

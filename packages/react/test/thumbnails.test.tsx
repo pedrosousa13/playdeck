@@ -447,6 +447,71 @@ describe('SeekSlider thumbnails', () => {
     );
   });
 
+  // #798: a relative cue image resolves against the VTT file's own fetch
+  // address, not the page's -- and, since a redirect can move that address,
+  // against the *response's* URL specifically rather than the URL the file
+  // was requested with. `okTextResponse`'s `Response` is not the product of
+  // a real fetch, so its own `.url` reads `''`; this test overrides it the
+  // way a redirected fetch's `response.url` would differ from its request.
+  test('a relative cue image resolves against the response URL, not the requested URL or the page', async () => {
+    stubFetch(async () => {
+      const response = okTextResponse(
+        [
+          'WEBVTT',
+          '',
+          '00:00:00.000 --> 00:01:40.000',
+          'sprite-0.jpg#xywh=0,0,160,90',
+          ''
+        ].join('\n')
+      );
+      Object.defineProperty(response, 'url', {
+        value: 'https://cdn.example.test/redirected/thumbs.vtt',
+        configurable: true
+      });
+      return response;
+    });
+    renderWithPlayer(
+      <Player.SeekSlider thumbnails="https://cdn.example.test/thumbs.vtt" />
+    );
+    hoverAt(50);
+    await waitFor(() =>
+      expect(getThumbnail()!.querySelector('img')?.src).toBe(
+        'https://cdn.example.test/redirected/sprite-0.jpg'
+      )
+    );
+  });
+
+  // #798: `response.url` reads `''` for a `Response` that is not the
+  // product of a real network fetch -- `okTextResponse` below builds
+  // exactly this kind, the same as every other test in this file that
+  // does not override `.url` -- and for some fetch polyfills and
+  // opaque-response cases too. `useThumbnailCues` must fall back to the
+  // requested `url` in that case rather than publish the cue unresolved:
+  // an unresolved relative cue is the original bug, resolving against the
+  // page once rendered as an `<img src>`.
+  test('a relative cue image resolves against the requested VTT URL when the response reports no URL of its own', async () => {
+    stubFetch(async () =>
+      okTextResponse(
+        [
+          'WEBVTT',
+          '',
+          '00:00:00.000 --> 00:01:40.000',
+          'sprite-0.jpg#xywh=0,0,160,90',
+          ''
+        ].join('\n')
+      )
+    );
+    renderWithPlayer(
+      <Player.SeekSlider thumbnails="https://cdn.example.test/thumbs.vtt" />
+    );
+    hoverAt(50);
+    await waitFor(() =>
+      expect(getThumbnail()!.querySelector('img')?.src).toBe(
+        'https://cdn.example.test/sprite-0.jpg'
+      )
+    );
+  });
+
   // #749: mirrors the deadline `OEMBED_REQUEST_TIMEOUT_MS`
   // (provider-vimeo/src/oembed-availability.ts) and `POSTER_PROBE_TIMEOUT_MS`
   // (provider-wistia/src/poster-availability.ts) already give their own
@@ -588,11 +653,14 @@ describe('SeekSlider thumbnails', () => {
     await waitFor(() =>
       expect(attr(getThumbnail(), 'data-state')).toBe('visible')
     );
-    // getAttribute, not the `.src` property: the latter resolves the value
-    // against the document's base URL and percent-encodes it, which would
-    // obscure the literal character this test is about.
+    // #798: this relative cue now resolves against the VTT file's own
+    // address (`useThumbnailCues`'s `responseBaseUrl`) before it ever
+    // becomes `src`, so the replacement character this test is about
+    // surfaces percent-encoded inside a full URL rather than literally --
+    // `getAttribute` or the `.src` property read the same value either way,
+    // since resolution already happened upstream of both.
     expect(getThumbnail()!.querySelector('img')!.getAttribute('src')).toBe(
-      'thumb-a�'
+      'https://cdn.example.test/thumb-a%EF%BF%BD'
     );
   });
 });
