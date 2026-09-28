@@ -3743,4 +3743,186 @@ describe('Controls container and scoped shortcuts', () => {
     );
     await waitFor(() => expect(document.activeElement).toBe(region));
   });
+
+  test('leaves an unmodified ArrowDown to a native radio group outside the player in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const group = document.createElement('div');
+    group.setAttribute('role', 'radiogroup');
+    const first = document.createElement('input');
+    first.type = 'radio';
+    first.name = 'outside-group';
+    const second = document.createElement('input');
+    second.type = 'radio';
+    second.name = 'outside-group';
+    group.append(first, second);
+    document.body.append(group);
+    try {
+      first.focus();
+      expect(fireEvent.keyDown(first, { key: 'ArrowDown' })).toBe(true);
+      expect(spies.setVolume).not.toHaveBeenCalled();
+    } finally {
+      group.remove();
+    }
+  });
+
+  test('leaves an unmodified arrow key to a native range input outside the player in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const range = document.createElement('input');
+    range.type = 'range';
+    document.body.append(range);
+    try {
+      range.focus();
+      expect(fireEvent.keyDown(range, { key: 'ArrowLeft' })).toBe(true);
+      expect(spies.seekBy).not.toHaveBeenCalled();
+    } finally {
+      range.remove();
+    }
+  });
+
+  test('leaves an unmodified arrow key to a select outside the player in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const select = document.createElement('select');
+    const option = document.createElement('option');
+    option.value = '1';
+    select.append(option);
+    document.body.append(select);
+    try {
+      select.focus();
+      expect(fireEvent.keyDown(select, { key: 'ArrowLeft' })).toBe(true);
+      expect(spies.seekBy).not.toHaveBeenCalled();
+    } finally {
+      select.remove();
+    }
+  });
+
+  test('leaves an unmodified arrow key to a focused tablist outside the player in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const tablist = document.createElement('div');
+    tablist.setAttribute('role', 'tablist');
+    tablist.tabIndex = 0;
+    document.body.append(tablist);
+    try {
+      tablist.focus();
+      expect(fireEvent.keyDown(tablist, { key: 'ArrowLeft' })).toBe(true);
+      expect(spies.seekBy).not.toHaveBeenCalled();
+    } finally {
+      tablist.remove();
+    }
+  });
+
+  test('leaves an unmodified arrow key to an element nested inside a role container outside the player in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const grid = document.createElement('div');
+    grid.setAttribute('role', 'grid');
+    const cell = document.createElement('div');
+    cell.setAttribute('role', 'gridcell');
+    cell.tabIndex = 0;
+    grid.append(cell);
+    document.body.append(grid);
+    try {
+      cell.focus();
+      expect(fireEvent.keyDown(cell, { key: 'ArrowLeft' })).toBe(true);
+      expect(spies.seekBy).not.toHaveBeenCalled();
+    } finally {
+      grid.remove();
+    }
+  });
+
+  test('still runs arrow-key shortcuts globally for ordinary content outside the player', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const outside = document.createElement('div');
+    outside.tabIndex = 0;
+    document.body.append(outside);
+    try {
+      outside.focus();
+      expect(fireEvent.keyDown(outside, { key: 'ArrowLeft' })).toBe(false);
+      expect(spies.seekBy).toHaveBeenCalledWith(-5);
+    } finally {
+      outside.remove();
+    }
+  });
+
+  test("still owns arrow keys on the player's own slider under global shortcuts", () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.SeekSlider />
+      </Player.Controls>,
+      controlsState()
+    );
+    const seekInput = container.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="seek-slider-input"]'
+    )!;
+    seekInput.focus();
+    expect(fireEvent.keyDown(seekInput, { key: 'ArrowLeft' })).toBe(false);
+    expect(spies.seekBy).toHaveBeenCalledWith(-5);
+  });
+
+  test('still owns arrow keys on a player-composed slider that sits outside Controls but inside the viewport', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Viewport>
+        <Player.SeekSlider />
+        <Player.Controls global>
+          <Player.Time />
+        </Player.Controls>
+      </Player.Viewport>,
+      controlsState()
+    );
+    const seekInput = container.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="seek-slider-input"]'
+    )!;
+    seekInput.focus();
+    expect(fireEvent.keyDown(seekInput, { key: 'ArrowLeft' })).toBe(false);
+    expect(spies.seekBy).toHaveBeenCalledWith(-5);
+  });
+
+  test('still exempts a native radio group entirely outside the player, even once a viewport is in the tree', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Viewport>
+        <Player.Controls global>
+          <Player.Time />
+        </Player.Controls>
+      </Player.Viewport>,
+      controlsState()
+    );
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    document.body.append(radio);
+    try {
+      radio.focus();
+      expect(fireEvent.keyDown(radio, { key: 'ArrowDown' })).toBe(true);
+      expect(spies.setVolume).not.toHaveBeenCalled();
+    } finally {
+      radio.remove();
+    }
+  });
 });
