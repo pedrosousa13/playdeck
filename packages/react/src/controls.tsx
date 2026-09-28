@@ -224,6 +224,11 @@ export const Controls = ({
   const { controller, lastSelectedTextTrackId, volumeRequest } = usePlayer();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const hadFocusWithin = useRef(false);
+  // Bumped on every focus into the region, so a blur's deferred check
+  // (below) can tell whether a newer focus already reclaimed the flag by
+  // the time it runs -- re-focusing inside the region must always win over
+  // a stale blur's verdict.
+  const focusVersion = useRef(0);
   // Signature of the capabilities that gate whether a child control is
   // rendered. Focus restoration keys off changes here so it fires only on a
   // capability transition (a gated control appearing or disappearing) and
@@ -387,12 +392,17 @@ export const Controls = ({
   // the region so keyboard users never lose their place. Scoping to
   // `gatedSignature` ensures this reacts only to a control appearing or
   // disappearing, so an outside click that drops focus to <body> is never
-  // re-stolen on the next unrelated render.
+  // re-stolen on the next unrelated render -- `hadFocusWithin` is what tells
+  // the two apart, and `onBlur`'s deferred check below is what keeps it
+  // correct regardless of how, or whether, the browser blurred the control
+  // that left. `preventScroll` keeps a legitimate restore from scrolling the
+  // page to the region -- the user's scroll position is not evidence the
+  // region asked to be seen.
   useEffect(() => {
     const node = containerRef.current;
     if (!node) return;
     if (hadFocusWithin.current && document.activeElement === document.body) {
-      node.focus();
+      node.focus({ preventScroll: true });
     }
   }, [gatedSignature]);
 
@@ -414,17 +424,44 @@ export const Controls = ({
       onBlur={(event) => {
         onBlur?.(event);
         const next = event.relatedTarget as Node | null;
-        if (
-          next &&
-          containerRef.current &&
-          !containerRef.current.contains(next)
-        ) {
-          hadFocusWithin.current = false;
+        if (next !== null) {
+          if (containerRef.current && !containerRef.current.contains(next)) {
+            hadFocusWithin.current = false;
+          }
+          return;
         }
+        // A null relatedTarget is ambiguous, and browsers do not even agree
+        // on whether it fires for the one case that must NOT clear the
+        // flag. A Playwright probe of the bundled Chromium (149.0.7827.55)
+        // and Firefox (151.0) on 2026-09-28 found: focusing a `<button>`
+        // and then removing it fires `blur`/`focusout` on it with
+        // `relatedTarget: null` in Chromium -- `isConnected` reads `true`
+        // if read synchronously inside the listener, but `false` by the
+        // time a microtask queued from that same listener runs, once the
+        // removal has completed -- while Firefox fires no blur at all.
+        // Focusing a `<button>` and then clicking a plain-text paragraph
+        // elsewhere on the page fires the same `relatedTarget: null` blur
+        // in both browsers, but leaves the button connected. Reading
+        // `isConnected` synchronously here can therefore only ever see
+        // Chromium's still-connected moment, so the check is deferred to a
+        // microtask, by which point a real removal (already underway,
+        // synchronously, in the same task as this blur) has finished.
+        const blurred = event.target as Node;
+        const focusVersionAtBlur = focusVersion.current;
+        queueMicrotask(() => {
+          // Bail if the region has unmounted, or if a newer focus already
+          // reclaimed the flag before this check ran.
+          if (!containerRef.current) return;
+          if (focusVersion.current !== focusVersionAtBlur) return;
+          if (blurred.isConnected) {
+            hadFocusWithin.current = false;
+          }
+        });
       }}
       onFocus={(event) => {
         onFocus?.(event);
         hadFocusWithin.current = true;
+        focusVersion.current += 1;
       }}
       onKeyDown={(event) => {
         onKeyDown?.(event);
