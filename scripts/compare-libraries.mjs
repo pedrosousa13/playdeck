@@ -367,7 +367,16 @@ export const libraries = [
     // ceiling raised). The whole distance from the last committed figure is
     // this issue's: that figure was 21.64 KB (22160 bytes), measured the
     // same day (2026-09-24) before this change, per `results.md` on `main`.
-    ceilingKb: 22
+    //
+    // 22581 bytes measured 2026-09-28 -- 22.0517578125 KB, 22.05 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 22 KB is #797's `plainCueText` (`@playdeck/core`) replacing its chain
+    // of sequential `.replace` calls with one regex and a callback, which
+    // this composition's native provider reaches through its own cue-text
+    // passthrough. The whole distance from the last committed figure is
+    // this issue's: that figure was 22.00 KB (22526 bytes), measured the
+    // same day (2026-09-28) before this change, per `results.md` on `main`.
+    ceilingKb: 22.25
   },
   {
     name: 'Playdeck',
@@ -389,7 +398,16 @@ export const libraries = [
     // (`use-activation.ts`) -- up from 22.29 KB the same day, per the "no
     // parts" row's comment above -- which stays under this ceiling with no
     // raise needed.
-    ceilingKb: 22.5
+    //
+    // 23064 bytes measured 2026-09-28 -- 22.5234375 KB, 22.52 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 22.5 KB is #797's `plainCueText` (`@playdeck/core`): the native
+    // provider's own cue-text passthrough grew into a call to it, which this
+    // composition's native provider reaches. The whole distance from the
+    // last committed figure is this issue's: that figure was 22.45 KB
+    // (22986 bytes), measured the same day (2026-09-28) before this change,
+    // per `results.md` on `main`.
+    ceilingKb: 22.75
   },
   {
     name: 'Playdeck (play-only)',
@@ -407,7 +425,16 @@ export const libraries = [
     // last committed figure is this issue's: that figure was 23.37 KB
     // (23929 bytes), measured the same day (2026-09-24) before this change,
     // per `results.md` on `main`.
-    ceilingKb: 23.75,
+    //
+    // 24338 bytes measured 2026-09-28 -- 23.7675781250 KB, 23.77 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 23.75 KB is #797's `plainCueText` (`@playdeck/core`) growing to decode
+    // decimal and hexadecimal numeric character references, which this
+    // composition's native provider reaches through its own cue-text
+    // passthrough. The whole distance from the last committed figure is this
+    // issue's: that figure was 23.64 KB (24203 bytes), measured the same day
+    // (2026-09-28) before this change, per `results.md` on `main`.
+    ceilingKb: 24,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
@@ -425,7 +452,16 @@ export const libraries = [
     // committed figure is this issue's: that figure was 26.42 KB
     // (27057 bytes), measured the same day (2026-09-24) before this change,
     // per `results.md` on `main`.
-    ceilingKb: 26.75
+    //
+    // 27465 bytes measured 2026-09-28 -- 26.8212890625 KB, 26.82 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 26.75 KB is #797's `plainCueText` (`@playdeck/core`) growing to decode
+    // decimal and hexadecimal numeric character references, the same change
+    // described on the "play-only" row above. The whole distance from the
+    // last committed figure is this issue's: that figure was 26.70 KB
+    // (27341 bytes), measured the same day (2026-09-28) before this change,
+    // per `results.md` on `main`.
+    ceilingKb: 27
   },
   {
     name: 'react-player',

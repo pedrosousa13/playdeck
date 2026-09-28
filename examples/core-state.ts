@@ -1,6 +1,7 @@
 import {
   createInitialPlayerState,
   isNotice,
+  plainCueText,
   textTrackLabel,
   type PlayerState
 } from '@playdeck/core';
@@ -27,3 +28,8 @@ export const rendersAsFailure = (state: PlayerState): boolean =>
 // and its language. Falls back to the language's own name, then to 'Unknown'.
 export const labelled = textTrackLabel('', 'pt-BR'); // 'português (Brasil)'
 export const named = textTrackLabel('Commentary', 'en'); // 'Commentary'
+
+// The plain text a caption overlay should render for a cue: WebVTT tag spans
+// removed, its character references decoded. Every provider runs its own cue
+// payload through this before publishing it as `TextCue.text`.
+export const cue = plainCueText('<v Bob><i>Look out</i> &amp; run'); // 'Look out & run'

@@ -154,6 +154,8 @@ export const play = (): Promise<unknown> => controller.play();
   distinct from the separate, unimplemented Cast SDK.
 - **Captions** are Playdeck's to draw by default (`captionRendering: 'custom'`);
   `setCaptionRenderer('native')` hands them back to the browser's own renderer.
+  `VTTCue.text` can carry WebVTT tags and character references, so cue markup
+  reaches `TextCue.text` as plain text — tags stripped, entities decoded.
 - **`live`** comes from the element's own signals: an endless `duration` and the
   moving `seekable` window, measured against the playhead. Never from the source
   URL. A file with a finite duration reports `null`, and the value is published
