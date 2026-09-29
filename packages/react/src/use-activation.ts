@@ -18,6 +18,7 @@ import {
 } from 'react';
 import {
   loadProvider,
+  suppliedProviderRegistrationKeyFor,
   type PlayerMediaMount,
   type PlayerProviders,
   type ResolvedProviderOptions,
@@ -490,6 +491,23 @@ const PROVIDER_LABELS: Record<ResolvedPlayerSource['type'], string> = {
   youtube: 'YouTube'
 };
 
+// A supplied kind's own label: `suppliedProviderRegistrationKeyFor`
+// (`provider-loaders.ts`) when it has one, `type` otherwise. That map holds
+// an entry exactly when `type` does not route to a registration `loadProvider`
+// can reach (`ownEntry(providers, source.type)`) -- missing, non-string, or a
+// non-empty string naming no entry of `providers` -- recorded by the detect
+// loop that produced this source, at the one place that still knows which
+// registration ran. Whenever the map holds nothing, `type` already is the
+// registration `loadProvider` found and called, so it is used directly.
+const suppliedProviderLabel = (
+  source: ResolvedPlayerSource<SuppliedProviderSource>
+): string | undefined => {
+  const key = suppliedProviderRegistrationKeyFor(source);
+  if (key !== undefined) return key;
+  const { type } = source;
+  return typeof type === 'string' ? type : undefined;
+};
+
 // Names the provider, which is knowable from the resolved source, and stops
 // there, which the reason is not: `loadProvider` rejects for a chunk the
 // network never delivered, a CSP that refused it, a missing media mount and an
@@ -503,13 +521,22 @@ const PROVIDER_LABELS: Record<ResolvedPlayerSource['type'], string> = {
 // document is the step both audiences can take, and its provider-load section
 // is what forwards to the CSP origins list -- one place to keep true, rather
 // than a second link maintained here.
-const providerError = (cause: unknown, type: ResolvedPlayerSource['type']) => ({
-  category: 'provider' as const,
-  cause,
-  fatal: false,
-  recoverable: true,
-  message: `Unable to load the ${PROVIDER_LABELS[type]} provider. Playdeck cannot say why: the rejection it caught is on this error's cause. See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for what to check.`
-});
+const providerError = (
+  cause: unknown,
+  source: ResolvedPlayerSource<SuppliedProviderSource>
+) => {
+  const { type } = source;
+  const label = Object.hasOwn(PROVIDER_LABELS, type)
+    ? PROVIDER_LABELS[type as ResolvedPlayerSource['type']]
+    : suppliedProviderLabel(source);
+  return {
+    category: 'provider' as const,
+    cause,
+    fatal: false,
+    recoverable: true,
+    message: `Unable to load the ${label} provider. Playdeck cannot say why: the rejection it caught is on this error's cause. See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for what to check.`
+  };
+};
 
 // `ProviderAdapter<string>`, not the bare `ProviderAdapter`: the adapter this
 // destroys is whatever `loadProvider` resolved to, which is honestly typed
@@ -1461,7 +1488,10 @@ export const useActivation = (
         if (!isCurrentLoad()) return;
         controller.setActivation({
           activation: 'error',
-          error: providerError(cause, source.source.type)
+          error: providerError(
+            cause,
+            source.source as ResolvedPlayerSource<SuppliedProviderSource>
+          )
         });
       });
   }, [currentKey, mediaVersion, sourceCommitted]);

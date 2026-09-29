@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { act, cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { Component, createRef, type ReactNode } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
 import type {
@@ -633,6 +633,304 @@ test('treats a supplied detect that throws as a decline: the player renders and 
   // Not silently lost even here, end to end through `Player.Root`.
   await Promise.resolve();
   expect(rethrows).toEqual([boom]);
+});
+
+// Naming a supplied provider by its registration key in a load-failure
+// message: `PROVIDER_LABELS` (`use-activation.ts`) only names the five
+// built-in kinds, so a supplied
+// registration's own load failure used to read back `undefined` there and
+// report "Unable to load the undefined provider." regardless of which
+// registration actually failed. `type: 'acme'` here is also the
+// registration's own key -- the ordinary case, since `loadProvider` only
+// ever reaches a registration's own code by finding it under `source.type`
+// (`provider-loaders.ts`'s `ownEntry(providers, source.type)`) -- so this is
+// what the factory `load()` hands back throwing now reports, on both
+// `PlayerState.error` and `ErrorDisplay`'s own rendered text.
+//
+// Demonstrated red, run with `pnpm vitest run
+// packages/react/test/supplied-provider.test.tsx -t "its factory throws"`
+// against `use-activation.ts` unchanged: `error.message` and the rendered
+// alert both read "Unable to load the undefined provider. ..." instead of
+// naming `acme`.
+test('names a supplied provider by its own registration key when its factory throws', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  const boom = new Error('factory blew up');
+  const detect = vi.fn(() => ({ type: 'acme', videoId: '1' }) as const);
+  const load = vi.fn(async () => () => {
+    throw boom;
+  });
+
+  render(
+    <Player.Root
+      loading="eager"
+      providers={{ acme: { detect, load } }}
+      ref={handle}
+      source="https://example.com/media/1"
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+      <Player.ErrorDisplay />
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(handle.current?.getState()).toMatchObject({
+      activation: 'error',
+      error: {
+        category: 'provider',
+        cause: boom,
+        message:
+          "Unable to load the acme provider. Playdeck cannot say why: the rejection it caught is on this error's cause. See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for what to check.",
+        recoverable: true
+      }
+    })
+  );
+  expect(screen.getByRole('alert').textContent).toContain(
+    'Unable to load the acme provider.'
+  );
+});
+
+// The `load()`-rejection counterpart of the factory-throw test above: a
+// different point inside `loadProvider` fails (`await registration.load()`
+// itself, rather than calling the factory it resolves to), but the two
+// converge on the exact same `providerError` (`use-activation.ts`) once
+// `loadProvider`'s own promise rejects, so this is the other of the two
+// triggers named by that route.
+//
+// Demonstrated red, run with `pnpm vitest run
+// packages/react/test/supplied-provider.test.tsx -t "its load rejects"`
+// against `use-activation.ts` unchanged: same failure as the factory-throw
+// test above, "undefined" instead of "acme".
+test('names a supplied provider by its own registration key when its load rejects', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  const boom = new Error('load blew up');
+  const detect = vi.fn(() => ({ type: 'acme', videoId: '1' }) as const);
+  const load = vi.fn(() => Promise.reject(boom));
+
+  render(
+    <Player.Root
+      loading="eager"
+      providers={{ acme: { detect, load } }}
+      ref={handle}
+      source="https://example.com/media/1"
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+      <Player.ErrorDisplay />
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(handle.current?.getState()).toMatchObject({
+      activation: 'error',
+      error: {
+        category: 'provider',
+        cause: boom,
+        message:
+          "Unable to load the acme provider. Playdeck cannot say why: the rejection it caught is on this error's cause. See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for what to check.",
+        recoverable: true
+      }
+    })
+  );
+  expect(screen.getByRole('alert').textContent).toContain(
+    'Unable to load the acme provider.'
+  );
+});
+
+// The third named trigger: a `detect` that returns a truthy value with
+// no `type` at all. `detectSourceWithProviders` (`provider-loaders.ts`)
+// still resolves this successfully -- the checks that gate a detect-loop
+// match are the reserved-name list and the shared URL allowlist, neither of
+// which requires `type` to be present -- so `loadProvider` reaches its own
+// dispatch with `source.type` missing, finds no registration for it
+// (`ownEntry(providers, undefined)`), and rejects before `load` is ever
+// called. `type` itself carries nothing to name the provider by at that
+// point; `suppliedProviderRegistrationKeyFor` (`provider-loaders.ts`) is
+// what still does, recorded against this exact resolved source at the one
+// place that still knows which registration's `detect` produced it.
+//
+// Demonstrated red, run with `pnpm vitest run
+// packages/react/test/supplied-provider.test.tsx -t "detect returns a
+// truthy value with no type"` against `use-activation.ts` unchanged: same
+// failure as the two tests above, "undefined" instead of "acme".
+test('names a supplied provider by its own registration key when its detect returns a truthy value with no type', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  const detect = vi.fn(() => ({ videoId: '1' }) as unknown as { type: string });
+  const load = vi.fn();
+
+  render(
+    <Player.Root
+      loading="eager"
+      providers={{ acme: { detect, load } }}
+      ref={handle}
+      source="https://example.com/media/1"
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+      <Player.ErrorDisplay />
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(handle.current?.getState()).toMatchObject({
+      activation: 'error',
+      error: {
+        category: 'provider',
+        message:
+          "Unable to load the acme provider. Playdeck cannot say why: the rejection it caught is on this error's cause. See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for what to check.",
+        recoverable: true
+      }
+    })
+  );
+  expect(screen.getByRole('alert').textContent).toContain(
+    'Unable to load the acme provider.'
+  );
+  expect(load).not.toHaveBeenCalled();
+});
+
+// A fourth shape the same lookup gap covers: `type` is a usable, non-empty
+// string, but it names no registration at all -- not `acme`'s own key, and
+// not any other entry of `providers`. `loadProvider` still finds nothing
+// under `source.type` and rejects before `load` is ever called, the same as
+// the no-`type` case above, so the label has to come from the same place.
+//
+// Demonstrated red, run with `pnpm vitest run
+// packages/react/test/supplied-provider.test.tsx -t "detect returns a type
+// naming no registration"` against `provider-loaders.ts` unchanged (the
+// `WeakMap` only recorded a non-string or empty `type`, never a non-empty
+// one that simply routes nowhere): `error.message` and the rendered alert
+// both read "Unable to load the bogus provider." -- `type`'s own value,
+// which names nothing real in `providers` -- instead of `acme`.
+test('names a supplied provider by its own registration key when its detect returns a type naming no registration', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  const detect = vi.fn(() => ({ type: 'bogus', videoId: '1' }) as const);
+  const load = vi.fn();
+
+  render(
+    <Player.Root
+      loading="eager"
+      providers={{ acme: { detect, load } }}
+      ref={handle}
+      source="https://example.com/media/1"
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+      <Player.ErrorDisplay />
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(handle.current?.getState()).toMatchObject({
+      activation: 'error',
+      error: {
+        category: 'provider',
+        message:
+          "Unable to load the acme provider. Playdeck cannot say why: the rejection it caught is on this error's cause. See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for what to check.",
+        recoverable: true
+      }
+    })
+  );
+  expect(screen.getByRole('alert').textContent).toContain(
+    'Unable to load the acme provider.'
+  );
+  expect(load).not.toHaveBeenCalled();
+});
+
+// The case the fix above must not break: a `type` that names a *different*,
+// real registration is a legitimate way for one registration's `detect` to
+// defer to another's own kind. `loadProvider` finds and calls that other
+// registration's own `load`, so a failure there is genuinely that
+// registration's own, and the label reads `type` directly, exactly as it
+// did before the fix above -- this is a guard against the fix above
+// widening the fallback too far, not itself demonstrated red: it already
+// passes against both `provider-loaders.ts` before and after that fix,
+// since `type` was always used directly whenever it was a non-empty string.
+test('names a supplied provider by the registration its detect actually routed to, not the registration that detected it', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  const boom = new Error('load blew up');
+  const acmeDetect = vi.fn(() => ({ type: 'other', videoId: '1' }) as const);
+  const otherDetect = vi.fn(() => undefined);
+  const otherLoad = vi.fn(() => Promise.reject(boom));
+
+  render(
+    <Player.Root
+      loading="eager"
+      providers={{
+        acme: { detect: acmeDetect, load: vi.fn() },
+        other: { detect: otherDetect, load: otherLoad }
+      }}
+      ref={handle}
+      source="https://example.com/media/1"
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+      <Player.ErrorDisplay />
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(handle.current?.getState()).toMatchObject({
+      activation: 'error',
+      error: {
+        category: 'provider',
+        cause: boom,
+        message:
+          "Unable to load the other provider. Playdeck cannot say why: the rejection it caught is on this error's cause. See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for what to check."
+      }
+    })
+  );
+  expect(screen.getByRole('alert').textContent).toContain(
+    'Unable to load the other provider.'
+  );
+  expect(otherDetect).not.toHaveBeenCalled();
+});
+
+// Nothing in `PlayerProviders` (`Record<string, ProviderRegistration>`)
+// forbids the empty string as a registration's own key. This is what that
+// reads as once named: not a placeholder or a refusal, the same empty
+// string a consumer chose, exactly as `PROVIDER_LABELS`'s own five entries
+// would be shown unchanged whatever they said.
+//
+// Demonstrated red, run with `pnpm vitest run
+// packages/react/test/supplied-provider.test.tsx -t "empty registration
+// key"` against `use-activation.ts` and `provider-loaders.ts` both
+// reverted to main: `error.message` and the rendered alert both read
+// "Unable to load the undefined provider. ..." instead of "Unable to load
+// the  provider. ..." (two spaces, the empty key between them).
+test('shows an empty registration key exactly as registered, rather than inventing a placeholder name', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  const detect = vi.fn(() => ({ videoId: '1' }) as unknown as { type: string });
+  const load = vi.fn();
+
+  render(
+    <Player.Root
+      loading="eager"
+      providers={{ '': { detect, load } }}
+      ref={handle}
+      source="https://example.com/media/1"
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+      <Player.ErrorDisplay />
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(handle.current?.getState()).toMatchObject({
+      activation: 'error',
+      error: {
+        category: 'provider',
+        message:
+          "Unable to load the  provider. Playdeck cannot say why: the rejection it caught is on this error's cause. See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for what to check."
+      }
+    })
+  );
 });
 
 // A supplied kind's own providerOptions bag is compared the same way the

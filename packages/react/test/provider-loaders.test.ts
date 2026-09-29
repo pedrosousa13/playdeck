@@ -23,7 +23,8 @@ import type {
 } from '../src/provider-loaders';
 import {
   detectSourceWithProviders,
-  loadProvider
+  loadProvider,
+  suppliedProviderRegistrationKeyFor
 } from '../src/provider-loaders';
 import type { RootProps } from '../src/root';
 
@@ -676,6 +677,62 @@ test('declines a detect return carrying a bigint field rather than resolving a s
   });
 
   expect(result.status).toBe('failure');
+});
+
+// Naming a supplied provider by its registration key in a load-failure
+// message: a `detect` that returns a truthy value with no `type` still
+// resolves here --
+// the checks above gate the reserved-name list and the shared URL allowlist,
+// neither of which requires `type` to be present -- so `loadProvider`'s own
+// dispatch (`ownEntry(providers, source.type)`) finds nothing to route to
+// and rejects, and `PROVIDER_LABELS[type]` (`use-activation.ts`) has only
+// `undefined` to read. `suppliedProviderRegistrationKeyFor` is what still
+// knows which registration's own `detect` produced the object, recorded
+// against this exact resolved source at the one place that still has that
+// information.
+//
+// Demonstrated red: `suppliedProviderRegistrationKeyFor` does not exist on
+// main at all -- run against `provider-loaders.ts` reverted to main,
+// `TypeError: suppliedProviderRegistrationKeyFor is not a function` at this
+// test's own call to it.
+test('records which registration a detect result carrying no type came from', () => {
+  const detect = vi.fn(() => ({ videoId: '1' }) as unknown as { type: string });
+
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    acme: { detect, load: vi.fn() }
+  });
+
+  expect(result.status).toBe('success');
+  expect(
+    result.status === 'success'
+      ? suppliedProviderRegistrationKeyFor(result.source)
+      : undefined
+  ).toBe('acme');
+});
+
+// The common, well-behaved case needs no record at all: `type` is already a
+// usable string, and it already routes to this exact registration
+// (`ownEntry(providers, kind)`, the same lookup `loadProvider` itself makes)
+// -- so `type` already is the registration's own key by the time this
+// returns. Nothing here tags the copy, which is what keeps the tagging
+// mechanism itself minimal -- added only where `type` genuinely carries
+// nothing to route or label by.
+//
+// Demonstrated red for the same reason the test above is red: run against
+// `provider-loaders.ts` reverted to main, `TypeError:
+// suppliedProviderRegistrationKeyFor is not a function` at this test's own
+// call to it -- the function this test calls does not exist there either.
+test('does not record a registration key for a detect result whose type already resolved', () => {
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    acme: { detect: () => ({ type: 'acme', videoId: '1' }), load: vi.fn() }
+  });
+
+  expect(result.status).toBe('success');
+  expect(
+    result.status === 'success'
+      ? suppliedProviderRegistrationKeyFor(result.source)
+      : undefined
+  ).toBeUndefined();
 });
 
 test('behaves exactly like detectSource when no providers are supplied', () => {
