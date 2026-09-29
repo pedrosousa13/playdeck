@@ -3784,6 +3784,134 @@ describe('Controls container and scoped shortcuts', () => {
     await waitFor(() => expect(document.activeElement).toBe(region));
   });
 
+  // A consumer's own control, shown or hidden by the consumer's own state --
+  // nothing in `gatedSignature` moves when this unmounts.
+  const ConsumerControl = ({ show }: { show: boolean }): ReactNode =>
+    show ? <button type="button">Consumer control</button> : null;
+
+  // A consumer's own control gated on a capability it reads for itself, the
+  // same way `Player.FullscreenButton` gates on it internally.
+  const ConsumerFullscreenButton = (): ReactNode => {
+    const fullscreenStatus = Player.usePlayerState(
+      (state) => state.capabilities.fullscreen.status
+    );
+    return fullscreenStatus === 'available' ? (
+      <button type="button">Consumer fullscreen control</button>
+    ) : null;
+  };
+
+  const rootTree = (children: ReactNode): ReactNode => (
+    <Player.Root loading="interaction" source="/tracer.mp4">
+      {children}
+    </Player.Root>
+  );
+
+  test('does not restore focus after a later capability change when a consumer removes its own focused control and the browser fires no blur', async () => {
+    const { rerender, emit } = renderWithPlayer(
+      <Player.Controls>
+        <ConsumerControl show />
+      </Player.Controls>,
+      controlsState()
+    );
+    const button = screen.getByRole('button', { name: 'Consumer control' });
+    button.focus();
+    expect(document.activeElement).toBe(button);
+    // The consumer's own state removes its control -- no blur fires here at
+    // all, the Firefox side of the dated Playwright probe cited in
+    // `Controls`' `onBlur` comment (controls.tsx).
+    act(() => {
+      rerender(
+        rootTree(
+          <Player.Controls>
+            <ConsumerControl show={false} />
+          </Player.Controls>
+        )
+      );
+    });
+    expect(document.activeElement).toBe(document.body);
+    // A later, unrelated capability change must not pull focus back in: the
+    // removal above was not a capability transition, so nothing restored it
+    // in the commit that dropped focus.
+    emit(
+      capabilities({
+        seek: available,
+        setVolume: available,
+        fullscreen: unavailable
+      })
+    );
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  test('does not restore focus after a later capability change when a consumer removes its own focused control after the browser blurs it first', async () => {
+    const { rerender, emit } = renderWithPlayer(
+      <Player.Controls>
+        <ConsumerControl show />
+      </Player.Controls>,
+      controlsState()
+    );
+    const button = screen.getByRole('button', { name: 'Consumer control' });
+    button.focus();
+    // The blur fires with relatedTarget null while the node is still
+    // attached -- the still-connected instant of the Chromium side of the
+    // dated Playwright probe cited in `Controls`' `onBlur` comment
+    // (controls.tsx) -- so the region's deferred `isConnected` check has
+    // not run by the time the removal below completes.
+    button.blur();
+    expect(button.isConnected).toBe(true);
+    act(() => {
+      rerender(
+        rootTree(
+          <Player.Controls>
+            <ConsumerControl show={false} />
+          </Player.Controls>
+        )
+      );
+    });
+    expect(button.isConnected).toBe(false);
+    emit(
+      capabilities({
+        seek: available,
+        setVolume: available,
+        fullscreen: unavailable
+      })
+    );
+    expect(document.activeElement).toBe(document.body);
+    // Let the deferred blur check run too: it finds the node detached and
+    // correctly does nothing either way, but must not be the thing masking
+    // a failure in the assertion above.
+    await Promise.resolve();
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  // Guard: exercises the pre-existing same-commit restore path, unchanged by
+  // this fix, with a consumer's own control instead of a Playdeck part --
+  // confirms the restore does not depend on which component removed the
+  // node. Passes against the unfixed code too.
+  test('restores focus into the region when a consumer control gated on its own capability read is removed by that capability going unavailable', async () => {
+    const { container, emit } = renderWithPlayer(
+      <Player.Controls>
+        <ConsumerFullscreenButton />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    const button = screen.getByRole('button', {
+      name: 'Consumer fullscreen control'
+    });
+    button.focus();
+    expect(document.activeElement).toBe(button);
+    emit(
+      capabilities({
+        seek: available,
+        setVolume: available,
+        fullscreen: unavailable
+      })
+    );
+    await waitFor(() => expect(document.activeElement).toBe(region));
+  });
+
   test('leaves an unmodified ArrowDown to a native radio group outside the player in global mode', () => {
     const { spies } = renderWithPlayer(
       <Player.Controls global>
