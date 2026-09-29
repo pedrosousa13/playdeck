@@ -1,5 +1,5 @@
 import { isNativeActivationTarget } from './controls.js';
-import { usePlayer } from './player-context.js';
+import { usePlayer, usePlayerState } from './player-context.js';
 import { assignRef } from './viewport-media.js';
 import {
   useCallback,
@@ -47,6 +47,7 @@ export const Gestures = ({
   ...props
 }: GesturesProps) => {
   const { controller } = usePlayer();
+  const seekStatus = usePlayerState((state) => state.capabilities.seek.status);
   const layerRef = useRef<HTMLDivElement | null>(null);
   const pendingTap = useRef<ReturnType<typeof setTimeout> | null>(null);
   // `...props` carries the consumer's `ref` too (React 19 treats it as a
@@ -85,6 +86,14 @@ export const Gestures = ({
       onPointerUp={(event) => {
         onPointerUp?.(event);
         if (event.defaultPrevented) return;
+        // Ignore a second (or later) touch point in a multi-touch gesture,
+        // and a non-primary mouse button (e.g. a right-click): neither is a
+        // tap, and letting either fall through would both misread a pinch
+        // as a double-tap seek and let a right-click toggle controls. A
+        // plain `return` here leaves any pending first tap exactly as it
+        // was, so an ignored event in between two real taps cannot reset or
+        // consume the pending-tap state.
+        if (!event.isPrimary || event.button !== 0) return;
         // Ignore taps that land on a real control inside the layer.
         if (isNativeActivationTarget(event.target)) return;
 
@@ -97,6 +106,14 @@ export const Gestures = ({
             onToggleControls?.();
             return;
           }
+          // Seeking isn't available (e.g. a live source with no DVR
+          // window): the tap is consumed as a double tap either way, but a
+          // double tap that can't seek does nothing rather than falling
+          // back to the single-tap toggle -- it was never a single tap, and
+          // toggling controls in response to two taps that landed on the
+          // video would surprise a person who has learned this gesture
+          // means "seek" everywhere else it works.
+          if (seekStatus !== 'available') return;
           const node = layerRef.current;
           if (!node) return;
           const rect = node.getBoundingClientRect();
