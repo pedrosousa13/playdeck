@@ -383,7 +383,19 @@ export const libraries = [
     // `main` -- which stays under this ceiling with no raise needed. The
     // growth is `controls.tsx`'s own new role list and containment check,
     // part of every composition here regardless of which parts it renders.
-    ceilingKb: 22.25
+    //
+    // 22804 bytes measured 2026-09-29 -- 22.26953125 KB, 22.27 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 22.25 KB is naming a supplied provider's own registration key in its
+    // load-failure message instead of "undefined": `use-activation.ts`'s
+    // `suppliedProviderLabel` and the `WeakMap` `provider-loaders.ts` adds to
+    // back it (`suppliedDetectRegistrationKeys`). Both sit in every
+    // composition this fixture builds regardless of provider, the same way
+    // `use-activation.ts`'s existing code already does. The whole distance
+    // from the last committed figure is this change's: that figure was
+    // 22.19 KB (22724 bytes), measured the same day (2026-09-29) before this
+    // change, per `results.md` on `main`.
+    ceilingKb: 22.5
   },
   {
     name: 'Playdeck',

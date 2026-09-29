@@ -850,6 +850,41 @@ const RESERVED_PROVIDER_NAMES: readonly string[] = [
   'wistia'
 ];
 
+// The registration key behind a detect-loop success whose own `type` does
+// not route to a registration `loadProvider` can reach (below: `type` is
+// missing, not a string, or a non-empty string naming no entry of
+// `providers` -- this loop's own registration included). `loadProvider`'s
+// dispatch (`ownEntry(providers, source.type)`) finds nothing for any of
+// those and rejects before ever reaching a registration's own code, so
+// nothing downstream of that rejection can read a key off `source.type`.
+// This is the one place that still knows which registration's `detect`
+// produced the object; `use-activation.ts`'s own load-failure message reads
+// it back through `suppliedProviderRegistrationKeyFor` below. A `type` that
+// does route to a registration is not recorded here -- `type` already names
+// it, whether that is this loop's own registration or another one this
+// `detect` deliberately deferred to.
+//
+// Keyed by the exact resolved source object `detectSourceWithProviders`
+// returns for that match, so a caller holding that same object later can
+// still ask, without this package re-running a supplied `detect` a second
+// time just to find out. A `WeakMap` rather than a field on the source
+// itself: the source is `copySuppliedSourceObject`'s own bounded, plain-value
+// copy, and adding an out-of-band key here keeps that copy exactly the shape
+// `everyStringPermitted` and `sourceKey`'s `JSON.stringify`
+// (`use-activation.ts`) already expect, with nothing extra for either to
+// walk.
+const suppliedDetectRegistrationKeys = new WeakMap<object, string>();
+
+// The read side of the map above. `undefined` for any source that was never
+// recorded there, which covers every built-in source, every explicit-object
+// supplied source (whose own `type` is already a real registration key by
+// the time it resolves -- `detectSourceWithProviders`'s own object branch
+// below requires `ownEntry(providers, kind)` to succeed), and a detect-loop
+// match whose `type` already routed to a registration.
+export const suppliedProviderRegistrationKeyFor = (
+  source: object
+): string | undefined => suppliedDetectRegistrationKeys.get(source);
+
 // `Root`'s own `detectSource`, layered over core's: core's own five-kind
 // `detectSource` runs first and wins outright on success, so a supplied kind
 // never gets a look-in on a URL -- or an explicit object -- a built-in host
@@ -1047,6 +1082,21 @@ export const detectSourceWithProviders = (
         // guarantee.
         everyStringPermitted(copy)
       ) {
+        // `loadProvider`'s own dispatch (`ownEntry(providers, source.type)`)
+        // is what decides whether a load failure downstream can read a
+        // registration off `type` at all -- not merely whether `type` is a
+        // string. `kind` can be missing, non-string, or a non-empty string
+        // that simply names no entry of `providers` (this registration's own
+        // key included), and every one of those reaches that dispatch and
+        // finds nothing. Recorded here, against this exact object, for
+        // `suppliedProviderRegistrationKeyFor` above to read back. A `kind`
+        // that does route to a real registration is left unrecorded, and
+        // `type` is used to name the load failure instead -- exactly the
+        // registration `loadProvider` reaches, whether that is this loop's
+        // own `key` or a different registration this `detect` deferred to.
+        if (!(typeof kind === 'string' && ownEntry(providers, kind))) {
+          suppliedDetectRegistrationKeys.set(copy, key);
+        }
         return {
           status: 'success',
           input,
