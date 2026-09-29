@@ -288,10 +288,21 @@ export const Captions = ({
   const captionRendering = usePlayerState((state) => state.captionRendering);
   const cues = useActiveCues();
   const overlayRef = useRef<HTMLDivElement | null>(null);
+  // Clears `overlayRef` itself in a cleanup it returns, rather than
+  // trusting a second call with `null`, so it never holds a detached node:
+  // if the consumer's own ref is a callback that returns a cleanup, React
+  // runs only that cleanup on detach and never calls this function again.
+  // Same merged-ref shape `Gestures` and the settings menu parts use.
   const setRef = useCallback(
     (node: HTMLDivElement | null) => {
       overlayRef.current = node;
-      return assignRef(ref, node);
+      const consumerCleanup = assignRef(ref, node);
+      if (!node) return;
+      return () => {
+        overlayRef.current = null;
+        if (consumerCleanup) consumerCleanup();
+        else assignRef(ref, null);
+      };
     },
     [ref]
   );
