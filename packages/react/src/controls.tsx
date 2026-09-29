@@ -494,6 +494,23 @@ export const Controls = ({
     }
   }, [gatedSignature]);
 
+  // `hadFocusWithin` also goes stale when something other than a capability
+  // change drops focus to <body> -- a consumer's own conditional render
+  // removing its own focused control, for one, which the effect above never
+  // sees because `gatedSignature` does not move. No dependency array: this
+  // runs after every commit, right after the effect above in the same
+  // commit's effect order, so it always observes that effect's outcome
+  // first. A commit whose removal the effect above just restored has
+  // already moved focus off <body> by the time this runs, so the check
+  // below finds nothing to do; a commit that leaves focus on <body>
+  // uncorrected is exactly a stale flag, cleared here before any later,
+  // unrelated capability change can act on it.
+  useEffect(() => {
+    if (hadFocusWithin.current && document.activeElement === document.body) {
+      hadFocusWithin.current = false;
+    }
+  });
+
   const setRef = useCallback(
     (node: HTMLDivElement | null) => {
       containerRef.current = node;
