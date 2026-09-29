@@ -499,7 +499,22 @@ export const libraries = [
     // distance from the last committed figure is this issue's: that figure
     // was 23.90 KB (24471 bytes), measured the same day (2026-09-28) before
     // this change, per `results.md` on `main`.
-    ceilingKb: 24.25,
+    //
+    // 24858 bytes measured 2026-09-29 -- 24.271484375 KB, 24.28 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 24.25 KB is storing a literal `__proto__` key as an own data property
+    // in two places that build an object from a supplied kind's own input,
+    // rather than as the object's own prototype: `provider-loaders.ts`'s
+    // `copySuppliedSourceValue` (the supplied source copy) and
+    // `sanitizeSuppliedProviderOptions` (the supplied `providerOptions` bag),
+    // both switched from bracket assignment to `Object.defineProperty`.
+    // Every composition here reaches both through `use-activation.ts`'s own
+    // calls into `detectSourceWithProviders` and `loadProvider`, regardless
+    // of whether it renders a supplied provider. The whole distance from the
+    // last committed figure is this change's: that figure was 24.24 KB,
+    // measured the same day (2026-09-29) before this change, per
+    // `results.md` on `main`.
+    ceilingKb: 24.5,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {

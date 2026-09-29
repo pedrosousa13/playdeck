@@ -378,7 +378,28 @@ const sanitizeSuppliedProviderOptions = (
       refused = true;
       continue;
     }
-    sanitized[key] = value;
+    // Not `sanitized[key] = value`: `PrimitiveOptionBag`'s own contract
+    // (above) is a compile-time constraint alone, and a caller building
+    // `providerOptions` from `JSON.parse` of external data bypasses it
+    // entirely, the same way an explicit `source` object does
+    // (`copySuppliedSourceValue`'s own doc comment). A key literally named
+    // `__proto__` is a real own key on such input, and `value` is not
+    // screened to a primitive by anything above -- the loop's only check is
+    // the string/URL one just above, which a non-string `value` (an object,
+    // for one) never reaches. `sanitized[key] = value` would run that
+    // assignment through `Object.prototype`'s own `__proto__` setter: for an
+    // object or `null` value, the setter replaces `sanitized`'s own
+    // prototype with it, and for any other value it silently does nothing
+    // at all -- neither stores the field nor reports a refusal.
+    // `defineProperty` calls `[[DefineOwnProperty]]` directly, so a key
+    // named `__proto__` is stored as an ordinary own data property, exactly
+    // like every other key this loop admits.
+    Object.defineProperty(sanitized, key, {
+      configurable: true,
+      enumerable: true,
+      value,
+      writable: true
+    });
   }
   return { options: sanitized, refused };
 };
@@ -772,7 +793,36 @@ const copySuppliedSourceValue = (
           result = keyResult;
           break;
         }
-        copied[key] = keyResult.value;
+        // Not `copied[key] = keyResult.value`: for a key literally named
+        // `__proto__` -- a real own key on `value` when it came from
+        // `JSON.parse`, per `Object.keys(value)` above -- that assignment
+        // goes through `[[Set]]`, which finds no own `__proto__` on `copied`
+        // yet and so runs `Object.prototype`'s own `__proto__` accessor
+        // instead of storing a field: the setter replaces `copied`'s own
+        // prototype with `keyResult.value`, leaving `copied` with no own
+        // property for that key at all, while the value still reads back
+        // through the prototype chain it just became. `defineProperty` calls
+        // `[[DefineOwnProperty]]` directly and never consults an inherited
+        // accessor, so a key named `__proto__` is stored as an ordinary own
+        // data property like any other, and `copied`'s own prototype stays
+        // exactly what the `{}` literal above gave it -- which is also why
+        // nothing downstream that checks a copy's prototype (a plain-object
+        // test, `hasOwnProperty`, a provider factory's own reads) needs to
+        // change: `copied` is still an ordinary `Object.prototype` object,
+        // never `Object.create(null)`.
+        //
+        // Landmine for a future caller: `copied`'s own `__proto__` key is
+        // safe under a spread (`{...copied}`) or handed on unspread, but
+        // `Object.assign(target, copied)` reads it with a plain `for...in`
+        // get and writes it with `target[key] = value` -- the exact `[[Set]]`
+        // this function avoids -- so `Object.assign`ing `copied` anywhere
+        // would re-open this same hole one call downstream.
+        Object.defineProperty(copied, key, {
+          configurable: true,
+          enumerable: true,
+          value: keyResult.value,
+          writable: true
+        });
       }
     }
   }
