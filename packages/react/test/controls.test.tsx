@@ -2635,6 +2635,122 @@ describe('Controls container and scoped shortcuts', () => {
     expect(attr(region, 'data-state')).toBe('global');
   });
 
+  // Guard: the merged ref callback already forwards a ref object to the
+  // region correctly, before and after the consumer-cleanup fix below.
+  test('forwards an object ref to the controls region', () => {
+    const ref = createRef<HTMLDivElement>();
+    const { container } = renderWithPlayer(
+      <Player.Controls ref={ref}>
+        <Player.PlayButton />
+      </Player.Controls>,
+      controlsState()
+    );
+    expect(ref.current).toBe(
+      container.querySelector('[data-playdeck-part="controls"]')
+    );
+  });
+
+  // Guard: a plain (non-cleanup-returning) callback ref is already called
+  // with `null` on detach, before and after the fix below.
+  test('forwards a callback ref to the controls region, and null on unmount', () => {
+    const consumerRef = vi.fn();
+    const { container, unmount } = renderWithPlayer(
+      <Player.Controls ref={consumerRef}>
+        <Player.PlayButton />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector('[data-playdeck-part="controls"]');
+    expect(consumerRef).toHaveBeenCalledExactlyOnceWith(region);
+
+    unmount();
+
+    expect(consumerRef).toHaveBeenCalledTimes(2);
+    expect(consumerRef.mock.calls[1][0]).toBeNull();
+  });
+
+  // Red against the unfixed code: the merged ref callback forwards to the
+  // consumer's ref but discards whatever it returns (a bare `assignRef(ref,
+  // node);` statement), so a cleanup a consumer's callback ref returns is
+  // silently skipped. React still calls the merged callback with `null` on
+  // detach (see the guard above), which in turn calls the consumer's
+  // callback a second time -- the two assertions below.
+  test('respects a callback ref that returns its own cleanup, and does not call it again with null', () => {
+    const cleanup = vi.fn();
+    const consumerRef = vi.fn(() => cleanup);
+    const { container, unmount } = renderWithPlayer(
+      <Player.Controls ref={consumerRef}>
+        <Player.PlayButton />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector('[data-playdeck-part="controls"]');
+    expect(consumerRef).toHaveBeenCalledExactlyOnceWith(region);
+
+    unmount();
+
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(consumerRef).toHaveBeenCalledOnce();
+  });
+
+  // Guard: an object ref's `current` is set to `null` by `assignRef` itself
+  // (there is no consumer cleanup to run for an object ref), unaffected by
+  // the fix above.
+  test('a ref object ends with current === null on unmount', () => {
+    const ref = createRef<HTMLDivElement>();
+    const { unmount } = renderWithPlayer(
+      <Player.Controls ref={ref}>
+        <Player.PlayButton />
+      </Player.Controls>,
+      controlsState()
+    );
+    expect(ref.current).not.toBeNull();
+
+    unmount();
+
+    expect(ref.current).toBeNull();
+  });
+
+  // Guard: a fresh inline callback ref each render is a consumer ref identity
+  // change, not a detach -- React runs the previous callback's cleanup (or
+  // calls it with `null`) and then calls the new callback with the live
+  // node, independent of the fix above. `containerRef`-dependent behavior
+  // (the scoped shortcut layer) keeps working across that churn too.
+  test('a fresh consumer callback ref each render still reaches the region, and scoped shortcuts still work', () => {
+    const calls: (Element | null)[] = [];
+    const { container, spies, rerender } = renderWithPlayer(
+      <Player.Controls
+        ref={(node) => {
+          calls.push(node);
+        }}
+      >
+        <Player.PlayButton />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    expect(calls.at(-1)).toBe(region);
+
+    rerender(
+      <Player.Root loading="interaction" source="/tracer.mp4">
+        <Player.Controls
+          ref={(node) => {
+            calls.push(node);
+          }}
+        >
+          <Player.PlayButton />
+        </Player.Controls>
+      </Player.Root>
+    );
+
+    expect(calls.at(-1)).toBe(region);
+    region.focus();
+    fireEvent.keyDown(region, { key: ' ' });
+    expect(spies.play).toHaveBeenCalledTimes(1);
+  });
+
   test('Space and K toggle playback when the region is focused', () => {
     const { container, spies } = renderWithPlayer(
       <Player.Controls>

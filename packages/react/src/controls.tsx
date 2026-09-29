@@ -511,10 +511,22 @@ export const Controls = ({
     }
   });
 
+  // `containerRef` backs the focus machinery above (`hadFocusWithin`, the
+  // restore effect, `onBlur`) and must land back on `null` on detach, so
+  // this clears it itself in a cleanup it returns, rather than trusting a
+  // second call with `null`: if the consumer's own ref is a callback that
+  // returns a cleanup, React runs only that cleanup on detach and never
+  // calls this function again.
   const setRef = useCallback(
     (node: HTMLDivElement | null) => {
       containerRef.current = node;
-      assignRef(ref, node);
+      const consumerCleanup = assignRef(ref, node);
+      if (!node) return;
+      return () => {
+        containerRef.current = null;
+        if (consumerCleanup) consumerCleanup();
+        else assignRef(ref, null);
+      };
     },
     [ref]
   );

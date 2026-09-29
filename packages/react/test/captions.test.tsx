@@ -357,6 +357,145 @@ describe('Player.Captions', () => {
     expect((overlay as HTMLElement | null)?.style.color).toBe('red');
     expect(ref.current).toBe(overlay);
   });
+
+  // Guard: an object ref's `current` is set to `null` by `assignRef` itself
+  // (there is no consumer cleanup to run for an object ref), unaffected by
+  // the internal-ref fix below.
+  test('a ref object ends with current === null on unmount', () => {
+    const ref = createRef<HTMLDivElement>();
+    const { emitState, unmount } = renderWithPlayer(
+      <Player.Captions ref={ref} />
+    );
+    emitState({ captionRendering: 'custom' });
+    expect(ref.current).not.toBeNull();
+
+    unmount();
+
+    expect(ref.current).toBeNull();
+  });
+
+  // Guard: a fresh inline callback ref each render is a consumer ref identity
+  // change, not a detach -- React runs the previous callback's cleanup (or
+  // calls it with `null`) and then calls the new callback with the live
+  // node, independent of the internal-ref fix below.
+  test('a fresh consumer callback ref each render still receives the live node', () => {
+    const calls: (Element | null)[] = [];
+    const { container, emitState, rerender } = renderWithPlayer(
+      <Player.Captions
+        ref={(node) => {
+          calls.push(node);
+        }}
+      />
+    );
+    emitState({ captionRendering: 'custom' });
+    const overlay = container.querySelector('[data-playdeck-part="captions"]');
+    expect(calls.at(-1)).toBe(overlay);
+
+    rerender(
+      <Player.Root loading="interaction" source="/tracer.mp4">
+        <Player.Captions
+          ref={(node) => {
+            calls.push(node);
+          }}
+        />
+      </Player.Root>
+    );
+
+    expect(calls.at(-1)).toBe(overlay);
+  });
+
+  // Guards: a plain (non-cleanup-returning) callback ref is already called
+  // with `null` on detach, and a cleanup-returning callback ref's cleanup
+  // already runs exactly once without a second call with `null` -- both
+  // true before and after the internal-ref fix below, because the merged
+  // ref callback already delegates its own return value straight to
+  // `assignRef`'s result. What it does not do, before that fix, is clear
+  // its own internal ref in that path -- see the guard further below.
+  test('calls a plain callback ref with null on detach', () => {
+    const consumerRef = vi.fn();
+    const { container, emitState, unmount } = renderWithPlayer(
+      <Player.Captions ref={consumerRef} />
+    );
+    emitState({ captionRendering: 'custom' });
+    const overlay = container.querySelector('[data-playdeck-part="captions"]');
+    expect(consumerRef).toHaveBeenCalledExactlyOnceWith(overlay);
+
+    unmount();
+
+    expect(consumerRef).toHaveBeenCalledTimes(2);
+    expect(consumerRef.mock.calls[1][0]).toBeNull();
+  });
+
+  test('respects a callback ref that returns its own cleanup, and does not call it again with null', () => {
+    const cleanup = vi.fn();
+    const consumerRef = vi.fn(() => cleanup);
+    const { container, emitState, unmount } = renderWithPlayer(
+      <Player.Captions ref={consumerRef} />
+    );
+    emitState({ captionRendering: 'custom' });
+    const overlay = container.querySelector('[data-playdeck-part="captions"]');
+    expect(consumerRef).toHaveBeenCalledExactlyOnceWith(overlay);
+
+    unmount();
+
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(consumerRef).toHaveBeenCalledOnce();
+  });
+
+  // Guard, not red: no reader of the internal (`overlayRef`) ref after
+  // detach exists anywhere in this file -- the only place that reads it,
+  // `useLiftAboveControls`, always overwrites it from the freshly attached
+  // node before reading it again, whether or not a stale value was left
+  // behind by the previous detach. There is therefore no
+  // application-observable assertion that fails against the unfixed merged
+  // ref callback (which returns the consumer's own cleanup as its own,
+  // leaving `overlayRef` pointed at the detached node): this instead pins
+  // the one behavior the fix must not disturb -- a fresh reattachment still
+  // lifts the overlay above the control row -- across a detach that used a
+  // cleanup-returning consumer ref.
+  test('guard: still lifts the overlay above the controls row after a detach/reattach cycle with a cleanup-returning consumer ref', () => {
+    const consumerRef = vi.fn(() => vi.fn());
+    const { container, emitState } = renderWithPlayer(
+      <Player.Viewport>
+        <Player.Captions ref={consumerRef} />
+        <Player.Controls />
+      </Player.Viewport>
+    );
+    emitState({ captionRendering: 'custom' });
+    const controls = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    controls.getBoundingClientRect = () =>
+      ({
+        top: 460,
+        bottom: 500,
+        left: 0,
+        right: 300,
+        width: 300,
+        height: 40
+      }) as DOMRect;
+    const viewport = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="viewport"]'
+    )!;
+    viewport.getBoundingClientRect = () =>
+      ({
+        top: 0,
+        bottom: 500,
+        left: 0,
+        right: 300,
+        width: 300,
+        height: 500
+      }) as DOMRect;
+
+    // Detach (captionRendering leaves 'custom') and reattach.
+    emitState({ captionRendering: 'native' });
+    emitState({ captionRendering: 'custom' });
+
+    const overlay = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="captions"]'
+    )!;
+    expect(overlay.style.transform).toBe('translateY(-48px)');
+  });
 });
 
 describe('Player.Root captionRenderer', () => {
