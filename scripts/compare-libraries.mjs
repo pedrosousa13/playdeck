@@ -534,7 +534,16 @@ export const libraries = [
     // the same way. The whole distance from the last committed figure is
     // this issue's: that figure was 26.96 KB (27612 bytes), measured the
     // same day (2026-09-28) before this change, per `results.md` on `main`.
-    ceilingKb: 27.25
+    //
+    // 27914 bytes measured 2026-09-29 -- 27.259765625 KB, 27.26 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 27.25 KB is the global-mode boundary check added for `PageUp`/
+    // `PageDown`, alongside the arrow-key exemption above, which this
+    // composition's control bar reaches the same way. The whole distance
+    // from the last committed figure is this change's: that figure was
+    // 27.24 KB (27896 bytes), measured the same day (2026-09-29) before this
+    // change, per `results.md` on `main`.
+    ceilingKb: 27.5
   },
   {
     name: 'react-player',

@@ -80,6 +80,18 @@ keystroke and not by its tag:
   still owns every arrow exactly as this decision states, this decision's own
   range inputs included, whether or not the widget answering an arrow itself
   sits inside `Controls` or elsewhere in the same player.
+- **In `global` mode, `PageUp`/`PageDown` belong to the player only inside
+  that same boundary.** Outside it the layer does not handle either key and
+  does not prevent its default, whatever is there — `<body>`, a plain
+  scrollable element, or a widget carrying one of the roles above — with no
+  ownership test standing between the target and the exemption the way there
+  is for arrows: native paging is the default the layer would otherwise be
+  overriding everywhere on the page. The rule is keyed on the two keys
+  themselves rather than on `seekBackwardLarge`/`seekForwardLarge`, so a
+  consumer who rebinds either key to a different action gets the same
+  in-region-only treatment for it. Inside the boundary the layer owns them
+  exactly as this decision states. Scoped mode is unaffected: it never
+  listens outside the region a keydown can reach.
 - **Everything else goes to the layer**, which acts and prevents the default.
 
 `range` is the one type on the non-text list and off the activation list, and

@@ -4209,4 +4209,204 @@ describe('Controls container and scoped shortcuts', () => {
       radio.remove();
     }
   });
+
+  test('leaves PageUp and PageDown to <body> in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    expect(fireEvent.keyDown(document.body, { key: 'PageUp' })).toBe(true);
+    expect(fireEvent.keyDown(document.body, { key: 'PageDown' })).toBe(true);
+    expect(spies.seekBy).not.toHaveBeenCalled();
+  });
+
+  test('leaves PageUp and PageDown to a plain scrollable div outside the player in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const scrollable = document.createElement('div');
+    scrollable.tabIndex = 0;
+    document.body.append(scrollable);
+    try {
+      scrollable.focus();
+      expect(fireEvent.keyDown(scrollable, { key: 'PageUp' })).toBe(true);
+      expect(fireEvent.keyDown(scrollable, { key: 'PageDown' })).toBe(true);
+      expect(spies.seekBy).not.toHaveBeenCalled();
+    } finally {
+      scrollable.remove();
+    }
+  });
+
+  test('leaves PageUp and PageDown to a grid outside the player in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const grid = document.createElement('div');
+    grid.setAttribute('role', 'grid');
+    grid.tabIndex = 0;
+    document.body.append(grid);
+    try {
+      grid.focus();
+      expect(fireEvent.keyDown(grid, { key: 'PageUp' })).toBe(true);
+      expect(fireEvent.keyDown(grid, { key: 'PageDown' })).toBe(true);
+      expect(spies.seekBy).not.toHaveBeenCalled();
+    } finally {
+      grid.remove();
+    }
+  });
+
+  test('leaves PageUp and PageDown to a tablist outside the player in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const tablist = document.createElement('div');
+    tablist.setAttribute('role', 'tablist');
+    tablist.tabIndex = 0;
+    document.body.append(tablist);
+    try {
+      tablist.focus();
+      expect(fireEvent.keyDown(tablist, { key: 'PageUp' })).toBe(true);
+      expect(fireEvent.keyDown(tablist, { key: 'PageDown' })).toBe(true);
+      expect(spies.seekBy).not.toHaveBeenCalled();
+    } finally {
+      tablist.remove();
+    }
+  });
+
+  // The boundary check requires an `HTMLElement`, but a focusable SVG (or
+  // any other non-HTML) target outside the player is exempted too: nothing
+  // narrower than "provably inside the boundary" counts as inside it.
+  test('leaves PageUp and PageDown to a focusable SVG outside the player in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('tabindex', '0');
+    document.body.append(svg);
+    try {
+      svg.focus();
+      expect(fireEvent.keyDown(svg, { key: 'PageUp' })).toBe(true);
+      expect(fireEvent.keyDown(svg, { key: 'PageDown' })).toBe(true);
+      expect(spies.seekBy).not.toHaveBeenCalled();
+    } finally {
+      svg.remove();
+    }
+  });
+
+  // The rule is keyed on the PageUp/PageDown keys, not on the action they
+  // resolve to: a consumer who rebinds PageUp to another action gets the
+  // same in-region-only treatment for whatever action answers it. Frees
+  // `PageUp` from the default `seekForwardLarge` binding first, so
+  // `toggleFullscreen` is genuinely what the key resolves to rather than
+  // losing to `seekForwardLarge`'s own unnamed default (still `PageUp`) in
+  // `resolveShortcutAction`'s action order.
+  test('leaves a PageUp rebound to another action to the page outside the player in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls
+        global
+        shortcuts={{ seekForwardLarge: 'l', toggleFullscreen: 'PageUp' }}
+      >
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const outside = document.createElement('div');
+    outside.tabIndex = 0;
+    document.body.append(outside);
+    try {
+      outside.focus();
+      expect(fireEvent.keyDown(outside, { key: 'PageUp' })).toBe(true);
+      expect(spies.requestFullscreen).not.toHaveBeenCalled();
+      expect(spies.seekBy).not.toHaveBeenCalled();
+    } finally {
+      outside.remove();
+    }
+  });
+
+  // Guard: the same rebinding, pressed inside the region, resolves to the
+  // rebound action rather than being left to the page -- the in-region half
+  // of the pair above, and what makes the README's rebinding example true.
+  // Passes unfixed: in-region rebinding is untouched by this fix.
+  test('applies a PageUp rebound to another action inside the region in global mode', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls
+        global
+        shortcuts={{ seekForwardLarge: 'l', toggleFullscreen: 'PageUp' }}
+      >
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    region.focus();
+    fireEvent.keyDown(region, { key: 'PageUp' });
+    expect(spies.requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(spies.seekBy).not.toHaveBeenCalled();
+  });
+
+  // Guard: PageUp/PageDown still seek ten seconds inside the player region
+  // in global mode -- the pre-existing behaviour the fix must not touch.
+  // Passes unfixed.
+  test('still seeks ten seconds on PageUp and PageDown inside the region in global mode', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.SeekSlider />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    region.focus();
+    expect(fireEvent.keyDown(region, { key: 'PageUp' })).toBe(false);
+    expect(spies.seekBy).toHaveBeenLastCalledWith(10);
+    expect(fireEvent.keyDown(region, { key: 'PageDown' })).toBe(false);
+    expect(spies.seekBy).toHaveBeenLastCalledWith(-10);
+    const seekInput = container.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="seek-slider-input"]'
+    )!;
+    seekInput.focus();
+    expect(fireEvent.keyDown(seekInput, { key: 'PageUp' })).toBe(false);
+    expect(fireEvent.keyDown(seekInput, { key: 'PageDown' })).toBe(false);
+    expect(spies.seekBy.mock.calls).toEqual([[10], [-10], [10], [-10]]);
+  });
+
+  // Guard: j and l are not page keys, so the fix must leave them seeking
+  // globally regardless of target. Passes unfixed.
+  test('still seeks on j and l outside the player in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const outside = document.createElement('div');
+    outside.tabIndex = 0;
+    document.body.append(outside);
+    try {
+      outside.focus();
+      expect(fireEvent.keyDown(outside, { key: 'l' })).toBe(false);
+      expect(spies.seekBy).toHaveBeenLastCalledWith(10);
+      expect(fireEvent.keyDown(outside, { key: 'j' })).toBe(false);
+      expect(spies.seekBy).toHaveBeenLastCalledWith(-10);
+    } finally {
+      outside.remove();
+    }
+  });
 });
