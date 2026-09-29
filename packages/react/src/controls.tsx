@@ -16,6 +16,7 @@ type ShortcutEvent = {
   readonly target: EventTarget | null;
   readonly defaultPrevented: boolean;
   readonly preventDefault: () => void;
+  readonly composedPath: () => EventTarget[];
 };
 
 // `<input>` types that act on Space or Enter instead of taking text: these
@@ -45,6 +46,10 @@ const nonTextInputTypes = new Set<string>([...activationInputTypes, 'range']);
 // Classified by what the control does with a keystroke, not by tag name, so a
 // focused range input (a seek or volume slider) no longer swallows the whole
 // map. Text entry swallows every key: nothing typed can mean a shortcut.
+// Takes the keydown's originating node (see `originatingNode` below), not a
+// possibly shadow-retargeted `event.target`: an `<input>` inside an open
+// shadow root is a real `HTMLInputElement` once read that way, exactly as
+// one outside a shadow tree is.
 const isTextEntryTarget = (node: EventTarget | null): boolean => {
   if (!(node instanceof HTMLElement)) return false;
   if (node.isContentEditable) return true;
@@ -54,11 +59,45 @@ const isTextEntryTarget = (node: EventTarget | null): boolean => {
   return tag === 'TEXTAREA' || tag === 'SELECT';
 };
 
-const isInOpenMenu = (node: EventTarget | null): boolean =>
-  node instanceof HTMLElement &&
-  node.closest(
+// The node a keydown actually originated from, even when a listener outside
+// a shadow tree sees `event.target` retargeted to that tree's host:
+// `composedPath()[0]` is the event's real origin regardless of where a
+// listener sits relative to any shadow boundary the keystroke crossed. Falls
+// back to `event.target` for the one case `composedPath()` cannot report
+// into -- an event with no target at all, where the fallback is exactly as
+// uninformative as the path would have been.
+const originatingNode = (
+  path: readonly EventTarget[],
+  target: EventTarget | null
+): EventTarget | null => path[0] ?? target;
+
+// Whether `selector` matches the keydown's originating node or any of its
+// ancestors, shadow boundaries included -- what `closest()` gives inside one
+// tree, done across as many trees as the keystroke's composed path crosses.
+// `closest()` itself cannot do this: called on a node inside a shadow root,
+// it only ever searches that root's own subtree, and never reaches the host
+// or anything above it, because that ancestor sits in a different tree. The
+// composed path already lists every one of those ancestors in the same
+// inside-out order `closest()` walks, host included, so testing each
+// `Element` entry against `selector` finds a role or tag on either side of
+// an open shadow boundary -- a consumer's own widget that puts an ARIA role
+// on its light-DOM host while its interactive parts live in the shadow tree
+// included. For an ordinary target with no shadow tree involved at all, this
+// finds exactly what `closest()` would have, which is why every closest()
+// call in this file that tests the keydown's own target against a selector
+// (this one, the arrow-key check and the activation check below) uses it
+// rather than only some of them.
+const matchesInPath = (
+  path: readonly EventTarget[],
+  selector: string
+): boolean =>
+  path.some((node) => node instanceof Element && node.matches(selector));
+
+const isInOpenMenu = (path: readonly EventTarget[]): boolean =>
+  matchesInPath(
+    path,
     '[role="menu"], [role="menubar"], [role="listbox"], [data-playdeck-menu="open"]'
-  ) !== null;
+  );
 
 const nativeActivationSelector = 'button, [role="button"], a[href], summary';
 
@@ -77,11 +116,18 @@ const activationInputSelector = activationInputTypes
 // Space and Enter belong to the focused control on these targets — a checkbox
 // toggles on Space, a submit input activates on either, exactly as a button
 // does. While focus is on one, a binding on either key is inert; every other
-// bound key still fires.
-const ownsActivationKeys = (node: EventTarget | null): boolean =>
+// bound key still fires. `path` is the same composed path `matchesInPath`
+// tests everywhere else in this file, so a button-shaped light-DOM host
+// wrapping shadow content keeps this the same way it keeps the others.
+const ownsActivationKeys = (
+  node: EventTarget | null,
+  path: readonly EventTarget[]
+): boolean =>
   node instanceof HTMLElement &&
-  node.closest(`${nativeActivationSelector}, ${activationInputSelector}`) !==
-    null;
+  matchesInPath(
+    path,
+    `${nativeActivationSelector}, ${activationInputSelector}`
+  );
 
 // WAI-ARIA APG composite-widget roles that answer the arrow keys with their
 // own navigation. One list drives the check below, so a role that owns
@@ -130,11 +176,14 @@ const isPageKey = (key: string): boolean =>
 // separately, against `keyOwnershipBoundary` below, so a slider or
 // radiogroup the player itself renders keeps the layer's ownership of its
 // arrows unchanged (ADR-0005).
-const ownsArrowKeysTarget = (node: EventTarget | null): boolean => {
+const ownsArrowKeysTarget = (
+  node: EventTarget | null,
+  path: readonly EventTarget[]
+): boolean => {
   if (!(node instanceof HTMLElement)) return false;
   if (node instanceof HTMLInputElement && arrowKeyInputTypes.has(node.type))
     return true;
-  return node.closest(arrowKeyRoleSelector) !== null;
+  return matchesInPath(path, arrowKeyRoleSelector);
 };
 
 // What "outside the player" is checked against, for every global-mode key
@@ -147,9 +196,26 @@ const ownsArrowKeysTarget = (node: EventTarget | null): boolean => {
 // ownership of its keys, even though it sits outside this region's own DOM
 // node. Falls back to the region itself where no viewport ancestor exists,
 // which is the boundary this check used before a viewport was part of it.
+// This is a lookup from the region's own light-DOM ancestors, not from the
+// keydown's target, so it is unaffected by shadow retargeting and stays a
+// plain `closest()`.
 const keyOwnershipBoundary = (region: HTMLElement | null): HTMLElement | null =>
   region &&
   (region.closest<HTMLElement>('[data-playdeck-part="viewport"]') ?? region);
+
+// Whether `boundary` is an ancestor of the keydown's originating node, shadow
+// boundaries included -- containment decided the same way `matchesInPath`
+// above decides a role or tag match: through the composed path, which
+// already lists every ancestor the keystroke's dispatch crossed, hosts of
+// open shadow roots included. `Node.contains` cannot answer this on its own:
+// it never crosses a shadow boundary, so a node inside an open shadow root
+// whose host sits inside the player would read as outside it. `boundary` can
+// be `null` (`keyOwnershipBoundary` returns that when the region itself is
+// already detached), and this reads as "not contained" rather than throwing.
+const isInComposedPath = (
+  boundary: HTMLElement | null,
+  path: readonly EventTarget[]
+): boolean => boundary !== null && path.includes(boundary);
 
 // Every action the layer knows, and — because one key can reach two of them —
 // the order a key resolves in: the first match here wins, whatever order a
@@ -312,8 +378,18 @@ export const Controls = ({
       if (shortcuts === false) return;
       if (event.defaultPrevented) return;
       if (event.altKey || event.ctrlKey || event.metaKey) return;
-      const target = event.target;
-      if (isTextEntryTarget(target) || isInOpenMenu(target)) return;
+      // The composed path is read once per keydown and threaded through
+      // every check below, none of which reads raw `event.target`: a
+      // listener outside a shadow tree (this one, in `global` mode) sees
+      // `event.target` retargeted to that tree's host, so a check built on
+      // it alone cannot tell a real `<input>` inside an open shadow root
+      // from the plain element hosting it. `composedPath()` is not affected
+      // -- its first entry is always the true origin -- and it also carries
+      // the full ancestor chain `matchesInPath`/`isInComposedPath` need for
+      // the role, activation and boundary checks below.
+      const path = event.composedPath();
+      const target = originatingNode(path, event.target);
+      if (isTextEntryTarget(target) || isInOpenMenu(path)) return;
       // Arrow keys only, and only outside the player: a widget elsewhere on
       // the page that answers arrows itself keeps them, the same way the
       // region's own range inputs keep every other key while the layer
@@ -321,14 +397,19 @@ export const Controls = ({
       // every arrow, its own sliders included and a consumer's own widget
       // composed outside this region but still inside `Player.Viewport`
       // included, which is why this checks `keyOwnershipBoundary` rather
-      // than this region's own containment.
+      // than this region's own containment. `boundary !== null` is checked
+      // explicitly rather than folded into `isInComposedPath` alone: a
+      // detached region (no boundary to test against at all) must not be
+      // read as "outside it", which is the exemption's fail-safe default --
+      // the layer keeps the arrow rather than risk handing it to whatever
+      // the target turns out to be.
       const boundary = keyOwnershipBoundary(containerRef.current);
       if (
         isArrowKey(event.key) &&
         target instanceof HTMLElement &&
-        boundary &&
-        !boundary.contains(target) &&
-        ownsArrowKeysTarget(target)
+        boundary !== null &&
+        !isInComposedPath(boundary, path) &&
+        ownsArrowKeysTarget(target, path)
       )
         return;
       // PageUp/PageDown, in global mode only, outside the same boundary: left
@@ -342,29 +423,18 @@ export const Controls = ({
       // key keeps the same in-region-only rule regardless of the action it
       // answers. In scoped mode the region never sees a keydown whose target
       // sits outside it, so `global` is what keeps this from running there.
-      // Unlike the arrow check above, this is not `target instanceof
-      // HTMLElement && ... && !boundary.contains(target)`: a target this
-      // layer cannot even test containment against -- an SVG element, or
-      // anything else that is a `Node` but not an `HTMLElement`, or no
-      // target at all -- is not thereby proven to be inside the boundary, so
-      // it is left to the page rather than falling through to the switch
-      // below. The condition is inverted for the same reason: "not provably
-      // inside" is what the rule turns on, not "provably outside".
-      if (
-        global &&
-        isPageKey(event.key) &&
-        !(
-          target instanceof Node &&
-          boundary !== null &&
-          boundary.contains(target)
-        )
-      )
+      // `isInComposedPath` already reads "not provably inside" as "not
+      // inside" for anything the path cannot place `boundary` in -- an event
+      // with no meaningful target among them -- so, unlike the arrow check
+      // above, this needs no separate guard for a detached region: PageUp/
+      // PageDown are left to the page by default, not owned by it.
+      if (global && isPageKey(event.key) && !isInComposedPath(boundary, path))
         return;
       const action = resolveShortcutAction(shortcuts, event.key);
       if (action === null) return;
       if (
         (event.key === ' ' || event.key === 'Enter') &&
-        ownsActivationKeys(target)
+        ownsActivationKeys(target, path)
       )
         return;
 
@@ -613,7 +683,15 @@ export const Controls = ({
       }}
       onKeyDown={(event) => {
         onKeyDown?.(event);
-        if (!global) handleShortcut(event);
+        // `event.nativeEvent`, not the synthetic wrapper: React's own
+        // `SyntheticEvent` type carries no `composedPath()`, while the real
+        // `KeyboardEvent` underneath it always does, and a consumer's own
+        // `preventDefault()` above already reaches the same native event
+        // either way. Scoped mode still only ever sees a keydown whose
+        // target is inside this region -- shadow retargeting can still
+        // rename that target to a shadow host inside the region, which is
+        // exactly what `handleShortcut`'s composed-path reading resolves.
+        if (!global) handleShortcut(event.nativeEvent);
       }}
       ref={setRef}
       // Deliberately role="group", not "toolbar": the region owns media
