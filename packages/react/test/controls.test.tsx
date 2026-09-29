@@ -483,6 +483,46 @@ describe('VolumeSlider', () => {
     vi.useRealTimers();
   });
 
+  // The regression: a volume asked for after a provider swap must still
+  // reach the new provider, even though the command chain -- shared with
+  // `useSeekPreview` through `createCommandChain` -- had a command from the
+  // old provider still in flight when the swap happened.
+  test('delivers a volume requested after a provider swap once the old command drains', async () => {
+    const { controller, spies: nativeSpies } = renderWithPlayer(
+      <Player.VolumeSlider />,
+      volumeReady()
+    );
+    const slider = screen.getByRole('slider', { name: 'Volume' });
+    const settleNative = holdNextVolume(nativeSpies.setVolume);
+
+    fireEvent.change(slider, { target: { value: '0.8' } });
+    expect(nativeSpies.setVolume).toHaveBeenCalledTimes(1);
+
+    const youtube = createMockAdapter();
+    act(() => {
+      controller.setProvider(youtube.adapter);
+      youtube.emit({
+        lifecycle: 'ready',
+        activation: 'ready',
+        provider: 'youtube',
+        ...volumeReady()
+      });
+    });
+
+    // Queued behind the native command, which is still in flight.
+    fireEvent.change(slider, { target: { value: '0.6' } });
+    expect(youtube.spies.setVolume).not.toHaveBeenCalled();
+
+    await act(async () => {
+      settleNative();
+    });
+
+    expect(youtube.spies.setVolume).toHaveBeenCalledWith(0.6);
+    // The value queued before the swap was aimed at the provider that is
+    // gone, and must not reach the one that replaced it.
+    expect(youtube.spies.setVolume).not.toHaveBeenCalledWith(0.8);
+  });
+
   test('shows a volume asked for while muted, not the muted zero', () => {
     const { spies } = renderWithPlayer(
       <Player.VolumeSlider />,
