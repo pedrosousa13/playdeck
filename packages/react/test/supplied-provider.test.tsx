@@ -998,6 +998,71 @@ test('re-attaches a supplied kind when its own providerOptions key changes', asy
   await waitFor(() => expect(fakes[0]!.counts().destroyCount).toBe(1));
 });
 
+// `use-activation.ts`'s `sourceKey` calls `JSON.stringify(source.source)` to
+// decide whether a re-render's source is the one already active. A copy
+// built with a bare `copied[key] = value` loses a field nested only under a
+// literal `__proto__` key entirely from its own keys -- that assignment runs
+// the field's value through `Object.prototype`'s own `__proto__` setter
+// rather than storing it, and `JSON.stringify` serialises only own
+// enumerable properties -- so two sources differing only inside such a field
+// would stringify identically, and `useActivation` would treat the second
+// render as the same source, never rebuilding the provider. Built with
+// `JSON.parse`, so `__proto__` is a real own key on each source.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): with
+// `copySuppliedSourceValue`'s object branch reverted to `copied[key] =
+// keyResult.value`, this test's second `waitFor` timed out -- `factory`
+// stayed at one call -- because both sources' own `config` field copied to
+// an object with zero own keys, and so an identical
+// `JSON.stringify(source.source)`, run with `pnpm vitest run
+// packages/react/test/supplied-provider.test.tsx -t "differ only inside a
+// literal __proto__ field"`.
+test('re-attaches a supplied kind when two sources differ only inside a literal __proto__ field', async () => {
+  const fakes: ReturnType<typeof createFakeProvider>[] = [];
+  const factory = vi.fn(() => {
+    const fake = createFakeProvider({ provider: 'native' });
+    fakes.push(fake);
+    return fake.adapter;
+  });
+  const load = vi.fn(async () => factory);
+
+  const sourceA = JSON.parse(
+    '{"type":"acme","videoId":"1","config":{"__proto__":{"secret":"a"}}}'
+  );
+  const sourceB = JSON.parse(
+    '{"type":"acme","videoId":"1","config":{"__proto__":{"secret":"b"}}}'
+  );
+
+  const { rerender } = render(
+    <Player.Root
+      loading="eager"
+      providers={{ acme: { detect: vi.fn(), load } }}
+      source={sourceA}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() => expect(factory).toHaveBeenCalledTimes(1));
+
+  rerender(
+    <Player.Root
+      loading="eager"
+      providers={{ acme: { detect: vi.fn(), load } }}
+      source={sourceB}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() => expect(factory).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(fakes[0]!.counts().destroyCount).toBe(1));
+});
+
 // #752, end to end: a supplied kind's own `providerOptions` bag used to reach
 // the registration's factory unfiltered, so a `javascript:` value written
 // there -- exactly where `docs/provider-setup.md`'s worked example carries a

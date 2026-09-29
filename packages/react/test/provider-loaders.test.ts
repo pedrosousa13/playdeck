@@ -1284,6 +1284,112 @@ test('declines a diamond chain 24 levels deep with two references per level, pro
   expect(result!.status).toBe('failure');
 }, 2000);
 
+// A key literally named `__proto__` is a real own key on the input when it
+// comes from `JSON.parse`, as this test builds it. A copy built with a bare
+// `copied[key] = value` runs that assignment through `Object.prototype`'s
+// own `__proto__` setter instead of storing it, replacing `copied`'s own
+// prototype with the value rather than adding a field.
+// `copySuppliedSourceValue`'s `Object.defineProperty` call calls
+// `[[DefineOwnProperty]]` directly and never consults an inherited accessor,
+// so `__proto__` is stored as an ordinary own data property, and the copy's
+// own prototype stays `Object.prototype`.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): with the
+// `defineProperty` call reverted to `copied[key] = keyResult.value`,
+// `Object.keys(config)` was `[]`, `Object.getPrototypeOf(config)` was the
+// `{secret: 'payload'}` object rather than `Object.prototype`, and
+// `JSON.stringify(config)` was `'{}'`, run with `pnpm vitest run
+// packages/react/test/provider-loaders.test.ts -t "own literal __proto__
+// key rather than replacing"`.
+test("a copied field carries an own literal __proto__ key rather than replacing the copy's own prototype", () => {
+  const input = JSON.parse(
+    '{"type":"acme","videoId":"1","config":{"__proto__":{"secret":"payload"}}}'
+  ) as Record<string, unknown>;
+
+  const result = detectSourceWithProviders(input, {
+    acme: { detect: vi.fn(), load: vi.fn() }
+  });
+  expect(result.status).toBe('success');
+  if (result.status !== 'success') throw new Error('expected a success');
+
+  const config = (result.source as unknown as { config: object }).config;
+  expect(Object.keys(config)).toEqual(['__proto__']);
+  expect(Object.getPrototypeOf(config)).toBe(Object.prototype);
+  expect(JSON.stringify(config)).toBe('{"__proto__":{"secret":"payload"}}');
+});
+
+// A caller building `source` from `JSON.parse` of external data can hand in
+// a whole object keyed by a literal `__proto__`, whose own value carries
+// `type` and the other fields. A copy built with a bare `copied[key] =
+// value` leaves `copy.type` reading `'acme'` through the prototype chain the
+// corrupted copy acquires -- the copy carries no own `type` key, but nothing
+// stands between it and a `type` field the value itself supplied -- so
+// `detectSourceWithProviders` would resolve this as an ordinary `acme`
+// source with zero own keys, a type spoofed entirely through a prototype no
+// field of the input actually declared. `copySuppliedSourceValue`'s
+// `defineProperty` copy stores no top-level `type` here at all -- the
+// input's only own key is `__proto__`, and that is where `type` is copied to
+// as well -- so this is refused for naming no genuine `type` field, the same
+// as any other object that never declared one.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): with the copy's object
+// branch reverted to `copied[key] = keyResult.value`, this resolved `status:
+// 'success'`, with `Object.keys(result.source)` empty and `(result.source as
+// Record<string, unknown>).type === 'acme'`, run with the same command as
+// above with `-t "does not resolve a source object whose only key is a
+// literal __proto__"`.
+test('does not resolve a source object whose only key is a literal __proto__ by reading type through a hijacked prototype', () => {
+  const input = JSON.parse(
+    '{"__proto__":{"type":"acme","src":"https://ok.test/a.mp4"}}'
+  ) as Record<string, unknown>;
+
+  const result = detectSourceWithProviders(input, {
+    acme: { detect: vi.fn(), load: vi.fn() }
+  });
+  expect(result.status).toBe('failure');
+});
+
+// Guard: `isPermittedSourceUrl` runs on each string during the copy, inside
+// the recursive call that produces `keyResult` -- ahead of the assignment
+// line this fix touches (`copySuppliedSourceValue`'s own doc comment). A
+// `javascript:` scheme nested under a literal `__proto__` key is refused
+// either side of the `defineProperty` change: that change only decides how
+// an *admitted* value is stored, never which values are admitted. Confirmed
+// directly: this test also passes unmodified against `provider-loaders.ts`
+// with the `defineProperty` call reverted to `copied[key] =
+// keyResult.value`.
+test('refuses a javascript: URL nested under a literal __proto__ key, the same as a normally keyed one', () => {
+  const input = JSON.parse(
+    '{"type":"acme","videoId":"1","config":{"__proto__":"javascript:alert(1)"}}'
+  ) as Record<string, unknown>;
+
+  const result = detectSourceWithProviders(input, {
+    acme: { detect: vi.fn(), load: vi.fn() }
+  });
+  expect(result.status).toBe('failure');
+});
+
+// Guard: a supplied source with no `__proto__` key anywhere copies to the
+// same own keys, prototype and serialisation either side of the
+// `defineProperty` change -- `copied[key] = value` and
+// `Object.defineProperty(copied, key, {...})` store an ordinary key
+// identically. Confirmed directly: this test also passes unmodified against
+// `provider-loaders.ts` with the `defineProperty` call reverted to
+// `copied[key] = keyResult.value`.
+test('copies an ordinary source object with no __proto__ key to a plain object with matching own keys and serialisation', () => {
+  const input = { type: 'acme', videoId: '1', config: { secret: 'payload' } };
+
+  const result = detectSourceWithProviders(input, {
+    acme: { detect: vi.fn(), load: vi.fn() }
+  });
+  expect(result.status).toBe('success');
+  if (result.status !== 'success') throw new Error('expected a success');
+
+  expect(Object.keys(result.source)).toEqual(['type', 'videoId', 'config']);
+  expect(Object.getPrototypeOf(result.source)).toBe(Object.prototype);
+  expect(JSON.stringify(result.source)).toBe(JSON.stringify(input));
+});
+
 test('dispatches a supplied kind to its own registration, with the mount, source and its own option bag', async () => {
   const adapter = { provider: 'native' } as unknown as ProviderAdapter;
   const factory = vi.fn(async () => adapter);
@@ -1460,6 +1566,111 @@ test('omits a refused option without throwing when no reportRefusedUrl is suppli
   ).resolves.toBe(adapter);
 
   expect(factory).toHaveBeenCalledWith(media, source, {});
+});
+
+// Traced first: `sanitizeSuppliedProviderOptions`'s only type check is the
+// `typeof value === 'string'` branch above -- a non-string `value` (an
+// object, for one) never reaches it and falls straight through to the write
+// below. `PrimitiveOptionBag` (above) guards this only at compile time; a
+// caller building `providerOptions` from `JSON.parse` of external data
+// reaches this loop with whatever `JSON.parse` produced, the same threat
+// model as an explicit `source` object (`copySuppliedSourceValue`'s own doc
+// comment). A key literally named `__proto__` is a real own key on such
+// input, so an object-valued `__proto__` field reaches the write unfiltered
+// -- this is not a guard.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): with the write
+// reverted to `sanitized[key] = value`, `factory` was called with an options
+// object with zero own keys whose own prototype was `{ polluted: true }` --
+// `Object.keys(options)` was `[]` and `options.polluted` read `true` through
+// the hijacked prototype -- run with `pnpm vitest run
+// packages/react/test/provider-loaders.test.ts -t "an object-valued literal
+// __proto__ key"`.
+test("stores an object-valued literal __proto__ key in a supplied kind's own providerOptions bag as an own key, never as the bag's prototype", async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(
+    async (
+      mount: unknown,
+      source: unknown,
+      options?: Record<string, unknown>
+    ) => {
+      void mount;
+      void source;
+      void options;
+      return adapter;
+    }
+  );
+  const load = vi.fn(async () => factory);
+  const media = document.createElement('div');
+  const source: AcmeSource = { type: 'acme', videoId: '1' };
+  const bag = JSON.parse('{"__proto__":{"polluted":true}}');
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providerOptions: { acme: bag } as never,
+      providers: { acme: { detect: vi.fn(), load } },
+      source
+    })
+  ).resolves.toBe(adapter);
+
+  expect(factory).toHaveBeenCalledOnce();
+  const options = factory.mock.calls[0]![2] as Record<string, unknown>;
+  expect(Object.keys(options)).toEqual(['__proto__']);
+  expect(Object.getPrototypeOf(options)).toBe(Object.prototype);
+  expect(options.polluted).toBeUndefined();
+  expect(options['__proto__']).toEqual({ polluted: true });
+});
+
+// Traced the same way: for a `value` that is a string but names no URL
+// scheme, `isPermittedSourceUrl` permits it and the value reaches the same
+// write. `Object.prototype`'s own `__proto__` setter is a no-op for a value
+// that is neither an object nor `null` -- its own algorithm returns before
+// ever reaching `[[SetPrototypeOf]]` -- so `sanitized[key] = value` neither
+// stores the field nor reports it refused: the field simply vanishes, with
+// no signal either way.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): with the write
+// reverted to `sanitized[key] = value`, `factory` was called with `{
+// quality: 'hd' }` -- the `__proto__` field vanished entirely, dropped
+// rather than stored or refused -- run with the same command as above with
+// `-t "a primitive-valued literal __proto__ key"`.
+test("stores a primitive-valued literal __proto__ key in a supplied kind's own providerOptions bag as an own key, the same as any other key", async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(
+    async (
+      mount: unknown,
+      source: unknown,
+      options?: Record<string, unknown>
+    ) => {
+      void mount;
+      void source;
+      void options;
+      return adapter;
+    }
+  );
+  const load = vi.fn(async () => factory);
+  const media = document.createElement('div');
+  const source: AcmeSource = { type: 'acme', videoId: '1' };
+  const bag = JSON.parse('{"quality":"hd","__proto__":"loud"}');
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providerOptions: { acme: bag } as never,
+      providers: { acme: { detect: vi.fn(), load } },
+      source
+    })
+  ).resolves.toBe(adapter);
+
+  expect(factory).toHaveBeenCalledOnce();
+  const options = factory.mock.calls[0]![2] as Record<string, unknown>;
+  expect(Object.keys(options)).toEqual(['quality', '__proto__']);
+  expect(options.quality).toBe('hd');
+  expect(options['__proto__']).toBe('loud');
+  expect(Object.getPrototypeOf(options)).toBe(Object.prototype);
 });
 
 test('reports a supplied kind with no matching registration the same way as an unrecognised type', async () => {
