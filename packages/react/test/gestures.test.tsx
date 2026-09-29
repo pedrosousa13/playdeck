@@ -158,6 +158,22 @@ const tapAt = (
   });
 };
 
+// Fire a pointerdown on the gesture layer. Only `isPrimary` varies across
+// this file's multi-touch fixtures; position is irrelevant to pointerdown
+// handling (only a tap's `pointerup` reads `clientX`).
+const pointerDownAt = (
+  layer: Element,
+  overrides: Partial<PointerEventInit> = {}
+) => {
+  fireEvent.pointerDown(layer, {
+    clientX: 150,
+    clientY: 10,
+    isPrimary: true,
+    button: 0,
+    ...overrides
+  });
+};
+
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
   vi.runOnlyPendingTimers();
@@ -401,6 +417,166 @@ describe('Gestures', () => {
     // tap, and toggling controls in response to two taps on the video
     // would contradict what the same gesture does everywhere it can seek.
     expect(onToggle).not.toHaveBeenCalled();
+  });
+
+  test('a two-finger gesture where the secondary lifts first does not toggle controls or seek', () => {
+    const onToggle = vi.fn();
+    const { spies } = renderGestures(
+      <Player.Viewport>
+        <Player.Gestures onToggleControls={onToggle} seekOffset={10} />
+      </Player.Viewport>,
+      withSeekCapability(available)
+    );
+    const layer = getLayer();
+    pointerDownAt(layer);
+    pointerDownAt(layer, { isPrimary: false });
+    fireEvent.pointerUp(layer, { clientX: 150, clientY: 10, isPrimary: false });
+    tapAt(layer, 150); // the primary's own lift
+    act(() => vi.advanceTimersByTime(320));
+    expect(onToggle).not.toHaveBeenCalled();
+    expect(spies.seekBy).not.toHaveBeenCalled();
+  });
+
+  test('a two-finger gesture where the primary lifts first does not toggle controls or seek', () => {
+    const onToggle = vi.fn();
+    const { spies } = renderGestures(
+      <Player.Viewport>
+        <Player.Gestures onToggleControls={onToggle} seekOffset={10} />
+      </Player.Viewport>,
+      withSeekCapability(available)
+    );
+    const layer = getLayer();
+    pointerDownAt(layer);
+    pointerDownAt(layer, { isPrimary: false });
+    tapAt(layer, 150); // the primary lifts first
+    fireEvent.pointerUp(layer, { clientX: 150, clientY: 10, isPrimary: false });
+    act(() => vi.advanceTimersByTime(320));
+    expect(onToggle).not.toHaveBeenCalled();
+    expect(spies.seekBy).not.toHaveBeenCalled();
+  });
+
+  test('an ordinary tap after a multi-touch gesture still toggles controls', () => {
+    const onToggle = vi.fn();
+    const { spies } = renderGestures(
+      <Player.Viewport>
+        <Player.Gestures onToggleControls={onToggle} seekOffset={10} />
+      </Player.Viewport>,
+      withSeekCapability(available)
+    );
+    const layer = getLayer();
+    pointerDownAt(layer);
+    pointerDownAt(layer, { isPrimary: false });
+    tapAt(layer, 150);
+    fireEvent.pointerUp(layer, { clientX: 150, clientY: 10, isPrimary: false });
+
+    pointerDownAt(layer);
+    tapAt(layer, 150);
+    act(() => vi.advanceTimersByTime(320));
+
+    expect(onToggle).toHaveBeenCalledTimes(1);
+    expect(spies.seekBy).not.toHaveBeenCalled();
+  });
+
+  // A primary pointerup can reach the layer with no primary pointerdown on
+  // it first -- a mouse press that started outside the layer and released
+  // inside, or a pointer captured elsewhere. The multi-touch record must not
+  // survive past the gesture's own primary lift waiting for a pointerdown
+  // that may never come.
+  test('an ordinary tap with no preceding pointerdown still toggles controls after a multi-touch gesture', () => {
+    const onToggle = vi.fn();
+    const { spies } = renderGestures(
+      <Player.Viewport>
+        <Player.Gestures onToggleControls={onToggle} seekOffset={10} />
+      </Player.Viewport>,
+      withSeekCapability(available)
+    );
+    const layer = getLayer();
+    pointerDownAt(layer);
+    pointerDownAt(layer, { isPrimary: false });
+    fireEvent.pointerUp(layer, { clientX: 150, clientY: 10, isPrimary: false });
+    tapAt(layer, 150); // the pinch's own primary lift, ignored
+
+    tapAt(layer, 150); // a primary pointerup with no preceding pointerdown
+    act(() => vi.advanceTimersByTime(320));
+
+    expect(onToggle).toHaveBeenCalledTimes(1);
+    expect(spies.seekBy).not.toHaveBeenCalled();
+  });
+
+  test('an ordinary double tap after a multi-touch gesture still seeks', () => {
+    const onToggle = vi.fn();
+    const { spies } = renderGestures(
+      <Player.Viewport>
+        <Player.Gestures onToggleControls={onToggle} seekOffset={10} />
+      </Player.Viewport>,
+      withSeekCapability(available)
+    );
+    const layer = getLayer();
+    pointerDownAt(layer);
+    pointerDownAt(layer, { isPrimary: false });
+    tapAt(layer, 150);
+    fireEvent.pointerUp(layer, { clientX: 150, clientY: 10, isPrimary: false });
+    // Flush the window before the ordinary double tap below: nothing from
+    // the gesture above should have been pending, so this must not resolve
+    // into a toggle. Without this, a stray pending tap left over by the
+    // gesture could pair up with the first tap below by coincidence and
+    // still produce a `seekBy(10)` call for the wrong reason.
+    act(() => vi.advanceTimersByTime(320));
+    expect(onToggle).not.toHaveBeenCalled();
+
+    pointerDownAt(layer);
+    tapAt(layer, 150);
+    pointerDownAt(layer);
+    tapAt(layer, 150);
+
+    expect(spies.seekBy).toHaveBeenCalledWith(10);
+  });
+
+  test('a genuine single tap followed within the window by a two-finger gesture resolves as a single tap, not a double-tap seek', () => {
+    const onToggle = vi.fn();
+    const { spies } = renderGestures(
+      <Player.Viewport>
+        <Player.Gestures onToggleControls={onToggle} seekOffset={10} />
+      </Player.Viewport>,
+      withSeekCapability(available)
+    );
+    const layer = getLayer();
+    tapAt(layer, 150); // genuine tap 1: starts the pending-tap window
+    pointerDownAt(layer); // the two-finger gesture's primary pointer
+    pointerDownAt(layer, { isPrimary: false });
+    tapAt(layer, 150); // the primary's lift is ignored, not a second tap
+    fireEvent.pointerUp(layer, { clientX: 150, clientY: 10, isPrimary: false });
+    act(() => vi.advanceTimersByTime(320));
+
+    expect(spies.seekBy).not.toHaveBeenCalled();
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  // Guard: Gestures has never listened for pointercancel, in either the
+  // unfixed or the fixed code, so a cancelled primary pointer already left
+  // nothing pending. This passes unfixed -- it demonstrates that the next
+  // primary pointerdown's reset is enough, without a dedicated cancel
+  // handler.
+  test('a pointercancel on the primary pointer during a multi-touch gesture is a no-op (guard)', () => {
+    const onToggle = vi.fn();
+    const { spies } = renderGestures(
+      <Player.Viewport>
+        <Player.Gestures onToggleControls={onToggle} seekOffset={10} />
+      </Player.Viewport>,
+      withSeekCapability(available)
+    );
+    const layer = getLayer();
+    pointerDownAt(layer);
+    pointerDownAt(layer, { isPrimary: false });
+    fireEvent.pointerCancel(layer, {
+      clientX: 150,
+      clientY: 10,
+      isPrimary: true
+    });
+    act(() => vi.advanceTimersByTime(320));
+
+    expect(onToggle).not.toHaveBeenCalled();
+    expect(spies.seekBy).not.toHaveBeenCalled();
   });
 
   test('forwards an object ref to the gesture layer element', () => {

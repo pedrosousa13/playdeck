@@ -41,6 +41,7 @@ export const Gestures = ({
   onToggleControls,
   onSeek,
   children,
+  onPointerDown,
   onPointerUp,
   ref,
   style,
@@ -50,6 +51,16 @@ export const Gestures = ({
   const seekStatus = usePlayerState((state) => state.capabilities.seek.status);
   const layerRef = useRef<HTMLDivElement | null>(null);
   const pendingTap = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Whether the primary pointer is currently down, and whether a second
+  // (non-primary) pointer joined while it was. Both clear on the primary
+  // pointer's own lift and again on the next primary press, so a stray
+  // primary `pointerup` with no preceding `pointerdown` on this layer (a
+  // press that started outside it, or a pointer captured elsewhere) never
+  // inherits a record from an earlier gesture. A `pointercancel` on the
+  // primary leaves both stuck until then, which the next primary press
+  // resets, so no separate handling for it is needed.
+  const primaryPointerDown = useRef(false);
+  const multiTouchDuringPrimary = useRef(false);
   // `...props` carries the consumer's `ref` too (React 19 treats it as a
   // plain prop), so this merges it with `layerRef` rather than letting the
   // internal `ref` below win by attaching last. The cleanup this returns
@@ -83,9 +94,34 @@ export const Gestures = ({
     <div
       {...props}
       data-playdeck-part="gestures"
+      onPointerDown={(event) => {
+        onPointerDown?.(event);
+        if (event.defaultPrevented) return;
+        if (event.isPrimary) {
+          // A fresh primary press starts a new gesture: clear whatever a
+          // previous gesture (or an uncancelled one) left behind.
+          primaryPointerDown.current = true;
+          multiTouchDuringPrimary.current = false;
+          return;
+        }
+        if (primaryPointerDown.current) {
+          multiTouchDuringPrimary.current = true;
+        }
+      }}
       onPointerUp={(event) => {
         onPointerUp?.(event);
         if (event.defaultPrevented) return;
+        // Consumed here rather than left for the next primary `pointerdown`
+        // to clear: a primary `pointerup` can arrive with no preceding
+        // primary `pointerdown` on this layer (a press that started outside
+        // it, or a pointer captured elsewhere), and that lift must not
+        // inherit a record left by an earlier gesture.
+        let joinedByASecondPointer = false;
+        if (event.isPrimary) {
+          joinedByASecondPointer = multiTouchDuringPrimary.current;
+          primaryPointerDown.current = false;
+          multiTouchDuringPrimary.current = false;
+        }
         // Ignore a second (or later) touch point in a multi-touch gesture,
         // and a non-primary mouse button (e.g. a right-click): neither is a
         // tap, and letting either fall through would both misread a pinch
@@ -96,6 +132,11 @@ export const Gestures = ({
         if (!event.isPrimary || event.button !== 0) return;
         // Ignore taps that land on a real control inside the layer.
         if (isNativeActivationTarget(event.target)) return;
+        // A second pointer joined while this primary pointer was down: this
+        // primary pointer's lift is the end of that multi-touch gesture, not
+        // a tap. Leave any pending single tap from an earlier, genuine tap
+        // untouched, the same way the other ignored-event cases above do.
+        if (joinedByASecondPointer) return;
 
         if (pendingTap.current !== null) {
           // Second tap within the window.
