@@ -21,6 +21,12 @@ type SettingsMenuContextValue = {
   readonly rootRef: RefObject<HTMLDivElement | null>;
   readonly triggerId: string;
   readonly contentId: string;
+  // Which item the open-autofocus effect below should land on. Set by
+  // SettingsMenuTrigger immediately before every `setOpen(true)`, so it
+  // carries no state across opens -- an ArrowUp open followed by Escape and
+  // an ArrowDown open reads 'first' on the second open, not a leftover
+  // 'last' from the one before it.
+  readonly openFocusRef: RefObject<'first' | 'last'>;
 };
 
 const SettingsMenuContext = createContext<SettingsMenuContextValue | null>(
@@ -67,6 +73,7 @@ export const SettingsMenu = ({
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const openFocusRef = useRef<'first' | 'last'>('first');
   const baseId = useId();
   const close = useCallback(() => {
     setOpen(false);
@@ -79,7 +86,8 @@ export const SettingsMenu = ({
     triggerRef,
     rootRef,
     triggerId: `${baseId}-trigger`,
-    contentId: `${baseId}-content`
+    contentId: `${baseId}-content`,
+    openFocusRef
   };
   // `...props` carries the consumer's `ref` too (React 19 treats it as a
   // plain prop), so this merges it with `rootRef` rather than letting the
@@ -125,7 +133,8 @@ export const SettingsMenuTrigger = ({
   style,
   ...props
 }: SettingsMenuTriggerProps) => {
-  const { open, setOpen, triggerRef, triggerId, contentId } = useSettingsMenu();
+  const { open, setOpen, triggerRef, triggerId, contentId, openFocusRef } =
+    useSettingsMenu();
   // Merges the consumer's `ref` (arriving through `...props` below) with
   // `triggerRef`, which `close()` reads from context to restore focus -- so a
   // stale `triggerRef` here would point `close()` at a detached button after
@@ -159,6 +168,7 @@ export const SettingsMenuTrigger = ({
       onClick={(event) => {
         onClick?.(event);
         if (event.defaultPrevented) return;
+        if (!open) openFocusRef.current = 'first';
         setOpen(!open);
       }}
       onKeyDown={(event) => {
@@ -166,7 +176,10 @@ export const SettingsMenuTrigger = ({
         if (event.defaultPrevented) return;
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
           event.preventDefault();
-          setOpen(true); // Content autofocuses its first item on open
+          // WAI-ARIA menu button pattern: ArrowUp opens onto the last item,
+          // ArrowDown (and click/Enter/Space, above) onto the first.
+          openFocusRef.current = event.key === 'ArrowUp' ? 'last' : 'first';
+          setOpen(true);
         }
       }}
       ref={setTriggerRef}
@@ -182,15 +195,23 @@ export type SettingsMenuContentProps = ComponentPropsWithRef<'div'>;
 
 export const SettingsMenuContent = ({
   children,
+  onFocus,
   onKeyDown,
   ref,
   style,
   tabIndex,
   ...props
 }: SettingsMenuContentProps) => {
-  const { open, close, setOpen, rootRef, triggerId, contentId } =
+  const { open, close, setOpen, rootRef, triggerId, contentId, openFocusRef } =
     useSettingsMenu();
   const contentRef = useRef<HTMLDivElement | null>(null);
+  // The item roving focus currently sits on, tracked live off `onFocus`
+  // below rather than recomputed from `document.activeElement` -- by the
+  // time the removal-repair effect runs, the item's DOM node (and thus
+  // `document.activeElement`) may already be gone, which is exactly the
+  // case it exists to detect.
+  const focusedItemRef = useRef<HTMLElement | null>(null);
+  const focusedIndexRef = useRef(0);
   // Merges the consumer's `ref` (arriving through `...props` below) with
   // `contentRef`, which the autofocus effect below and the keyboard handlers
   // further below both need for roving focus -- see the `setRootRef` comment
@@ -210,11 +231,72 @@ export const SettingsMenuContent = ({
     [ref]
   );
 
-  // Autofocus the first item when the menu opens.
+  // Autofocus the first item when the menu opens, or the last when
+  // SettingsMenuTrigger's ArrowUp requested it (openFocusRef, set just
+  // before the `setOpen(true)` that led here). Reset on close so a stale
+  // reference from a prior open cycle can never satisfy the removal-repair
+  // effect below.
+  useEffect(() => {
+    if (!open) {
+      focusedItemRef.current = null;
+      return;
+    }
+    const items = menuItems(contentRef.current);
+    const target =
+      openFocusRef.current === 'last' ? items[items.length - 1] : items[0];
+    target?.focus();
+  }, [open, openFocusRef]);
+
+  // Safeguard for QualityMenu/AudioTrackMenu re-rendering with a shorter
+  // item list while the menu is open: if the item that held focus is no
+  // longer in the roving-focus list, the browser has already dropped focus
+  // to <body> (its DOM node is gone), and nothing else would move it back --
+  // Escape/arrow keys/Home/End are handled on this element, not <body>, so
+  // the menu would be stuck open with no keyboard escape. Follows the
+  // WAI-ARIA APG rearrangeable-listbox precedent: land on the item now at
+  // the removed item's index, or the new last item if it was last, or close
+  // the menu if none remain.
+  //
+  // Deliberately no dependency array: the item list can shrink from a
+  // parent re-render for reasons this component has no prop to depend on
+  // (QualityMenu/AudioTrackMenu build a new children tree every render
+  // regardless of whether their list changed), so this re-checks the live
+  // DOM after every commit rather than trying to name what changed.
   useEffect(() => {
     if (!open) return;
-    menuItems(contentRef.current)[0]?.focus();
-  }, [open]);
+    const focused = focusedItemRef.current;
+    if (!focused) return;
+    const items = menuItems(contentRef.current);
+    const index = items.indexOf(focused);
+    if (index !== -1) {
+      // Still there -- not what moved. Keep the tracked index current even
+      // though no focus event fired: a re-render that inserts an item ahead
+      // of the focused one shifts its index without ever refocusing it, and
+      // this is the only other point that ever sees the new position.
+      focusedIndexRef.current = index;
+      return;
+    }
+    // The tracked item is gone, but that alone does not mean focus was
+    // lost -- a click on the menu's own padding, or consumer code focusing
+    // something outside the menu, both move focus deliberately while `open`
+    // stays true, and onFocus below only knows to clear the tracked item for
+    // the first of those (an outside focus target never fires it, since it
+    // isn't a descendant of this element). The one thing that reliably means
+    // "the browser dropped focus because the node disappeared" is
+    // document.activeElement landing on <body>.
+    if (
+      document.activeElement !== document.body &&
+      document.activeElement !== null
+    ) {
+      focusedItemRef.current = null; // stale -- stop tracking it
+      return;
+    }
+    if (items.length === 0) {
+      close(); // closes the menu and refocuses the trigger
+      return;
+    }
+    items[Math.min(focusedIndexRef.current, items.length - 1)]?.focus();
+  });
 
   // Close on outside pointerdown without stealing focus.
   useEffect(() => {
@@ -258,6 +340,20 @@ export const SettingsMenuContent = ({
       data-playdeck-menu="open"
       data-playdeck-part="settings-menu"
       id={contentId}
+      onFocus={(event) => {
+        onFocus?.(event);
+        const items = menuItems(contentRef.current);
+        const index = items.indexOf(event.target as HTMLElement);
+        if (index === -1) {
+          // Focus landed on the root itself, not an item -- stop tracking,
+          // so a later removal of whatever used to be focused finds nothing
+          // to repair rather than stealing focus back from the root.
+          focusedItemRef.current = null;
+          return;
+        }
+        focusedItemRef.current = items[index] ?? null;
+        focusedIndexRef.current = index;
+      }}
       onKeyDown={(event) => {
         onKeyDown?.(event);
         if (event.defaultPrevented) return;

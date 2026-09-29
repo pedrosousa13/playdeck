@@ -107,6 +107,7 @@ const quality = (
 
 const p1080 = quality('1080p', 1080, 5_000_000);
 const p720 = quality('720p', 720, 2_500_000);
+const p480 = quality('480p', 480, 1_000_000);
 
 afterEach(() => {
   cleanup();
@@ -350,5 +351,81 @@ describe('Player.QualityMenu', () => {
     expect(ref.current).toBe(
       container.querySelector('[data-playdeck-part="settings-menu-root"]')
     );
+  });
+
+  // Regression coverage for SettingsMenu's removal-repair effect, driven
+  // through the real preset rather than SettingsMenu directly: the ladder
+  // shrinking (as it does when a provider reports fewer renditions) while
+  // the removed rung holds focus, once with it last and once from a middle
+  // position.
+  test('the ladder shrinking while the focused last rung disappears moves focus to the new last rung', () => {
+    const { container, emitState } = renderWithPlayer(<Player.QualityMenu />);
+    emitState({
+      capabilities: withSelectQuality(available, {
+        status: 'unavailable',
+        reason: 'source'
+      }), // no Auto row, so the menuitemradios are just the rungs
+      qualities: [p1080, p720],
+      quality: p1080,
+      selectedQualityId: '1080p'
+    });
+    fireEvent.click(
+      container.querySelector(
+        '[data-playdeck-part="settings-menu-trigger"]'
+      ) as HTMLButtonElement
+    );
+    const items = () =>
+      Array.from(
+        container.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
+      );
+    expect(items().map((item) => item.textContent)).toEqual(['1080p', '720p']);
+    act(() => items()[1]?.focus()); // focus 720p, the last rung
+    expect(document.activeElement).toBe(items()[1]);
+
+    emitState({ qualities: [p1080] }); // the provider drops 720p
+
+    const remaining = items();
+    expect(remaining.map((item) => item.textContent)).toEqual(['1080p']);
+    expect(document.activeElement).toBe(remaining[0]);
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
+  test('the ladder shrinking while a focused middle rung disappears moves focus to the rung now at its index', () => {
+    const { container, emitState } = renderWithPlayer(<Player.QualityMenu />);
+    emitState({
+      capabilities: withSelectQuality(available, {
+        status: 'unavailable',
+        reason: 'source'
+      }),
+      qualities: [p1080, p720, p480],
+      quality: p1080,
+      selectedQualityId: '1080p'
+    });
+    fireEvent.click(
+      container.querySelector(
+        '[data-playdeck-part="settings-menu-trigger"]'
+      ) as HTMLButtonElement
+    );
+    const items = () =>
+      Array.from(
+        container.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
+      );
+    expect(items().map((item) => item.textContent)).toEqual([
+      '1080p',
+      '720p',
+      '480p'
+    ]);
+    act(() => items()[1]?.focus()); // focus 720p, the middle rung
+    expect(document.activeElement).toBe(items()[1]);
+
+    emitState({ qualities: [p1080, p480] }); // the provider drops 720p
+
+    const remaining = items();
+    expect(remaining.map((item) => item.textContent)).toEqual([
+      '1080p',
+      '480p'
+    ]);
+    expect(document.activeElement).toBe(remaining[1]); // 480p, now at index 1
+    expect(document.activeElement).not.toBe(document.body);
   });
 });
