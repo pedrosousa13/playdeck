@@ -582,6 +582,21 @@ still belongs to the layer wherever focus sits inside that boundary, its own
 sliders included and a consumer's own control composed elsewhere in the same
 viewport included, and still fires normally on any other page content.
 
+`PageUp` and `PageDown` are in-region only in `global` mode: outside that same
+boundary the layer does not handle either key and does not call
+`preventDefault()`, on any target — `<body>`, a plain scrollable element, a
+`grid` or `tablist`, or anything else — so the page keeps its own paging.
+Unlike the arrow exemption above, this one does not check what the target is;
+native paging outranks the shortcut everywhere outside the player. The rule
+follows the two keys themselves rather than the actions bound to them, so
+`shortcuts={{ seekForwardLarge: 'l', toggleFullscreen: 'PageUp' }}` — which
+frees `PageUp` from the default `seekForwardLarge` binding before handing it
+to `toggleFullscreen` — keeps that in-region-only behaviour for the rebound
+key: outside the boundary it still does nothing, and inside it it toggles
+fullscreen instead of seeking. `PageUp`/`PageDown` at their defaults seek
+inside the boundary exactly as described above, and scoped mode is unchanged
+either way.
+
 `shortcuts` controls the layer. `shortcuts={false}` turns it off entirely — in
 `global` mode no `document` listener is attached at all. An object is a partial
 override map of action to a `KeyboardEvent.key` value, an array of them, or

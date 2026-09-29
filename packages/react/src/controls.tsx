@@ -119,12 +119,15 @@ const isArrowKey = (key: string): boolean =>
   key === 'ArrowLeft' ||
   key === 'ArrowRight';
 
+const isPageKey = (key: string): boolean =>
+  key === 'PageUp' || key === 'PageDown';
+
 // True for a target that answers arrow keys on its own — a native radio or
 // range input, or anything inside one of the composite roles above. A
 // `<select>` needs no entry here: `isTextEntryTarget` already silences the
 // whole layer for one, arrows included, before this runs. Says nothing about
 // whether the target sits inside this player; the caller checks that
-// separately, against `arrowKeyOwnershipBoundary` below, so a slider or
+// separately, against `keyOwnershipBoundary` below, so a slider or
 // radiogroup the player itself renders keeps the layer's ownership of its
 // arrows unchanged (ADR-0005).
 const ownsArrowKeysTarget = (node: EventTarget | null): boolean => {
@@ -134,19 +137,17 @@ const ownsArrowKeysTarget = (node: EventTarget | null): boolean => {
   return node.closest(arrowKeyRoleSelector) !== null;
 };
 
-// What "outside the player" is checked against: `Player.Viewport`'s own DOM
-// node -- the player's own bounding box (CONTEXT.md's "Viewport" entry) --
-// when this region sits inside one, the same viewport part
-// `useLiftAboveControls` (`captions.tsx`) already reaches through to find
-// `Controls` from outside it. A consumer's own widget composed elsewhere in
-// that box, a `SeekSlider` moved outside `Controls` included, is still part
-// of this player and keeps the layer's ownership of its arrows, even though
-// it sits outside this region's own DOM node. Falls back to the region
-// itself where no viewport ancestor exists, which is the boundary this
-// check used before a viewport was part of it.
-const arrowKeyOwnershipBoundary = (
-  region: HTMLElement | null
-): HTMLElement | null =>
+// What "outside the player" is checked against, for every global-mode key
+// exemption below: `Player.Viewport`'s own DOM node -- the player's own
+// bounding box (CONTEXT.md's "Viewport" entry) -- when this region sits
+// inside one, the same viewport part `useLiftAboveControls` (`captions.tsx`)
+// already reaches through to find `Controls` from outside it. A consumer's
+// own widget composed elsewhere in that box, a `SeekSlider` moved outside
+// `Controls` included, is still part of this player and keeps the layer's
+// ownership of its keys, even though it sits outside this region's own DOM
+// node. Falls back to the region itself where no viewport ancestor exists,
+// which is the boundary this check used before a viewport was part of it.
+const keyOwnershipBoundary = (region: HTMLElement | null): HTMLElement | null =>
   region &&
   (region.closest<HTMLElement>('[data-playdeck-part="viewport"]') ?? region);
 
@@ -319,15 +320,44 @@ export const Controls = ({
       // takes theirs (ADR-0005). Inside the player the layer still owns
       // every arrow, its own sliders included and a consumer's own widget
       // composed outside this region but still inside `Player.Viewport`
-      // included, which is why this checks `arrowKeyOwnershipBoundary`
-      // rather than this region's own containment.
-      const boundary = arrowKeyOwnershipBoundary(containerRef.current);
+      // included, which is why this checks `keyOwnershipBoundary` rather
+      // than this region's own containment.
+      const boundary = keyOwnershipBoundary(containerRef.current);
       if (
         isArrowKey(event.key) &&
         target instanceof HTMLElement &&
         boundary &&
         !boundary.contains(target) &&
         ownsArrowKeysTarget(target)
+      )
+        return;
+      // PageUp/PageDown, in global mode only, outside the same boundary: left
+      // to the page unconditionally, with no target-ownership test like the
+      // arrow exemption's above -- native paging and every widget that
+      // answers Page keys has as much claim to them as a composite role does
+      // to arrows, and the boundary is what already separates "the player"
+      // from "the page" for that exemption, so this reuses it rather than
+      // building a second one. Checked on the key itself and before
+      // `resolveShortcutAction` runs, so a consumer's own rebinding of either
+      // key keeps the same in-region-only rule regardless of the action it
+      // answers. In scoped mode the region never sees a keydown whose target
+      // sits outside it, so `global` is what keeps this from running there.
+      // Unlike the arrow check above, this is not `target instanceof
+      // HTMLElement && ... && !boundary.contains(target)`: a target this
+      // layer cannot even test containment against -- an SVG element, or
+      // anything else that is a `Node` but not an `HTMLElement`, or no
+      // target at all -- is not thereby proven to be inside the boundary, so
+      // it is left to the page rather than falling through to the switch
+      // below. The condition is inverted for the same reason: "not provably
+      // inside" is what the rule turns on, not "provably outside".
+      if (
+        global &&
+        isPageKey(event.key) &&
+        !(
+          target instanceof Node &&
+          boundary !== null &&
+          boundary.contains(target)
+        )
       )
         return;
       const action = resolveShortcutAction(shortcuts, event.key);
@@ -455,6 +485,7 @@ export const Controls = ({
       controller,
       fullscreen,
       fullscreenStatus,
+      global,
       lastSelectedTextTrackId,
       muted,
       seekStatus,
