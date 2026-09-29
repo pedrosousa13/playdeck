@@ -64,7 +64,11 @@ const nativeActivationSelector = 'button, [role="button"], a[href], summary';
 
 export const isNativeActivationTarget = (node: EventTarget | null): boolean =>
   node instanceof HTMLElement &&
-  node.closest(nativeActivationSelector) !== null;
+  // A range input isn't a Space/Enter activation target (see
+  // `nonTextInputTypes` above, which keeps it out of `ownsActivationKeys`
+  // deliberately) -- but it's still real control surface, so it's included
+  // here rather than folded into the shared `nativeActivationSelector`.
+  node.closest(`${nativeActivationSelector}, input[type="range"]`) !== null;
 
 const activationInputSelector = activationInputTypes
   .map((type) => `input[type="${type}"]`)
