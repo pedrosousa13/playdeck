@@ -8,7 +8,9 @@ import type {
 import { deriveLiveState, liveStateEqual, notifySafely } from '@playdeck/core';
 import {
   HAVE_METADATA,
+  NETWORK_NO_SOURCE,
   providerEvent,
+  sourceExhausted,
   toRanges,
   type EmitProviderState
 } from './adapter-values.js';
@@ -79,6 +81,22 @@ export const createNativeAttachment = (
   let destroyed = false;
   let loaded = false;
   let liveState: PlayerLiveState = null;
+  // The `<source>` children wired to `onSourceError`, snapshotted once in
+  // `addListeners` so the same elements are unwired in `removeListeners`.
+  // Empty for a `src`-attribute media element, which already errors on itself
+  // through `onError` below.
+  //
+  // A snapshot rather than a live query is safe because this attachment's
+  // `<video>` cannot gain or lose a `<source>` out from under it: React keys
+  // that element on `sourceKey(source)` (`@playdeck/react`'s
+  // `viewport-media.tsx`), so a change to the source list remounts the
+  // element -- and a remount tears this attachment down and builds a new one
+  // -- rather than patching its children in place.
+  let sourceElements: readonly HTMLSourceElement[] = [];
+  // Whether this load's source-exhaustion error has already gone out. Reset
+  // on `emptied`, which fires at the start of every `media.load()` --
+  // `retry`'s included -- so a reload gets its own chance to publish.
+  let sourceErrorPublished = false;
 
   // Before metadata arrives, and on an audio-only or errored source, both
   // dimensions read 0 — and some DOM test environments omit them entirely.
@@ -308,9 +326,34 @@ export const createNativeAttachment = (
   // emitter here, because the load algorithm empties the seekable window too
   // and liveness is derived from it.
   const onEmptied = (): void => {
+    sourceErrorPublished = false;
     if (lastBuffered.length === 0) return;
     lastBuffered = [];
     emit(syncLive({ buffered: [] }));
+  };
+  // Fires once per failed `<source>` candidate rather than once per load: the
+  // media element itself never errors when every child does (see
+  // `sourceExhausted`), so this is the only listener that hears it.
+  // `networkState` reaching `NETWORK_NO_SOURCE` is the browser's own signal
+  // that nothing is left to try -- an earlier candidate's failure leaves it at
+  // `NETWORK_LOADING` while the next one is attempted, so a source that fails
+  // while a later one succeeds never reaches this branch.
+  const onSourceError = (originalEvent: Event): void => {
+    if (sourceErrorPublished || media.networkState !== NETWORK_NO_SOURCE)
+      return;
+    sourceErrorPublished = true;
+    const error = sourceExhausted(media);
+    emit(
+      {
+        lifecycle: 'error',
+        activation: 'error',
+        playback: 'paused',
+        buffering: false,
+        seeking: false,
+        error
+      },
+      providerEvent('error', originalEvent, error)
+    );
   };
   const onVolumeChange = (originalEvent: Event): void => {
     emit(
@@ -348,6 +391,10 @@ export const createNativeAttachment = (
     media.addEventListener('volumechange', onVolumeChange);
     media.addEventListener('ratechange', onRateChange);
     media.addEventListener('error', onError);
+    sourceElements = Array.from(media.querySelectorAll('source'));
+    sourceElements.forEach((source) =>
+      source.addEventListener('error', onSourceError)
+    );
     ownerDocument.addEventListener('fullscreenchange', onFullscreenChange);
     media.addEventListener('enterpictureinpicture', onPictureInPictureChange);
     media.addEventListener('leavepictureinpicture', onPictureInPictureChange);
@@ -381,6 +428,9 @@ export const createNativeAttachment = (
     media.removeEventListener('volumechange', onVolumeChange);
     media.removeEventListener('ratechange', onRateChange);
     media.removeEventListener('error', onError);
+    sourceElements.forEach((source) =>
+      source.removeEventListener('error', onSourceError)
+    );
     ownerDocument.removeEventListener('fullscreenchange', onFullscreenChange);
     media.removeEventListener(
       'enterpictureinpicture',

@@ -460,7 +460,17 @@ export const libraries = [
     // change described on the "no parts" row above -- up from 22.78 KB
     // (23327 bytes) the same day (2026-09-28), per `results.md` on `main`
     // -- which stays under this ceiling with no raise needed.
-    ceilingKb: 23
+    //
+    // 23637 bytes measured 2026-09-30 -- 23.0830078125 KB, 23.08 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 23.00 KB is #857's fix: the native provider's attachment now listens
+    // for `error` on every `<source>` child and publishes a `PlayerError`
+    // once `networkState` reaches `NETWORK_NO_SOURCE`, reached by every
+    // composition this fixture builds through its native provider. The
+    // whole distance from the last committed figure is this issue's: that
+    // figure was 22.95 KB, measured 2026-09-30 (#862) before this change,
+    // per `results.md` on `main`.
+    ceilingKb: 23.25
   },
   {
     name: 'Playdeck (play-only)',

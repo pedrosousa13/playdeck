@@ -62,6 +62,16 @@ type PlayerFixtureProps = {
   // `e2e/activation.spec.ts` can drive a viewport-autoplayed fixture that
   // wraps on its own, for #673's auto-pause-survives-the-loop coverage.
   readonly loop?: boolean;
+  // `Player.Media`'s own `crossOrigin` attribute, threaded through so
+  // `e2e/native-source-error.spec.ts` can reproduce #857 against a source
+  // whose host sends no CORS headers.
+  readonly crossOrigin?: 'anonymous' | 'use-credentials';
+  // Mounts `Player.ErrorDisplay`, opt-in so every story that does not set it
+  // renders exactly as it did before #857: this page's own doc warns that a
+  // story here is addressed by ID from `e2e/`, so an element appearing under
+  // every existing story would be a change none of them asked for. Only the
+  // `NativeSourceError*` stories below set it.
+  readonly showErrorDisplay?: boolean;
 };
 
 // Tall enough that the player starts fully outside the observer's root even
@@ -294,7 +304,9 @@ const PlayerFixture = ({
   poster,
   posterShowWhilePaused,
   scrollPage,
-  loop
+  loop,
+  crossOrigin,
+  showErrorDisplay
 }: PlayerFixtureProps) => {
   const autoplay: Player.RootProps['autoplay'] = autoplayInput ?? false;
   const loading: Player.PlayerLoadingStrategy = loadingInput ?? 'viewport';
@@ -340,14 +352,43 @@ const PlayerFixture = ({
               }
             : sourceKey === 'long'
               ? assetUrl('tracer-10s.mp4')
-              : (vimeoSource ??
-                (sourceChange
-                  ? 'https://provider.invalid/source-a.mp4'
-                  : activationSource === 'external'
-                    ? 'https://provider.invalid/tracer.mp4'
-                    : activationSource === 'youtube'
-                      ? youtubeExampleUrl
-                      : assetUrl('tracer.mp4')));
+              : // A fixed local origin `e2e/native-source-error.spec.ts` serves
+                // itself, on a port the storybook dev server never binds, so a
+                // real cross-origin fetch with `crossOrigin` set is genuinely
+                // subject to CORS -- a `page.route` fulfilment is not (#857):
+                // Chromium does not apply the opaque-response filter to a
+                // response CDP injected for an intercepted request, so a
+                // missing `access-control-allow-origin` on a routed response
+                // never blocks the media element the way a real one does.
+                sourceKey === 'no-cors'
+                ? 'http://127.0.0.1:4174/tracer.mp4'
+                : // Two candidate `<source>` elements at hosts
+                  // `e2e/native-source-error.spec.ts` intercepts with
+                  // `page.route` -- the only fixture shape with more than one,
+                  // for `provider-native`'s `<source>`-exhaustion handling to
+                  // tell "every candidate failed" from "one did".
+                  sourceKey === 'multi'
+                  ? {
+                      type: 'video',
+                      sources: [
+                        {
+                          src: 'https://source-a.invalid/clip.mp4',
+                          mimeType: 'video/mp4'
+                        },
+                        {
+                          src: 'https://source-b.invalid/clip.mp4',
+                          mimeType: 'video/mp4'
+                        }
+                      ]
+                    }
+                  : (vimeoSource ??
+                    (sourceChange
+                      ? 'https://provider.invalid/source-a.mp4'
+                      : activationSource === 'external'
+                        ? 'https://provider.invalid/tracer.mp4'
+                        : activationSource === 'youtube'
+                          ? youtubeExampleUrl
+                          : assetUrl('tracer.mp4')));
 
   const replacementSource = sourceChange
     ? 'https://provider.invalid/source-b.mp4'
@@ -426,9 +467,10 @@ const PlayerFixture = ({
           </Player.Poster>
           <Player.ActivationButton />
           <Player.LoadingIndicator />
-          <Player.Media textTracks={textTracks} />
+          <Player.Media crossOrigin={crossOrigin} textTracks={textTracks} />
           <Player.Captions />
           <Player.LiveIndicator />
+          {showErrorDisplay ? <Player.ErrorDisplay /> : null}
         </Player.Viewport>
         <Player.PlayButton />
         <Player.CaptionsButton />
@@ -488,7 +530,7 @@ const meta: Meta<PlayerFixtureProps> = {
     source: {
       control: 'text',
       description:
-        "'hls' | 'hls-nosubs' | 'hls-audio' | 'live' | 'long' | 'vimeo' | 'vimeo-unlisted' | an https:// URL | undefined (defaults to the native tracer)."
+        "'hls' | 'hls-nosubs' | 'hls-audio' | 'live' | 'long' | 'no-cors' | 'multi' | 'vimeo' | 'vimeo-unlisted' | an https:// URL | undefined (defaults to the native tracer)."
     },
     engine: {
       control: 'radio',
@@ -570,6 +612,27 @@ export const NativeMp4: Story = {
 // clip, which leaves the applying case no room to be interesting (#465).
 export const NativeMp4StartTime: Story = {
   args: { source: 'long', startTime: 5 }
+};
+
+// A single candidate source on the fixed local origin `source: 'no-cors'`
+// resolves to, with `crossOrigin` set -- `e2e/native-source-error.spec.ts`
+// serves that origin itself, without an `access-control-allow-origin`
+// header, to reproduce #857's CORS case against a real cross-origin fetch.
+export const NativeSourceErrorCrossOrigin: Story = {
+  args: { source: 'no-cors', crossOrigin: 'anonymous', showErrorDisplay: true }
+};
+
+// A single candidate source `e2e/native-source-error.spec.ts` intercepts with
+// `page.route` and answers 404, to reproduce #857's other case.
+export const NativeSourceError404: Story = {
+  args: { activationSource: 'external', showErrorDisplay: true }
+};
+
+// Two candidate sources (`source: 'multi'`, above) -- the shape
+// `e2e/native-source-error.spec.ts` needs to drive the case where the first
+// 404s and the second loads.
+export const NativeSourceErrorMulti: Story = {
+  args: { source: 'multi', showErrorDisplay: true }
 };
 
 // The ten-second clip, with `chapters.vtt` attached -- `e2e/chapters.spec.ts`

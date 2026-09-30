@@ -86,10 +86,10 @@ one of these sources it is large. Gzip, excluding React itself and the optional
 
 | Playing                                           | Downloads                                                          | Total        |
 | ------------------------------------------------- | ------------------------------------------------------------------ | ------------ |
-| MP4 or WebM                                       | core 9.5 + primitives 22.4 + native 6.7                            | **38.6 KB**  |
-| HLS on Safari and iOS                             | the above + HLS adapter 5.5                                        | **44.1 KB**  |
-| HLS on Chrome, Edge, Firefox                      | the above + **hls.js 192.4**                                       | **236.5 KB** |
-| HLS on Chrome, Edge, Firefox, with `hls.js/light` | core + primitives + native + HLS adapter 44.1 + hls.js light 123.3 | **167.4 KB** |
+| MP4 or WebM                                       | core 9.5 + primitives 22.4 + native 6.9                            | **38.8 KB**  |
+| HLS on Safari and iOS                             | the above + HLS adapter 5.5                                        | **44.3 KB**  |
+| HLS on Chrome, Edge, Firefox                      | the above + **hls.js 192.4**                                       | **236.7 KB** |
+| HLS on Chrome, Edge, Firefox, with `hls.js/light` | core + primitives + native + HLS adapter 44.3 + hls.js light 123.3 | **167.6 KB** |
 | YouTube                                           | core 9.5 + primitives 22.4 + adapter 6.3                           | **38.2 KB**  |
 | Vimeo                                             | core 9.5 + primitives 22.4 + adapter 8.2 + `@vimeo/player` 8.5     | **48.6 KB**  |
 | Wistia                                            | core 9.5 + primitives 22.4 + adapter 5.9                           | **37.8 KB**  |

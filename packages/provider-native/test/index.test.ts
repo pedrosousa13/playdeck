@@ -1811,6 +1811,134 @@ test('reports waiting, recovery, ended, and source errors from media events', as
   );
 });
 
+// #857: a `<source>` child fires `error` on itself rather than on the media
+// element, and `media.error` stays null even once every candidate has
+// failed -- the shape a CORS block and a 404 both leave, with nothing in the
+// events to tell them apart. happy-dom leaves `networkState` a plain
+// writable field (it never runs real resource selection), so these tests set
+// it by hand at the point the browser would have reached it -- once nothing
+// is left to try.
+test('publishes a source error once every <source> child has failed', async () => {
+  const media = document.createElement('video');
+  const first = document.createElement('source');
+  const second = document.createElement('source');
+  media.append(first, second);
+  const patches: unknown[] = [];
+  const provider = createNativeProvider(media);
+  provider.subscribe((patch) => patches.push(patch));
+  await provider.attach();
+  patches.length = 0;
+
+  // The first candidate's failure: the browser is about to try the next one,
+  // so `networkState` has not yet reached `NETWORK_NO_SOURCE`.
+  Object.defineProperty(media, 'networkState', {
+    configurable: true,
+    value: 2
+  });
+  first.dispatchEvent(new Event('error'));
+  expect(patches).toEqual([]);
+
+  // The last candidate's failure: nothing is left to try.
+  Object.defineProperty(media, 'networkState', {
+    configurable: true,
+    value: 3
+  });
+  second.dispatchEvent(new Event('error'));
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      lifecycle: 'error',
+      activation: 'error',
+      playback: 'paused',
+      buffering: false,
+      seeking: false,
+      error: expect.objectContaining({
+        category: 'source',
+        fatal: true,
+        recoverable: false,
+        message: 'No source could be loaded.'
+      })
+    })
+  );
+});
+
+// The guard that keeps this to one publish per load (`sourceErrorPublished`)
+// has to clear on a reload, or a `retry` that fails again would leave a
+// viewer who asked to try again with no sign it was tried. `retry` calls
+// `media.load()`, which fires `emptied` on a real element before anything
+// else -- `onEmptied`'s own header describes that ordering -- so this test
+// dispatches it by hand the way every other test here drives an event
+// happy-dom does not run the real algorithm behind.
+test('re-arms after a reload, publishing again if the retry also fails', async () => {
+  const media = document.createElement('video');
+  const source = document.createElement('source');
+  media.append(source);
+  const patches: unknown[] = [];
+  const provider = createNativeProvider(media);
+  provider.subscribe((patch) => patches.push(patch));
+  await provider.attach();
+  patches.length = 0;
+
+  Object.defineProperty(media, 'networkState', {
+    configurable: true,
+    value: 3
+  });
+  source.dispatchEvent(new Event('error'));
+  expect(patches).toHaveLength(1);
+
+  await provider.retry?.();
+  media.dispatchEvent(new Event('emptied'));
+  source.dispatchEvent(new Event('error'));
+
+  expect(patches).toHaveLength(2);
+});
+
+test('publishes no error while a later <source> candidate can still be tried', async () => {
+  const media = document.createElement('video');
+  const first = document.createElement('source');
+  const second = document.createElement('source');
+  media.append(first, second);
+  const patches: unknown[] = [];
+  const provider = createNativeProvider(media);
+  provider.subscribe((patch) => patches.push(patch));
+  await provider.attach();
+  patches.length = 0;
+
+  Object.defineProperty(media, 'networkState', {
+    configurable: true,
+    value: 2
+  });
+  first.dispatchEvent(new Event('error'));
+
+  expect(patches).toEqual([]);
+});
+
+test('names the crossOrigin setting in a source-exhaustion message', async () => {
+  const media = document.createElement('video');
+  media.crossOrigin = 'anonymous';
+  const source = document.createElement('source');
+  media.append(source);
+  const patches: unknown[] = [];
+  const provider = createNativeProvider(media);
+  provider.subscribe((patch) => patches.push(patch));
+  await provider.attach();
+  patches.length = 0;
+
+  Object.defineProperty(media, 'networkState', {
+    configurable: true,
+    value: 3
+  });
+  source.dispatchEvent(new Event('error'));
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      error: expect.objectContaining({
+        message: expect.stringContaining('crossOrigin="anonymous"')
+      })
+    })
+  );
+});
+
 test('clears active playback, buffering, and seeking on fatal media error', async () => {
   const media = document.createElement('video');
   const patches: Array<Record<string, unknown>> = [];

@@ -69,6 +69,9 @@ export const sourceHasNoPoster: Availability = {
 // omit the static readyState constants.
 export const HAVE_METADATA = 1;
 
+// HTMLMediaElement.NETWORK_NO_SOURCE, inlined for the same reason.
+export const NETWORK_NO_SOURCE = 3;
+
 export const toRanges = (
   ranges: globalThis.TimeRanges
 ): ReadonlyArray<TimeRange> =>
@@ -95,6 +98,23 @@ export const mediaError = (media: HTMLVideoElement): PlayerError => {
       media.error?.message || 'The media element could not load the source.'
   };
 };
+
+// What `mediaError` cannot see: a `<source>` child fires `error` on itself,
+// never on the media element, so `media.error` stays null even once every
+// candidate has failed -- CORS and a 404 both leave exactly that signal, with
+// nothing to tell them apart. The category is always `'source'` rather than
+// guessed, and never `recoverable`: a retry reloads the same candidates
+// against the same URLs and reaches the same answer. `crossOrigin` is named
+// in the message when set, since a host missing CORS headers is the likeliest
+// cause a consumer who set it will hit (#857).
+export const sourceExhausted = (media: HTMLVideoElement): PlayerError => ({
+  category: 'source',
+  fatal: true,
+  recoverable: false,
+  message: media.crossOrigin
+    ? `No source could be loaded. crossOrigin="${media.crossOrigin}" is set: check that every source's host sends CORS headers that permit it.`
+    : 'No source could be loaded.'
+});
 
 export const errorString = (cause: unknown, property: 'message' | 'name') => {
   if (
