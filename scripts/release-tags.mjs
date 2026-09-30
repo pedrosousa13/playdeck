@@ -17,7 +17,7 @@
 // configuration choice, and a tagging scheme that only worked under one setting
 // of it would break quietly the day that setting changed.
 //
-// The names are not invented here. `changeset tag` creates them, so the
+// The names are not invented here. `changeset git-tag` creates them, so the
 // vocabulary is changesets' own and follows changesets rather than this file if
 // it ever changes. `releaseTag` restates the same rule, but only to decide what
 // to push and what to complain about: if the two ever disagreed, every tag
@@ -46,10 +46,10 @@
 // did not already have.
 //
 // Idempotent in both halves, because a retried release is exactly when this
-// gets run twice: `changeset tag` skips a tag that already exists locally or on
-// the remote, and the push below carries only the tags the remote does not
-// have, without `--force` -- so a name already there under a different sha is
-// refused rather than moved.
+// gets run twice: `changeset git-tag` skips a tag that already exists locally
+// or on the remote, and the push below carries only the tags the remote does
+// not have, without `--force` -- so a name already there under a different
+// sha is refused rather than moved.
 
 import { execFileSync } from 'node:child_process';
 import { join, relative } from 'node:path';
@@ -102,11 +102,11 @@ export const remoteTagNames = (lsRemote) =>
  * repository can supply, and the ones nothing anywhere can account for.
  *
  * The second list is not defensive padding. `git.tag` in @changesets/git
- * (3.0.4, the copy this lockfile resolves) answers `gitCmd.code === 0` and the
- * `tag` command discards that answer, so a tag changesets failed to create is a
- * silent no-op. Without this the run would push what worked, report success,
- * and leave a published version untagged -- which is the whole failure this
- * script exists to prevent.
+ * (4.0.1, the copy this lockfile resolves) answers `gitCmd.exitCode === 0` and
+ * the `git-tag` command discards that answer, so a tag changesets failed to
+ * create is a silent no-op. Without this the run would push what worked,
+ * report success, and leave a published version untagged -- which is the
+ * whole failure this script exists to prevent.
  * @param {{
  *   packages: readonly TaggablePackage[];
  *   localTags: ReadonlySet<string>;
@@ -215,7 +215,7 @@ export const tagRelease = ({ repoRoot: tree }) => {
     execFileSync('git', args, { cwd: tree, encoding: 'utf8' });
 
   // A version that is not committed is not at HEAD, and HEAD is what
-  // `changeset tag` tags. `pnpm version:packages` leaves exactly this state,
+  // `changeset git-tag` tags. `pnpm version:packages` leaves exactly this state,
   // and it is the script named next to this one, so running the two back to
   // back is the easy mistake -- it would push a tag naming a version the
   // tagged commit does not carry. Only the manifests are examined: a dirty
@@ -262,7 +262,7 @@ export const tagRelease = ({ repoRoot: tree }) => {
   // Creates the missing tags on HEAD. It reads `.changeset/config.json` and
   // both `git tag` and `git ls-remote` out of its own working directory, so
   // `cwd` is what points it at the repository being tagged.
-  execFileSync(changesetBin, ['tag'], { cwd: tree, stdio: 'inherit' });
+  execFileSync(changesetBin, ['git-tag'], { cwd: tree, stdio: 'inherit' });
 
   const { toPush, unaccounted } = tagPlan({
     packages,
@@ -276,7 +276,7 @@ export const tagRelease = ({ repoRoot: tree }) => {
 
   if (unaccounted.length > 0) {
     throw new Error(
-      `changeset tag created none of these, and the remote does not carry them:\n${unaccounted
+      `changeset git-tag created none of these, and the remote does not carry them:\n${unaccounted
         .map((tag) => `  ${tag}`)
         .join('\n')}`
     );

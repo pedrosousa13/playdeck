@@ -144,7 +144,7 @@ test('reads the paths out of git status porcelain output', () => {
  * A throwaway workspace with a bare repository standing in for `origin`, two
  * publishable packages at different versions, and the changesets configuration
  * this repository uses. Everything `tagRelease` touches is real: real git, real
- * `changeset tag`, real `pnpm list -r`. Nothing leaves the machine -- `origin`
+ * `changeset git-tag`, real `pnpm list -r`. Nothing leaves the machine -- `origin`
  * is a path on disk, which is what lets `git ls-remote` answer offline.
  * @param {import('node:test').TestContext} t
  */
@@ -217,7 +217,7 @@ const fixtureWorkspace = (t) => {
 // The two criteria that only an end-to-end run can answer: a version reaches a
 // tag *on the remote*, and running the same thing twice is a no-op rather than
 // a failure or a duplicate. Both halves of the second one are load-bearing --
-// `changeset tag` skips a tag it finds, and the plan pushes only what the
+// `changeset git-tag` skips a tag it finds, and the plan pushes only what the
 // remote lacks -- and neither is visible from the pure functions above.
 test('puts a tag per package on the remote, and repeats without complaint', (t) => {
   const { repo, originTags } = fixtureWorkspace(t);
@@ -239,7 +239,7 @@ test('puts a tag per package on the remote, and repeats without complaint', (t) 
   ]);
 });
 
-// `changeset tag` tags HEAD, and a bump that has not been committed is not at
+// `changeset git-tag` tags HEAD, and a bump that has not been committed is not at
 // HEAD. Running this straight after `pnpm version:packages` -- the mistake two
 // scripts sitting next to each other invites, and one the `--list` output
 // names the second of -- would push a tag onto a commit carrying the version
