@@ -88,8 +88,8 @@ one of these sources it is large. Gzip, excluding React itself and the optional
 | ------------------------------------------------- | ------------------------------------------------------------------ | ------------ |
 | MP4 or WebM                                       | core 9.5 + primitives 22.4 + native 6.7                            | **38.6 KB**  |
 | HLS on Safari and iOS                             | the above + HLS adapter 5.5                                        | **44.1 KB**  |
-| HLS on Chrome, Edge, Firefox                      | the above + **hls.js 169.2**                                       | **213.3 KB** |
-| HLS on Chrome, Edge, Firefox, with `hls.js/light` | core + primitives + native + HLS adapter 44.1 + hls.js light 113.0 | **157.1 KB** |
+| HLS on Chrome, Edge, Firefox                      | the above + **hls.js 192.4**                                       | **236.5 KB** |
+| HLS on Chrome, Edge, Firefox, with `hls.js/light` | core + primitives + native + HLS adapter 44.1 + hls.js light 123.3 | **167.4 KB** |
 | YouTube                                           | core 9.5 + primitives 22.4 + adapter 6.2                           | **38.1 KB**  |
 | Vimeo                                             | core 9.5 + primitives 22.4 + adapter 8.2 + `@vimeo/player` 8.5     | **48.6 KB**  |
 | Wistia                                            | core 9.5 + primitives 22.4 + adapter 5.9                           | **37.8 KB**  |
@@ -98,13 +98,13 @@ one of these sources it is large. Gzip, excluding React itself and the optional
 
 **hls.js is the whole story here, and it is not ours.** Adaptive streaming needs
 manifest parsing, MSE buffer management, ABR heuristics, MPEG-TS to fMP4
-transmuxing and CEA-608/708 extraction; hls.js's own smallest build is 113.0 KB,
+transmuxing and CEA-608/708 extraction; hls.js's own smallest build is 123.3 KB,
 and Playdeck's HLS adapter over it is 5.5. What lazy loading buys is not a
 smaller hls.js. It is that the other four rows never download one, and that
 Safari and iOS do not either, because they play HLS natively and hls.js is never
 fetched there.
 
-Two of those numbers are within your control. `hls.js/light` saves 56.2 KB and
+Two of those numbers are within your control. `hls.js/light` saves 69.1 KB and
 gives up subtitles, alternate audio and DRM — the HLS package's README covers
 what that costs and how the player reports it, and it is reached through
 `loadHls` without forking anything. The `@vimeo/player` and hls.js versions are
@@ -134,7 +134,7 @@ graph.
 The third-party bytes are the exception, and deliberately so: hls.js and
 `@vimeo/player` are external to those bundles, so that script never sees them.
 They are measured from the installed packages instead: the ES module entry a
-bundler resolves — hls.js 1.6.16 and `@vimeo/player` 2.30.4 — put through the
+bundler resolves — hls.js 1.7.3 and `@vimeo/player` 2.30.4 — put through the
 same Vite build and the same gzip that produced the first-party figures, so both
 halves of a row are the same unit. The check fails if what is installed is not
 the version each package's manifest pins. They carry no reference figure at

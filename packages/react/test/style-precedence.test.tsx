@@ -134,18 +134,18 @@ test('replaces the UA default paint with tokens a stylesheet can still reach', a
   // colour grammar that does not recognise the two-argument
   // `var(name, fallback)` form and silently drops the whole declaration
   // rather than storing it — confirmed against this repo's pinned happy-dom
-  // (20.8.9): `el.style.backgroundColor = 'var(--x, red)'` leaves
+  // (20.14.5): `el.style.backgroundColor = 'var(--x, red)'` leaves
   // `el.style.backgroundColor` at `''` and the declaration list at length 0,
   // even though a real browser stores and serialises it unchanged. `border`,
-  // set as the shorthand, does not go through that per-property validation —
-  // it copies its raw text into its three longhands, whitespace collapsed —
-  // so `button.style.borderColor` is what actually observes it, and it comes
-  // back without the space a browser preserves; a bare `button.style.border`
-  // read (the shorthand itself) does not round-trip either, for the ordinary
-  // reason a shorthand getter has to re-serialise from parsed longhands and
-  // happy-dom's serialiser does not special-case a `var()`-only value the way
-  // a browser's does.
-  expect(button.style.borderColor).toBe('var(--playdeck-activation-border,0)');
+  // set as the shorthand, is read back through the shorthand itself: a real
+  // browser cannot statically expand a `var()` reference into `border`'s
+  // longhands, so it stores the whole declaration as a pending-substitution
+  // value on the shorthand and `borderColor` reads back empty until the
+  // custom property resolves — happy-dom (20.14.5, unlike 20.8.9, which
+  // expanded it into the three longhands and lost the reference) now matches
+  // that: `button.style.border` round-trips the raw text unchanged, and
+  // `button.style.borderColor` is the one that reads empty.
+  expect(button.style.border).toBe('var(--playdeck-activation-border, 0)');
   // The fill token has no such longhand to fall back on — `background-color`
   // is already a leaf property, and every property this test tried on it
   // (`background`, `backgroundColor`, `setProperty`, `cssText`, plain

@@ -1671,6 +1671,15 @@ test('normalizes poster inputs without altering consumer priority choices', () =
 });
 
 test('tracks poster image request state and preserves its explicit image attributes', () => {
+  // Simulate an in-flight request: happy-dom's `complete` otherwise defaults
+  // true for an <img> that never actually loads (image loading is off in
+  // this environment), which would resolve every rerender below as an
+  // already-complete, zero-dimension image and jump straight past 'loading'
+  // -- see the two 'cached poster image' tests below for the case this
+  // default is meant to represent.
+  vi.spyOn(HTMLImageElement.prototype, 'complete', 'get').mockReturnValue(
+    false
+  );
   const onLoad = vi.fn();
   const onError = vi.fn();
   const { PosterImage } = posterPrimitives;
@@ -1745,6 +1754,12 @@ test('defaults the poster image to strict-origin-when-cross-origin, and lets a c
 });
 
 test('rejects an unsafe poster image src exactly as an absent prop, and permits every safe form', () => {
+  // See the same spy in 'tracks poster image request state...' above: without
+  // it, happy-dom's default `complete` resolves every valid src straight to
+  // 'error' instead of leaving it 'loading'.
+  vi.spyOn(HTMLImageElement.prototype, 'complete', 'get').mockReturnValue(
+    false
+  );
   const { PosterImage } = posterPrimitives;
   const { container, rerender } = render(
     <PosterImage src="javascript:alert(1)" />
@@ -1789,6 +1804,12 @@ test('rejects an unsafe poster image src exactly as an absent prop, and permits 
 });
 
 test('drops rejected srcSet candidates and keeps the surviving ones, permitting every safe form', () => {
+  // See the same spy in 'tracks poster image request state...' above: without
+  // it, happy-dom's default `complete` resolves every valid srcSet straight
+  // to 'error' instead of leaving it 'loading'.
+  vi.spyOn(HTMLImageElement.prototype, 'complete', 'get').mockReturnValue(
+    false
+  );
   const { PosterImage } = posterPrimitives;
   const { container, rerender } = render(
     <PosterImage srcSet="javascript:alert(1) 1x, /good-2x.jpg 2x" />
