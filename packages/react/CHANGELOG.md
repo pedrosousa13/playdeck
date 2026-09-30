@@ -1,5 +1,1070 @@
 # @playdeck/react
 
+## 1.2.0
+
+### Minor Changes
+
+- 17627c6: Let a consumer register a provider for a source kind beyond the five built-in ones
+
+  `PlayerSource` was a closed union of exactly five source kinds, and the
+  loader that turns a resolved source into a running provider hard-wired the
+  import for each of those five inside this package — supporting a sixth
+  platform required changing `@playdeck/react` itself. `Player.Root` now takes
+  a `providers` prop closing that gap:
+
+  ```tsx
+  <Player.Root
+    providers={{
+      acme: {
+        detect: (url) => /* this kind's own source object, or undefined */,
+        load: () => import('./acme-provider').then((m) => m.createAcmeProvider)
+      }
+    }}
+    source="https://acme.example/videos/123"
+  >
+    {/* … */}
+  </Player.Root>
+  ```
+
+  `detect` takes a URL string and either turns it into that kind's own source
+  object or declines by returning `undefined`. `load` is a lazy factory —
+  calling it is what performs this kind's own dynamic import, exactly the way
+  this package's own `await import('@playdeck/provider-hls')` never runs for a
+  page that plays nothing but MP4 — and it resolves to the function that builds
+  the running `ProviderAdapter`, given the mount point, the detected source and
+  this kind's own `providerOptions` bag.
+
+  Detection tries the five built-in kinds first and only then walks
+  `providers`' own entries, in declaration order, using the first whose
+  `detect` accepts the URL and returns a value that itself clears the same
+  allowlist below — a supplied kind can never intercept a URL, or an explicit
+  source object, a built-in host already claims, and `hls`, `video`, `youtube`,
+  `vimeo` and `wistia` are reserved names: a `providers` entry keyed by one of
+  them is a compile error — `RootProps`'s own type parameter is bound against a
+  constraint that excludes them, so such an entry never typechecks in the first
+  place. Were that check somehow bypassed, such an entry would still be skipped
+  outright at runtime, before its `detect` is ever called or its entry is ever
+  looked up against an explicit object, rather than merely turning out to be
+  unreachable once a resolved source of that `type` reaches this package's own
+  built-in loader. An explicit source object of a registered, non-reserved
+  kind resolves too, without calling `detect` — it has already declared its
+  own kind through its `type` field — once every string value anywhere inside
+  it, nested included, passes the same allowlist a URL string does; a `detect`
+  return is held to that same allowlist before it is
+  accepted, and one that fails it is treated as a decline rather than a failure
+  of detection outright, so a later registration that would have matched
+  honestly still gets its turn. That same walk declines a cyclic `detect`
+  return rather than recursing until the stack overflows — a provider-authored
+  shape is arbitrary by design, and a self-reference is reachable input, not a
+  hypothetical. The shared URL allowlist (`isPermittedSourceUrl`) runs ahead of
+  every supplied `detect` and every explicit object alike, exactly where it
+  runs ahead of every built-in host inside `detectSource` — a scheme the
+  allowlist refuses never reaches provider-authored code. `providerOptions`
+  gains a further key per supplied kind, compared for equality the same way the
+  four built-in bags already are, so an inline object literal does not tear the
+  provider down and rebuild it every render.
+
+  This is not free. `Root` calls the layered detection this prop adds
+  unconditionally, on every `Player.Root`, whether or not a consumer ever sets
+  `providers` — so it adds bytes to every composition
+  `scripts/compare-libraries.mjs` measures, including the no-parts and play-only
+  rows, neither of which ever passes `providers` at all. Landing it raised all
+  four of that script's committed ceilings to admit the added bytes, each on top
+  of whatever `main` had already moved that row to for unrelated reasons (#659):
+  the no-parts row to 21.00 KB, the full row to 21.50 KB, the play-only row to
+  22.75 KB, and the control-bar row to 26.75 KB. The play-only row's ceiling held
+  at 22.5 KB through the seam's first measurement — 23039 bytes, 22.4990 KB,
+  genuinely one byte under it despite the table printing both as "22.50 KB" —
+  and only crossed it once the cycle guard was corrected to track an object for
+  the depth of its own subtree alone, rather than for the rest of the walk, so
+  that a `detect` return referencing the same nested object from two sibling
+  branches is accepted as the acyclic diamond it is rather than declined as a
+  cycle; that correction's own bookkeeping added the last few bytes past the
+  line.
+
+- bfcae93: Add sprite-thumbnail seek preview to `SeekSlider`
+
+  `@playdeck/core` gains `parseThumbnailCues` and `thumbnailCueAt`, parsing the
+  `#xywh=` sprite-region flavour of WebVTT that Vidstack, Media Chrome and
+  Video.js all read, plus the two `ThumbnailCue`/`ThumbnailRegion` types the
+  parsed cues carry. `RefusedUrlSurface` gains `'thumbnails'` and `'thumbnails
+cue image'`, appended at the end of the existing tie-break rank so no
+  existing surface's priority against another changes.
+
+  `@playdeck/react`'s `SeekSlider` gains a `thumbnails` prop: the URL of that
+  WebVTT file. The file is fetched once, lazily, on the first hover or the
+  first keyboard focus of the input — never at mount — and, once loaded, a
+  `thumbnail` part renders the cue image cropped to its region, positioned
+  above the pointer or the current keyboard-focus position and clamped to stay
+  inside the slider's own box. Without the prop, nothing extra renders. A
+  relative cue image URL — the ordinary output of a sprite generator —
+  resolves against the fetched VTT file's own final address, not the page's,
+  through `parseThumbnailCues`'s `baseUrl` argument, before it ever reaches
+  the allowlist. Every image URL — the WebVTT file's own and each cue's —
+  passes through the same allowlist every other URL prop in the player does,
+  and a refused one publishes the existing refusal notice. The feature is
+  provider-agnostic: it derives entirely from the supplied WebVTT/sprite pair,
+  never from provider internals, so it works the same way under every
+  provider.
+
+  No `PlayerCapabilities` change and no provider package changes: the feature
+  needs no per-provider support to gate.
+
+- f912b5d: Load `SeekSlider`'s thumbnail preview only when a consumer sets `thumbnails`
+
+  `@playdeck/core` gains a second export subpath, `@playdeck/core/thumbnails`,
+  exposing `parseThumbnailCues`, `thumbnailCueAt` and the `ThumbnailCue` and
+  `ThumbnailRegion` types. All four stay exported from `@playdeck/core` itself
+  as well, so nothing a consumer writes today changes. The subpath is built as
+  its own bundle rather than as a second entry of the one beside it, which is
+  what keeps `dist/index.js` a single module every bundler can tree-shake the
+  parser out of.
+
+  `@playdeck/react` reaches the parser only through that subpath, from the
+  module it now loads on demand. `SeekSlider` imports its whole thumbnail path
+  — the cue fetch, the cue lookup, the crop geometry and the `thumbnail` part's
+  markup — through a dynamic `import()` started when the `thumbnails` prop is
+  present, the same trade `Player.Root` already makes for provider adapters. A
+  composition that renders a seek slider without the prop no longer downloads
+  any of it: the "Playdeck (control bar)" comparison row falls from 27.01 KB to
+  25.92 KB gzipped, and both bundlers the comparison runs agree on the size of
+  the drop.
+
+  Behaviour with the prop set is unchanged, with one timing difference worth
+  naming: the `thumbnail` part mounts when its module arrives rather than in the
+  same tick as the slider. It is `position: absolute` and starts hidden, so it
+  displaces nothing and paints nothing on arrival, and a hover or focus that
+  happens first is recorded and previewed as soon as the module is there. The
+  WebVTT file is still fetched on first interaction and never at mount.
+
+  The package's `dist` gains files a consumer's bundler resolves on its own:
+  `thumbnails.js` (the preview), and, in the no-build `./browser` entry,
+  `react.js` (React, now shared between that entry and the preview) and
+  `assets/thumbnails.js`.
+
+- cf879ba: Wire `LiveIndicator`'s press behaviour and make `Time` live-aware
+
+  `LiveIndicator` becomes the button its docstring always described: where
+  `capabilities.liveEdge` is `available`, pressing it issues
+  `PlayerController.seekToLiveEdge()`, following the same consumer-`onClick`/
+  `preventDefault` contract every other command-issuing part in this package
+  uses. Where `liveEdge` is `unavailable`, the part stays mounted as a
+  non-interactive LIVE badge instead of vanishing -- a deliberate, named
+  exception to this package's uniform capability gate (documented beside
+  `LiveIndicator` and in this package's README, next to that rule): an
+  indicator reports a property of the stream, it does not offer a command, and
+  being live is true whether or not a seek-to-edge command exists on the active
+  provider.
+
+  `Time` gains a live-aware rendering for `type="current"` on a live source:
+  it shows a negative offset from the edge when playback has fallen behind it
+  (for example `-0:42`, sourced from `PlayerLiveState.offsetFromEdge`), and the
+  word LIVE once playback is within the edge's tolerance
+  (`PlayerLiveState.atLiveEdge`). The LIVE string is localisable through a new
+  `liveLabel` prop on `TimeProps`, defaulting to `'LIVE'`. `type="duration"` on
+  a live source already rendered nothing (`hasDuration` is false for every live
+  source's `null`/`Infinity` duration, #248) -- unchanged, and now pinned by a
+  test that also sets `PlayerState.live`.
+
+- 059e008: Add `QualityMenu`, a preset quality-selection menu
+
+  `selectQuality` and `PlayerState.qualities` already existed, but no shipped
+  part exposed them — a consumer had to compose one from `SettingsMenu`,
+  `MenuRadioGroup` and `MenuRadioItem` by hand, the way the reference example
+  and `RateMenu` still do for playback rate.
+
+  `Player.QualityMenu` is the same preset shape `Player.CaptionsMenu` is over
+  that composition: it renders nothing until `capabilities.selectQuality`
+  resolves `available`, lists `state.qualities` plus an "Auto" row, and marks
+  the active rung from `state.selectedQualityId`. The auto row's own label
+  names the level actually playing (`state.quality`), e.g. "Auto (1080p)" —
+  `selectedQualityId === null` means auto, and a menu needs both fields, since
+  `quality` moves on its own under adaptive selection while `selectedQualityId`
+  is only what the consumer chose.
+
+  The Auto row carries its own gate, `capabilities.selectQualityAuto` — a new
+  `PlayerCapabilities` field, distinct from `selectQuality`. A provider can
+  select real rungs without honouring `selectQuality(null)` for auto:
+  `@playdeck/provider-vimeo`'s ladder does not always carry an `auto` entry,
+  and where it does not, `selectQuality(null)` resolves `unsupported` against a
+  ladder that otherwise selects fine. A menu gated on `selectQuality` alone
+  would render an Auto row that silently does nothing when chosen on such an
+  embed. `@playdeck/provider-hls` never splits the two — hls.js honours
+  `currentLevel = -1` whenever it has a ladder at all, so `selectQualityAuto`
+  mirrors `selectQuality` there. `@playdeck/provider-native`,
+  `-youtube` and `-wistia` report `selectQualityAuto` unavailable alongside
+  their existing `selectQuality` verdict, for the same reason: none of the
+  three offers quality selection at all.
+
+  `@playdeck/core`'s `PlayerCapabilities` gains a required field: any object
+  built to satisfy that type — a custom provider adapter, a capabilities
+  fixture in a test — needs the new field before it type-checks again, the
+  same compatibility impact `providerPoster` had when it landed (1.1.0).
+
+- 21d7848: Add `PlaybackRateMenu`, a preset playback-rate menu
+
+  `setPlaybackRate` and `PlayerState.playbackRate` already existed, but no
+  shipped part exposed them — a consumer had to compose one from
+  `SettingsMenu`, `MenuRadioGroup` and `MenuRadioItem` by hand, the way the
+  reference example's `RateMenu` still does for a consumer who wants rate and
+  quality under one trigger.
+
+  `Player.PlaybackRateMenu` is the same preset shape `Player.QualityMenu` is
+  over that composition: it renders nothing until
+  `capabilities.setPlaybackRate` resolves `available`, lists a rate ladder
+  (default `[0.5, 1, 1.5, 2]`, overridable via a `rates` prop), and marks the
+  active rung from `state.playbackRate`.
+
+  No core or provider package changes: `setPlaybackRate` and its capability
+  already existed everywhere.
+
+- 33bbd72: Widen `ProviderAdapterFactory`'s return type to the supplied kind's own provider identity
+
+  `ProviderAdapterFactory<Source, Options>` (added in #662 for the `providers`
+  prop) returned the bare `ProviderAdapter` — `@playdeck/core`'s closed,
+  five-built-in-kind union — so no factory for a supplied kind could honestly
+  set `provider:` on the adapter it built without a cast to that narrower type.
+  It now returns `ProviderAdapter<Source['type']>`, instantiating
+  `@playdeck/core`'s newly-generic `ProviderAdapter` (companion changeset in
+  `@playdeck/core`) with the same literal a registration's own `Source` already
+  carries, so a supplied kind's factory writes its own identity directly.
+
+  Additive: this only widens what a valid `ProviderAdapterFactory` may return.
+  Every existing implementation — every one necessarily reported one of the
+  five built-in identities, since reporting anything else required the very
+  cast this change removes the need for — still satisfies the wider contract
+  unchanged, and `loadProvider`'s own five built-in branches are untouched.
+  `examples/provider-setup-file-adapter.tsx`'s reference adapter is the first
+  implementation that reports a supplied identity directly, with its
+  `as unknown as PlayerProvider` cast removed.
+
+- 6cc2455: Add `RemotePlaybackButton`, reporting the standards-based Remote Playback API beside AirPlay
+
+  The comparison page marked Chromecast as unsupported because the only route
+  there was the Cast SDK — a sender script and a receiver page. The Remote
+  Playback API is the standards-based alternative already built into the media
+  element: Chrome's own route to Chromecast for a file or an HLS stream, with no
+  SDK to load.
+
+  `@playdeck/core` gains `capabilities.remotePlayback`, beside the existing
+  `airPlay`: `available` where the element's `remote` object exists and a device
+  is currently reachable per its own `watchAvailability()`, `unavailable` with
+  reason `browser` where the API is absent, and `unavailable` with reason
+  `provider` where it exists but no device has announced itself yet — the same
+  three-way split `airPlay` already makes. A `showRemotePlaybackPicker` command
+  joins `PlayerCommand` and `ProviderAdapter`, refusing through the same path
+  every other pre-attach command does. `PlayerState.remotePlayback` reflects the
+  connection state the API itself reports (`connecting`/`connected`/
+  `disconnected`), `null` both before the capability resolves `available` and
+  once it has settled back on `unavailable` — the same pairing
+  `capabilities.providerPoster`/`providerPosterUrl` already are.
+
+  `@playdeck/provider-native` implements all of this against the media element;
+  `@playdeck/provider-hls` delegates to the embedded native adapter the way it
+  already does for `airPlay`. `@playdeck/provider-youtube`, `-vimeo` and
+  `-wistia` report `unavailable`/`provider`: none of the three exposes a media
+  element this adapter has a handle to.
+
+  `@playdeck/react`'s `RemotePlaybackButton` mirrors the existing `AirPlayButton`
+  part exactly — not a toggle, no `aria-pressed`, renders nothing until the
+  capability resolves `available` — and is exported alongside it.
+
+  `@playdeck/core`'s `PlayerCapabilities` gains a required field: any object
+  built to satisfy that type — a custom provider adapter, a capabilities fixture
+  in a test — needs the new field before it type-checks again, the same
+  compatibility impact `providerPoster` had when it landed (1.1.0).
+
+  The features comparison gains a Chromecast/Google Cast anchor reading yes for
+  Playdeck, with a footnote naming the Remote Playback API as the specific route
+  — distinct from the separate, unimplemented Cast SDK.
+
+- e1db77d: Add `AudioTrackMenu`, a preset audio-track menu
+
+  `selectAudioTrack` and `PlayerState.audioTracks` already existed (#656), but
+  no shipped part exposed them — a consumer had to compose one from
+  `SettingsMenu`, `MenuRadioGroup` and `MenuRadioItem` by hand.
+
+  `Player.AudioTrackMenu` is the same preset shape `Player.QualityMenu`,
+  `Player.PlaybackRateMenu` and `Player.ChaptersMenu` are over that
+  composition: it renders nothing until `capabilities.selectAudioTrack`
+  resolves `available`, and lists one rung per published audio track. Unlike
+  `QualityMenu`, there is no "Auto" row and no sibling selection field to read
+  `MenuRadioGroup`'s value from — each `AudioTrack` carries its own `active`
+  flag, so the active row is derived from whichever entry has it set.
+
+  No core or provider package changes: `selectAudioTrack`,
+  `PlayerState.audioTracks` and their capability already existed everywhere.
+
+- 7a4d917: Add `ChaptersMenu`, a preset chapters-navigation menu
+
+  `PlayerState.chapters` and `capabilities.chapters` already existed, but no
+  shipped part let a consumer browse or jump to a chapter — a consumer had to
+  compose one from `SettingsMenu`, `MenuRadioGroup` and `MenuRadioItem` by
+  hand.
+
+  `Player.ChaptersMenu` is the same preset shape `Player.QualityMenu` and
+  `Player.PlaybackRateMenu` are over that composition: it renders nothing
+  until `capabilities.chapters` resolves `available`, or while the published
+  list is empty; otherwise it lists one rung per chapter (title and start
+  time), marks the rung containing the current playback position (derived
+  from `state.currentTime`, not read raw), and seeks to a chapter's start time
+  through `controller.seekToWithOrigin(startTime, 'user')` when chosen.
+
+  No core or provider package changes: `PlayerState.chapters` and
+  `capabilities.chapters` already existed everywhere they are populated.
+
+- 01a6853: Add a no-build entry, `@playdeck/react/browser`
+
+  Issue #448's second deliverable: a build a consumer loads from a plain HTML
+  page with a `<script type="module">` tag, no bundler and no package manager.
+  Nothing about the default `.` entry changes — its resolution, its tree-shaking
+  and its budget are all still what `pnpm test:bundle` and `pnpm test:budgets`
+  measured before this landed.
+
+  React 19 ships no UMD and no ESM build — `react`'s own `exports` carries only
+  a CommonJS `default` condition, so there is no script-tag-loadable React for
+  an import map to point at. `./browser` is therefore the one entry in this
+  package that bundles React, ReactDOM and the JSX runtime rather than leaving
+  them external, re-exporting `createElement` and `createRoot` alongside the
+  usual primitives so a page with nothing but a `<script>` tag can build a tree
+  with no JSX and mount it.
+
+  Only the native provider ships in this bundle. HLS, YouTube, Vimeo and Wistia
+  stay external, exactly as they are for the default entry: carrying every
+  provider would have put hls.js and `@vimeo/player` inside this package's own
+  tarball, downloaded by every consumer whether or not they load this entry, and
+  would have misrepresented the library's size to exactly the audience this
+  entry exists for. A source that needs one of the four fails at the point of
+  use with an unresolved import — an honest limitation, not a silent one.
+
+  Measured (gzip): `browser.js` 85.22 KB, the `@playdeck/core` chunk it shares
+  with the native provider 8.38 KB, the native provider itself 6.64 KB —
+  budgeted in `scripts/bundle-budgets.mjs`, alongside the default entry's own
+  figures. `pnpm test:budgets` is what prints those three, so they are worth
+  re-reading there rather than here once anything in the graph moves. `tests/bundle/no-build/test.mjs` drives a real Chromium page over
+  this exact artifact — served with no build step of its own — and plays an MP4
+  end to end, while asserting that no HLS, YouTube, Vimeo or Wistia code is ever
+  requested.
+
+- e8dc8c3: Add `LiveIndicator`, a live-playback status badge
+
+  `PlayerState.live` (`PlayerLiveState`, `@playdeck/core`) already existed, but
+  no shipped part surfaced it — the comparison page's live-streaming cell was
+  marked amber for want of one.
+
+  `Player.LiveIndicator` renders a `live` part: `data-state="at-edge"` while
+  the viewer is at the live edge and `data-state="behind-edge"` once they have
+  fallen more than the shared ten-second tolerance behind it
+  (`deriveLiveState`, `packages/core/src/live-state.ts`). It renders nothing
+  when `state.live` is `null` — not live, or liveness not yet known; there is
+  no third `data-state` for "not live", since `PlayerLiveState` is non-null
+  only when `isLive` is `true`.
+
+  Structurally a `<button type="button">`, and `disabled`: seeking to the live
+  edge is not built yet, so a press here would do nothing today. The contract —
+  markup shape, state attribute, and props — is written so live-edge seeking can
+  be wired onto it later rather than having to replace it.
+
+  No `@playdeck/core` or provider package changes: `PlayerState.live` and
+  `deriveLiveState` already existed everywhere.
+
+### Patch Changes
+
+- 8534536: Name a supplied provider by its registration key in a load-failure message
+
+  A supplied provider's own load failure -- its factory throwing, its `load()`
+  rejecting, or its `detect` returning a value whose `type` names no
+  registration of its own, no `type` at all included -- names that provider by
+  its own registration key in the message `ErrorDisplay` renders, in place of
+  "undefined". A factory throw or a `load()` rejection reads the key straight
+  off the resolved source's own `type`, since `loadProvider` only reaches a
+  registration's own code by finding it there first. A `detect` result whose
+  `type` does not route to any registration carries nothing to read a key from
+  at that point, so `detectSourceWithProviders` records the registration
+  behind such a result at detection time, and the message reads it back from
+  there. A `detect` result whose `type` names a different, real registration
+  still names that registration. The five built-in providers' own
+  load-failure messages are unchanged.
+
+- 1c644e6: Give `LiveIndicator` a default accessible name that carries the action
+
+  `LiveIndicator`'s default `aria-label` was "Live" in every state, so a
+  screen-reader user heard the same name whether or not pressing the part
+  would do anything -- the distinction between `data-state="at-edge"` and
+  `data-state="behind-edge"` reached a sighted viewer through the attribute
+  and reached assistive technology not at all.
+
+  The default is now "Go to live" only where pressing the part would act:
+  `capabilities.liveEdge` seekable and `data-state="behind-edge"`. Every other
+  state -- at the edge, or `liveEdge` unavailable -- keeps "Live". The visible
+  text stays "Live" throughout; "Go to live" contains it, satisfying WCAG 2.5.3
+  _Label in Name_. A consumer-supplied `aria-label` still wins in every state,
+  unchanged. No `aria-live` is added, and nothing is announced on a state
+  change by itself.
+
+- fdf0e81: Refuse a supplied detect result that claims a built-in source type
+
+  A provider registration keyed by any name other than one of the five
+  built-in kinds could still have its `detect` return an object whose `type`
+  named a built-in kind (for example `'hls'`). That result was accepted as
+  the registration's own resolved source and routed straight to the matching
+  built-in branch, which builds the adapter from it directly and skips every
+  check that branch's own explicit-source validation applies -- engine and
+  host validation, video-id format checks, and network-path rewriting. The
+  existing guard only refused a registration whose own key named a built-in
+  kind; it never inspected the `type` a `detect` result claimed, and it read
+  that result's own live object rather than a copy of it, so a `type`
+  implemented as a getter could answer safely while this check ran and
+  answer with a built-in kind's own name once resolution had already moved
+  on.
+
+  A `detect` result is now copied into a plain value this package controls
+  before anything reads it, the same way an explicit source object already
+  was. A result whose `type` names a built-in kind, or whose shape this
+  package cannot fully account for (a `Map`, a `Set`, a `bigint`, a symbol
+  key, a class instance), is treated exactly like a declined `detect`:
+  resolution moves on to the next registration, or falls through to
+  built-in detection, which still gets its own chance -- and its own
+  validation -- at the same input.
+
+- b62df07: Lift the caption cue clear of the control row instead of letting it paint over it
+
+  `Player.Captions`' cue box carries an opaque default background and shares the
+  control row's own `z-index`, composing after it, so it always won the paint
+  tie. Centred in the middle of the row, that box could land on top of live
+  controls — measured on the reference composition under either shipped theme,
+  where it covered the captions button and the captions menu's own trigger.
+
+  While the control row is actually painted, the cue overlay now measures the
+  row's own current rect and applies a `transform: translateY(...)` that clears
+  its top edge by 8px, so the cue's box can never overlap a control regardless
+  of what background it paints. "Painted" is read off the row itself — its
+  computed `opacity` and `visibility` — rather than inferred from `Viewport`'s
+  `data-idle` attribute: `docked.css` never reads that attribute at all, so its
+  bar never fades, and a fix that treated idle as hidden un-lifted the cue onto
+  a docked bar that was still fully visible. Reading the row's own computed
+  style instead gives the right answer under all three cases this package
+  ships — always shown for `docked.css` and for an unthemed row, and exactly
+  `theme.css`'s own fade (`:focus-within` override included) for the themed
+  row — with no per-theme branching in the fix itself.
+
+  The measurement is live: a `ResizeObserver` on the row (so it holds under any
+  control-row height — either shipped theme, the phone media query, or an
+  unthemed composition with no stylesheet at all), a `MutationObserver` on
+  `Viewport`'s own `data-idle` attribute and on `transitionrun`/`transitionend`
+  for the row's own opacity transition, and a further `MutationObserver` on the
+  viewport's child list so a control row that mounts after `Captions`, or is
+  unmounted and remounted later, is picked up without a remount of `Captions`
+  itself. Once the row is no longer painted, the transform clears and the cue
+  returns to the resting position `--playdeck-caption-*`'s own `paddingBottom`
+  formula already draws. The move transitions (150ms, matching the rest of the
+  library's default), collapsed to near-zero under
+  `prefers-reduced-motion: reduce`.
+
+  No new theming surface: the 8px clearance and the transition timing are
+  internal constants, the same "no prop" call `viewport-media.tsx`'s own idle
+  delay already makes, not new `--playdeck-*` tokens.
+
+  `e2e/visual.spec.ts`'s "the caption cue paints above the control row" stays
+  green — the paint-order tie it asserts is now moot in the reference
+  composition's own layout (the cue no longer reaches the row at all there),
+  but the same tie still matters for a `renderCue` consumer whose own box is
+  taller than the clearance, so the assertion and the composition order it
+  depends on are both kept. Some of that file's Chromium screenshot baselines
+  move because the cue itself moves — `reference-composition.png`,
+  `reference-menu-open.png` and `reference-narrow.png` are expected to;
+  `reference-idle.png` and `reference-error.png` are not, since captions are
+  hidden in both states. Not regenerated here; CI's `visual` job produces the
+  actuals to review.
+
+  This is not reachable from any of the four scenarios
+  `scripts/compare-libraries.mjs` measures — none of them render
+  `Player.Captions`, and `Player.Controls`' only static reference into
+  `captions.tsx` is the standalone `resolveCaptionToggle`, which tree-shakes
+  independently of the rest of the module, so `docs/comparison/results.md` is
+  unchanged. It does move `@playdeck/react`'s own published bundle, measured by
+  `pnpm test:budgets` and `README.md`'s byte table (the whole package, not a
+  tree-shaken scenario): the primitives figure moves from 20.4 KB to 21.02 KB
+  gzipped, about 0.6 KB, for the `ResizeObserver`/`MutationObserver` wiring and
+  the lift arithmetic. `@playdeck/react`'s reporting-only budget line was
+  already over its reference figure before this change; it stays reporting-only
+  and this adds to that gap rather than opening it.
+
+- 892479a: Fix a looping viewport-autoplayed player auto-pausing only on its first exit
+
+  `restartFromBoundary` plays the media directly to restart a loop, and the
+  resulting `play` event went through the same path as a viewer pressing the
+  native controls, carrying the `'provider'` origin. #309's ownership rule
+  reads any non-`'autoplay'` play as the viewer taking over, so a looping
+  player started by viewport autoplay auto-paused correctly on its first exit
+  and then never again — it played on indefinitely once scrolled offscreen.
+
+  A loop restart is the library continuing playback it started, not the
+  viewer's. `restartFromBoundary` now labels its own `play` event `'system'`
+  — the existing `PlayerEventOrigin` member that was declared and never
+  emitted — and `use-activation.ts`'s ownership tracker treats a `'system'`
+  play as no takeover at all, leaving whatever ownership already stood
+  (`'autoplaying'` or `'none'`) exactly where it was. No new origin, and no
+  further breaking change to `@playdeck/core`.
+
+  A natural end of media (the `onEnded` loop path, with no `endTime`
+  configured) also fires a real `pause` event of its own before `restartFromBoundary`
+  runs, since the underlying element is never given the native `loop`
+  attribute — Playdeck implements looping itself. That pause used to publish
+  with the same `'provider'` origin, handing ownership away before the loop's
+  `play` event ever arrived. It is now suppressed the same way the
+  `endTime`-boundary path already suppresses its own boundary-induced pause,
+  read off `media.ended` rather than a new flag.
+
+  `provider-hls` needs no change of its own: both engines play into the same
+  `<video>` element through an embedded `@playdeck/provider-native` adapter,
+  so this fix reaches a looping HLS source through the same code path.
+
+- 4b3acb1: `Player.Controls` runs a consumer's cleanup-returning ref callback on detach: the cleanup runs exactly once, and the callback is not also called with `null`. `Player.Captions` clears its own internal ref on detach through the same merged-ref shape `Gestures` and the settings menu parts use.
+- f9a74e1: Parse `Player.PosterImage`'s `srcSet` candidates the way browsers do, so a URL containing a comma no longer gets corrupted
+
+  `srcSet` candidates are now scanned per the HTML spec's own grammar: a
+  candidate's URL runs up to the next whitespace, and a comma only ends a
+  candidate once that candidate's URL and optional descriptor have already
+  been consumed. A candidate URL from an image-transformation service (a
+  Cloudinary-style `.../upload/w_400,c_fill/a.jpg 400w`, for instance) now
+  survives as one candidate instead of splitting at its embedded comma into
+  two malformed ones. Each candidate still goes through the same URL
+  allowlist as every other candidate.
+
+- 9fd52b7: Copying a supplied source object, and sanitising a supplied kind's own `providerOptions` bag, both store a field keyed literally `__proto__` as an ordinary own data property, the same as any other field. Neither copy's own prototype ever becomes a value the input supplied.
+- 02dc67a: Copy a supplied provider's explicit source object before validating or dispatching it, instead of trusting the caller's own object
+
+  `detectSourceWithProviders`'s explicit-object branch used to return a
+  consumer's own source object unchanged once its strings cleared the shared
+  allowlist -- the same live object the walk had just read was also what
+  `sourceKey` serialised and what a supplied kind's own `load` factory
+  received. That let a hostile or `JSON.parse`-derived object cause four
+  distinct problems: an acyclic object thousands of levels deep overflowed the
+  stack inside `Root`'s own render; a getter could answer the allowlist walk
+  with a permitted URL and the factory with a `javascript:` one on a second
+  read; a string inside a `Map`, a `Set`, behind a symbol key, or on a
+  non-enumerable property was never checked at all; and a `bigint`, or a
+  `toJSON` that throws, passed detection and then threw out of `sourceKey`'s
+  `JSON.stringify` during render.
+
+  The explicit-object branch now copies the caller's object into a plain
+  structure this package builds itself before any validation runs.
+  `copySuppliedSourceValue` reads each own, enumerable, string-keyed value
+  exactly once, checking it against the shared allowlist right there for a
+  string, at a nesting depth capped by `MAX_SUPPLIED_SOURCE_DEPTH` (32, well
+  past any legitimate source shape). Only plain objects, arrays, strings,
+  finite numbers, booleans, `null` and `undefined` are admitted -- a `Map`, a
+  `Set`, a `bigint`, a function, a class instance, a symbol-keyed property, a
+  `javascript:`/`data:` string, or nesting past the cap refuses the whole
+  source as `invalid-source`, never a throw, the same outcome a refused URL
+  already produces. A non-enumerable own property is silently left out of the
+  copy rather than refusing the source, since the copy never carrying it
+  closes the same hole a symbol key opens. The copy -- not the caller's object
+  -- is what a resolved source's `input`/`source` pair carries on to
+  `sourceKey` and to a supplied kind's `load` factory.
+
+  A cycle (an object reachable from itself) is refused outright, in constant
+  time, by an ancestor check -- it does not rely on the depth cap at all. A
+  diamond (the same nested object reached through two sibling branches, which
+  is not a cycle) is copied independently for each branch rather than reused
+  from one shared copy: a copy that only told a cycle apart from a diamond by
+  depth, with no further guard, cost time exponential in a diamond's depth
+  rather than linear in the number of distinct objects, hanging render on a
+  shape well within the depth cap. Memoising a diamond's shared object into one
+  copy fixes that recursion, but was not the fix landed here -- `sourceKey`
+  calls `JSON.stringify` on a resolved source during every render, and
+  `JSON.stringify` does not deduplicate a shared reference either, so a
+  memoised copy would still expand exponentially one call downstream, inside
+  `sourceKey`, rather than during detection. The actual fix is
+  `MAX_SUPPLIED_SOURCE_NODES` (10,000): every value the copy visits, valid or
+  not, counts against this one shared budget, so a small diamond -- copied
+  twice, at twice its own cost -- comfortably fits, while a diamond chain deep
+  enough to double at every level spends the whole budget within a small,
+  fixed number of levels and is refused, promptly, before either the copy or
+  any later walk over it could expand exponentially.
+
+  `everyStringPermitted` itself, and the cycle/diamond handling of a
+  registration's own `detect` return, are unchanged: that path gets no copy
+  step and still needs its own `WeakSet`-based cycle guard, and is not called a
+  second time over the finished copy -- doing so would walk the same object
+  twice with no memory of the first walk.
+
+  A related, pre-existing defect surfaced once a diamond-shaped source could
+  finally be refused rather than hang or be wrongly accepted: `use-activation.ts`'s
+  `echoSource`, which quotes a refused source in the error message any
+  consumer sees, called `JSON.stringify` on the caller's raw, still fully
+  shared, object to build that quote -- so refusing a large diamond raised
+  `RangeError: Invalid array length` while truncating the resulting,
+  exponentially long string. `echoSource` now bounds its own `JSON.stringify`
+  call with a node-counting replacer, the same technique
+  `copySuppliedSourceValue`'s budget uses, so building a refusal message is
+  bounded regardless of what was refused.
+
+  The copy is also now throw-safe. None of its checks can rule out, ahead of
+  time, a value whose own shape makes _reading_ it throw rather than merely
+  making the read value invalid: an ordinary data property can declare a
+  throwing getter, and a `Proxy` can make any of `copySuppliedSourceValue`'s
+  own reads (`value[key]`, `Object.keys`, `Object.getOwnPropertySymbols`,
+  `Object.getPrototypeOf`) throw from its own trap. `copySuppliedSourceObject`
+  now wraps the whole recursive copy in one `try`/`catch`, converting any such
+  throw into the same `invalid-source` refusal a `Map` or a `bigint` already
+  gets, rather than retrying an individual read -- which would read the
+  offending value a second time, exactly the getter hazard this package's own
+  single-read rule exists to close.
+
+  `docs/provider-setup.md`'s "Explicit source objects" section now states the
+  copy's constraints. `scripts/compare-libraries.mjs`'s Playdeck row ceilings
+  move for the added bytes, following the same procedure #752 used, raised
+  only where a row's own measurement actually breached its ceiling.
+
+- 4840367: Treat a supplied provider's `detect` throw as a decline instead of letting it escape render
+
+  `detectSourceWithProviders` called each `providers` registration's `detect(input)`
+  with no containment, and it runs during render, inside `Root`'s memoised source
+  resolution. A `detect` that threw — an ordinary adapter bug, such as parsing a
+  URL shape the author did not anticipate — escaped render and reached the
+  consumer's nearest error boundary, or unmounted the whole root if there was
+  none, for any string an attacker could put in the `source` prop. It also
+  stopped every later registration from being offered the URL, the opposite of
+  the deliberate behaviour one line below, where a registration returning a
+  refused value is treated as a decline and the loop continues.
+
+  A `detect` that throws now means the same as `detect` returning `undefined`:
+  that registration declines, and the loop moves on to the next one. The error
+  is not silently dropped — it is reported on a fresh task via `queueMicrotask`,
+  the same mechanism `@playdeck/core`'s `notifySafely` already uses to surface a
+  throwing subscriber without breaking its caller, so an adapter author can
+  still see their own bug.
+
+  `docs/provider-setup.md`'s "Supplying your own provider" section and the
+  `detect` JSDoc on `ProviderRegistration` now state this rule.
+
+- ea6a76f: Resolve a `providers` registration only by its own property, never an inherited one
+
+  Both registry lookups indexed the `providers` map directly: `detectSourceWithProviders`'s
+  explicit-object branch, and `loadProvider`'s supplied-kind branch. With `providers` set to
+  anything at all — `{}` included — a source of `{ type: 'toString' }` (or `constructor`,
+  `valueOf`, `hasOwnProperty`, `__proto__`) resolved the inherited `Object.prototype` member,
+  which is truthy: detection reported `status: 'success'` and passed the object on as the
+  resolved source, and dispatch then failed with a swallowed provider error instead of the
+  `invalid-source` refusal a consumer was owed.
+
+  A `type` now counts as a supplied registration only when it is an own property of the
+  `providers` map, through one shared `Object.hasOwn` lookup both sites call. A `type`
+  matching no own property is refused exactly as an unregistered name already was. The same
+  lookup also gates `loadProvider`'s own `providerOptions[source.type]` read, so an inherited
+  member cannot stand in for an option bag nobody supplied either.
+
+- b17f05c: Stop `Player.Controls`' global arrow-key shortcuts from taking over a native
+  radio or range input, or a WAI-ARIA composite widget (`radiogroup`,
+  `tablist`, `slider`, `spinbutton`, `listbox`, `menu`, `menubar`, `tree`,
+  `treegrid`, `grid`, `toolbar`) elsewhere on the page.
+
+  With `global` shortcuts on, an arrow key aimed at one of these outside the
+  player used to run the matching seek or volume shortcut and call
+  `preventDefault()`, leaving the widget's own arrow-key navigation with
+  nothing. The shortcut layer now leaves the key alone there. "Outside the
+  player" is checked against `Player.Viewport`'s own bounding box where the
+  controls region renders inside one, so a consumer's own control composed
+  elsewhere in that box -- `SeekSlider` moved outside `Controls` included --
+  still counts as part of the player and keeps the layer's ownership of its
+  arrows, exactly as it did before. The layer still fires normally on any
+  other page content.
+
+- 50fbdc3: Pin the seek bar to `direction: ltr` regardless of the page's own direction
+
+  `SeekSlider`'s wrapper carries an inline `direction: ltr`, inherited by the
+  native range input, the progress fill, the buffered ranges and the thumbnail
+  preview. Under a `dir="rtl"` ancestor, the native input, its thumb, the
+  fill, the buffered ranges and the thumbnail preview all run left-to-right
+  together, so the thumb and the fill agree — the same convention media
+  progress indicators keep elsewhere, left-to-right regardless of the
+  surrounding page, matching a video's own playback direction rather than the
+  reading direction around it. Other RTL behavior of the player (captions, the
+  control row, settings menus) is unaffected.
+
+- 03fd737: Match the WAI-ARIA menu button pattern for ArrowUp and a removed focused item
+
+  `SettingsMenuTrigger`'s ArrowUp opens the menu with focus on the last item,
+  matching the WAI-ARIA menu button pattern; ArrowDown, click, Enter and Space
+  focus the first item.
+
+  If the item holding focus is removed from an open menu's roving-focus list —
+  `QualityMenu` or `AudioTrackMenu` re-rendering with a shorter list while one
+  of their rungs or tracks is focused — focus follows the WAI-ARIA APG
+  rearrangeable-listbox precedent: it moves to the item now occupying that
+  index, or the new last item if the removed item was last, or the menu closes
+  and returns focus to the trigger if none remain. Escape, the arrow keys,
+  Home and End keep operating the menu in every case; focus that has moved
+  elsewhere on purpose — to the menu's own root, or to an element outside the
+  menu while it stays open — is left alone.
+
+- a9cbab7: Read `Player.Controls`' shortcut targets through open shadow roots.
+
+  The shortcut layer reads every keydown's target through `composedPath()`,
+  so a real `<input>`, `<textarea>`, content-editable region, open menu,
+  arrow-owning widget or activation control inside an open shadow root is
+  judged as itself rather than as the shadow root's host.
+
+  Text entry and an open menu inside an open shadow root silence the layer
+  exactly as one outside a shadow tree does, and the typed character reaches
+  the field. In `global` mode, an arrow-owning widget -- a native radio or
+  range input, or an element carrying one of the WAI-ARIA composite-widget
+  roles -- keeps its own arrow keys whether that role sits on the widget
+  itself or on a light-DOM host wrapping the shadow content that answers the
+  key. Containment in the player boundary, for that same arrow exemption and
+  for the `global`-mode `PageUp`/`PageDown` rule, is decided through the
+  keydown's composed path rather than `Node.contains`, so a widget nested
+  inside the player through an open shadow root is recognised as inside it.
+  Space and Enter activation targets (a button, link or checkbox-shaped
+  control) get the same treatment. A closed shadow root exposes only its
+  host.
+
+- 591b836: Keep a class-based or frozen supplied adapter's methods on the queued-play path
+
+  A supplied provider's factory can return a class instance, or one guarded
+  with `Object.freeze`, and `ProviderAdapter` is structural, so nothing
+  forbids either. Queuing a play before loading finishes
+  (`loading="interaction"`, or a retry through `activateFromInteraction`) used
+  to hand the controller a copy built with `{ ...adapter, load: ... }`. A
+  spread copies only an object's own enumerable properties, and a class
+  declares its methods on its prototype, so the copy silently lost every
+  method but the replacement `load`. The controller's first call on a newly
+  attached provider is `subscribe`, not `attach`, so the missing method broke
+  there first: activation went straight to `error` and the provider never
+  attached at all. `loading="eager"`, which never queues a play, passed the
+  adapter through unchanged and was unaffected.
+
+  The copy is now a `Proxy` whose target is an empty object rather than the
+  adapter itself. Every property but `load` reads through to the real
+  adapter, binding a function value to it before handing it back. That fixes
+  both shapes: a class instance, because a method reading a `#private` field
+  checks the exact instance that declared it rather than what is reachable
+  through its prototype -- a same-named method rebuilt on a plain copy, or
+  reattached with `Object.create(adapter)`, still throws on that read; and a
+  frozen adapter, because a `Proxy` targeting an object whose own properties
+  are non-configurable and non-writable must return each one's exact value
+  back, which neither a `load` override nor a bound method ever is.
+
+- 70342d3: Stop `Controls`' focus-restoration effect from re-stealing focus after the user has left the player
+
+  `Controls` restores focus to itself when a capability-gated control (seek,
+  volume, fullscreen, or picture-in-picture) unmounts while it held focus, so
+  keyboard users do not lose their place. It could also fire after the user
+  had already, legitimately, left the player -- a click on non-focusable
+  page content, or the window itself losing focus -- calling `.focus()` on
+  the region and scrolling the page to it even though focus was correctly on
+  `<body>`.
+
+  `Controls` now tells a real abandonment apart from a control actually
+  being removed, regardless of how, or whether, the browser blurred the
+  control that lost focus, and the restore call passes `preventScroll: true`
+  so a legitimate restore never scrolls the page either.
+
+- ac488b1: Deliver a volume or seek value requested right after a provider swap
+
+  `createCommandChain` (`optimistic-request.ts`) tags a value queued behind an
+  in-flight command with the generation live at the moment it is queued. When
+  the in-flight command drains, the chain compares that tag against the current
+  generation: a value tagged with a generation `invalidate()` has since moved
+  past is discarded, aimed as it was at media that is gone, while a value
+  tagged with the current generation is delivered to whatever provider is
+  current when the drain happens. `VolumeSlider` and `useSeekPreview` share this
+  chain, so a volume or seek change requested for a new provider, made while
+  the previous provider's command is still settling, reaches the new provider
+  once that command drains instead of being discarded alongside the stale
+  value.
+
+- 2b16b69: Fix a consumer ref on `Player.Gestures` and the settings menu parts never reaching the element
+
+  `Gestures`, `SettingsMenu`, `SettingsMenuTrigger` and `SettingsMenuContent`
+  spread `...props` -- which carries a consumer's `ref` in React 19 -- and then
+  set their own internal `ref` afterward, so the internal one always won and
+  `ref.current` stayed `null` with no warning. Each now merges the two refs
+  through `assignRef`: the consumer gets the part's element (an object ref) or
+  is called with it (a callback ref, its own cleanup respected), while the
+  part's internal ref keeps working -- and is explicitly released again on
+  unmount, rather than assuming a second call with `null` that a
+  cleanup-returning consumer ref would otherwise suppress. `PlaybackRateMenu`,
+  `QualityMenu` and `AudioTrackMenu` spread their props into `SettingsMenu`
+  unchanged, so they inherit the fix without any change of their own.
+
+- c52e1e7: Remove a dead `captions-menu` selector from both shipped stylesheets
+
+  `theme.css` and `docked.css` each carried three or four rules keyed to
+  `[data-playdeck-part='settings-menu'], [data-playdeck-part='captions-menu']`
+  (the popover geometry, the phone bottom-sheet, and the forced-colors and dark
+  overrides). No primitive ever renders a `captions-menu` part: `CaptionsMenu`
+  is a preset assembly over `SettingsMenu`/`SettingsMenuContent`, which emit
+  `settings-menu-root` and `settings-menu` — the same parts a standalone
+  `SettingsMenu` renders. The `captions-menu` branch was inert CSS in both
+  files, and it misled a reader into thinking a distinct part existed.
+
+  Both stylesheets now key those rules to `settings-menu` alone. Nothing a
+  consumer can observe changes: the selector's other branch already carried
+  every one of these rules' declarations, and `CaptionsMenu` was always styled
+  through `settings-menu`, never through the dead name.
+
+- dcc4bcc: Stop both shipped stylesheets lowering the touch-target floor below 44px on phones
+
+  `theme.css` and `docked.css` each set `--playdeck-control-min-size` to
+  `2.5rem` (40px) and `--playdeck-seek-slider-min-block-size` to `1.5rem` (24px)
+  inside their own `48rem` phone media query. The primitives that size every
+  button and the seek slider (`controlTargetStyle` in `loading-error.tsx`, the
+  constant beside `SeekSlider` in `transport-controls.tsx`) read these two
+  tokens directly as `min-width`/`min-height`, so the lowered value was obeyed
+  outright below 48rem: importing either stylesheet dropped every button to
+  40px and the seek slider to 24px on phones, exactly where a touch target
+  matters most. Playdeck commits to WCAG 2.2 SC 2.5.5 _Target Size (Enhanced)_,
+  44x44 CSS px, so this was a defect in both shipped themes.
+
+  Neither stylesheet's phone query sets either floor token any more. A consumer
+  importing `theme.css` or `docked.css` will see every control-bar button and
+  the seek slider hold 44px at every viewport width, including below 48rem,
+  where they previously measured 40px and 24px. `theme.css`'s and `docked.css`'s
+  own "below 48rem" query still shrinks the button box itself
+  (`--playdeck-control-size: 2.5rem`) for the row-two layout fix (#622) — CSS
+  `min-width`/`min-height` always win over a smaller `width`/`height`
+  regardless of which rule set which, so the rendered button is unaffected and
+  stays 44x44. The floating control bar is taller below 48rem than before
+  (about 96px rather than the previous ~76px budget) because the seek row no
+  longer shrinks either; no control wraps, scrolls, or is dropped at any width
+  this package tests.
+
+  Every code comment that named WCAG 2.5.8 beside a 44px figure now names SC
+  2.5.5, the correct citation for that figure — 2.5.8 is the 24x24 AA minimum,
+  not 44x44.
+
+- 76dbaaa: Ignore multi-touch, right-click and unseekable double taps in `Gestures`
+
+  `Gestures`' pointerup handler only treats a primary pointer's primary-button
+  release as a tap: a second touch point during a pinch (`isPrimary: false`)
+  and a non-primary mouse button such as a right-click (`button !== 0`) are
+  both ignored outright, neither toggling controls nor counting toward a
+  double tap. An ignored event leaves any pending first tap untouched, so one
+  landing between two real taps doesn't reset or consume the pending state.
+
+  A double tap that lands while `capabilities.seek` isn't `'available'` (a
+  live source with no DVR window, for example) calls neither
+  `seekByWithOrigin` nor `onSeek`. It also doesn't fall back to the
+  single-tap toggle: an unseekable double tap does nothing, since it was
+  never a single tap and toggling controls in response to two taps on the
+  video would contradict what the same gesture does everywhere else it
+  works.
+
+  `isNativeActivationTarget` (the check `Gestures` uses to ignore a tap that
+  lands on a real control) also recognizes a native `input[type="range"]`,
+  so a pointerup on a seek or volume slider composed inside the gesture layer
+  is ignored exactly like one on a button.
+
+- 10578ce: Leave PageUp and PageDown to the page in global keyboard mode outside the player region
+
+  `Controls`' `global` shortcut layer handles `PageUp`/`PageDown` only where the
+  keydown's target sits inside the player boundary — `Player.Viewport`'s DOM
+  node where the region renders inside one, the region's own node otherwise.
+  Outside that boundary neither key is handled and neither call's default is
+  prevented, on any target: `<body>`, a plain scrollable element, or a widget
+  carrying a role such as `grid` or `tablist`. The rule follows the two keys
+  themselves rather than the actions bound to them, so a consumer who rebinds
+  either key to a different action gets the same in-region-only treatment.
+  Inside the boundary both keys seek ten seconds exactly as documented, and
+  scoped mode is unaffected.
+
+- 5d2e6bf: Stop `Root` from publishing a spurious `refusedCommand` for a controlled
+  `volume`, `muted`, or `playbackRate` prop before a provider has attached.
+
+  Setting one of these props before the player has a provider -- the default
+  `loading: 'viewport'` before the player scrolls into view, or
+  `loading: 'interaction'` before the viewer's first gesture -- used to issue
+  the matching command anyway, which the controller refused for want of a
+  provider and published on `PlayerState.refusedCommand`. The value was never
+  lost: `Root` already seeds it once a provider attaches, or once an embed
+  reports ready, so the early command accomplished nothing but the refusal.
+  `Root` now skips issuing it while unattached, and still seeds the value the
+  same way once a provider exists.
+
+- eee6e7a: Document the theme tokens as a versioned contract, with a starter theme
+
+  Every `--playdeck-*` custom property `theme.css`, `docked.css` or a primitive
+  reads is now named, in a `## Theming` section of this package's own README:
+  its role, its default, and which parts read it. `test/tokens.contract.test.ts`
+  keeps it in sync with the stylesheets and the primitives automatically, in
+  both directions.
+
+  The [Theme](https://playdeck.video/guides/theme/) guide now carries a minimal
+  starter theme (`examples/css-starter-theme.css`) and points at the README's
+  table instead of keeping its own copy of it.
+
+  No behaviour changes: this is documentation and a test.
+
+- 4c08429: Scope the volume slider's hidden rest state to its mute-button sibling
+
+  Under `(pointer: fine)`, both `theme.css` and `docked.css` put
+  `[data-playdeck-part='volume-slider']` at `opacity: 0; pointer-events: none`
+  at rest, revealing it on the adjacent mute button's hover/focus-within or on
+  the slider's own hover/focus-within. `pointer-events: none` removes an
+  element from hit testing, so a slider mounted with no adjacent
+  `Player.MuteButton` could never match its own `:hover` branch — it was
+  invisible and pointer-unreachable, reachable only by Tab. That is the defect
+  #598 filed as "A lone VolumeSlider is invisible and unreachable on a fine
+  pointer".
+
+  The hidden rest state is now scoped to the adjacent-sibling relationship —
+  `[data-playdeck-part='mute-button'] + [data-playdeck-part='volume-slider']`
+  — rather than naming the slider bare. A `VolumeSlider` composed beside a
+  `MuteButton` behaves exactly as before: hidden at rest, revealed on either
+  element's hover or focus. A `VolumeSlider` composed alone is now simply
+  visible and interactive at rest, in both themes. `docked.css`'s own copy of
+  the rule also sets the slider's `inline-size`, which stays on the bare
+  selector so a standalone slider keeps its width.
+
+- 175fbb2: Give the thumbnails fetch deadlines, a retry, a byte cap and a cue cap, and binary-search cue lookup
+
+  The React thumbnails loader's fetch (`packages/react/src/thumbnails.tsx`) now
+  carries two deadlines. `THUMBNAILS_FETCH_TIMEOUT_MS` (4000ms, the same figure
+  and shape `OEMBED_REQUEST_TIMEOUT_MS` (`@playdeck/provider-vimeo`) and
+  `POSTER_PROBE_TIMEOUT_MS` (`@playdeck/provider-wistia`) already give their own
+  fetches) bounds only the wait for a response's headers: a WebVTT host that is
+  malicious or merely compromised can no longer hold it open indefinitely by
+  never answering at all. Once headers arrive, `THUMBNAILS_BODY_READ_TIMEOUT_MS`
+  (20000ms) separately bounds the body read that follows, so a large sprite VTT
+  on a slow connection is given time to finish downloading instead of being cut
+  off by a budget sized for "is anything answering at all" -- a body that stops
+  delivering bytes partway through still ends as a failure once this second
+  deadline elapses.
+
+  A fetch that fails -- a network error, a non-ok response, or either deadline
+  -- is retried once `THUMBNAILS_RETRY_BACKOFF_MS` (5000ms) has passed, rather
+  than staying failed for the rest of the URL's life: whether that backoff ends
+  while the pointer is still hovering the seek slider (or its input still holds
+  keyboard focus) or only once a later hover or focus arrives, either way
+  triggers the retry. A host that keeps failing is retried at most once per
+  backoff, not on every pointer movement in between. A URL that already
+  fetched successfully is still fetched only once.
+
+  The response body is read through a counting stream reader
+  (`readCappedBody`) rather than `response.text()`, and abandoned -- the stream
+  cancelled -- once the running byte count passes `THUMBNAILS_FETCH_BYTE_CAP`
+  (10,000,000 bytes): `Content-Length` is not trusted on its own, since a
+  response can omit or understate it.
+
+  `parseThumbnailCues` (`@playdeck/core/thumbnails`) now stops, and publishes
+  no cues at all, once a file's cue count would exceed an internal cap sized
+  at roughly ten times the ~10,800 cues a 3-hour film produces at one cue per
+  second. Both this and the byte cap resolve to the same "no thumbnails"
+  result an unparseable file already produced; neither throws. The cap itself
+  is not exported: `./thumbnails` is a published subpath built as its own
+  bundle, so anything exported from that module ships in `dist/thumbnails.js`
+  and becomes public API, which this internal limit is not meant to be.
+
+  `thumbnailCueAt` is now a binary search over the cues' own running-maximum
+  `endTime`, rather than a linear `Array.prototype.find`, fixing the O(n) scan
+  `SeekSlider` ran on every `pointermove` while scrubbing a long thumbnail
+  track. It returns exactly what the linear scan returned, including when
+  cues share a `startTime` or overlap.
+
+  No public API changes beyond four new constants on the React side
+  (`THUMBNAILS_FETCH_TIMEOUT_MS`, `THUMBNAILS_BODY_READ_TIMEOUT_MS`,
+  `THUMBNAILS_RETRY_BACKOFF_MS`, `THUMBNAILS_FETCH_BYTE_CAP`), none re-exported
+  from `@playdeck/react`'s main entry point -- the same treatment
+  `OEMBED_REQUEST_TIMEOUT_MS` and `POSTER_PROBE_TIMEOUT_MS` already get.
+
+- 12bfaeb: Attribute an engine's own viewport resume to autoplay, not a takeover
+
+  `use-activation.ts`'s ownership tracker read a `play` event's origin off
+  `event.origin` alone: `'autoplay'` kept the viewport's ownership, any other
+  origin dropped it to `'none'`. On WebKit, which manages viewport playback of
+  muted autoplaying video itself, a re-entry resume can arrive as a play
+  Playdeck never issued -- no pending origin for `PlayerController` to confirm
+  -- so it resolved as `'provider'` and ownership dropped. From that point a
+  `loading: 'viewport'` player never auto-paused again on WebKit, the first
+  time it scrolled back into view (#695).
+
+  A `'provider'` play now keeps ownership too, under one condition: ownership
+  already reads `'auto-paused'`, which only this hook's own exit pause ever
+  sets. That is an engine resuming exactly the playback it paused, not a
+  takeover, and it holds regardless of which engine or code path left the
+  pending origin unconfirmed. A genuine takeover is unaffected: a viewer's or a
+  caller's play is confirmed through a pending origin and arrives as `'user'`
+  or `'api'`, never falling back to `'provider'`; and outside `'auto-paused'`,
+  an unconfirmed `'provider'` play still drops ownership exactly as before.
+
+- b4d5ba1: Gate a supplied provider's own `providerOptions` bag through the shared allowlist before its factory is called
+
+  `loadProvider`'s supplied-kind branch handed `providerOptions[source.type]` straight
+  to the registration's factory with no validation, unlike the resolved source itself,
+  which the shared allowlist already covers. The reference file adapter carries its
+  playback URL in that bag and writes it into a `<source src>`, and `docs/provider-setup.md`
+  told readers that is where the playback URL goes — so a `javascript:` or `data:`
+  value written there by a consumer had no gate between it and provider-authored code.
+  A registration that builds an iframe from an option would have executed a
+  `javascript:` URL in the embedding origin.
+
+  Every string in a supplied kind's own option bag now passes the same shared
+  allowlist the resolved source passes before the factory is ever called. A refused
+  string is omitted from the bag exactly as if the consumer had not set it, never a
+  throw, and reported through `PlayerController.reportRefusedUrl` under a new
+  `providerOptions` surface — the same mechanism every other refused consumer-supplied
+  URL already uses. Numbers and booleans are never checked and always pass through
+  untouched, and built-in kinds' own option handling is unchanged.
+
+  `docs/provider-setup.md` and the reference adapter's comments
+  (`examples/provider-setup-file-adapter.tsx`) now say the allowlist applies here too.
+
+  `@playdeck/core`'s `RefusedUrlSurface` gains a new member, `'providerOptions'`,
+  alongside its notice in `REFUSED_URL_NOTICES` and its rank in
+  `REFUSED_URL_SURFACE_RANK` — the same closed union and tables every other
+  refused-prop surface is already declared in.
+
+- 613f1d9: Fix an inline callback ref on `Player.Media` reloading the provider on every parent re-render
+
+  An inline ref (`<Player.Media ref={(el) => ...} />`) gets a new function
+  identity on every render, which made the internal media registration tear
+  down and rebuild along with it -- stopping playback, resetting the position,
+  and showing the poster again. The consumer's ref no longer drives that
+  registration's identity, so a volatile ref stops churning it while still
+  receiving the node on mount and `null` on unmount.
+
+- 58b749d: Ignore the primary pointer's lift when a second pointer joined it in `Gestures`
+
+  `Gestures` listens for `pointerdown` in addition to `pointerup`. When a
+  non-primary pointer goes down while the primary pointer is still down, the
+  primary pointer's own next `pointerup` does not count as a tap: it does not
+  toggle controls, does not start a pending single tap, and does not complete
+  a double tap. Any single tap still pending from an earlier, genuine tap is
+  left untouched by the ignored lift. The primary pointer's own lift clears
+  the record, so an ordinary tap or double tap right after a multi-touch
+  gesture toggles controls or seeks normally, whether or not a `pointerdown`
+  preceded it on the layer.
+
+- b192ab5: Stop `Controls` restoring focus into the region after a consumer removes its own focused control
+
+  `Controls` remembers that focus was inside its region so it can restore focus when a capability-gated control unmounts while focused. That memory survived a removal the region did not cause -- a consumer's own conditional render (`{show && <button/>}`) dropping its own focused control to `<body>` -- because the restore only ever ran on a capability-signature change, and nothing else ever cleared the memory once a blur's deferred check found the abandoned node still connected. A later, unrelated capability change (seek becoming available, say) then pulled focus back into the player, possibly long after the user had moved on.
+
+  A second effect, declared right after the restore effect and with no dependency array, runs after every commit: if focus is still remembered as within the region and landed on `<body>`, nothing restored it this commit, so the memory is stale and is cleared. A legitimate restore already moves focus off `<body>` earlier in the same commit, so it is unaffected -- a capability change that removes the focused control, a Playdeck part or a consumer's own control gated on its own capability read, restores focus into the region.
+
+- Updated dependencies [cf879ba]
+- Updated dependencies [892479a]
+- Updated dependencies [bfcae93]
+- Updated dependencies [f116c0a]
+- Updated dependencies [f912b5d]
+- Updated dependencies [4aa6035]
+- Updated dependencies [7db1141]
+- Updated dependencies [059e008]
+- Updated dependencies [cc697b4]
+- Updated dependencies [17627c6]
+- Updated dependencies [6cc2455]
+- Updated dependencies [175fbb2]
+- Updated dependencies [b4d5ba1]
+- Updated dependencies [33bbd72]
+  - @playdeck/core@1.2.0
+  - @playdeck/provider-hls@1.2.0
+  - @playdeck/provider-native@1.2.0
+  - @playdeck/provider-youtube@1.2.0
+  - @playdeck/provider-vimeo@1.2.0
+  - @playdeck/provider-wistia@1.2.0
+
 ## 1.1.0
 
 **2026-09-13: the citations below are corrected.** The `(#598)` and `#598`

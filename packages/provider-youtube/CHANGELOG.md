@@ -1,5 +1,145 @@
 # @playdeck/provider-youtube
 
+## 1.2.0
+
+### Minor Changes
+
+- cf879ba: Add a live edge: `PlayerLiveState.offsetFromEdge`, a `liveEdge` capability, and `seekToLiveEdge`
+
+  `PlayerLiveState` gains `offsetFromEdge`: how far behind the provider's live
+  edge playback is, in whole seconds, `0` at or ahead of it. Whole seconds is
+  deliberate — `liveStateEqual` is what every adapter consults to decide
+  whether a changed `live` value is worth publishing, and an unrounded float
+  would differ on essentially every `timeupdate`, so `liveStateEqual` now
+  compares the new field too.
+
+  `PlayerCapabilities` gains a required field, `liveEdge`, told apart the way
+  `chapters` is: `unavailable`/`provider` means the provider has no way to
+  report a live edge at all, `unavailable`/`source` means this particular
+  source is not live. Any object built to satisfy `PlayerCapabilities` — a
+  custom provider adapter, a capabilities fixture in a test — needs the new
+  field before it type-checks again, the same compatibility impact
+  `providerPoster` had when it landed (1.1.0).
+
+  `PlayerController` gains `seekToLiveEdge()`, and `PlayerCommand` gains the
+  matching member. It refuses with `not-ready` whenever there is no provider,
+  `capabilities.liveEdge` is not `available`, or the attached adapter
+  implements no `seekToLiveEdge` — the same `RefusedCommand` shape every other
+  pre-attach refusal uses. Where a provider can answer, the command lands on
+  the provider's own notion of the edge, never a value the controller
+  computes.
+
+  Each provider adapter reports `liveEdge` for what it can actually see:
+
+  - `@playdeck/provider-hls`: on the hls.js engine, `available` once the source
+    is live, hls.js's own `liveSyncPosition` is finite, and the existing
+    seek-window-meaningful check passes — `seekToLiveEdge` lands on
+    `liveSyncPosition`, deliberately behind the raw seekable end. On the native
+    engine, the edge is the raw seekable end, delegated straight to
+    `@playdeck/provider-native`.
+  - `@playdeck/provider-native`: `available` once the source is live and its
+    `seekable` has a finite end, which `seekToLiveEdge` lands on — the only
+    notion of a live edge a plain media element has.
+  - `@playdeck/provider-youtube`: `unavailable`/`provider`. The IFrame Player
+    API exposes no seekable-range accessor at all, and `getDuration()` is a
+    snapshot rather than a value tracking the edge on a live stream.
+  - `@playdeck/provider-vimeo`: `unavailable`/`provider`. `@vimeo/player`
+    (2.30.4) has no live concept anywhere to build one on.
+  - `@playdeck/provider-wistia`: `unavailable`/`provider`. `PublicApi` has no
+    seekable-range accessor and no dedicated live-edge member.
+
+- 059e008: Add `QualityMenu`, a preset quality-selection menu
+
+  `selectQuality` and `PlayerState.qualities` already existed, but no shipped
+  part exposed them — a consumer had to compose one from `SettingsMenu`,
+  `MenuRadioGroup` and `MenuRadioItem` by hand, the way the reference example
+  and `RateMenu` still do for playback rate.
+
+  `Player.QualityMenu` is the same preset shape `Player.CaptionsMenu` is over
+  that composition: it renders nothing until `capabilities.selectQuality`
+  resolves `available`, lists `state.qualities` plus an "Auto" row, and marks
+  the active rung from `state.selectedQualityId`. The auto row's own label
+  names the level actually playing (`state.quality`), e.g. "Auto (1080p)" —
+  `selectedQualityId === null` means auto, and a menu needs both fields, since
+  `quality` moves on its own under adaptive selection while `selectedQualityId`
+  is only what the consumer chose.
+
+  The Auto row carries its own gate, `capabilities.selectQualityAuto` — a new
+  `PlayerCapabilities` field, distinct from `selectQuality`. A provider can
+  select real rungs without honouring `selectQuality(null)` for auto:
+  `@playdeck/provider-vimeo`'s ladder does not always carry an `auto` entry,
+  and where it does not, `selectQuality(null)` resolves `unsupported` against a
+  ladder that otherwise selects fine. A menu gated on `selectQuality` alone
+  would render an Auto row that silently does nothing when chosen on such an
+  embed. `@playdeck/provider-hls` never splits the two — hls.js honours
+  `currentLevel = -1` whenever it has a ladder at all, so `selectQualityAuto`
+  mirrors `selectQuality` there. `@playdeck/provider-native`,
+  `-youtube` and `-wistia` report `selectQualityAuto` unavailable alongside
+  their existing `selectQuality` verdict, for the same reason: none of the
+  three offers quality selection at all.
+
+  `@playdeck/core`'s `PlayerCapabilities` gains a required field: any object
+  built to satisfy that type — a custom provider adapter, a capabilities
+  fixture in a test — needs the new field before it type-checks again, the
+  same compatibility impact `providerPoster` had when it landed (1.1.0).
+
+- 6cc2455: Add `RemotePlaybackButton`, reporting the standards-based Remote Playback API beside AirPlay
+
+  The comparison page marked Chromecast as unsupported because the only route
+  there was the Cast SDK — a sender script and a receiver page. The Remote
+  Playback API is the standards-based alternative already built into the media
+  element: Chrome's own route to Chromecast for a file or an HLS stream, with no
+  SDK to load.
+
+  `@playdeck/core` gains `capabilities.remotePlayback`, beside the existing
+  `airPlay`: `available` where the element's `remote` object exists and a device
+  is currently reachable per its own `watchAvailability()`, `unavailable` with
+  reason `browser` where the API is absent, and `unavailable` with reason
+  `provider` where it exists but no device has announced itself yet — the same
+  three-way split `airPlay` already makes. A `showRemotePlaybackPicker` command
+  joins `PlayerCommand` and `ProviderAdapter`, refusing through the same path
+  every other pre-attach command does. `PlayerState.remotePlayback` reflects the
+  connection state the API itself reports (`connecting`/`connected`/
+  `disconnected`), `null` both before the capability resolves `available` and
+  once it has settled back on `unavailable` — the same pairing
+  `capabilities.providerPoster`/`providerPosterUrl` already are.
+
+  `@playdeck/provider-native` implements all of this against the media element;
+  `@playdeck/provider-hls` delegates to the embedded native adapter the way it
+  already does for `airPlay`. `@playdeck/provider-youtube`, `-vimeo` and
+  `-wistia` report `unavailable`/`provider`: none of the three exposes a media
+  element this adapter has a handle to.
+
+  `@playdeck/react`'s `RemotePlaybackButton` mirrors the existing `AirPlayButton`
+  part exactly — not a toggle, no `aria-pressed`, renders nothing until the
+  capability resolves `available` — and is exported alongside it.
+
+  `@playdeck/core`'s `PlayerCapabilities` gains a required field: any object
+  built to satisfy that type — a custom provider adapter, a capabilities fixture
+  in a test — needs the new field before it type-checks again, the same
+  compatibility impact `providerPoster` had when it landed (1.1.0).
+
+  The features comparison gains a Chromecast/Google Cast anchor reading yes for
+  Playdeck, with a footnote naming the Remote Playback API as the specific route
+  — distinct from the separate, unimplemented Cast SDK.
+
+### Patch Changes
+
+- Updated dependencies [cf879ba]
+- Updated dependencies [bfcae93]
+- Updated dependencies [f116c0a]
+- Updated dependencies [f912b5d]
+- Updated dependencies [4aa6035]
+- Updated dependencies [7db1141]
+- Updated dependencies [059e008]
+- Updated dependencies [cc697b4]
+- Updated dependencies [17627c6]
+- Updated dependencies [6cc2455]
+- Updated dependencies [175fbb2]
+- Updated dependencies [b4d5ba1]
+- Updated dependencies [33bbd72]
+  - @playdeck/core@1.2.0
+
 ## 1.1.0
 
 ### Minor Changes

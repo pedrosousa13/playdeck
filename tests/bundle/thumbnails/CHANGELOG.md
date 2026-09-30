@@ -1,4 +1,4 @@
-# @playdeck/site
+# @playdeck/bundle-thumbnails
 
 ## 0.0.2
 
@@ -7,19 +7,15 @@
 - Updated dependencies [8534536]
 - Updated dependencies [1c644e6]
 - Updated dependencies [fdf0e81]
-- Updated dependencies [cf879ba]
 - Updated dependencies [b62df07]
 - Updated dependencies [892479a]
 - Updated dependencies [17627c6]
 - Updated dependencies [4b3acb1]
 - Updated dependencies [bfcae93]
-- Updated dependencies [f116c0a]
 - Updated dependencies [f912b5d]
-- Updated dependencies [4aa6035]
 - Updated dependencies [f9a74e1]
 - Updated dependencies [cf879ba]
 - Updated dependencies [9fd52b7]
-- Updated dependencies [7db1141]
 - Updated dependencies [02dc67a]
 - Updated dependencies [4840367]
 - Updated dependencies [ea6a76f]
@@ -29,7 +25,6 @@
 - Updated dependencies [03fd737]
 - Updated dependencies [21d7848]
 - Updated dependencies [a9cbab7]
-- Updated dependencies [cc697b4]
 - Updated dependencies [33bbd72]
 - Updated dependencies [591b836]
 - Updated dependencies [70342d3]
@@ -41,7 +36,6 @@
 - Updated dependencies [10578ce]
 - Updated dependencies [5d2e6bf]
 - Updated dependencies [eee6e7a]
-- Updated dependencies [17627c6]
 - Updated dependencies [6cc2455]
 - Updated dependencies [e1db77d]
 - Updated dependencies [4c08429]
@@ -53,26 +47,5 @@
 - Updated dependencies [58b749d]
 - Updated dependencies [01a6853]
 - Updated dependencies [b192ab5]
-- Updated dependencies [33bbd72]
 - Updated dependencies [e8dc8c3]
   - @playdeck/react@1.2.0
-  - @playdeck/core@1.2.0
-
-## 0.0.1
-
-### Patch Changes
-
-- Updated dependencies [f6bf30b]
-- Updated dependencies [f582807]
-- Updated dependencies [d36f242]
-- Updated dependencies [f6c086c]
-- Updated dependencies [2096dc1]
-- Updated dependencies [687260f]
-- Updated dependencies [f42f118]
-- Updated dependencies [dc71c32]
-- Updated dependencies [7deed3e]
-- Updated dependencies [2902590]
-- Updated dependencies [62b13f2]
-- Updated dependencies [80e35be]
-  - @playdeck/react@1.1.0
-  - @playdeck/core@1.1.0
