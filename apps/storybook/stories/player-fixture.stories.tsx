@@ -648,6 +648,23 @@ export const ViewportAutoplayScrollLoopMuted: Story = {
   args: { autoplay: 'muted', scrollPage: true, loop: true }
 };
 
+// #854: the same tall scroll page and loop configuration as
+// `ViewportAutoplayScrollLoopMuted` above, sourced from YouTube instead of the
+// native tracer, with a non-zero `startTime` so a wrap runs through the
+// adapter's own `restartFromBoundary` (`boundary.ts`) rather than through
+// YouTube's own playlist auto-restart -- `e2e/youtube.spec.ts` drives its own
+// fake iframe API's natural-end simulation against this to prove the
+// resulting PLAYING is labelled `'system'`, not `'provider'`.
+export const ViewportAutoplayScrollLoopMutedYoutube: Story = {
+  args: {
+    autoplay: 'muted',
+    scrollPage: true,
+    loop: true,
+    startTime: 0.3,
+    activationSource: 'youtube'
+  }
+};
+
 export const AutoplayAudible: Story = {
   args: { autoplay: 'audible' }
 };

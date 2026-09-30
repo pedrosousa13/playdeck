@@ -1704,6 +1704,78 @@ test('loop with an end boundary restarts instead of ending', async () => {
   expect(harness.player.pauseVideo).not.toHaveBeenCalled();
 });
 
+// #854: a loop restart is the library continuing playback it started, not the
+// viewer taking over (the same ruling #673 already applied to provider-native
+// and Vimeo). With no start boundary, YouTube's own single-video-playlist
+// loop (`loop`/`playlist` player vars, `attachment.ts:237-242`) restarts
+// itself -- `onProviderEnded` never calls `restartFromBoundary` for it, since
+// an unset start boundary is already where the platform's own loop lands
+// (`boundary.ts`'s `restartsAtStart`) -- so the ENDED-to-PLAYING transition
+// that follows carries no command of this adapter's own at all, and the fix
+// has to read it off the ended latch itself (`consumeLoopRestart`).
+test("labels YouTube's own playlist-loop restart as the library, not the provider", async () => {
+  const { events, harness } = await readyAdapter('M7lc1UVf-VE', {
+    loop: true
+  });
+  harness.fireStateChange(playerStates.PLAYING);
+  events.length = 0;
+  harness.currentTime = 120;
+
+  harness.fireStateChange(playerStates.ENDED);
+  harness.fireStateChange(playerStates.PLAYING);
+
+  expect(events).toContainEqual(
+    expect.objectContaining({ type: 'play', origin: 'system' })
+  );
+});
+
+// #854's other loop path: a non-zero start boundary makes `onProviderEnded`
+// call `restartFromBoundary` itself, whose own deferred `playVideo()` is what
+// the fix labels `'system'` (`boundary.ts`'s `consumeLoopRestart`, mirroring
+// `provider-native`'s `restartingGeneration`).
+test('labels a start-boundary loop restart as the library, not the provider', async () => {
+  const { events, harness } = await readyAdapter('M7lc1UVf-VE', {
+    loop: true,
+    startTime: 5
+  });
+  harness.fireStateChange(playerStates.PLAYING);
+  events.length = 0;
+  harness.currentTime = 120;
+
+  harness.fireStateChange(playerStates.ENDED);
+  // `restartFromBoundary`'s own resume check runs a microtask after the seek
+  // it issues synchronously (`boundary.ts`'s `restartFromBoundary`).
+  await Promise.resolve();
+  harness.fireStateChange(playerStates.PLAYING);
+
+  expect(events).toContainEqual(
+    expect.objectContaining({ type: 'play', origin: 'system' })
+  );
+});
+
+// The one direction `consumeLoopRestart` must leave alone: a viewer's own
+// resume mid-clip never sets the ended latch and never runs
+// `restartFromBoundary`, so it stays a `'provider'` play exactly as it always
+// has -- what lets the viewer take ownership from the viewport
+// (`use-activation.ts`'s ownership tracker, untouched by this fix).
+test('a viewer resume mid-clip on a looping player stays a provider play', async () => {
+  const { events, harness, provider } = await readyAdapter('M7lc1UVf-VE', {
+    loop: true
+  });
+  harness.fireStateChange(playerStates.PLAYING);
+  harness.currentTime = 40;
+  harness.fireStateChange(playerStates.PAUSED);
+  events.length = 0;
+
+  const resumed = provider.play?.();
+  harness.fireStateChange(playerStates.PLAYING);
+  await expect(resumed).resolves.toEqual({ ok: true });
+
+  expect(events).toContainEqual(
+    expect.objectContaining({ type: 'play', origin: 'provider' })
+  );
+});
+
 // Same table as the core helper's, asserted through what the adapter does:
 // a start that sanitises away issues no seek and writes no player var.
 test.each([

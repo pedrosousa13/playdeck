@@ -75,6 +75,7 @@ export type YouTubePlaybackDeps = {
     | 'applyPlayPosition'
     | 'clearEnded'
     | 'clearEndedAndPendingResume'
+    | 'consumeLoopRestart'
     | 'isEnded'
     | 'onProviderEnded'
     | 'seekTarget'
@@ -292,6 +293,10 @@ export const createYouTubePlayback = ({
         const current = getPlayer();
         if (isDestroyed() || !current) return;
         if (data === playerStates.PLAYING) {
+          // A loop restart is the library continuing playback it started, not
+          // the viewer taking over (`boundary.ts`'s `consumeLoopRestart`),
+          // read before the ended latch it can depend on is cleared below.
+          const origin = boundary.consumeLoopRestart() ? 'system' : undefined;
           // Playback resumed, whether this adapter asked for it or the viewer
           // pressed YouTube's own play button. Either way the window is open
           // again, so the end boundary has to be able to fire a second time
@@ -335,7 +340,7 @@ export const createYouTubePlayback = ({
               duration:
                 Number.isFinite(duration) && duration > 0 ? duration : null
             },
-            providerEvent('play', undefined)
+            providerEvent('play', undefined, undefined, origin)
           );
           timeUpdates.start();
           return;

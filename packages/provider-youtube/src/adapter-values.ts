@@ -4,6 +4,7 @@ import type {
   PlayerCapabilities,
   PlayerError,
   PlayerEventDetailMap,
+  PlayerEventOrigin,
   PlayerEventType,
   ProviderEvent,
   ProviderEventFor,
@@ -17,14 +18,19 @@ export type EmitProviderState = (
   event?: ProviderEvent
 ) => void;
 
+// `origin` defaults to `'provider'`, what every state change YouTube's own
+// player reports is. `playback.ts`'s PLAYING branch is the one caller that
+// passes `'system'` instead, for a loop restart this seam raised itself
+// rather than the platform -- see `boundary.ts`'s `consumeLoopRestart`.
 export const providerEvent = <Type extends PlayerEventType>(
   type: Type,
   detail: PlayerEventDetailMap[Type],
-  originalEvent?: unknown
+  originalEvent?: unknown,
+  origin: PlayerEventOrigin = 'provider'
 ): ProviderEventFor<Type> => ({
   type,
   detail,
-  origin: 'provider',
+  origin,
   ...(originalEvent === undefined ? {} : { originalEvent })
 });
 
