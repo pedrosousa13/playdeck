@@ -50,6 +50,16 @@ export type YouTubeBoundaryDeps = {
 // 250 ms can only notice the boundary after it has passed, so the frames between
 // the two are shown either way.
 export type YouTubeBoundary = {
+  // Whether this attachment is configured to loop, constant for its whole
+  // life. `playback.ts`'s ENDED branch reads it to tell a genuine end of
+  // media apart from YouTube's own platform-driven wrap: with no start
+  // boundary, `onProviderEnded` below neither suppresses that ENDED nor
+  // restarts anything itself (`restartsAtStart` is false), so the `ended`
+  // it publishes is the one YouTube fires on every iteration of its own
+  // playlist loop (#214's declared divergence from native) — `loops` is
+  // what lets that publish keep firing exactly as it always has while still
+  // being told apart from a real terminal end.
+  readonly loops: boolean;
   // The whole-second `start` player var, or undefined when there is no start.
   // A load hint only: it saves loading from zero, and the seek below is still
   // the authority because the var cannot carry a fraction.
@@ -83,6 +93,25 @@ export type YouTubeBoundary = {
   // `controls: true` the viewer can press YouTube's own play button, and a
   // latch left set would keep the boundary from ever firing again.
   readonly clearEnded: () => void;
+  // Consumed by `playback.ts`'s PLAYING branch, before `clearEnded` runs:
+  // true when the PLAYING state change it is about to report is this loop
+  // continuing playback it started, not a play the viewer or the platform's
+  // own chrome newly took over. Two shapes reach it. `restartFromBoundary`'s
+  // own deferred `playVideo()` call (a non-zero start boundary, or an
+  // `endTime` wrap) sets a generation right before calling it, read back
+  // here against the live `resumeGeneration` the same way
+  // `provider-native`'s `onPlay` handler reads its own `restartingGeneration`
+  // back against its own `replayGeneration`. A loop with no start boundary
+  // restarts through neither: YouTube's own playlist loop (`attachment.ts`'s
+  // `loop`/`playlist` vars) replays it without this seam ever calling
+  // `playVideo`, so that shape is read off the ended latch itself instead --
+  // `loop` and `boundaryEnded` both true means the last state change this
+  // seam reported was the platform's own end of a looping player, and
+  // nothing but that platform's own loop can have produced the
+  // PLAYING now arriving. False for every other PLAYING, including a resume
+  // after the media's natural end with `loop` unset, where `boundaryEnded`
+  // is set for an unrelated reason (`onProviderEnded`).
+  readonly consumeLoopRestart: () => boolean;
   // Releases the latch and invalidates a pending loop resume without moving
   // the playhead; the error path uses it.
   readonly clearEndedAndPendingResume: () => void;
@@ -100,6 +129,11 @@ export const createYouTubeBoundary = (
   let positioned = false;
   let boundaryEnded = false;
   let resumeGeneration = 0;
+  // The generation of whichever `restartFromBoundary` call is currently
+  // waiting on its own `playVideo()` to produce the PLAYING state change it
+  // means to label `'system'` -- `undefined` when none is. See
+  // `consumeLoopRestart`.
+  let restartingGeneration: number | undefined;
 
   // The player's duration, or undefined before it knows one. `getDuration()`
   // reports 0 until metadata lands, which is not a duration to clamp against.
@@ -166,8 +200,10 @@ export const createYouTubeBoundary = (
       const player = getPlayer();
       if (!player) return;
       try {
-        if (player.getPlayerState() !== playerStates.PLAYING)
+        if (player.getPlayerState() !== playerStates.PLAYING) {
+          restartingGeneration = generation;
           player.playVideo();
+        }
       } catch {
         // A loop restart must not escape the provider boundary.
       }
@@ -175,6 +211,7 @@ export const createYouTubeBoundary = (
   };
 
   return {
+    loops: loop,
     startPlayerVar:
       bounds.startTime > 0 ? Math.floor(bounds.startTime) : undefined,
     applyInitialPosition: (current) => {
@@ -299,6 +336,13 @@ export const createYouTubeBoundary = (
     },
     clearEnded: () => {
       boundaryEnded = false;
+    },
+    consumeLoopRestart: () => {
+      const pendingRestart =
+        restartingGeneration !== undefined &&
+        restartingGeneration === resumeGeneration;
+      restartingGeneration = undefined;
+      return loop && (boundaryEnded || pendingRestart);
     },
     clearEndedAndPendingResume: () => {
       ++resumeGeneration;

@@ -19,6 +19,24 @@ const isYouTubeUrl = (url: URL): boolean =>
 // the parts of the real API the adapter relies on: the window-level ready
 // callback, the adoption of the iframe it is handed rather than one it builds,
 // and asynchronous state confirmation.
+//
+// It also mirrors the platform's own natural end (#854): while playing,
+// \`currentTime\` advances at real wall-clock speed, and on reaching
+// \`getDuration()\` the fake fires the platform's own ENDED, exactly as a real
+// embed does. What happens after that ENDED depends on whether a \`start\`
+// player var is on the url, the same way it does for the real embed
+// (\`boundary.ts\`'s \`restartsAtStart\`): with one (\`start=\`,
+// \`ViewportAutoplayScrollLoopMutedYoutube\`), the ENDED reaches the adapter's
+// own \`restartFromBoundary\`, whose seek back to \`startTime\` and resulting
+// \`playVideo()\` call are this fake's ordinary command handling, not a
+// shortcut it takes for itself; with none
+// (\`ViewportAutoplayScrollLoopMutedYoutubeNoBoundary\`), nothing in the
+// adapter ever calls \`playVideo\` again, so the fake fires the platform's own
+// PLAYING on its own, the same way YouTube's single-video-playlist loop
+// restarts an embed with no \`start\` configured. A short \`getDuration()\` for
+// a \`loop=1\` src keeps that real-clock wait to a fraction of a second rather
+// than the 120s every other fixture in this file gets, which none of them
+// read.
 const fakeIframeApi = `
   window.YT = {
     PlayerState: {
@@ -26,28 +44,71 @@ const fakeIframeApi = `
     },
     Player: function (iframe, config) {
       let state = -1;
+      let currentTime = 0;
       const target = {};
       const events = config.events || {};
       const setState = (next) => {
         state = next;
         if (events.onStateChange) events.onStateChange({ data: next, target });
       };
+      const looping = /[?&]loop=1(?:&|$)/.test(iframe.src);
+      const hasStartBoundary = /[?&]start=\\d/.test(iframe.src);
+      const duration = looping ? 1 : 120;
+      let clockTimer;
+      let lastTick;
+      const stopClock = () => {
+        clearInterval(clockTimer);
+        clockTimer = undefined;
+      };
+      const startClock = () => {
+        if (clockTimer) return;
+        lastTick = Date.now();
+        clockTimer = setInterval(() => {
+          const now = Date.now();
+          currentTime += (now - lastTick) / 1000;
+          lastTick = now;
+          if (currentTime < duration) return;
+          currentTime = duration;
+          stopClock();
+          setState(0);
+          if (looping && !hasStartBoundary) {
+            setTimeout(() => {
+              currentTime = 0;
+              setState(1);
+              startClock();
+            }, 0);
+          }
+        }, 50);
+      };
       Object.assign(target, {
-        playVideo: () => setTimeout(() => setState(1), 0),
-        pauseVideo: () => setTimeout(() => setState(2), 0),
-        seekTo: () => {},
+        playVideo: () =>
+          setTimeout(() => {
+            setState(1);
+            startClock();
+          }, 0),
+        pauseVideo: () => {
+          stopClock();
+          setTimeout(() => setState(2), 0);
+        },
+        seekTo: (seconds) => {
+          currentTime = seconds;
+        },
         mute: () => {},
         unMute: () => {},
         isMuted: () => false,
         setVolume: () => {},
         getVolume: () => 100,
-        getDuration: () => 120,
-        getCurrentTime: () => 0,
+        getDuration: () => duration,
+        getVideoLoadedFraction: () => 1,
+        getCurrentTime: () => currentTime,
         getPlaybackRate: () => 1,
         setPlaybackRate: () => {},
         getPlayerState: () => state,
         getIframe: () => iframe,
-        destroy: () => iframe.remove()
+        destroy: () => {
+          stopClock();
+          iframe.remove();
+        }
       });
       setTimeout(() => {
         if (events.onReady) events.onReady({ target });
@@ -179,4 +240,123 @@ test('youtube docs example stays dormant while the native fixture is used', asyn
   await expect(
     page.getByTestId('youtube-example').locator('iframe')
   ).toBeVisible();
+});
+
+// #854: `ViewportAutoplayScrollLoopMutedYoutube`
+// (`player-fixture.stories.tsx`) is `ViewportAutoplayScrollLoopMuted` sourced
+// from YouTube instead of the native tracer, with a non-zero `startTime`
+// alongside `loop: true` -- a tall scroll page around a `loading: 'viewport'`
+// player, so it starts fully outside the observer's root at Playwright's
+// default 1280x720 iframe and can be scrolled out of and back into view. The
+// `startTime` is what makes `restartsAtStart(loop)` true (`boundary.ts`), so
+// each wrap runs through the adapter's own `restartFromBoundary` rather than
+// through YouTube's own playlist auto-restart -- the shape this fix targets,
+// and the one `fakeIframeApi` above is built to drive.
+const viewportScrollLoopYoutubeStory =
+  '/iframe.html?id=fixtures-playerfixture--viewport-autoplay-scroll-loop-muted-youtube&viewMode=story';
+
+const mountedPlayButton = async (page: Page) => {
+  const play = playButton(page);
+  await play.waitFor({ state: 'attached' });
+  return play;
+};
+
+const scrollPlayerIntoView = (page: Page): Promise<void> =>
+  page.getByTestId('viewport').scrollIntoViewIfNeeded();
+
+const scrollPlayerOutOfView = (page: Page): Promise<void> =>
+  page.evaluate(() => window.scrollTo(0, 0));
+
+// Polls the fake player's own `getCurrentTime()` (exposed through
+// `window.playdeckHandle`'s `currentTime`) for a drop -- the playhead going
+// backward is what a loop restart looks like from outside, real playback
+// advancing forward the rest of the time -- the same instrument
+// `e2e/activation.spec.ts`'s native loop test reads (#673).
+// A fixed, fast interval rather than `expect.poll`'s default growing one
+// (100ms up to 1000ms): the fake's own wrap cycle is itself close to 1000ms
+// (`getDuration()`'s 1 second, in `fakeIframeApi` above), and a poll that
+// grows to sample once a second risks aliasing onto nearly the same phase of
+// every cycle and never observing the drop at all.
+const waitForLoopWrap = async (page: Page): Promise<void> => {
+  let previous = await page.evaluate(
+    () => window.playdeckHandle?.getState().currentTime ?? 0
+  );
+  await expect
+    .poll(
+      async () => {
+        const current = await page.evaluate(
+          () => window.playdeckHandle?.getState().currentTime ?? 0
+        );
+        const wrapped = current < previous;
+        previous = current;
+        return wrapped;
+      },
+      { timeout: 8_000, intervals: [50] }
+    )
+    .toBe(true);
+};
+
+// The bug's own shape: `restartFromBoundary` (`boundary.ts`) used to leave
+// the resulting `playVideo()` confirmation labelled `'provider'`, and #309's
+// ownership rule read it as a viewer taking over -- correct on the first
+// exit, and never auto-pausing again after the player had looped even once
+// (the same shape #673 fixed for the native provider). This crosses the
+// viewport boundary twice (`scrollPlayerOutOfView` at each half), with a loop
+// wrap awaited in between both, so a fix that only survived the first wrap
+// would still fail the second.
+test('a looping viewport-autoplayed YouTube player auto-pauses on every exit, even after it has wrapped', async ({
+  page
+}) => {
+  await routeYouTube(page);
+  await page.goto(viewportScrollLoopYoutubeStory);
+  const play = await mountedPlayButton(page);
+
+  await scrollPlayerIntoView(page);
+  await expect(play).toHaveAttribute('data-state', 'playing');
+  await waitForLoopWrap(page);
+
+  await scrollPlayerOutOfView(page);
+  await expect(play).toHaveAttribute('data-state', 'paused');
+
+  await scrollPlayerIntoView(page);
+  await expect(play).toHaveAttribute('data-state', 'playing');
+  await waitForLoopWrap(page);
+
+  await scrollPlayerOutOfView(page);
+  await expect(play).toHaveAttribute('data-state', 'paused');
+});
+
+// #854: the reporter's own configuration (`ViewportAutoplayScrollLoopMutedYoutubeNoBoundary`
+// in `player-fixture.stories.tsx`) -- plain `loop`, no `startTime` and no
+// `endTime` -- where YouTube's own playlist loop restarts the embed with no
+// command from the adapter, and still fires a real `ended` on every
+// iteration (#214's declared divergence from native, `time-boundary.ts`'s
+// `restartsAtStart`). That `ended` used to drop viewport ownership to
+// `'none'` unconditionally (`use-activation.ts`'s `ended` listener), so a
+// player that wrapped even once stopped auto-pausing on exit regardless of
+// the wrap's own `play` event's origin. Crosses the wrap twice, the same way
+// the boundary-shape test above does.
+const viewportScrollLoopYoutubeNoBoundaryStory =
+  '/iframe.html?id=fixtures-playerfixture--viewport-autoplay-scroll-loop-muted-youtube-no-boundary&viewMode=story';
+
+test('a plain looping viewport-autoplayed YouTube player with no boundary auto-pauses on every exit', async ({
+  page
+}) => {
+  await routeYouTube(page);
+  await page.goto(viewportScrollLoopYoutubeNoBoundaryStory);
+  const play = await mountedPlayButton(page);
+
+  await scrollPlayerIntoView(page);
+  await expect(play).toHaveAttribute('data-state', 'playing');
+  await waitForLoopWrap(page);
+
+  await scrollPlayerOutOfView(page);
+  await expect(play).toHaveAttribute('data-state', 'paused');
+
+  await scrollPlayerIntoView(page);
+  await expect(play).toHaveAttribute('data-state', 'playing');
+  await waitForLoopWrap(page);
+
+  await scrollPlayerOutOfView(page);
+  await expect(play).toHaveAttribute('data-state', 'paused');
 });

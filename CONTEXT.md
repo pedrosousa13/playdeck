@@ -193,9 +193,13 @@ Where a command the library issued came from — a control a person operated, an
 untagged public command, an autoplay attempt. Held from the moment the command
 is issued until the provider reports the change that confirms it, and used in
 place of the `provider` an adapter stamps its own reports with by default.
-`system` is the one exception an adapter stamps itself: the native provider's
-loop restart marks the `play` it raises for a wrap, so the viewport's ownership
-survives it instead of reading as a viewer taking over (#673). Distinct from a
+`system` is the one exception an adapter stamps itself: a loop restart marks
+the `play` it raises for a wrap, so the viewport's ownership survives it
+instead of reading as a viewer taking over -- the native provider's own
+restart (#673), and YouTube's (#854), both do this. YouTube also marks an
+`ended` its own platform-driven wrap fires the same way, for a loop with no
+start boundary, where the wrap reaches the adapter as a real end of media
+rather than a command it can attach a generation to (#854). Distinct from a
 requested value: this is who asked, not what for.
 _Avoid_: source, trigger, cause
 
