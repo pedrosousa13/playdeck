@@ -14,6 +14,20 @@
 # applies to the directory whose entry carries it, so ignoring these package
 # names at the root would have suppressed real updates elsewhere in the repo
 # instead.
+#
+# The entries below cover the root workspace. Before they existed, the two
+# fixture entries above were the only ones in this file, so the root -- and
+# with it the shipped runtime dependencies, `hls.js` and `@vimeo/player` --
+# got security pull requests only, never routine version updates.
+# `directory: /` is enough for the whole pnpm workspace: Dependabot's npm
+# ecosystem reads `pnpm-workspace.yaml` from there, so one entry covers every
+# package under it.
+#
+# Minor and patch updates are grouped into a single weekly pull request per
+# ecosystem. Majors are left out of the group so each one opens its own pull
+# request: a major can carry a breaking change, so it needs its own review and
+# its own decision to take or defer, not a spot inside a batch of routine
+# bumps nobody reads that closely.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -29,3 +43,25 @@ updates:
       interval: weekly
     ignore:
       - dependency-name: '*'
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
