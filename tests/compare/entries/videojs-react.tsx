@@ -1,17 +1,17 @@
-// `@videojs/react` 10.0.0-beta.32 is not a React wrapper around the
+// `@videojs/react` 10.0.0-rc.4 is not a React wrapper around the
 // `video.js` 8.24.0 this comparison also measures: it is the Video.js 10
 // rewrite, published by the same GitHub org (`repository` field:
 // github.com/videojs/v10, directory `packages/react`) with its own engine
 // packages (`@videojs/core`, `@videojs/media`, `@videojs/spf`,
 // `@videojs/store`, `@videojs/utils`) and no dependency on `video.js` at all.
-// It is still marked beta by its own README ("Close to stable. Experimental
-// adoption in real projects."), and it is measured here as its own row rather
-// than folded into the video.js 8 one for that reason -- the two rows are two
-// different libraries that happen to share a name and an org.
+// It is marked release candidate by its own README ("Close to stable.
+// Adoption in real projects encouraged."), and it is measured here as its own
+// row rather than folded into the video.js 8 one for that reason -- the two
+// rows are two different libraries that happen to share a name and an org.
 //
 // The composition is the one its own bundled documentation installs, read
 // from the installed package rather than a docs site:
-// node_modules/@videojs/react/docs/how-to/installation.md's "Create your
+// node_modules/@videojs/react/docs/guides/installation.md's "Add your
 // player" step is `<VideoPlayer><VideoSkin><Video src playsInline /></VideoSkin></VideoPlayer>`
 // from the `@videojs/react/video` preset subpath -- the packaged default skin,
 // which is this library's own answer to "default controls".

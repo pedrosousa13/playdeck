@@ -115,7 +115,7 @@ hls.js, each loaded only for a source that actually needs it. For
 react-player it is its other, lazily-loaded provider packages. For Vidstack
 it is the split-off UI and caption modules the "Equivalent composition per
 library" section below names individually. For Media Chrome, Video.js and
-Video.js 10 (beta) it is nothing — each emits a single chunk, with no split
+Video.js 10 (rc) it is nothing — each emits a single chunk, with no split
 to report. The column
 exists so "Gzipped" cannot hide code-splitting in either direction: a library
 that defers a lot would otherwise look smaller than what it actually ships,
@@ -164,7 +164,7 @@ implementations and is the kind of disagreement this cross-check is supposed
 to surface as normal rather than hide: a small, one-directional gap, on a row
 with nothing else that could move it, is minifier noise, not a finding.
 
-**Video.js 10 (beta)** is not one of those two, and carries the table's
+**Video.js 10 (rc)** is not one of those two, and carries the table's
 second-largest gap, so it was traced rather than filed under the same
 heading. Its graph does contain dynamic imports: `@videojs/core`'s
 `dist/default/core/i18n/load-locale.js` holds a `loaders` map of 53
@@ -291,8 +291,10 @@ can re-derive on a later run, so they are not used.
   `dist/players.js` carries ten provider entries (`hls`, `dash`, `mux`,
   `spotify`, `tiktok`, `twitch`, `vimeo`, `wistia`, `youtube` and the `html`
   fallback), the widest provider list of anything measured here and the reason
-  its "other hosted providers" cell is the only `yes` outside Video.js 10
-  (beta)'s.
+  its "other hosted providers" cell is the only `yes` on that axis: Video.js
+  10 (rc)'s equivalent providers moved to separate, optional peer packages in
+  the rc line and its cell is `plugin` rather than `yes` (see "Features"
+  below).
 - **Vidstack** — a React-first, composable player that also ships a configured
   default skin: `@vidstack/react/player/layouts/default` exports
   `DefaultVideoLayout`, which is what this comparison's Vidstack entry
@@ -309,18 +311,18 @@ can re-derive on a later run, so they are not used.
   data point: what a React reader gets from that package is a class-based
   library and a hand-written `useEffect`. That is a fact about the pinned
   package and not about the project, which is the next entry.
-- **Video.js 10 (beta)** — `@videojs/react` 10.0.0-beta.32, published by the
+- **Video.js 10 (rc)** — `@videojs/react` 10.0.0-rc.4, published by the
   videojs GitHub org (its own `repository` field is
   github.com/videojs/v10, directory `packages/react`; first published
   2025-10-25). It is **not** a React wrapper around `video.js` 8.24.0: it is
   the Video.js 10 rewrite, depending on its own `@videojs/core`,
   `@videojs/media`, `@videojs/spf`, `@videojs/store` and `@videojs/utils`
-  engine packages and not on `video.js` at all, and its own README still marks
-  it beta ("Close to stable. Experimental adoption in real projects."). It is
-  measured as its own row and its own column, under the same rules as every
-  other one, because it is a React video library a reader can install today —
-  and both tables label it "Video.js 10 (beta)" so no figure of its is ever
-  read as `video.js` 8.24.0's, or the reverse.
+  engine packages and not on `video.js` at all, and its own README now marks
+  it release candidate ("Close to stable. Adoption in real projects
+  encouraged."). It is measured as its own row and its own column, under the
+  same rules as every other one, because it is a React video library a reader
+  can install today — and both tables label it "Video.js 10 (rc)" so no
+  figure of its is ever read as `video.js` 8.24.0's, or the reverse.
 
 **Out:**
 
@@ -451,7 +453,7 @@ composition never pairs a seek slider without one, though it answers nothing
 on Media Chrome's own bar (built from `MediaTimeRange` alone, with no
 `MediaTimeDisplay`) and is not part of the five-of-seven count. **This row is
 the fair comparison against Media Chrome, Vidstack, Video.js and Video.js 10
-(beta)**, each of
+(rc)**, each of
 which draws a full control bar rather than one button; see "Where each
 alternative measures smaller, or wins on something else" below for the two
 controls Media Chrome ships that this row does not.
@@ -470,7 +472,7 @@ button either row draws.
 **Vidstack** (`entries/vidstack.tsx`) is `<MediaPlayer src="…mp4">` wrapping
 `<MediaProvider />` and `<DefaultVideoLayout icons={defaultLayoutIcons} />` —
 Vidstack's own documented answer to "give me default controls", and one of the
-two full, off-the-shelf skins measured here (the other is Video.js 10 (beta)'s
+two full, off-the-shelf skins measured here (the other is Video.js 10 (rc)'s
 `VideoSkin`): a play button, seek bar, volume, fullscreen, and
 settings/captions/chapters menus, all drawn by the library. `results.md`'s "Not counted" column names the further
 chunks the same build produced beyond that row's own figure. That count and
@@ -520,11 +522,11 @@ MP4 this fixture asks for. That is measured from the installed package's own
 `dist/video.es.js`, not asserted: the file has no code-splitting to preserve,
 so nothing about it depends on this harness's own reachability logic.
 
-**Video.js 10 (beta)** (`entries/videojs-react.tsx`) is `@videojs/react`
-10.0.0-beta.32, a different library from the row above it — see "Which
+**Video.js 10 (rc)** (`entries/videojs-react.tsx`) is `@videojs/react`
+10.0.0-rc.4, a different library from the row above it — see "Which
 libraries, and why". Its composition is the one the package's own bundled
 documentation installs, read from
-`node_modules/@videojs/react/docs/how-to/installation.md` rather than from a
+`node_modules/@videojs/react/docs/guides/installation.md` rather than from a
 docs site: `<VideoPlayer><VideoSkin><Video src playsInline /></VideoSkin></VideoPlayer>`,
 imported from the `@videojs/react/video` preset subpath. `VideoSkin` is that
 preset's packaged default skin, which is this library's own answer to "default
@@ -555,15 +557,15 @@ one number off `results.md` without this paragraph would misread it:
   buttons gets them from Media Chrome, not from Playdeck, without writing one
   first. See "Equivalent composition per library" above for how that fifth
   and sixth control were confirmed absent rather than assumed.
-- **Vidstack's, Video.js's and Video.js 10 (beta)'s rows all ship more than
+- **Vidstack's, Video.js's and Video.js 10 (rc)'s rows all ship more than
   Playdeck's control-bar row does at the same five-of-seven baseline** —
-  Vidstack's row and Video.js 10 (beta)'s row each draw a full skin with
+  Vidstack's row and Video.js 10 (rc)'s row each draw a full skin with
   menus this fixture's control bar does not attempt, and Video.js's row adds
   an entire HLS/DASH engine none of the others needed for this fixture's plain
   MP4. Media Chrome's row is the closest like-for-like match at this
   composition: a control bar with two more buttons and no menus, no bundled
   streaming engine.
-- **Video.js, Vidstack's `DefaultVideoLayout` and Video.js 10 (beta)'s
+- **Video.js, Vidstack's `DefaultVideoLayout` and Video.js 10 (rc)'s
   `VideoSkin` all need a stylesheet import to render correctly** — a control
   bar with no CSS is unstyled, not merely plain. Neither this harness nor
   Playdeck's own `README.md` byte table counts a stylesheet in its headline
@@ -683,11 +685,11 @@ token is in none of them, so a `no` costs the same evidence in every column,
 Playdeck's included. It searches every package a consumer of that column
 installs, not only the one the column is named after: Playdeck is
 `packages/core` plus `packages/react`, since a consumer installs one and gets
-the other, and Video.js 10 (beta) is `@videojs/react` plus the five
+the other, and Video.js 10 (rc) is `@videojs/react` plus the five
 `@videojs/*` engine packages its own `dependencies` pin at the same version.
 Anything narrower would let one column's `no` cost less evidence than
 another's. One cell narrows deliberately and says so in its footnote: "lazy
-provider loading" for Video.js 10 (beta) searches the two of those six that
+provider loading" for Video.js 10 (rc) searches the two of those six that
 actually ship providers, because that is the question the axis asks — the
 dynamic imports in the other four are `@videojs/core`'s translation packs.
 `absent-in-tree` also refuses to hold vacuously in the other direction: a glob
@@ -773,7 +775,7 @@ of them itself, and says so; video.js 8.24.0's own shipped
 `dist/video.es.js` and `dist/types/video.d.ts` (every `registerComponent` call
 is a built-in part, read directly rather than assumed from the docs site,
 which changes less often than the installed code); `@videojs/react`
-10.0.0-beta.32's own bundled documentation, which the package ships in
+10.0.0-rc.4's own bundled documentation, which the package ships in
 `node_modules/@videojs/react/docs` beside its `dist/dev/index.d.ts`, so every
 claim about that column is read from the installed package rather than from a
 docs site; and, for Playdeck, `CONTEXT.md`, `packages/react/README.md` and the
@@ -817,10 +819,12 @@ deciding them:
   answer, and dropping an axis merely because it did not discriminate would be
   a second, quieter way to make the table an argument. It has since stopped
   being flat: `videojs-mux` is a documented Mux Data plugin for video.js, so
-  that cell is `plugin`, and `@videojs/react` ships a `MuxData` component in
-  the package itself, so that cell is `yes`. `npm view` finds no equivalent
-  published plugin for Media Chrome or Vidstack, which is why those two stay
-  `no`. What the axis is not asking is whether a library emits playback
+  that cell is `plugin`, and `@videojs/react` ships a `MuxData` component
+  behind its own optional peer package (`@videojs/mux-data`, org-published
+  and not part of this fixture's pinned install), so that cell is `plugin`
+  too. `npm view` finds no equivalent published plugin for Media Chrome or
+  Vidstack, which is why those two stay `no`. What the axis is not asking is
+  whether a library emits playback
   events a consumer could wire to any analytics tool — every library here,
   Playdeck included, has those, and an axis they all satisfy by definition
   would be unfalsifiable.
@@ -837,33 +841,40 @@ deciding them:
 
 Read directly off the table. **Quality selection and playback rate** are
 full, ready-made UI primitives in Vidstack, Media Chrome and Video.js 10
-(beta) (and, for playback rate, `video.js` 8 as well), where Playdeck ships
+(rc) (and, for playback rate, `video.js` 8 as well), where Playdeck ships
 only the command and capability behind a consumer's own `SettingsMenu`
 composition. **Audio track selection** exists in Vidstack, Media Chrome and
 both Video.js lines and is absent from Playdeck entirely, and so is a
-**thumbnail preview on seek** (Vidstack, Media Chrome and Video.js 10 (beta)
+**thumbnail preview on seek** (Vidstack, Media Chrome and Video.js 10 (rc)
 ship one; `video.js` 8 has a documented plugin). **Chapters** get a full
 navigation UI in Vidstack and both Video.js lines; Playdeck publishes the same
 `Chapter` collection on player state but ships no primitive to browse it.
 **Live streaming** gets a dedicated UI (a "LIVE" button or badge) in Vidstack,
 Media Chrome and both Video.js lines; Playdeck models the state, lets existing
 controls adapt to it, and stops there. **Chromecast** works in Vidstack, Media
-Chrome and Video.js 10 (beta), and through a documented plugin in `video.js`
+Chrome and Video.js 10 (rc), and through a documented plugin in `video.js`
 8; Playdeck and react-player have no casting beyond AirPlay. **DRM** ships in Video.js 10
-(beta) (a `source.drm` map of key-system ids on its Shaka and hls.js media
+(rc) (a `source.drm` map of key-system ids on its Shaka and hls.js media
 components) and is a documented plugin away in `video.js` 8, with no
 equivalent path in Playdeck at all. **Playlists** and **ads** are each a
 documented `video.js` 8 plugin away and reach nothing else here, Playdeck
-included — Video.js 10 (beta)'s own migration guide lists both among the
-features its rewrite does not yet answer. **DASH** plays in react-player,
-Vidstack and both Video.js lines, and through a documented compatible element
-in Media Chrome; Playdeck's refusal is deliberate and already on record in
-`.out-of-scope/dash.md`. **Analytics** has a shipped component in Video.js 10
-(beta) and a documented plugin for `video.js` 8, and nothing in the other four
-columns. And **other hosted providers** — Mux, Twitch, TikTok, Spotify,
-Cloudflare Stream — reach react-player through its `Config` interface and
-Video.js 10 (beta) through its `media/*` subpaths; Playdeck's closed
-`PlayerSource` union carries none of them.
+included — Video.js 10 (rc)'s own migration guide lists both among the
+features its rewrite does not yet answer. **DASH** plays in react-player and
+Vidstack outright, and through a documented compatible element in Media
+Chrome; `video.js` 8 bundles it, and Video.js 10 (rc) reaches it only through
+a separate, optional peer package (`@videojs/dash-video`) this fixture does
+not install, so that cell reads `plugin` rather than `yes` — a change from
+the beta line, which bundled its media adapters directly. Playdeck's refusal
+is deliberate and already on record in `.out-of-scope/dash.md`. **Analytics**
+is a documented plugin away in both Video.js lines — `videojs-mux` for
+`video.js` 8, `@videojs/mux-data` (again a peer package, not bundled) for
+Video.js 10 (rc) — and reaches nothing else here. And **other hosted
+providers** — Mux, Twitch, TikTok, Spotify, Cloudflare Stream — reach
+react-player outright through its `Config` interface, and Video.js 10 (rc)
+through the same kind of separate, optional `@videojs/*-video` peer package as
+DASH (each still resolves through the library's own `media/*` subpath, but
+importing it now throws unless the matching peer is installed); Playdeck's
+closed `PlayerSource` union carries none of them.
 
 ### Where Playdeck has something no alternative does
 
@@ -879,12 +890,15 @@ are `no` for react-player, which draws no UI of its own for a plain file and
 inherits whatever the native `<video>` element happens to expose; its
 **fullscreen, playback-rate and keyboard** cells read `plugin` rather than
 `no` because its own README's "Custom player controls" section composes Media
-Chrome parts for exactly those three. **Wistia** plays in Playdeck and
-react-player and in neither Vidstack nor either Video.js line, and reaches
-Media Chrome only through a separately published custom element. **Headless,
+Chrome parts for exactly those three. **Wistia** plays outright in Playdeck
+and react-player, is absent from Vidstack and `video.js` 8 entirely, and
+reaches Media Chrome and Video.js 10 (rc) each only through a separately
+published custom element or peer package (`wistia-video-element`,
+`@videojs/wistia-video` — the latter new in the rc line; the beta line had no
+Wistia adapter at all). **Headless,
 independently composable parts** — primitives a consumer imports and arranges
 individually rather than a single configured component — are `yes` for
-Playdeck, Vidstack, Media Chrome and Video.js 10 (beta) alike, so this is not
+Playdeck, Vidstack, Media Chrome and Video.js 10 (rc) alike, so this is not
 a Playdeck-only property; it is one `video.js` 8, which publishes no React
 parts at all, is on the other side of.
 
