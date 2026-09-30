@@ -39,9 +39,8 @@ including the large majority who never intercept anything.
 
 ## The maintainer's decision
 
-Observe now, intercept later. The issue stays open, undated, as the place a
-future brief starts from — it is not scheduled and nothing here is in
-progress.
+Observe now, intercept later. Issue #665 is closed as not planned, and this
+file is where a future brief starts from. Nothing is scheduled.
 
 ## Recorded answers, for whoever reopens it
 
@@ -74,4 +73,4 @@ starting is what turns the recorded answers above into a brief.
   whether commands can be intercepted by a plugin", raised alongside #664
   (behaviour plugins) and split from it once it became clear observation and
   interception are different seams. The maintainer's answers above are
-  recorded on the issue for whenever it is reopened.
+  recorded on the issue as well.
