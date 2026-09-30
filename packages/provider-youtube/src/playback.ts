@@ -77,6 +77,7 @@ export type YouTubePlaybackDeps = {
     | 'clearEndedAndPendingResume'
     | 'consumeLoopRestart'
     | 'isEnded'
+    | 'loops'
     | 'onProviderEnded'
     | 'seekTarget'
   >;
@@ -368,13 +369,25 @@ export const createYouTubePlayback = ({
           // so the next `play()` replays the window from its start.
           if (boundary.onProviderEnded()) return;
           timeUpdates.stop();
+          // With no start boundary, this ENDED is YouTube's own platform
+          // loop wrapping in place (`boundary.ts`'s `loops`) rather than a
+          // real terminal end -- `'system'`, the same label the PLAYING that
+          // follows it carries, so the ownership tracker leaves a viewport
+          // session alone across it exactly as it already does for that
+          // PLAYING. A non-looping end is published with the default
+          // `'provider'` origin, unchanged.
           emit(
             {
               playback: 'ended',
               buffering: false,
               currentTime: timeUpdates.adoptCurrentTime(current)
             },
-            providerEvent('ended', undefined)
+            providerEvent(
+              'ended',
+              undefined,
+              undefined,
+              boundary.loops ? 'system' : undefined
+            )
           );
           return;
         }

@@ -23,14 +23,20 @@ const isYouTubeUrl = (url: URL): boolean =>
 // It also mirrors the platform's own natural end (#854): while playing,
 // \`currentTime\` advances at real wall-clock speed, and on reaching
 // \`getDuration()\` the fake fires the platform's own ENDED, exactly as a real
-// embed does -- with a \`startTime\` configured alongside \`loop=1\`
-// (\`ViewportAutoplayScrollLoopMutedYoutube\`), that ENDED reaches the
-// adapter's own \`restartFromBoundary\` (\`boundary.ts\`'s \`onProviderEnded\`),
-// whose seek back to \`startTime\` and resulting \`playVideo()\` call are this
-// fake's ordinary command handling, not a shortcut it takes for itself. A
-// short \`getDuration()\` for a \`loop=1\` src keeps that real-clock wait to a
-// fraction of a second rather than the 120s every other fixture in this file
-// gets, which none of them read.
+// embed does. What happens after that ENDED depends on whether a \`start\`
+// player var is on the url, the same way it does for the real embed
+// (\`boundary.ts\`'s \`restartsAtStart\`): with one (\`start=\`,
+// \`ViewportAutoplayScrollLoopMutedYoutube\`), the ENDED reaches the adapter's
+// own \`restartFromBoundary\`, whose seek back to \`startTime\` and resulting
+// \`playVideo()\` call are this fake's ordinary command handling, not a
+// shortcut it takes for itself; with none
+// (\`ViewportAutoplayScrollLoopMutedYoutubeNoBoundary\`), nothing in the
+// adapter ever calls \`playVideo\` again, so the fake fires the platform's own
+// PLAYING on its own, the same way YouTube's single-video-playlist loop
+// restarts an embed with no \`start\` configured. A short \`getDuration()\` for
+// a \`loop=1\` src keeps that real-clock wait to a fraction of a second rather
+// than the 120s every other fixture in this file gets, which none of them
+// read.
 const fakeIframeApi = `
   window.YT = {
     PlayerState: {
@@ -45,7 +51,9 @@ const fakeIframeApi = `
         state = next;
         if (events.onStateChange) events.onStateChange({ data: next, target });
       };
-      const duration = /[?&]loop=1(?:&|$)/.test(iframe.src) ? 1 : 120;
+      const looping = /[?&]loop=1(?:&|$)/.test(iframe.src);
+      const hasStartBoundary = /[?&]start=\\d/.test(iframe.src);
+      const duration = looping ? 1 : 120;
       let clockTimer;
       let lastTick;
       const stopClock = () => {
@@ -63,6 +71,13 @@ const fakeIframeApi = `
           currentTime = duration;
           stopClock();
           setState(0);
+          if (looping && !hasStartBoundary) {
+            setTimeout(() => {
+              currentTime = 0;
+              setState(1);
+              startClock();
+            }, 0);
+          }
         }, 50);
       };
       Object.assign(target, {
@@ -257,6 +272,11 @@ const scrollPlayerOutOfView = (page: Page): Promise<void> =>
 // backward is what a loop restart looks like from outside, real playback
 // advancing forward the rest of the time -- the same instrument
 // `e2e/activation.spec.ts`'s native loop test reads (#673).
+// A fixed, fast interval rather than `expect.poll`'s default growing one
+// (100ms up to 1000ms): the fake's own wrap cycle is itself close to 1000ms
+// (`getDuration()`'s 1 second, in `fakeIframeApi` above), and a poll that
+// grows to sample once a second risks aliasing onto nearly the same phase of
+// every cycle and never observing the drop at all.
 const waitForLoopWrap = async (page: Page): Promise<void> => {
   let previous = await page.evaluate(
     () => window.playdeckHandle?.getState().currentTime ?? 0
@@ -271,7 +291,7 @@ const waitForLoopWrap = async (page: Page): Promise<void> => {
         previous = current;
         return wrapped;
       },
-      { timeout: 5_000 }
+      { timeout: 8_000, intervals: [50] }
     )
     .toBe(true);
 };
@@ -289,6 +309,41 @@ test('a looping viewport-autoplayed YouTube player auto-pauses on every exit, ev
 }) => {
   await routeYouTube(page);
   await page.goto(viewportScrollLoopYoutubeStory);
+  const play = await mountedPlayButton(page);
+
+  await scrollPlayerIntoView(page);
+  await expect(play).toHaveAttribute('data-state', 'playing');
+  await waitForLoopWrap(page);
+
+  await scrollPlayerOutOfView(page);
+  await expect(play).toHaveAttribute('data-state', 'paused');
+
+  await scrollPlayerIntoView(page);
+  await expect(play).toHaveAttribute('data-state', 'playing');
+  await waitForLoopWrap(page);
+
+  await scrollPlayerOutOfView(page);
+  await expect(play).toHaveAttribute('data-state', 'paused');
+});
+
+// #854: the reporter's own configuration (`ViewportAutoplayScrollLoopMutedYoutubeNoBoundary`
+// in `player-fixture.stories.tsx`) -- plain `loop`, no `startTime` and no
+// `endTime` -- where YouTube's own playlist loop restarts the embed with no
+// command from the adapter, and still fires a real `ended` on every
+// iteration (#214's declared divergence from native, `time-boundary.ts`'s
+// `restartsAtStart`). That `ended` used to drop viewport ownership to
+// `'none'` unconditionally (`use-activation.ts`'s `ended` listener), so a
+// player that wrapped even once stopped auto-pausing on exit regardless of
+// the wrap's own `play` event's origin. Crosses the wrap twice, the same way
+// the boundary-shape test above does.
+const viewportScrollLoopYoutubeNoBoundaryStory =
+  '/iframe.html?id=fixtures-playerfixture--viewport-autoplay-scroll-loop-muted-youtube-no-boundary&viewMode=story';
+
+test('a plain looping viewport-autoplayed YouTube player with no boundary auto-pauses on every exit', async ({
+  page
+}) => {
+  await routeYouTube(page);
+  await page.goto(viewportScrollLoopYoutubeNoBoundaryStory);
   const play = await mountedPlayButton(page);
 
   await scrollPlayerIntoView(page);

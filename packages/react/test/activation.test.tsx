@@ -651,6 +651,26 @@ const pauseEvent = {
   detail: undefined,
   origin: 'provider'
 } as const;
+// What a platform-driven loop wrap's own `ended` looks like by the time it
+// reaches this hook (#854): YouTube still fires a real `ended` on every
+// iteration of a loop with no start boundary (#214's declared divergence from
+// native -- suppressing the event would change what a `loop` consumer
+// already receives), so `provider-youtube`'s `boundary.ts` labels that one
+// `'system'` rather than suppressing it. `confirmsPlayback` in
+// `player-controller.ts` only overrides `'play'` and `'pause'` events, so
+// this origin passes straight through unlike `playEvent`'s placeholder above.
+const loopWrapEndedEvent = {
+  type: 'ended',
+  detail: undefined,
+  origin: 'system'
+} as const;
+// A real end of media: what every provider's `ended` carries outside a
+// platform-driven loop wrap.
+const endedEvent = {
+  type: 'ended',
+  detail: undefined,
+  origin: 'provider'
+} as const;
 
 // Shared setup for the exit/re-entry tests below (#309): activates a viewport
 // session at the default (single, unseparated) threshold and installs a
@@ -1202,6 +1222,49 @@ test('a viewer-controlled loop restart does not hand ownership back to the viewp
   await act(async () => undefined);
 
   expect(pauseWithOrigin).not.toHaveBeenCalledWith('autoplay');
+});
+
+// #854: before this fix, the `ended` listener dropped ownership to `'none'`
+// on every `ended` unconditionally, with no origin check at all -- so a
+// provider whose own loop wrap fires a real `ended` (YouTube, with no start
+// boundary) lost ownership there before the wrap's own `'system'` play ever
+// had a chance to matter, exactly the shape #673 fixed for the `play`
+// listener. Default `pnpm test`, not `@real`, per
+// `docs/agents/demonstrated-red.md`.
+test("a loop wrap's ended event does not release ownership from the viewport", async () => {
+  const { controller, fake, observer, pauseWithOrigin } =
+    await setUpViewportPlayback();
+  await playAs(controller, fake, 'autoplay');
+
+  act(() => fake.emit({ playback: 'ended' }, loopWrapEndedEvent));
+  act(() => fake.emit({ playback: 'playing' }, loopRestartPlayEvent));
+
+  act(() =>
+    observer.intersect({ isIntersecting: false, intersectionRatio: 0 })
+  );
+
+  await vi.waitFor(() =>
+    expect(pauseWithOrigin).toHaveBeenCalledExactlyOnceWith('autoplay')
+  );
+});
+
+// The mirror of the test above: a real end of media -- `loop` unset, so the
+// provider's `ended` keeps its default `'provider'` origin -- still drops
+// ownership exactly as it always has, and a later exit finds nothing to
+// pause.
+test('a real end of media still releases ownership from the viewport', async () => {
+  const { controller, fake, observer, pauseWithOrigin } =
+    await setUpViewportPlayback();
+  await playAs(controller, fake, 'autoplay');
+
+  act(() => fake.emit({ playback: 'ended' }, endedEvent));
+
+  act(() =>
+    observer.intersect({ isIntersecting: false, intersectionRatio: 0 })
+  );
+  await act(async () => undefined);
+
+  expect(pauseWithOrigin).not.toHaveBeenCalled();
 });
 
 // Named rather than clamped, and reported the way the interaction/autoplay

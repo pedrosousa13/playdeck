@@ -50,6 +50,16 @@ export type YouTubeBoundaryDeps = {
 // 250 ms can only notice the boundary after it has passed, so the frames between
 // the two are shown either way.
 export type YouTubeBoundary = {
+  // Whether this attachment is configured to loop, constant for its whole
+  // life. `playback.ts`'s ENDED branch reads it to tell a genuine end of
+  // media apart from YouTube's own platform-driven wrap: with no start
+  // boundary, `onProviderEnded` below neither suppresses that ENDED nor
+  // restarts anything itself (`restartsAtStart` is false), so the `ended`
+  // it publishes is the one YouTube fires on every iteration of its own
+  // playlist loop (#214's declared divergence from native) — `loops` is
+  // what lets that publish keep firing exactly as it always has while still
+  // being told apart from a real terminal end.
+  readonly loops: boolean;
   // The whole-second `start` player var, or undefined when there is no start.
   // A load hint only: it saves loading from zero, and the seek below is still
   // the authority because the var cannot carry a fraction.
@@ -201,6 +211,7 @@ export const createYouTubeBoundary = (
   };
 
   return {
+    loops: loop,
     startPlayerVar:
       bounds.startTime > 0 ? Math.floor(bounds.startTime) : undefined,
     applyInitialPosition: (current) => {

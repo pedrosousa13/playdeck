@@ -665,6 +665,21 @@ export const ViewportAutoplayScrollLoopMutedYoutube: Story = {
   }
 };
 
+// #854: the reporter's own configuration -- `autoplay="muted" loading="viewport"
+// loop`, no `startTime` and no `endTime` at all -- where YouTube's own
+// single-video-playlist loop restarts the embed on its own, with no command
+// from the adapter in between, and still fires a real `ended` on every
+// iteration (#214's declared divergence from native). `e2e/youtube.spec.ts`
+// drives its own fake iframe API's self-restart simulation against this.
+export const ViewportAutoplayScrollLoopMutedYoutubeNoBoundary: Story = {
+  args: {
+    autoplay: 'muted',
+    scrollPage: true,
+    loop: true,
+    activationSource: 'youtube'
+  }
+};
+
 export const AutoplayAudible: Story = {
   args: { autoplay: 'audible' }
 };

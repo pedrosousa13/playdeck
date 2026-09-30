@@ -1729,6 +1729,45 @@ test("labels YouTube's own playlist-loop restart as the library, not the provide
   );
 });
 
+// #854: the `ended` YouTube fires on every iteration of that same platform
+// loop (#214's declared divergence from native -- suppressing the event
+// would change what a `loop` consumer already receives) is the one this
+// provider has no command of its own to attach a generation to, so it is
+// labelled straight off `boundary.ts`'s `loops`: with no start boundary,
+// reaching this ENDED at all already means the platform's own loop produced
+// it. The event itself still fires, unchanged -- only its origin is new.
+test("labels YouTube's own platform-driven wrap ended as the library, not the provider", async () => {
+  const { events, harness } = await readyAdapter('M7lc1UVf-VE', {
+    loop: true
+  });
+  harness.fireStateChange(playerStates.PLAYING);
+  events.length = 0;
+  harness.currentTime = 120;
+
+  harness.fireStateChange(playerStates.ENDED);
+
+  expect(events).toContainEqual(
+    expect.objectContaining({ type: 'ended', origin: 'system' })
+  );
+});
+
+// The one direction that must not move: a real end of media on a
+// non-looping player is still a real end, and still drops ownership --
+// `boundary.ts`'s `loops` is false, so `onProviderEnded`'s fallback
+// publishes `'provider'` exactly as it always has.
+test('a natural end on a non-looping player stays a provider ended', async () => {
+  const { events, harness } = await readyAdapter('M7lc1UVf-VE');
+  harness.fireStateChange(playerStates.PLAYING);
+  events.length = 0;
+  harness.currentTime = 120;
+
+  harness.fireStateChange(playerStates.ENDED);
+
+  expect(events).toContainEqual(
+    expect.objectContaining({ type: 'ended', origin: 'provider' })
+  );
+});
+
 // #854's other loop path: a non-zero start boundary makes `onProviderEnded`
 // call `restartFromBoundary` itself, whose own deferred `playVideo()` is what
 // the fix labels `'system'` (`boundary.ts`'s `consumeLoopRestart`, mirroring
