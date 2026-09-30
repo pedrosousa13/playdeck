@@ -139,22 +139,40 @@ jobs:
       # is the correct outcome: a publish that quietly did not happen looks
       # exactly like a publish that did.
       #
+      # `wranglerVersion` below has to agree with the `wrangler` devDependency
+      # in the root `package.json`, because of how the action installs the
+      # CLI: it probes for it first with `pnpm exec wrangler --version`, and
+      # falls back to a bare `pnpm add` when the probe's version doesn't match
+      # `wranglerVersion`. pnpm refuses that add at a workspace root without
+      # `-w`, a flag the action doesn't pass (`ERR_PNPM_ADDING_TO_ROOT`), so a
+      # mismatch fails the deploy outright rather than installing a different
+      # Wrangler. That is what happened in run 36710422767 (2026-09-30):
+      # Dependabot bumped the devDependency without being able to reach this
+      # file, the probe saw the new version, and the fallback install broke.
+      #
+      # Read here instead of written a second time, so the two can't drift
+      # again the same way -- whatever Dependabot leaves in `package.json` is
+      # what this step passes on. It fails loudly on a range (`^`, `~`)
+      # instead of forwarding one, since `wranglerVersion` wants one resolved
+      # version, not a range for the action to resolve itself.
+      - name: Read wrangler version from package.json
+        id: wrangler-version
+        run: |
+          version=$(node -p "require('./package.json').devDependencies.wrangler")
+          if [[ "$version" =~ ^[\^~] ]]; then
+            echo "wrangler devDependency must be pinned to an exact version, got '$version'" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       # `wranglerVersion` is pinned because the action's own version tag does
       # not reach it: the action installs the CLI at run time, so without a
       # version here a new Wrangler could change how this repository publishes
       # with no diff to review. The tool that does the publishing is the last
-      # thing that should float.
-      #
-      # It has to agree with the `wrangler` devDependency in the root
-      # `package.json`, and that is what makes this step work at all. The action
-      # probes for the CLI with `pnpm exec wrangler --version` and installs it
-      # with a bare `pnpm add` when the probe fails -- which pnpm refuses in a
-      # workspace root without `-w`, a flag the action does not pass
-      # (`ERR_PNPM_ADDING_TO_ROOT`). Declaring the dependency makes the probe
-      # succeed, so the install never runs. If the two versions drift, the probe
-      # fails again and the deploy goes back to failing on that refusal.
+      # thing that should float. It comes from the step above rather than a
+      # literal here -- see that step's comment for why.
       - uses: cloudflare/wrangler-action@v4.1.3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: '4.127.1'
+          wranglerVersion: ${{ steps.wrangler-version.outputs.version }}
