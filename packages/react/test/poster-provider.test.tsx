@@ -126,6 +126,9 @@ test('poster="provider" renders the resolved still as Player.Poster\'s default i
       'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg'
     )
   );
+  expect(posterImage()?.getAttribute('referrerpolicy')).toBe(
+    'strict-origin-when-cross-origin'
+  );
 });
 
 test('a literal poster URL populates the default image without any provider request', async () => {

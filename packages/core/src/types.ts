@@ -101,6 +101,10 @@ export type TextCue = {
   readonly id: string | null;
   readonly startTime: number;
   readonly endTime: number;
+  // Plain text: every provider publishes a cue through `plainCueText`
+  // (`@playdeck/core`) first, which strips WebVTT tag spans and decodes
+  // character references, so this never carries markup for a consumer or the
+  // default renderer to interpret.
   readonly text: string;
 };
 

@@ -355,7 +355,10 @@ export const WithThumbnails: Story = {
       { timeout: 2_000 }
     );
     const img = thumbnail.querySelector('img') as HTMLImageElement;
-    await expect(img).toHaveAttribute('src', assetUrl('thumbnails-sprite.svg'));
+    await expect(img).toHaveAttribute(
+      'src',
+      new URL(assetUrl('thumbnails-sprite.svg'), document.baseURI).href
+    );
     // The crop offset: `-x`/`-y` of tile 2's region (x=320, y=0).
     expect(img.style.left).toBe('-320px');
     expect(img.style.top).toBe('0px');
@@ -405,6 +408,22 @@ export const ThumbnailFollowsKeyboardFocus: Story = {
     fireEvent.focusOut(slider);
     await expect(thumbnail).toHaveAttribute('data-state', 'hidden');
   }
+};
+
+/**
+ * A nonzero `currentTime`, a buffered range and `thumbnails` together, so one
+ * fixture has a fill, a buffered range and a preview cue all measurable at
+ * once — what `e2e/seek-bar-rtl.spec.ts` compares between a `dir="rtl"` and a
+ * `dir="ltr"` ancestor. `currentTime: 3` is `thumbnails.vtt`'s 2-4s cue (tile
+ * 1, green, the same fixture value `ThumbnailFollowsKeyboardFocus` above
+ * uses); the buffered range covers the first 6 of the 10s window.
+ */
+export const WithBufferedAndThumbnails: Story = {
+  parameters: ready(
+    { seek: available },
+    { currentTime: 3, duration: 10, buffered: [{ start: 0, end: 6 }] }
+  ),
+  render: renderWithThumbnails
 };
 
 /**

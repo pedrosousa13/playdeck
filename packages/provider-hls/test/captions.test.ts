@@ -545,6 +545,28 @@ test('subscribeCues normalizes CUES_PARSED cues windowed to the current time, an
   expect(cueFrames.at(-1)).toEqual([]);
 });
 
+test('subscribeCues decodes WebVTT tags and character references in CUES_PARSED cues', async () => {
+  const { provider, media, hls } = await mountHlsEngineHls();
+  discoverHlsSubtitles(hls, [
+    { id: 0, name: 'English', lang: 'en', default: true, type: 'SUBTITLES' }
+  ]);
+  const cueFrames: Array<readonly unknown[]> = [];
+  provider.subscribeCues?.((cues) => cueFrames.push(cues));
+  const rawCue = {
+    id: 'cue-1',
+    startTime: 1,
+    endTime: 2,
+    text: '<v Bob><i>Look out</i> &amp; run'
+  };
+
+  media.currentTime = 1.5;
+  hls.emitCuesParsed([rawCue]);
+
+  expect(cueFrames.at(-1)).toEqual([
+    { id: 'cue-1', startTime: 1, endTime: 2, text: 'Look out & run' }
+  ]);
+});
+
 test('ignores CUES_PARSED cues once no text track is selected', async () => {
   const { provider, media, hls } = await mountHlsEngineHls();
   discoverHlsSubtitles(hls, [

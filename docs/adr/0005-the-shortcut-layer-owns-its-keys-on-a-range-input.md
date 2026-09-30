@@ -68,6 +68,30 @@ keystroke and not by its tag:
   focus is on one, which generalises a carve-out that used to cover Space alone.
   Each input type is named because a CSS `button` selector matches `<button>`
   and never an `<input>`.
+- **In `global` mode, an arrow-owning widget outside the player keeps its own
+  arrows.** A native radio or range input, or a target inside an element
+  carrying one of the WAI-ARIA APG composite-widget roles that navigate with
+  arrows — `radiogroup`, `tablist`, `slider`, `spinbutton`, `listbox`, `menu`,
+  `menubar`, `tree`, `treegrid`, `grid`, `toolbar` — keeps every arrow key for
+  itself once it sits outside the player's own boundary: `Player.Viewport`'s
+  DOM node where the region renders inside one, the region's own node
+  otherwise. Every other bound key still fires there; only the four arrow
+  keys are exempted, and only outside that boundary. Inside it the layer
+  still owns every arrow exactly as this decision states, this decision's own
+  range inputs included, whether or not the widget answering an arrow itself
+  sits inside `Controls` or elsewhere in the same player.
+- **In `global` mode, `PageUp`/`PageDown` belong to the player only inside
+  that same boundary.** Outside it the layer does not handle either key and
+  does not prevent its default, whatever is there — `<body>`, a plain
+  scrollable element, or a widget carrying one of the roles above — with no
+  ownership test standing between the target and the exemption the way there
+  is for arrows: native paging is the default the layer would otherwise be
+  overriding everywhere on the page. The rule is keyed on the two keys
+  themselves rather than on `seekBackwardLarge`/`seekForwardLarge`, so a
+  consumer who rebinds either key to a different action gets the same
+  in-region-only treatment for it. Inside the boundary the layer owns them
+  exactly as this decision states. Scoped mode is unaffected: it never
+  listens outside the region a keydown can reach.
 - **Everything else goes to the layer**, which acts and prevents the default.
 
 `range` is the one type on the non-text list and off the activation list, and

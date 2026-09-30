@@ -85,6 +85,15 @@ test('injects one API script per window and shares one promise', async () => {
   expect(document.querySelectorAll(scriptSelector)).toHaveLength(1);
 });
 
+test('sets a strict-origin-when-cross-origin referrer policy on the script it injects, before appending it', async () => {
+  const loadYouTubeIframeApi = await importLoader();
+
+  loadYouTubeIframeApi();
+
+  const script = document.querySelector<HTMLScriptElement>(scriptSelector);
+  expect(script?.referrerPolicy).toBe('strict-origin-when-cross-origin');
+});
+
 test('reuses an API script another consumer already injected', async () => {
   const existing = document.createElement('script');
   existing.src = 'https://www.youtube.com/iframe_api';

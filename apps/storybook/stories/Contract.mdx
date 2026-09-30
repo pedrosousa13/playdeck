@@ -49,9 +49,13 @@ Every primitive exposes a stable styling/testing contract via data attributes.
   rather than `0:00`, which reads as a zero-length video (#248). Nothing is
   substituted for it: a `LIVE` badge, an em dash or an elapsed-time fallback is
   a consumer's to compose off `[data-state='untimed']` in their own layout, or
-  to pass as `children`. `type="current"` is unaffected, because `currentTime`
-  means the same thing on a live source as on a VOD one; it keeps counting, and
-  it carries `data-state="untimed"` alongside on such a source.
+  to pass as `children`. `type="current"` changes on a live source too, but
+  not by emptying: it reports `live.offsetFromEdge` in place of elapsed time —
+  the word `LIVE` once playback is at the edge, and a negative offset while
+  behind it — so a `current` instance is always a `<time>`, never the `<span>`
+  below, and it still carries `data-state="untimed"` alongside, because that
+  attribute names the source rather than what the instance is showing. The
+  full account, including `liveLabel`, is in the **Live** guide.
   The element itself is a `<span>` in that state rather than a `<time>` — there
   is no time to mark up, and an emptied `<time>` would carry neither a
   `datetime` nor a parseable time. The swap is keyed on the source being

@@ -126,6 +126,7 @@ const GUIDE_SOURCES = [
   'apps/storybook/stories/Quality.mdx',
   'apps/storybook/stories/PlaybackRate.mdx',
   'apps/storybook/stories/Chapters.mdx',
+  'apps/storybook/stories/Live.mdx',
   'apps/storybook/stories/BehaviourPlugins.mdx',
   'apps/storybook/stories/Theme.mdx'
 ];

@@ -541,10 +541,35 @@ test('under docked, the bar’s top hairline is the stage’s own dark line in b
  * runs, always on this test and never elsewhere. Polling for two identical
  * reads in a row is what a settled box actually means; a fixed extra delay
  * would only have been a guess at how long that settling takes.
+ *
+ * That polling loop assumes the box it starts reading is already sized off
+ * the clip's own dimensions, which is not true on a slow WebKit run (#746):
+ * before metadata loads, a `<video>` reports the browser's own placeholder
+ * intrinsic size, 300x150, and two placeholder reads in a row are just as
+ * "stable" as two settled ones -- `Received: 2` against an expected ~2.39 is
+ * exactly that placeholder's ratio. The wait this function makes for
+ * `videoWidth` below, ahead of the loop, is what keeps a stable-but-wrong
+ * read like that one from ever reaching it.
  */
 const stableBoundingBox = async (
   locator: ReturnType<typeof media>
 ): Promise<{ x: number; y: number; width: number; height: number }> => {
+  // Only for a `<video>`: both of this helper's callers (`activateAndMeasure`,
+  // below) always land on `hls`, the switch's default position and the only
+  // one neither test in this file ever moves it away from
+  // (`bench-sources.ts`), which renders a real `<video>` rather than a
+  // provider iframe -- `youtube` and `vimeo` mount an iframe with no
+  // `videoWidth` of its own, so this checks the element's own type rather
+  // than assuming every caller measures the same kind of source.
+  await expect
+    .poll(
+      () =>
+        locator.evaluate(
+          (el) => !(el instanceof HTMLVideoElement) || el.videoWidth > 0
+        ),
+      { timeout: 5_000 }
+    )
+    .toBe(true);
   let previous: Awaited<ReturnType<typeof locator.boundingBox>> = null;
   await expect
     .poll(

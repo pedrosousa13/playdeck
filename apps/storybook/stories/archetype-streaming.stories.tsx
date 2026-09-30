@@ -40,6 +40,9 @@ const available: Availability = { status: 'available' };
  * the real clip cannot show: the native provider cannot switch renditions of a
  * progressive MP4, so against the Blender file the settings menu is correctly
  * absent altogether. Staging it here is how that menu is seen at all.
+ * `selectQualityAuto` is also staged available, modelling a provider whose
+ * Auto row is real (e.g. `@playdeck/provider-hls`); `QualityAutoUnavailable`
+ * below stages the split instead.
  *
  * `setPlaybackRate` is deliberately NOT staged. The archetype offers no rate
  * control — that is the course layout's — so dialing the capability on would
@@ -59,6 +62,7 @@ const watching: ProviderStatePatch = {
     seek: available,
     setVolume: available,
     selectQuality: available,
+    selectQualityAuto: available,
     selectTextTrack: available,
     fullscreen: available,
     pictureInPicture: available,
@@ -114,7 +118,7 @@ export const Composition: Story = {
       'Play',
       'Mute',
       'Disable captions',
-      'Settings',
+      'Quality',
       'Enter picture-in-picture',
       'AirPlay',
       'Enter fullscreen'
@@ -151,10 +155,8 @@ export const ViewingRatherThanStudying: Story = {
       canvas.queryByRole('group', { name: 'Playback speed' })
     ).toBeNull();
 
-    await userEvent.click(canvas.getByRole('button', { name: 'Settings' }));
-    await expect(
-      canvas.getByRole('group', { name: 'Quality' })
-    ).toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('button', { name: 'Quality' }));
+    await expect(canvas.getByRole('menu')).toBeInTheDocument();
     await expect(
       canvas.queryByRole('group', { name: 'Playback speed' })
     ).toBeNull();
@@ -188,7 +190,7 @@ export const CapabilitiesWithdrawn: Story = {
   },
   play: async ({ canvas }) => {
     for (const name of [
-      'Settings',
+      'Quality',
       'Enter picture-in-picture',
       'AirPlay',
       'Enter fullscreen'
@@ -203,6 +205,45 @@ export const CapabilitiesWithdrawn: Story = {
     await expect(
       canvas.getByRole('slider', { name: 'Seek' })
     ).toBeInTheDocument();
+  }
+};
+
+/**
+ * #554: the Auto row is gated on `selectQualityAuto` separately from
+ * `selectQuality`, because a provider can accept a rung while refusing
+ * `selectQuality(null)` (`@playdeck/provider-vimeo` is exactly that shape —
+ * see the comment on `PlayerCapabilities.selectQualityAuto`,
+ * `packages/core/src/types.ts`). This stages that split against the
+ * streaming archetype's own fixture and pins that Auto is absent while the
+ * real ladder still renders.
+ */
+export const QualityAutoUnavailable: Story = {
+  parameters: {
+    player: {
+      state: {
+        ...watching,
+        capabilities: {
+          ...createInitialPlayerState().capabilities,
+          seek: available,
+          setVolume: available,
+          selectQuality: available,
+          selectTextTrack: available,
+          fullscreen: available,
+          pictureInPicture: available,
+          airPlay: available,
+          selectQualityAuto: { status: 'unavailable', reason: 'provider' }
+        }
+      } satisfies ProviderStatePatch
+    }
+  },
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole('button', { name: 'Quality' }));
+    await expect(
+      canvas.getByRole('menuitemradio', { name: '1080p' })
+    ).toBeInTheDocument();
+    await expect(
+      canvas.queryByRole('menuitemradio', { name: /Auto/ })
+    ).toBeNull();
   }
 };
 

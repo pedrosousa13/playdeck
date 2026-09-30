@@ -23,7 +23,8 @@ import type {
 } from '../src/provider-loaders';
 import {
   detectSourceWithProviders,
-  loadProvider
+  loadProvider,
+  suppliedProviderRegistrationKeyFor
 } from '../src/provider-loaders';
 import type { RootProps } from '../src/root';
 
@@ -313,6 +314,21 @@ test('reports source types without an installed adapter', async () => {
 //   resolve an explicit object whose type is a reserved built-in name
 //   through the supplied path", "never lets a providers entry keyed by a
 //   built-in name intercept the built-in dispatch".
+// - The reserved-type check on the copy's own `kind` in the string branch,
+//   replaced with a bare `true` (the copy step and `everyStringPermitted`
+//   left in place), failed 1: "declines a detect return whose type names a
+//   reserved built-in kind, and continues to a later registration" -- the
+//   dishonest registration's own resolved source won outright and the
+//   later, honest registration was never reached.
+// - The copy step itself dropped from the string branch (`detected` checked
+//   and returned directly, the way `source` was before this fix), failed 2:
+//   "does not let a detect result's type getter answer safely for the
+//   reserved-name check and differently once loadProvider reads it again"
+//   -- `createHlsProvider` was called once, with the dishonest object, and
+//   the `acme` registration's own factory was never reached -- and
+//   "declines a detect return carrying a bigint field rather than
+//   resolving a source that would crash JSON.stringify" -- `result.status`
+//   was `'success'` rather than `'failure'`.
 // - `SuppliedSource` (below) collapsed to `never` for every key, dropping
 //   its derivation of a registration's own `Source`, made `pnpm typecheck`
 //   report TS2344 at "a supplied kind types its own source shape and its own
@@ -546,6 +562,177 @@ test('never calls detect for a registration keyed by a reserved built-in name', 
   expect(hlsDetect).not.toHaveBeenCalled();
   expect(youtubeDetect).not.toHaveBeenCalled();
   expect(result.status).toBe('failure');
+});
+
+// The other half of the same guarantee: a registration keyed honestly (not
+// one of the five names above) can still have its own `detect` claim a
+// built-in kind through the shape it returns, rather than through its key.
+// Treated exactly like a decline, so the loop keeps walking the remaining
+// registrations -- the same fall-through the forbidden-scheme test above
+// proves for a nested URL, applied here to the `type` field itself.
+test('declines a detect return whose type names a reserved built-in kind, and continues to a later registration', () => {
+  const dishonest = vi.fn(
+    () =>
+      ({
+        type: 'hls',
+        src: 'https://evil.test/injected.m3u8',
+        engine: 'bogus'
+      }) as const
+  );
+  const honest = vi.fn(() => ({ type: 'other', id: '1' }) as const);
+
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    acme: { detect: dishonest, load: vi.fn() },
+    other: { detect: honest, load: vi.fn() }
+  });
+
+  expect(dishonest).toHaveBeenCalledWith('https://example.com/media/1');
+  expect(honest).toHaveBeenCalledWith('https://example.com/media/1');
+  expect(result).toMatchObject({
+    status: 'success',
+    source: { type: 'other', id: '1' }
+  });
+});
+
+// The bypass the fix above closes: `source` used to be the caller's own
+// live `detect` return, read once by `everyStringPermitted`'s enumeration
+// and once by the reserved-type check, then handed on unchanged. A `type`
+// getter that answers safely for exactly those two reads and a built-in
+// kind's own name on every read after slips both checks and is still live
+// when `loadProvider` reads `.type` again to dispatch -- proven end to end
+// below, through the same `createHlsProvider` mock the dispatch tests above
+// use.
+//
+// Demonstrated red, run with
+// `pnpm vitest run packages/react/test/provider-loaders.test.ts -t "does
+// not let a detect result's type getter"` against the commit that added
+// the reserved-type check but read `source.type` directly rather than
+// through a copy: `createHlsProvider` was called once, with `[<video />,
+// { type: 'hls', src: 'https://evil.test/injected.m3u8', engine: 'bogus'
+// }, {}]`, and the `acme` registration's own factory was never reached.
+test("does not let a detect result's type getter answer safely for the reserved-name check and differently once loadProvider reads it again", async () => {
+  const { createHlsProvider } = await import('@playdeck/provider-hls');
+  // Shared with every other test in this file through the module-level
+  // `vi.mock` above -- cleared here so an earlier test's own calls cannot
+  // hide a real call this one makes.
+  vi.mocked(createHlsProvider).mockClear();
+  const media = document.createElement('video');
+  let reads = 0;
+  const dishonest = vi.fn(() => ({
+    get type() {
+      reads += 1;
+      return reads <= 2 ? 'acme' : 'hls';
+    },
+    src: 'https://evil.test/injected.m3u8',
+    engine: 'bogus'
+  }));
+  const adapter = { provider: 'acme' } as unknown as ProviderAdapter;
+  const factory = vi.fn(() => adapter);
+  const acme = {
+    detect: dishonest,
+    load: vi.fn(() => Promise.resolve(factory))
+  };
+
+  const detected = detectSourceWithProviders('https://example.com/media/1', {
+    acme
+  });
+  if (detected.status !== 'success') {
+    throw new Error(`expected success, got ${detected.status}`);
+  }
+
+  await loadProvider({
+    media,
+    nativeOptions: {},
+    providers: { acme },
+    source: detected.source
+  });
+
+  expect(createHlsProvider).not.toHaveBeenCalled();
+  expect(factory).toHaveBeenCalledWith(media, detected.source, undefined);
+});
+
+// #808's second half ("copy detect results"), satisfied here alongside
+// #800: the copy step above refuses any shape it cannot fully account for,
+// a `bigint` field included, the same way `copySuppliedSourceObject`
+// already refuses one on the explicit-object path. Before this, a `detect`
+// return carrying one resolved successfully and would have gone on to
+// crash `sourceKey`'s `JSON.stringify` (`use-activation.ts`) the first time
+// render reached it, rather than being declined here where the source it
+// came from is still known.
+//
+// Demonstrated red, run with the same command against main (591b836,
+// before this fix, `packages/react/src/provider-loaders.ts` swapped back
+// to that commit's copy): `result.status` was `'success'` rather than
+// `'failure'`, and `JSON.stringify(result.source)` -- what
+// `use-activation.ts`'s `sourceKey` would have done next -- throws
+// `TypeError: Do not know how to serialize a BigInt` for exactly this
+// shape, confirmed separately with `node -e`.
+test('declines a detect return carrying a bigint field rather than resolving a source that would crash JSON.stringify', () => {
+  const detect = vi.fn(
+    () => ({ type: 'acme', big: 10n }) as unknown as { type: string }
+  );
+
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    acme: { detect, load: vi.fn() }
+  });
+
+  expect(result.status).toBe('failure');
+});
+
+// Naming a supplied provider by its registration key in a load-failure
+// message: a `detect` that returns a truthy value with no `type` still
+// resolves here --
+// the checks above gate the reserved-name list and the shared URL allowlist,
+// neither of which requires `type` to be present -- so `loadProvider`'s own
+// dispatch (`ownEntry(providers, source.type)`) finds nothing to route to
+// and rejects, and `PROVIDER_LABELS[type]` (`use-activation.ts`) has only
+// `undefined` to read. `suppliedProviderRegistrationKeyFor` is what still
+// knows which registration's own `detect` produced the object, recorded
+// against this exact resolved source at the one place that still has that
+// information.
+//
+// Demonstrated red: `suppliedProviderRegistrationKeyFor` does not exist on
+// main at all -- run against `provider-loaders.ts` reverted to main,
+// `TypeError: suppliedProviderRegistrationKeyFor is not a function` at this
+// test's own call to it.
+test('records which registration a detect result carrying no type came from', () => {
+  const detect = vi.fn(() => ({ videoId: '1' }) as unknown as { type: string });
+
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    acme: { detect, load: vi.fn() }
+  });
+
+  expect(result.status).toBe('success');
+  expect(
+    result.status === 'success'
+      ? suppliedProviderRegistrationKeyFor(result.source)
+      : undefined
+  ).toBe('acme');
+});
+
+// The common, well-behaved case needs no record at all: `type` is already a
+// usable string, and it already routes to this exact registration
+// (`ownEntry(providers, kind)`, the same lookup `loadProvider` itself makes)
+// -- so `type` already is the registration's own key by the time this
+// returns. Nothing here tags the copy, which is what keeps the tagging
+// mechanism itself minimal -- added only where `type` genuinely carries
+// nothing to route or label by.
+//
+// Demonstrated red for the same reason the test above is red: run against
+// `provider-loaders.ts` reverted to main, `TypeError:
+// suppliedProviderRegistrationKeyFor is not a function` at this test's own
+// call to it -- the function this test calls does not exist there either.
+test('does not record a registration key for a detect result whose type already resolved', () => {
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    acme: { detect: () => ({ type: 'acme', videoId: '1' }), load: vi.fn() }
+  });
+
+  expect(result.status).toBe('success');
+  expect(
+    result.status === 'success'
+      ? suppliedProviderRegistrationKeyFor(result.source)
+      : undefined
+  ).toBeUndefined();
 });
 
 test('behaves exactly like detectSource when no providers are supplied', () => {
@@ -1097,6 +1284,112 @@ test('declines a diamond chain 24 levels deep with two references per level, pro
   expect(result!.status).toBe('failure');
 }, 2000);
 
+// A key literally named `__proto__` is a real own key on the input when it
+// comes from `JSON.parse`, as this test builds it. A copy built with a bare
+// `copied[key] = value` runs that assignment through `Object.prototype`'s
+// own `__proto__` setter instead of storing it, replacing `copied`'s own
+// prototype with the value rather than adding a field.
+// `copySuppliedSourceValue`'s `Object.defineProperty` call calls
+// `[[DefineOwnProperty]]` directly and never consults an inherited accessor,
+// so `__proto__` is stored as an ordinary own data property, and the copy's
+// own prototype stays `Object.prototype`.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): with the
+// `defineProperty` call reverted to `copied[key] = keyResult.value`,
+// `Object.keys(config)` was `[]`, `Object.getPrototypeOf(config)` was the
+// `{secret: 'payload'}` object rather than `Object.prototype`, and
+// `JSON.stringify(config)` was `'{}'`, run with `pnpm vitest run
+// packages/react/test/provider-loaders.test.ts -t "own literal __proto__
+// key rather than replacing"`.
+test("a copied field carries an own literal __proto__ key rather than replacing the copy's own prototype", () => {
+  const input = JSON.parse(
+    '{"type":"acme","videoId":"1","config":{"__proto__":{"secret":"payload"}}}'
+  ) as Record<string, unknown>;
+
+  const result = detectSourceWithProviders(input, {
+    acme: { detect: vi.fn(), load: vi.fn() }
+  });
+  expect(result.status).toBe('success');
+  if (result.status !== 'success') throw new Error('expected a success');
+
+  const config = (result.source as unknown as { config: object }).config;
+  expect(Object.keys(config)).toEqual(['__proto__']);
+  expect(Object.getPrototypeOf(config)).toBe(Object.prototype);
+  expect(JSON.stringify(config)).toBe('{"__proto__":{"secret":"payload"}}');
+});
+
+// A caller building `source` from `JSON.parse` of external data can hand in
+// a whole object keyed by a literal `__proto__`, whose own value carries
+// `type` and the other fields. A copy built with a bare `copied[key] =
+// value` leaves `copy.type` reading `'acme'` through the prototype chain the
+// corrupted copy acquires -- the copy carries no own `type` key, but nothing
+// stands between it and a `type` field the value itself supplied -- so
+// `detectSourceWithProviders` would resolve this as an ordinary `acme`
+// source with zero own keys, a type spoofed entirely through a prototype no
+// field of the input actually declared. `copySuppliedSourceValue`'s
+// `defineProperty` copy stores no top-level `type` here at all -- the
+// input's only own key is `__proto__`, and that is where `type` is copied to
+// as well -- so this is refused for naming no genuine `type` field, the same
+// as any other object that never declared one.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): with the copy's object
+// branch reverted to `copied[key] = keyResult.value`, this resolved `status:
+// 'success'`, with `Object.keys(result.source)` empty and `(result.source as
+// Record<string, unknown>).type === 'acme'`, run with the same command as
+// above with `-t "does not resolve a source object whose only key is a
+// literal __proto__"`.
+test('does not resolve a source object whose only key is a literal __proto__ by reading type through a hijacked prototype', () => {
+  const input = JSON.parse(
+    '{"__proto__":{"type":"acme","src":"https://ok.test/a.mp4"}}'
+  ) as Record<string, unknown>;
+
+  const result = detectSourceWithProviders(input, {
+    acme: { detect: vi.fn(), load: vi.fn() }
+  });
+  expect(result.status).toBe('failure');
+});
+
+// Guard: `isPermittedSourceUrl` runs on each string during the copy, inside
+// the recursive call that produces `keyResult` -- ahead of the assignment
+// line this fix touches (`copySuppliedSourceValue`'s own doc comment). A
+// `javascript:` scheme nested under a literal `__proto__` key is refused
+// either side of the `defineProperty` change: that change only decides how
+// an *admitted* value is stored, never which values are admitted. Confirmed
+// directly: this test also passes unmodified against `provider-loaders.ts`
+// with the `defineProperty` call reverted to `copied[key] =
+// keyResult.value`.
+test('refuses a javascript: URL nested under a literal __proto__ key, the same as a normally keyed one', () => {
+  const input = JSON.parse(
+    '{"type":"acme","videoId":"1","config":{"__proto__":"javascript:alert(1)"}}'
+  ) as Record<string, unknown>;
+
+  const result = detectSourceWithProviders(input, {
+    acme: { detect: vi.fn(), load: vi.fn() }
+  });
+  expect(result.status).toBe('failure');
+});
+
+// Guard: a supplied source with no `__proto__` key anywhere copies to the
+// same own keys, prototype and serialisation either side of the
+// `defineProperty` change -- `copied[key] = value` and
+// `Object.defineProperty(copied, key, {...})` store an ordinary key
+// identically. Confirmed directly: this test also passes unmodified against
+// `provider-loaders.ts` with the `defineProperty` call reverted to
+// `copied[key] = keyResult.value`.
+test('copies an ordinary source object with no __proto__ key to a plain object with matching own keys and serialisation', () => {
+  const input = { type: 'acme', videoId: '1', config: { secret: 'payload' } };
+
+  const result = detectSourceWithProviders(input, {
+    acme: { detect: vi.fn(), load: vi.fn() }
+  });
+  expect(result.status).toBe('success');
+  if (result.status !== 'success') throw new Error('expected a success');
+
+  expect(Object.keys(result.source)).toEqual(['type', 'videoId', 'config']);
+  expect(Object.getPrototypeOf(result.source)).toBe(Object.prototype);
+  expect(JSON.stringify(result.source)).toBe(JSON.stringify(input));
+});
+
 test('dispatches a supplied kind to its own registration, with the mount, source and its own option bag', async () => {
   const adapter = { provider: 'native' } as unknown as ProviderAdapter;
   const factory = vi.fn(async () => adapter);
@@ -1273,6 +1566,111 @@ test('omits a refused option without throwing when no reportRefusedUrl is suppli
   ).resolves.toBe(adapter);
 
   expect(factory).toHaveBeenCalledWith(media, source, {});
+});
+
+// Traced first: `sanitizeSuppliedProviderOptions`'s only type check is the
+// `typeof value === 'string'` branch above -- a non-string `value` (an
+// object, for one) never reaches it and falls straight through to the write
+// below. `PrimitiveOptionBag` (above) guards this only at compile time; a
+// caller building `providerOptions` from `JSON.parse` of external data
+// reaches this loop with whatever `JSON.parse` produced, the same threat
+// model as an explicit `source` object (`copySuppliedSourceValue`'s own doc
+// comment). A key literally named `__proto__` is a real own key on such
+// input, so an object-valued `__proto__` field reaches the write unfiltered
+// -- this is not a guard.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): with the write
+// reverted to `sanitized[key] = value`, `factory` was called with an options
+// object with zero own keys whose own prototype was `{ polluted: true }` --
+// `Object.keys(options)` was `[]` and `options.polluted` read `true` through
+// the hijacked prototype -- run with `pnpm vitest run
+// packages/react/test/provider-loaders.test.ts -t "an object-valued literal
+// __proto__ key"`.
+test("stores an object-valued literal __proto__ key in a supplied kind's own providerOptions bag as an own key, never as the bag's prototype", async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(
+    async (
+      mount: unknown,
+      source: unknown,
+      options?: Record<string, unknown>
+    ) => {
+      void mount;
+      void source;
+      void options;
+      return adapter;
+    }
+  );
+  const load = vi.fn(async () => factory);
+  const media = document.createElement('div');
+  const source: AcmeSource = { type: 'acme', videoId: '1' };
+  const bag = JSON.parse('{"__proto__":{"polluted":true}}');
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providerOptions: { acme: bag } as never,
+      providers: { acme: { detect: vi.fn(), load } },
+      source
+    })
+  ).resolves.toBe(adapter);
+
+  expect(factory).toHaveBeenCalledOnce();
+  const options = factory.mock.calls[0]![2] as Record<string, unknown>;
+  expect(Object.keys(options)).toEqual(['__proto__']);
+  expect(Object.getPrototypeOf(options)).toBe(Object.prototype);
+  expect(options.polluted).toBeUndefined();
+  expect(options['__proto__']).toEqual({ polluted: true });
+});
+
+// Traced the same way: for a `value` that is a string but names no URL
+// scheme, `isPermittedSourceUrl` permits it and the value reaches the same
+// write. `Object.prototype`'s own `__proto__` setter is a no-op for a value
+// that is neither an object nor `null` -- its own algorithm returns before
+// ever reaching `[[SetPrototypeOf]]` -- so `sanitized[key] = value` neither
+// stores the field nor reports it refused: the field simply vanishes, with
+// no signal either way.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): with the write
+// reverted to `sanitized[key] = value`, `factory` was called with `{
+// quality: 'hd' }` -- the `__proto__` field vanished entirely, dropped
+// rather than stored or refused -- run with the same command as above with
+// `-t "a primitive-valued literal __proto__ key"`.
+test("stores a primitive-valued literal __proto__ key in a supplied kind's own providerOptions bag as an own key, the same as any other key", async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(
+    async (
+      mount: unknown,
+      source: unknown,
+      options?: Record<string, unknown>
+    ) => {
+      void mount;
+      void source;
+      void options;
+      return adapter;
+    }
+  );
+  const load = vi.fn(async () => factory);
+  const media = document.createElement('div');
+  const source: AcmeSource = { type: 'acme', videoId: '1' };
+  const bag = JSON.parse('{"quality":"hd","__proto__":"loud"}');
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providerOptions: { acme: bag } as never,
+      providers: { acme: { detect: vi.fn(), load } },
+      source
+    })
+  ).resolves.toBe(adapter);
+
+  expect(factory).toHaveBeenCalledOnce();
+  const options = factory.mock.calls[0]![2] as Record<string, unknown>;
+  expect(Object.keys(options)).toEqual(['quality', '__proto__']);
+  expect(options.quality).toBe('hd');
+  expect(options['__proto__']).toBe('loud');
+  expect(Object.getPrototypeOf(options)).toBe(Object.prototype);
 });
 
 test('reports a supplied kind with no matching registration the same way as an unrecognised type', async () => {

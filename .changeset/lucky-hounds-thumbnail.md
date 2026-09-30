@@ -17,12 +17,16 @@ WebVTT file. The file is fetched once, lazily, on the first hover or the
 first keyboard focus of the input — never at mount — and, once loaded, a
 `thumbnail` part renders the cue image cropped to its region, positioned
 above the pointer or the current keyboard-focus position and clamped to stay
-inside the slider's own box. Without the prop, nothing extra renders. Every
-image URL — the WebVTT file's own and each cue's — passes through the same
-allowlist every other URL prop in the player does, and a refused one
-publishes the existing refusal notice. The feature is provider-agnostic: it
-derives entirely from the supplied WebVTT/sprite pair, never from provider
-internals, so it works the same way under every provider.
+inside the slider's own box. Without the prop, nothing extra renders. A
+relative cue image URL — the ordinary output of a sprite generator —
+resolves against the fetched VTT file's own final address, not the page's,
+through `parseThumbnailCues`'s `baseUrl` argument, before it ever reaches
+the allowlist. Every image URL — the WebVTT file's own and each cue's —
+passes through the same allowlist every other URL prop in the player does,
+and a refused one publishes the existing refusal notice. The feature is
+provider-agnostic: it derives entirely from the supplied WebVTT/sprite pair,
+never from provider internals, so it works the same way under every
+provider.
 
 No `PlayerCapabilities` change and no provider package changes: the feature
 needs no per-provider support to gate.

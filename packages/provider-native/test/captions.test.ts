@@ -486,6 +486,33 @@ test('cuechange with an empty, whitespace-only, or missing cue text normalizes t
   ]);
 });
 
+test('cuechange with WebVTT tags and character references decodes to plain text', async () => {
+  const { provider, tracks } = mountNative([
+    { kind: 'captions', label: 'English', language: 'en', id: 't1' }
+  ]);
+  await provider.attach();
+  await provider.selectTextTrack?.('t1');
+  const cueFrames: Array<readonly unknown[]> = [];
+  provider.subscribeCues?.((cues) => cueFrames.push(cues));
+  const track = tracks[0];
+
+  if (track) {
+    track.activeCues = [
+      {
+        id: 'cue-1',
+        startTime: 0,
+        endTime: 1,
+        text: '<v Bob><i>Look out</i> &amp; run'
+      }
+    ];
+  }
+  track?.dispatch('cuechange');
+
+  expect(cueFrames).toEqual([
+    [{ id: 'cue-1', startTime: 0, endTime: 1, text: 'Look out & run' }]
+  ]);
+});
+
 // --- subscriber isolation (#233) ---
 
 // The cue channel is its own listener set, fanned out the same way the state
