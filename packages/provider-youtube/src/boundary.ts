@@ -100,14 +100,14 @@ export type YouTubeBoundary = {
   // own deferred `playVideo()` call (a non-zero start boundary, or an
   // `endTime` wrap) sets a generation right before calling it, read back
   // here against the live `resumeGeneration` the same way
-  // `provider-native`'s `restartingGeneration` reads back its own
-  // `replayGeneration` (`provider-native/src/playback.ts:435-439`). A loop
-  // with no start boundary restarts through neither: YouTube's own playlist
-  // loop (`attachment.ts`'s `loop`/`playlist` vars) replays it without this
-  // seam ever calling `playVideo`, so that shape is read off the ended latch
-  // itself instead -- `loop` and `boundaryEnded` both true means the last
-  // state change this seam reported was the platform's own end of a looping
-  // player, and nothing but that platform's own loop can have produced the
+  // `provider-native`'s `onPlay` handler reads its own `restartingGeneration`
+  // back against its own `replayGeneration`. A loop with no start boundary
+  // restarts through neither: YouTube's own playlist loop (`attachment.ts`'s
+  // `loop`/`playlist` vars) replays it without this seam ever calling
+  // `playVideo`, so that shape is read off the ended latch itself instead --
+  // `loop` and `boundaryEnded` both true means the last state change this
+  // seam reported was the platform's own end of a looping player, and
+  // nothing but that platform's own loop can have produced the
   // PLAYING now arriving. False for every other PLAYING, including a resume
   // after the media's natural end with `loop` unset, where `boundaryEnded`
   // is set for an unrelated reason (`onProviderEnded`).

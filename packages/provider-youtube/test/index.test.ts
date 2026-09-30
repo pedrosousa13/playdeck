@@ -1707,12 +1707,13 @@ test('loop with an end boundary restarts instead of ending', async () => {
 // #854: a loop restart is the library continuing playback it started, not the
 // viewer taking over (the same ruling #673 already applied to provider-native
 // and Vimeo). With no start boundary, YouTube's own single-video-playlist
-// loop (`loop`/`playlist` player vars, `attachment.ts:237-242`) restarts
-// itself -- `onProviderEnded` never calls `restartFromBoundary` for it, since
-// an unset start boundary is already where the platform's own loop lands
-// (`boundary.ts`'s `restartsAtStart`) -- so the ENDED-to-PLAYING transition
-// that follows carries no command of this adapter's own at all, and the fix
-// has to read it off the ended latch itself (`consumeLoopRestart`).
+// loop (the `loop`/`playlist` player vars `attachment.ts`'s `youTubeEmbedUrl`
+// call sets) restarts itself -- `onProviderEnded` never calls
+// `restartFromBoundary` for it, since an unset start boundary is already
+// where the platform's own loop lands (`boundary.ts`'s `restartsAtStart`) --
+// so the ENDED-to-PLAYING transition that follows carries no command of this
+// adapter's own at all, and the fix has to read it off the ended latch
+// itself (`consumeLoopRestart`).
 test("labels YouTube's own playlist-loop restart as the library, not the provider", async () => {
   const { events, harness } = await readyAdapter('M7lc1UVf-VE', {
     loop: true
