@@ -355,7 +355,27 @@ export const ErrorDisplay = ({
   );
 };
 
+// A `var()` read rather than the literal `44` it used to be (#622): an inline
+// style beats any stylesheet, so a fixed number here would have made
+// `theme.css`'s and `docked.css`'s own "below 48rem" queries dead CSS the
+// moment either tried to shrink the control row for one row of phone-width
+// buttons.
+//
+// The token read is `--playdeck-control-min-size`, not `--playdeck-control-size`
+// itself: the two files' target-size class rule and this inline floor used to
+// read the same token (`--playdeck-control-size`), which quietly turned
+// Theme.mdx's documented contract -- "a smaller value is clamped up rather
+// than obeyed" -- into no floor at all, since a bare `--playdeck-control-size`
+// override on any ancestor moved both the size and its own floor together
+// (`stories/theme.stories.tsx`'s `ControlSizeFloorHolds` measured that
+// directly: 36px, not the locked 44px). A dedicated token keeps the floor
+// independent of the size a consumer themes: it falls back to the desktop
+// 44px lock for a bare consumer, and neither shipped stylesheet's own
+// "below 48rem" query moves it any lower (#736 -- both used to, which was a
+// WCAG 2.2 SC 2.5.5 defect; that query still shrinks `--playdeck-control-size`
+// alone, and `min-width`/`min-height` win over a smaller `width`/`height`
+// regardless of which rule set which, so the locked value still applies).
 export const controlTargetStyle: CSSProperties = {
-  minWidth: 44,
-  minHeight: 44
+  minWidth: 'var(--playdeck-control-min-size, 2.75rem)',
+  minHeight: 'var(--playdeck-control-min-size, 2.75rem)'
 };

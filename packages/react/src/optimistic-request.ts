@@ -123,21 +123,28 @@ export const createCommandChain = <Value>({
   // same tick, before React has re-rendered, so every one of them would still
   // read a rendered flag as false and issue its own command.
   let inFlight = false;
-  let pending: Value | null = null;
+  // Tagged with the generation live at the moment it was queued, not the one
+  // the running loop started under: a value queued for the media that was
+  // just invalidated and a value queued for whatever replaced it both pass
+  // through the same `pending` slot, and only the tag tells them apart. The
+  // loop below reads its tag against the *current* generation when it is
+  // ready for it, which is what lets a value queued after `invalidate()`
+  // still be delivered once the command ahead of it drains, while one queued
+  // before it is dropped.
+  let pending: { readonly value: Value; readonly generation: number } | null =
+    null;
   // A chain is aimed at whatever media was loaded when it started, so
-  // invalidation is a generation and not a flag: the running loop compares the
-  // generation it started under, and a value queued for media that has gone is
-  // dropped rather than sent to whatever is loaded now.
+  // invalidation is a generation and not a flag: a value queued for media
+  // that has gone is dropped rather than sent to whatever is loaded now.
   let generation = 0;
 
   return {
     send: (value) => {
       if (inFlight) {
-        pending = value;
+        pending = { value, generation };
         return;
       }
       inFlight = true;
-      const chain = generation;
       void (async () => {
         let next: Value | null = value;
         let ok = true;
@@ -145,7 +152,10 @@ export const createCommandChain = <Value>({
           // A command that never settles at all is counted as failed rather
           // than left holding the chain open.
           ok = await answeredInTime(command(next));
-          next = generation === chain ? pending : null;
+          next =
+            pending !== null && pending.generation === generation
+              ? pending.value
+              : null;
           pending = null;
         }
         inFlight = false;

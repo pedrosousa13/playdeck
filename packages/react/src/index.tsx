@@ -46,10 +46,17 @@ export {
 export type { PlayerActions, PlayerHandle } from './player-context.js';
 
 export type {
+  ConsumerProviders,
   PlayerLoadingStrategy,
   PlayerMediaMount,
   PlayerPreload,
-  PlayerProviderOptions
+  PlayerProviderOptions,
+  PlayerProviders,
+  ProviderAdapterFactory,
+  ProviderRegistration,
+  SuppliedProviderOptions,
+  SuppliedProviderSource,
+  SuppliedSource
 } from './use-activation.js';
 
 // The bag `PlayerProviderOptions.wistia` holds, so a caller can name the type
@@ -103,6 +110,26 @@ export type {
   SettingsMenuTriggerProps
 } from './settings-menu.js';
 
+export { QualityMenu } from './quality.js';
+
+export type { QualityMenuProps } from './quality.js';
+
+export { PlaybackRateMenu } from './playback-rate.js';
+
+export type { PlaybackRateMenuProps } from './playback-rate.js';
+
+export { ChaptersMenu } from './chapters.js';
+
+export type { ChaptersMenuProps } from './chapters.js';
+
+export { AudioTrackMenu } from './audio-tracks.js';
+
+export type { AudioTrackMenuProps } from './audio-tracks.js';
+
+export { LiveIndicator } from './live-indicator.js';
+
+export type { LiveIndicatorProps } from './live-indicator.js';
+
 export {
   MuteButton,
   PlayButton,
@@ -122,13 +149,15 @@ export type {
 export {
   AirPlayButton,
   FullscreenButton,
-  PipButton
+  PipButton,
+  RemotePlaybackButton
 } from './display-controls.js';
 
 export type {
   AirPlayButtonProps,
   FullscreenButtonProps,
-  PipButtonProps
+  PipButtonProps,
+  RemotePlaybackButtonProps
 } from './display-controls.js';
 
 export { Controls } from './controls.js';

@@ -3,6 +3,7 @@ import type {
   CommandResult,
   PlayerError,
   PlayerEventDetailMap,
+  PlayerEventOrigin,
   PlayerEventType,
   ProviderEvent,
   ProviderEventFor,
@@ -12,19 +13,33 @@ import type {
 
 // Publishes a provider-state patch to every subscriber, optionally paired
 // with the provider event that caused it. Every seam takes this as its sink.
+//
+// Returns a disposer when the patch carries a `configuration` notice: calling
+// it withdraws that notice from the controller's error slot, the way
+// `PlayerController.reportRefusedUrl`'s own disposer withdraws a refused URL
+// report (`@playdeck/core`'s `ProviderStateListener`). `undefined` for every
+// other patch — there is nothing to withdraw. A seam that decides a notice
+// per load, rather than once per attach, holds the disposer and calls it once
+// a later decision no longer needs the notice it published; `playback.ts`'s
+// `startTime` is the one seam in this package that does (#475).
 export type EmitProviderState = (
   patch: ProviderStatePatch,
   event?: ProviderEvent
-) => void;
+) => (() => void) | undefined;
 
+// `origin` defaults to `'provider'`, what every raw DOM media event is: the
+// element, not a Playdeck command, produced it. `restartFromBoundary` in
+// `playback.ts` is the one caller that passes `'system'` instead, for the one
+// event it raises itself rather than the element -- see the comment there.
 export const providerEvent = <Type extends PlayerEventType>(
   type: Type,
   originalEvent: Event,
-  detail: PlayerEventDetailMap[Type]
+  detail: PlayerEventDetailMap[Type],
+  origin: PlayerEventOrigin = 'provider'
 ): ProviderEventFor<Type> => ({
   type,
   detail,
-  origin: 'provider',
+  origin,
   originalEvent
 });
 
@@ -40,6 +55,14 @@ export const policyDisallowed: Availability = {
 export const notReady: Availability = {
   status: 'unknown',
   reason: 'not-ready'
+};
+
+// A file has no poster of its own -- there is nothing to ask for one and
+// nothing that could later resolve, so this is a verdict rather than an
+// `unknown` (#556).
+export const sourceHasNoPoster: Availability = {
+  status: 'unavailable',
+  reason: 'source'
 };
 
 // HTMLMediaElement.HAVE_METADATA, inlined because some DOM test environments

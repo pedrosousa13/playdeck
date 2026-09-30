@@ -1,7 +1,8 @@
 import * as Player from '@playdeck/react';
 
 // The overlay layers, in the order they stack inside a Viewport. Each renders
-// only when its own state says it should: no disabled-looking placeholders.
+// only when its own state says it should: no disabled-looking placeholders,
+// with one exception noted below.
 export const Overlays = () => (
   <Player.Viewport>
     <Player.Poster>
@@ -12,6 +13,12 @@ export const Overlays = () => (
     <Player.ActivationButton aria-label="Play" />
     <Player.LoadingIndicator />
     <Player.Captions />
+    {/* Renders only on a live source -- nothing while `state.live` is null.
+        The one exception to "no disabled-looking placeholders" above: where
+        the provider cannot seek to the live edge it stays mounted as a
+        disabled badge, because being live is true whether or not that
+        command exists. Where the provider can, it is an active button. */}
+    <Player.LiveIndicator />
     <Player.Gestures
       seekOffset={10}
       onSeek={(direction, offset) => console.log(direction, offset)}

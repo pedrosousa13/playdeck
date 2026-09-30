@@ -1,17 +1,28 @@
 import type {
+  Availability,
   PlayerCapabilities,
   ProviderAdapter,
   ProviderEvent,
-  ProviderStateListener
+  ProviderStatePatch
 } from '@playdeck/core';
-import { notifySafely } from '@playdeck/core';
+import { deriveLiveState } from '@playdeck/core';
 import { createNativeAttachment } from './attachment.js';
-import { available } from './adapter-values.js';
+import {
+  available,
+  sourceHasNoPoster,
+  toRanges,
+  type EmitProviderState
+} from './adapter-values.js';
+import {
+  createNativeAudioTracks,
+  type NativeAudioTracks
+} from './audio-tracks.js';
 import {
   createNativePlayback,
   type NativePlaybackOptions
 } from './playback.js';
 import { createNativePresentation } from './presentation.js';
+import { createNativeRemotePlayback } from './remote-playback.js';
 import {
   createNativeTextTracks,
   type NativeTextTracks
@@ -24,6 +35,7 @@ type NativeCommand =
   | 'pause'
   | 'seekTo'
   | 'seekBy'
+  | 'seekToLiveEdge'
   | 'mute'
   | 'unmute'
   | 'setVolume'
@@ -33,6 +45,7 @@ type NativeCommand =
   | 'requestPictureInPicture'
   | 'exitPictureInPicture'
   | 'showAirPlayPicker'
+  | 'showRemotePlaybackPicker'
   | 'retry';
 
 export type NativeProviderAdapter = ProviderAdapter &
@@ -40,17 +53,54 @@ export type NativeProviderAdapter = ProviderAdapter &
     readonly provider: 'native';
   };
 
+// What this module actually stores a subscriber under: `ProviderStateListener`
+// widened to admit the real return value `playback.ts`'s `startTime` seam
+// needs back — the disposer a notice-carrying patch's listener hands back to
+// withdraw it later (`EmitProviderState`, #475). Local to this module and
+// never exported: `ProviderAdapter.subscribe` still takes and returns exactly
+// `ProviderStateListener` at the public boundary, so nothing outside this file
+// has to know the stored type is wider. A `ProviderStateListener` — declared
+// `void` — is assignable here without a cast, because TypeScript's "a
+// void-returning function's actual return value is ignored" leniency runs the
+// other way too: a function typed to return `void` may be passed wherever a
+// wider return is expected, since `void` itself is a member of the wider
+// union. That is what lets `emit` below read a real `PlayerController`
+// subscription's disposer back out with no cast of its own, unlike widening
+// `ProviderStateListener` itself, which is declared `void` for the reason its
+// own comment in `@playdeck/core` gives.
+type NativeStateListener = (
+  patch: ProviderStatePatch,
+  event?: ProviderEvent
+) => void | (() => void);
+
 export const createNativeProvider = (
   media: HTMLVideoElement,
   options: NativePlaybackOptions = {}
 ): NativeProviderAdapter => {
-  const listeners = new Set<ProviderStateListener>();
+  const listeners = new Set<NativeStateListener>();
 
-  const emit = (
-    patch: Parameters<ProviderStateListener>[0],
-    event?: ProviderEvent
-  ): void =>
-    listeners.forEach((listener) => notifySafely(listener, patch, event));
+  // Not `notifySafely`: that helper's signature forces a listener's return to
+  // `void`, which is exactly the value `playback.ts`'s `startTime` seam needs
+  // back. Which listener's disposer this returns when more than one is
+  // subscribed is unspecified — the last one to run wins, here as it does for
+  // `notifySafely`'s own fan-out — because `subscribe` is public API and
+  // nothing about this module limits it to one subscriber. The `try`/`catch`
+  // below is `notifySafely`'s own safety, kept so one listener throwing
+  // cannot stop a later one from being notified or drop its own disposer.
+  const emit: EmitProviderState = (patch, event) => {
+    let disposer: (() => void) | undefined;
+    listeners.forEach((listener) => {
+      try {
+        const result = listener(patch, event);
+        if (typeof result === 'function') disposer = result;
+      } catch (cause) {
+        queueMicrotask(() => {
+          throw cause;
+        });
+      }
+    });
+    return disposer;
+  };
 
   const playback = createNativePlayback(media, options, {
     emit,
@@ -62,9 +112,44 @@ export const createNativeProvider = (
     getCapabilities: () => mediaCapabilities()
   });
 
+  const remotePlayback = createNativeRemotePlayback(media, {
+    emit,
+    getCapabilities: () => mediaCapabilities()
+  });
+
   const textTracks: NativeTextTracks = createNativeTextTracks(media, emit, () =>
     mediaCapabilities()
   );
+
+  const audioTracks: NativeAudioTracks = createNativeAudioTracks(
+    media,
+    emit,
+    () => mediaCapabilities()
+  );
+
+  // Available only once the element is live and its own seekable window has a
+  // finite end to offer as one -- a media element has no target latency of
+  // its own the way hls.js's `liveSyncPosition` is, so the seekable end is the
+  // only candidate. Re-derives liveness fresh off `media.duration` rather than
+  // reading a cached value: `deriveLiveState` is the one liveness derivation
+  // in the workspace, and calling it here keeps this answering the same
+  // question the same way every other adapter does, at the cost of computing
+  // it twice per patch alongside `attachment.ts`'s own `live` derivation.
+  const liveEdgeAvailability = (): Availability => {
+    const ranges = toRanges(media.seekable);
+    const live = deriveLiveState({
+      duration: media.duration,
+      seekable: ranges,
+      currentTime: media.currentTime
+    });
+    const edge = ranges.reduce(
+      (end, range) => Math.max(end, range.end),
+      Number.NEGATIVE_INFINITY
+    );
+    return live?.isLive && Number.isFinite(edge)
+      ? available
+      : { status: 'unavailable', reason: 'source' };
+  };
 
   function mediaCapabilities(): PlayerCapabilities {
     return {
@@ -77,12 +162,18 @@ export const createNativeProvider = (
       // consumer gating a quality menu on it waited on a verdict that never
       // arrived.
       selectQuality: { status: 'unavailable', reason: 'source' },
+      // No ladder means no auto mode to offer either.
+      selectQualityAuto: { status: 'unavailable', reason: 'source' },
       selectTextTrack: textTracks.selectTextTrackAvailability(),
+      selectAudioTrack: audioTracks.selectAudioTrackAvailability(),
       chapters: textTracks.chaptersAvailability(),
+      liveEdge: liveEdgeAvailability(),
       fullscreen: presentation.fullscreenAvailability(),
       pictureInPicture: presentation.pictureInPictureAvailability(),
       airPlay: presentation.airPlayAvailability(),
-      customControls: available
+      customControls: available,
+      providerPoster: sourceHasNoPoster,
+      remotePlayback: remotePlayback.remotePlaybackAvailability()
     };
   }
 
@@ -91,7 +182,9 @@ export const createNativeProvider = (
     getCapabilities: mediaCapabilities,
     playback,
     presentation,
+    remotePlayback,
     textTracks,
+    audioTracks,
     clearStateListeners: () => listeners.clear()
   });
 
@@ -110,6 +203,7 @@ export const createNativeProvider = (
     pause: playback.pause,
     seekTo: playback.seekTo,
     seekBy: playback.seekBy,
+    seekToLiveEdge: playback.seekToLiveEdge,
     mute: playback.mute,
     unmute: playback.unmute,
     setVolume: playback.setVolume,
@@ -119,8 +213,10 @@ export const createNativeProvider = (
     requestPictureInPicture: presentation.requestPictureInPicture,
     exitPictureInPicture: presentation.exitPictureInPicture,
     showAirPlayPicker: presentation.showAirPlayPicker,
+    showRemotePlaybackPicker: remotePlayback.showRemotePlaybackPicker,
     retry: playback.retry,
     selectTextTrack: textTracks.selectTextTrack,
-    setCaptionRenderer: textTracks.setCaptionRenderer
+    setCaptionRenderer: textTracks.setCaptionRenderer,
+    selectAudioTrack: audioTracks.selectAudioTrack
   };
 };

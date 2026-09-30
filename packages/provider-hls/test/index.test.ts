@@ -8,7 +8,8 @@ import type {
 } from '@playdeck/core';
 import { createSeekingVideo } from '@playdeck/test-support/seeking-video';
 import { createHlsProvider } from '../src/index';
-import { captureRethrows } from './fixtures/capture-rethrows';
+import { HLS_JS_ELEMENT_ERROR_TIMEOUT_MS } from '../src/error-recovery';
+import { captureRethrows } from '@playdeck/test-support/capture-rethrows';
 import { FakeHls, fakeHlsLoader } from './fixtures/fake-hls';
 
 const source = { type: 'hls', src: '/hls/master.m3u8' } as const;
@@ -20,6 +21,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 const stubNativeHlsSupport = (media: HTMLVideoElement): void => {
@@ -205,6 +207,45 @@ test('honors a forced hls.js engine even where native HLS exists', async () => {
   expect(currentFakeHls().attachedMedia).toBe(media);
 });
 
+// `build` (#579) is the primitive `PlayerProviderOptions.hls` carries through
+// `Player.Root`; `loadHls` stays the direct-adapter option it always was. An
+// explicit `loadHls` wins over `build` rather than the two being combined, so
+// a caller that supplies both gets what it asked the loader to do, not a
+// silent second opinion from the build name beside it.
+test('an explicit loadHls wins over a build name given alongside it', async () => {
+  const media = document.createElement('video');
+  vi.spyOn(media, 'canPlayType').mockReturnValue('maybe');
+  vi.stubGlobal('MediaSource', { isTypeSupported: () => true });
+  const loader = fakeHlsLoader();
+  const provider = createHlsProvider(
+    media,
+    { ...source, engine: 'hls.js' },
+    { build: 'light', loadHls: loader.loadHls }
+  );
+
+  await provider.attach();
+  await provider.load();
+
+  expect(loader.calls()).toBe(1);
+});
+
+// Red: with provider-native's `sourceHasNoPoster` mutated to `{ status:
+// 'available' }`, this failed with `providerPoster: { status: 'available' }`
+// received where `{ status: 'unavailable', reason: 'source' }` was expected --
+// this adapter wraps the native provider, so the manifest inherits its
+// verdict. The equivalent provider-native test failed the same way from the
+// same mutation.
+test('reports providerPoster as unavailable -- a manifest has no still of its own', async () => {
+  const harness = createHarness(stubNativeHlsSupport);
+  await harness.provider.attach();
+
+  expect(harness.patches.at(-1)).toMatchObject({
+    capabilities: {
+      providerPoster: { status: 'unavailable', reason: 'source' }
+    }
+  });
+});
+
 test('reports quality selection honestly per engine', async () => {
   const nativeHarness = createHarness(stubNativeHlsSupport);
   await nativeHarness.provider.attach();
@@ -240,6 +281,55 @@ test('reports quality selection honestly per engine', async () => {
     qualities: [],
     capabilities: {
       selectQuality: { status: 'unavailable', reason: 'source' }
+    }
+  });
+});
+
+// Demonstrated red (docs/agents/demonstrated-red.md), substitute mutation:
+// hardcoded `decorateCapabilities`'s `selectQualityAuto` branch to
+// `{ status: 'unavailable', reason: 'provider' }` regardless of engine or
+// ladder, and ran this file:
+//
+//   × reports auto offered exactly where quality selection is (hls.js
+//     always honours it)
+//
+//   Test Files  1 failed | 90 passed (91)
+//        Tests  1 failed | 2303 passed (2304)
+//
+// Reverted, all 2304 passed again.
+test('reports auto offered exactly where quality selection is (hls.js always honours it)', async () => {
+  const nativeHarness = createHarness(stubNativeHlsSupport);
+  await nativeHarness.provider.attach();
+  expect(nativeHarness.patches.at(-1)).toMatchObject({
+    capabilities: {
+      selectQualityAuto: { status: 'unavailable', reason: 'provider' }
+    }
+  });
+
+  const mseHarness = createHarness(stubMseOnlySupport);
+  await mseHarness.provider.attach();
+  expect(mseHarness.patches.at(-1)).toMatchObject({
+    capabilities: {
+      selectQualityAuto: { status: 'unknown', reason: 'provider-check' }
+    }
+  });
+  await mseHarness.provider.load();
+  const hls = currentFakeHls();
+  hls.levels = [{ height: 180 }, { height: 90 }];
+  hls.emit(FakeHls.Events.MANIFEST_PARSED, { levels: hls.levels });
+  expect(mseHarness.patches.at(-1)).toMatchObject({
+    capabilities: { selectQualityAuto: { status: 'available' } }
+  });
+
+  const emptyHarness = createHarness(stubMseOnlySupport);
+  await emptyHarness.provider.attach();
+  await emptyHarness.provider.load();
+  const emptyHls = currentFakeHls();
+  emptyHls.levels = [];
+  emptyHls.emit(FakeHls.Events.MANIFEST_PARSED, { levels: emptyHls.levels });
+  expect(emptyHarness.patches.at(-1)).toMatchObject({
+    capabilities: {
+      selectQualityAuto: { status: 'unavailable', reason: 'source' }
     }
   });
 });
@@ -711,7 +801,8 @@ test('retry stays functional after recovery exhaustion', async () => {
   expect(patches).toHaveLength(patchCount);
 });
 
-test('suppresses raw media element errors while hls.js owns recovery', async () => {
+test('holds a raw media element error rather than discarding it while hls.js owns recovery', async () => {
+  vi.useFakeTimers();
   const { patches, provider, media } = createHarness(stubMseOnlySupport);
   await provider.attach();
   await provider.load();
@@ -725,6 +816,143 @@ test('suppresses raw media element errors while hls.js owns recovery', async () 
   expect(patches).not.toContainEqual(
     expect.objectContaining({ lifecycle: 'error' })
   );
+
+  // Still held, not yet expired.
+  vi.advanceTimersByTime(HLS_JS_ELEMENT_ERROR_TIMEOUT_MS - 1);
+  expect(patches).not.toContainEqual(
+    expect.objectContaining({ lifecycle: 'error' })
+  );
+});
+
+// #636: nothing on the hls.js path ever surfaced a raw element error, and
+// playback stayed reported as playing on an element that could never
+// advance. Drives the embedded native adapter's own subscription with an
+// errored patch and never fires hls.js's own ERROR event, so the only way
+// this can go green is the bounded timer itself publishing the errored
+// state.
+test('surfaces a decode error when an hls.js-path element error goes unclaimed', async () => {
+  vi.useFakeTimers();
+  const { patches, provider, media } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+
+  Object.defineProperty(media, 'error', {
+    configurable: true,
+    value: { code: 3, message: 'transient decode' }
+  });
+  media.dispatchEvent(new Event('error'));
+
+  vi.advanceTimersByTime(HLS_JS_ELEMENT_ERROR_TIMEOUT_MS);
+
+  expect(patches.at(-1)).toMatchObject({
+    lifecycle: 'error',
+    activation: 'error',
+    playback: 'paused',
+    buffering: false,
+    seeking: false,
+    error: { category: 'decode', message: 'transient decode' }
+  });
+});
+
+test('cancels the pending element-error timer when hls.js reports its own error first', async () => {
+  vi.useFakeTimers();
+  const { patches, provider, media } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const hls = currentFakeHls();
+
+  Object.defineProperty(media, 'error', {
+    configurable: true,
+    value: { code: 3, message: 'transient decode' }
+  });
+  media.dispatchEvent(new Event('error'));
+  hls.emit(FakeHls.Events.ERROR, {
+    type: FakeHls.ErrorTypes.NETWORK_ERROR,
+    details: 'fragLoadError',
+    fatal: false
+  });
+
+  vi.advanceTimersByTime(HLS_JS_ELEMENT_ERROR_TIMEOUT_MS);
+
+  expect(patches).not.toContainEqual(
+    expect.objectContaining({ lifecycle: 'error' })
+  );
+});
+
+test('cancels the pending element-error timer when hls.js runs its own recovery', async () => {
+  vi.useFakeTimers();
+  const { patches, provider, media } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+  const hls = currentFakeHls();
+
+  Object.defineProperty(media, 'error', {
+    configurable: true,
+    value: { code: 3, message: 'transient decode' }
+  });
+  media.dispatchEvent(new Event('error'));
+  hls.emitFatalError(FakeHls.ErrorTypes.NETWORK_ERROR);
+  expect(hls.startLoadCalls).toBe(1);
+
+  vi.advanceTimersByTime(HLS_JS_ELEMENT_ERROR_TIMEOUT_MS);
+
+  expect(patches).not.toContainEqual(
+    expect.objectContaining({ lifecycle: 'error' })
+  );
+});
+
+test('cancels the pending element-error timer when playback progresses', async () => {
+  vi.useFakeTimers();
+  const { patches, provider, media } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+
+  Object.defineProperty(media, 'error', {
+    configurable: true,
+    value: { code: 3, message: 'transient decode' }
+  });
+  media.dispatchEvent(new Event('error'));
+  media.currentTime = 5;
+  media.dispatchEvent(new Event('timeupdate'));
+
+  vi.advanceTimersByTime(HLS_JS_ELEMENT_ERROR_TIMEOUT_MS);
+
+  expect(patches).not.toContainEqual(
+    expect.objectContaining({ lifecycle: 'error' })
+  );
+});
+
+// #636's own failure mode, and the regression a weaker guard (cancelling on
+// any patch that merely carries `currentTime`, rather than one reporting a
+// position that actually moved) would let back in: `timeupdate` is not proof
+// of progress by itself. `provider-native`'s `onTimeUpdate` publishes
+// `currentTime` unconditionally on every firing, and the HTML spec lets
+// `timeupdate` keep firing while an element is "potentially playing" even
+// where the position never moves -- which is exactly what #636 reports:
+// `currentTime` pinned at one position while `playback` kept reading
+// `'playing'`. A `timeupdate` at the same position the error patch reported
+// must not cancel the hold.
+test('surfaces a decode error even when timeupdate keeps firing at an unchanged position', async () => {
+  vi.useFakeTimers();
+  const { patches, provider, media } = createHarness(stubMseOnlySupport);
+  await provider.attach();
+  await provider.load();
+
+  Object.defineProperty(media, 'error', {
+    configurable: true,
+    value: { code: 3, message: 'transient decode' }
+  });
+  media.dispatchEvent(new Event('error'));
+  media.dispatchEvent(new Event('timeupdate'));
+
+  vi.advanceTimersByTime(HLS_JS_ELEMENT_ERROR_TIMEOUT_MS);
+
+  expect(patches.at(-1)).toMatchObject({
+    lifecycle: 'error',
+    activation: 'error',
+    playback: 'paused',
+    error: { category: 'decode', message: 'transient decode' }
+  });
 });
 
 test('passes native media element errors through on the native engine', async () => {
@@ -895,6 +1123,51 @@ test('exposes the AirPlay picker through the wrapper on the native engine', asyn
   });
   await expect(provider.showAirPlayPicker?.()).resolves.toEqual({ ok: true });
   expect(showPicker).toHaveBeenCalledOnce();
+});
+
+test('exposes the remote-playback picker through the wrapper on the native engine', async () => {
+  const { media, patches, provider } = createHarness(stubNativeHlsSupport);
+  let availabilityCallback: ((available: boolean) => void) | undefined;
+  const prompt = vi.fn(() => Promise.resolve());
+  Object.defineProperty(media, 'remote', {
+    configurable: true,
+    value: {
+      state: 'disconnected',
+      watchAvailability: vi.fn((callback: (available: boolean) => void) => {
+        availabilityCallback = callback;
+        return Promise.resolve(1);
+      }),
+      cancelWatchAvailability: vi.fn(() => Promise.resolve()),
+      prompt,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn()
+    }
+  });
+
+  await provider.attach();
+  await provider.load();
+
+  // `createNativeProvider` is delegated to, so HLS inherits the same
+  // no-device-yet gating: filtered because `load()` also emits the
+  // standalone `commandsReady` declaration (#69), which would otherwise be
+  // the newest patch.
+  expect(
+    patches.filter((patch) => 'capabilities' in patch).at(-1)
+  ).toMatchObject({
+    capabilities: {
+      remotePlayback: { status: 'unavailable', reason: 'provider' }
+    }
+  });
+
+  availabilityCallback?.(true);
+
+  expect(patches.at(-1)).toMatchObject({
+    capabilities: { remotePlayback: { status: 'available' } }
+  });
+  await expect(provider.showRemotePlaybackPicker?.()).resolves.toEqual({
+    ok: true
+  });
+  expect(prompt).toHaveBeenCalledOnce();
 });
 
 test('exposes fullscreen through the wrapper', async () => {

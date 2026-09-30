@@ -15,6 +15,7 @@ import {
   chaptersEqual,
   deriveChapters,
   notifySafely,
+  plainCueText,
   textTrackLabel
 } from '@playdeck/core';
 import { available } from './adapter-values.js';
@@ -368,9 +369,12 @@ export const createNativeTextTracks = (
 
   // Normalizes a cue's text so downstream overlay rendering never has to
   // guard against a missing, empty, or whitespace-only value: all three
-  // collapse to `''` rather than throwing or leaking `undefined`.
+  // collapse to `''` rather than throwing or leaking `undefined`. The engine
+  // hands `VTTCue.text` through with its WebVTT tags and entities intact, so
+  // `plainCueText` (`@playdeck/core`) turns it into the plain text
+  // `TextCue.text`'s own doc comment promises before this returns.
   const cueText = (cue: NativeTextTrackCue): string => {
-    const text = typeof cue.text === 'string' ? cue.text : '';
+    const text = typeof cue.text === 'string' ? plainCueText(cue.text) : '';
     return text.trim().length === 0 ? '' : text;
   };
 

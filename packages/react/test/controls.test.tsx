@@ -47,6 +47,7 @@ const createMockAdapter = () => {
     requestPictureInPicture: vi.fn(ok),
     exitPictureInPicture: vi.fn(ok),
     showAirPlayPicker: vi.fn(ok),
+    showRemotePlaybackPicker: vi.fn(ok),
     selectTextTrack: vi.fn(ok)
   };
   const adapter: ProviderAdapter = {
@@ -102,12 +103,17 @@ const allNotReady = (): PlayerCapabilities => ({
   setVolume: notReady,
   setPlaybackRate: notReady,
   selectQuality: notReady,
+  selectQualityAuto: notReady,
   selectTextTrack: notReady,
+  selectAudioTrack: notReady,
   chapters: notReady,
+  liveEdge: notReady,
   fullscreen: notReady,
   pictureInPicture: notReady,
   airPlay: notReady,
-  customControls: notReady
+  customControls: notReady,
+  providerPoster: notReady,
+  remotePlayback: notReady
 });
 
 const capabilities = (
@@ -159,8 +165,18 @@ describe('PlayButton', () => {
     expect(ref.current).toBe(button);
     expect(button.classList.contains('c')).toBe(true);
     expect(button.style.color).toBe('red');
-    expect(button.style.minWidth).toBe('44px');
-    expect(button.style.minHeight).toBe('44px');
+    // A `var()` read of the dedicated floor token, not the literal `44px`
+    // it used to be and not `--playdeck-control-size` either: a theme's own
+    // "below 48rem" query moves both together, but a bare consumer setting
+    // only `--playdeck-control-size` cannot also shrink the floor. Falls
+    // back to 44px -- the desktop lock -- for a bare consumer with no
+    // stylesheet loaded.
+    expect(button.style.minWidth).toBe(
+      'var(--playdeck-control-min-size, 2.75rem)'
+    );
+    expect(button.style.minHeight).toBe(
+      'var(--playdeck-control-min-size, 2.75rem)'
+    );
   });
 
   test('renders replacement children', () => {
@@ -467,6 +483,46 @@ describe('VolumeSlider', () => {
     vi.useRealTimers();
   });
 
+  // The regression: a volume asked for after a provider swap must still
+  // reach the new provider, even though the command chain -- shared with
+  // `useSeekPreview` through `createCommandChain` -- had a command from the
+  // old provider still in flight when the swap happened.
+  test('delivers a volume requested after a provider swap once the old command drains', async () => {
+    const { controller, spies: nativeSpies } = renderWithPlayer(
+      <Player.VolumeSlider />,
+      volumeReady()
+    );
+    const slider = screen.getByRole('slider', { name: 'Volume' });
+    const settleNative = holdNextVolume(nativeSpies.setVolume);
+
+    fireEvent.change(slider, { target: { value: '0.8' } });
+    expect(nativeSpies.setVolume).toHaveBeenCalledTimes(1);
+
+    const youtube = createMockAdapter();
+    act(() => {
+      controller.setProvider(youtube.adapter);
+      youtube.emit({
+        lifecycle: 'ready',
+        activation: 'ready',
+        provider: 'youtube',
+        ...volumeReady()
+      });
+    });
+
+    // Queued behind the native command, which is still in flight.
+    fireEvent.change(slider, { target: { value: '0.6' } });
+    expect(youtube.spies.setVolume).not.toHaveBeenCalled();
+
+    await act(async () => {
+      settleNative();
+    });
+
+    expect(youtube.spies.setVolume).toHaveBeenCalledWith(0.6);
+    // The value queued before the swap was aimed at the provider that is
+    // gone, and must not reach the one that replaced it.
+    expect(youtube.spies.setVolume).not.toHaveBeenCalledWith(0.8);
+  });
+
   test('shows a volume asked for while muted, not the muted zero', () => {
     const { spies } = renderWithPlayer(
       <Player.VolumeSlider />,
@@ -597,10 +653,23 @@ describe('SeekSlider', () => {
     expect(ranges[1]!.style.width).toBe('20%');
   });
 
-  test('gives the scrubber input a 44px default target', () => {
-    renderWithPlayer(<Player.SeekSlider />, seekReady());
+  test('gives the wrapper and the scrubber input a 44px default target', () => {
+    const { container } = renderWithPlayer(<Player.SeekSlider />, seekReady());
+    const wrapper = container.querySelector(
+      '[data-playdeck-part="seek-slider"]'
+    );
     const slider = screen.getByRole('slider', { name: 'Seek' });
-    expect((slider as HTMLInputElement).style.minHeight).toBe('44px');
+    // A `var()` read, not the literal `44px` either used to carry, so a
+    // theme's own "below 48rem" query can shrink the row -- the same move
+    // #622 made for every button-shaped control's own target. Falls back to
+    // 2.75rem, the desktop lock, for a bare consumer with no stylesheet
+    // loaded.
+    expect((wrapper as HTMLElement).style.minHeight).toBe(
+      'var(--playdeck-seek-slider-min-block-size, 2.75rem)'
+    );
+    expect((slider as HTMLInputElement).style.minHeight).toBe(
+      'var(--playdeck-seek-slider-min-block-size, 2.75rem)'
+    );
   });
 
   test('forwards inputProps to the range control and chains onChange', () => {
@@ -1943,6 +2012,145 @@ describe('Time', () => {
     expect(attr(remaining ?? null, 'data-state')).toBe('untimed');
   });
 
+  // Distinct from the two "untimed" tests above: those drive `duration`
+  // alone and leave `state.live` at its default `null`, so neither is a
+  // "live source" as `PlayerState.live` defines the term. This one also
+  // sets `live`, matching what a live provider adapter actually publishes
+  // alongside a null/infinite `duration` -- the case #180's brief names.
+  // #180 does not change this rendering path (`type="duration"` was already
+  // untimed on a null/infinite duration, #248), so there is no unfixed
+  // version of THIS code to run the assertion against. Per
+  // docs/agents/demonstrated-red.md's documented fallback: substitute
+  // mutation, the untimed branch's `null` fallback (the #248 fix) changed
+  // back to `0` -- the exact defect #248 removed. Ran:
+  //
+  //   AssertionError: expected '0:00' to be '' // Object.is equality
+  //    ❯ packages/react/test/controls.test.tsx:1995:31
+  //      1993|     ];
+  //      1994|     expect(duration?.tagName).toBe('SPAN');
+  //      1995|     expect(duration?.textContent).toBe('');
+  //          |                               ^
+  //
+  //   Test Files  1 failed (1)
+  //        Tests  5 failed | 14 passed | 166 skipped (185)
+  //
+  // (Four other pre-existing tests share the same fixture shape and failed
+  // alongside this one, all for the same reintroduced #248 defect.) Reverted,
+  // all 19 of this describe block's tests passed again.
+  test('renders nothing for type="duration" on a genuinely live source', () => {
+    const { container } = renderWithPlayer(
+      <>
+        <Player.Time type="duration" />
+        <Player.Time type="remaining" />
+      </>,
+      {
+        currentTime: 42,
+        duration: Number.POSITIVE_INFINITY,
+        live: { isLive: true, atLiveEdge: true, offsetFromEdge: 0 }
+      }
+    );
+    const [duration, remaining] = [
+      ...container.querySelectorAll('[data-playdeck-part="time"]')
+    ];
+    expect(duration?.tagName).toBe('SPAN');
+    expect(duration?.textContent).toBe('');
+    expect(attr(duration ?? null, 'data-state')).toBe('untimed');
+    expect(remaining?.tagName).toBe('SPAN');
+    expect(remaining?.textContent).toBe('');
+  });
+
+  // Demonstrated red, substitute mutation: the `current`-on-a-live-source
+  // branch of `seconds` (`live?.offsetFromEdge ?? currentTime`) reverted to
+  // plain `currentTime`. The same mutation fails this test and "keeps
+  // dateTime honest..." below it -- both read off the same `seconds`. Ran:
+  //
+  //   TestingLibraryElementError: Unable to find an element with the text: -0:42.
+  //    ❯ packages/react/test/controls.test.tsx:2008:25
+  //      2006|       live: { isLive: true, atLiveEdge: false, offsetFromEdge: 42 }
+  //      2007|     });
+  //      2008|     const time = screen.getByText('-0:42');
+  //          |                         ^
+  //
+  //   Test Files  1 failed (1)
+  //        Tests  2 failed | 17 passed | 166 skipped (185)
+  //
+  // Reverted, all 19 passed again.
+  test('shows a negative offset from the live edge on type="current" when behind it', () => {
+    renderWithPlayer(<Player.Time />, {
+      currentTime: 100,
+      duration: Number.POSITIVE_INFINITY,
+      live: { isLive: true, atLiveEdge: false, offsetFromEdge: 42 }
+    });
+    const time = screen.getByText('-0:42');
+    expect(time.tagName).toBe('TIME');
+    expect(attr(time, 'data-time-type')).toBe('current');
+  });
+
+  // Demonstrated red, substitute mutation: the `display` ternary's
+  // `live.atLiveEdge ? liveLabel : ...` branch removed, so `current` on a
+  // live source always shows the negative-offset form. Failed this test AND
+  // "honours a custom liveLabel prop" AND "keeps dateTime honest" below --
+  // all three query for the LIVE-branch text. Ran:
+  //
+  //   TestingLibraryElementError: Unable to find an element with the text: LIVE.
+  //    ❯ packages/react/test/controls.test.tsx:2019:19
+  //      2017|       live: { isLive: true, atLiveEdge: true, offsetFromEdge: 4 }
+  //      2018|     });
+  //      2019|     expect(screen.getByText('LIVE')).toBeDefined();
+  //          |                   ^
+  //
+  //   Test Files  1 failed (1)
+  //        Tests  3 failed | 16 passed | 166 skipped (185)
+  //
+  // Reverted, all 19 passed again.
+  test('shows the localisable LIVE label on type="current" once within the edge tolerance', () => {
+    renderWithPlayer(<Player.Time />, {
+      currentTime: 100,
+      duration: Number.POSITIVE_INFINITY,
+      live: { isLive: true, atLiveEdge: true, offsetFromEdge: 4 }
+    });
+    expect(screen.getByText('LIVE')).toBeDefined();
+  });
+
+  test('honours a custom liveLabel prop in place of the LIVE default', () => {
+    renderWithPlayer(<Player.Time liveLabel="AO VIVO" />, {
+      currentTime: 100,
+      duration: Number.POSITIVE_INFINITY,
+      live: { isLive: true, atLiveEdge: true, offsetFromEdge: 0 }
+    });
+    expect(screen.getByText('AO VIVO')).toBeDefined();
+    expect(screen.queryByText('LIVE')).toBeNull();
+  });
+
+  // "Keep dateTime honest for whatever you render" (#180's brief): pins that
+  // `dateTime` reflects the measured `offsetFromEdge` even in the render
+  // branch whose visible text is the word LIVE rather than a number.
+  //
+  // Demonstrated red, same substitute mutation as the offset test above
+  // (`seconds` reverted to plain `currentTime`) -- `datetime` then reports
+  // the raw playhead position instead of the offset:
+  //
+  //   AssertionError: expected 'PT100S' to be 'PT4S' // Object.is equality
+  //    ❯ packages/react/test/controls.test.tsx:2039:36
+  //      2037|     });
+  //      2038|     const time = screen.getByText('LIVE');
+  //      2039|     expect(attr(time, 'datetime')).toBe('PT4S');
+  //          |                                    ^
+  //
+  //   Test Files  1 failed (1)
+  //        Tests  2 failed | 17 passed | 166 skipped (185)
+  //
+  // Reverted, all 19 passed again.
+  test('keeps dateTime honest for the measured offset while the label reads LIVE', () => {
+    renderWithPlayer(<Player.Time />, {
+      currentTime: 100,
+      duration: Number.POSITIVE_INFINITY,
+      live: { isLive: true, atLiveEdge: true, offsetFromEdge: 4 }
+    });
+    const time = screen.getByText('LIVE');
+    expect(attr(time, 'datetime')).toBe('PT4S');
+  });
+
   test('still formats the elapsed time on an untimed source', () => {
     renderWithPlayer(<Player.Time />, { currentTime: 75, duration: null });
     const time = screen.getByText('1:15');
@@ -2227,8 +2435,12 @@ describe('AirPlayButton', () => {
     expect(ref.current).toBe(button);
     expect(button.classList.contains('c')).toBe(true);
     expect(button.style.color).toBe('red');
-    expect(button.style.minWidth).toBe('44px');
-    expect(button.style.minHeight).toBe('44px');
+    expect(button.style.minWidth).toBe(
+      'var(--playdeck-control-min-size, 2.75rem)'
+    );
+    expect(button.style.minHeight).toBe(
+      'var(--playdeck-control-min-size, 2.75rem)'
+    );
     // A bare <button> inside a form submits it.
     expect(button.getAttribute('type')).toBe('button');
   });
@@ -2265,6 +2477,111 @@ describe('AirPlayButton', () => {
     expect(
       attr(screen.getByRole('button', { name: 'AirPlay' }), 'aria-label')
     ).toBe('AirPlay');
+  });
+});
+
+describe('RemotePlaybackButton', () => {
+  test('stays absent until the capability resolves', () => {
+    const { emit } = renderWithPlayer(
+      <Player.RemotePlaybackButton />,
+      capabilities({ remotePlayback: notReady })
+    );
+    expect(screen.queryByRole('button')).toBeNull();
+    emit(capabilities({ remotePlayback: available }));
+    expect(screen.getByRole('button', { name: 'Cast' })).toBeDefined();
+  });
+
+  test('renders nothing when remote playback is unavailable', () => {
+    renderWithPlayer(
+      <Player.RemotePlaybackButton />,
+      capabilities({ remotePlayback: unavailable })
+    );
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  test('opens the picker and carries the part/provider contract', () => {
+    const { spies } = renderWithPlayer(
+      <Player.RemotePlaybackButton />,
+      capabilities({ remotePlayback: available })
+    );
+    const button = screen.getByRole('button', { name: 'Cast' });
+    expect(attr(button, 'data-playdeck-part')).toBe('remote-playback-button');
+    expect(attr(button, 'data-provider')).toBe('native');
+    fireEvent.click(button);
+    expect(spies.showRemotePlaybackPicker).toHaveBeenCalledTimes(1);
+  });
+
+  // Structured like AirPlayButton: which device the user picked, or whether
+  // they picked one at all, is never exposed through this control, so there
+  // is no invented state attribute here either.
+  test('is not a toggle: no aria-pressed, one static label', () => {
+    const { emit } = renderWithPlayer(
+      <Player.RemotePlaybackButton />,
+      capabilities({ remotePlayback: available })
+    );
+    const button = screen.getByRole('button', { name: 'Cast' });
+    expect(attr(button, 'aria-pressed')).toBeNull();
+    expect(attr(button, 'data-state')).toBeNull();
+    fireEvent.click(button);
+    emit({ playback: 'playing' });
+    expect(
+      screen.getByRole('button', { name: 'Cast' }).getAttribute('aria-label')
+    ).toBe('Cast');
+  });
+
+  test('passes className, style and ref through, with a 44px target', () => {
+    const ref = createRef<HTMLButtonElement>();
+    renderWithPlayer(
+      <Player.RemotePlaybackButton
+        className="c"
+        ref={ref}
+        style={{ color: 'red' }}
+      />,
+      capabilities({ remotePlayback: available })
+    );
+    const button = screen.getByRole('button', { name: 'Cast' });
+    expect(ref.current).toBe(button);
+    expect(button.classList.contains('c')).toBe(true);
+    expect(button.style.color).toBe('red');
+    expect(button.style.minWidth).toBe(
+      'var(--playdeck-control-min-size, 2.75rem)'
+    );
+    expect(button.style.minHeight).toBe(
+      'var(--playdeck-control-min-size, 2.75rem)'
+    );
+    // A bare <button> inside a form submits it.
+    expect(button.getAttribute('type')).toBe('button');
+  });
+
+  test('a consumer onClick that prevents default suppresses the picker', () => {
+    const { spies } = renderWithPlayer(
+      <Player.RemotePlaybackButton
+        onClick={(event) => {
+          event.preventDefault();
+        }}
+      />,
+      capabilities({ remotePlayback: available })
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Cast' }));
+    expect(spies.showRemotePlaybackPicker).not.toHaveBeenCalled();
+  });
+
+  test('honours a consumer aria-label', () => {
+    renderWithPlayer(
+      <Player.RemotePlaybackButton aria-label="Transmitir" />,
+      capabilities({ remotePlayback: available })
+    );
+    expect(screen.getByRole('button', { name: 'Transmitir' })).toBeDefined();
+  });
+
+  test('names itself Cast when no consumer label is given', () => {
+    renderWithPlayer(
+      <Player.RemotePlaybackButton />,
+      capabilities({ remotePlayback: available })
+    );
+    expect(
+      attr(screen.getByRole('button', { name: 'Cast' }), 'aria-label')
+    ).toBe('Cast');
   });
 });
 
@@ -2316,6 +2633,122 @@ describe('Controls container and scoped shortcuts', () => {
     );
     const region = container.querySelector('[data-playdeck-part="controls"]');
     expect(attr(region, 'data-state')).toBe('global');
+  });
+
+  // Guard: the merged ref callback already forwards a ref object to the
+  // region correctly, before and after the consumer-cleanup fix below.
+  test('forwards an object ref to the controls region', () => {
+    const ref = createRef<HTMLDivElement>();
+    const { container } = renderWithPlayer(
+      <Player.Controls ref={ref}>
+        <Player.PlayButton />
+      </Player.Controls>,
+      controlsState()
+    );
+    expect(ref.current).toBe(
+      container.querySelector('[data-playdeck-part="controls"]')
+    );
+  });
+
+  // Guard: a plain (non-cleanup-returning) callback ref is already called
+  // with `null` on detach, before and after the fix below.
+  test('forwards a callback ref to the controls region, and null on unmount', () => {
+    const consumerRef = vi.fn();
+    const { container, unmount } = renderWithPlayer(
+      <Player.Controls ref={consumerRef}>
+        <Player.PlayButton />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector('[data-playdeck-part="controls"]');
+    expect(consumerRef).toHaveBeenCalledExactlyOnceWith(region);
+
+    unmount();
+
+    expect(consumerRef).toHaveBeenCalledTimes(2);
+    expect(consumerRef.mock.calls[1][0]).toBeNull();
+  });
+
+  // Red against the unfixed code: the merged ref callback forwards to the
+  // consumer's ref but discards whatever it returns (a bare `assignRef(ref,
+  // node);` statement), so a cleanup a consumer's callback ref returns is
+  // silently skipped. React still calls the merged callback with `null` on
+  // detach (see the guard above), which in turn calls the consumer's
+  // callback a second time -- the two assertions below.
+  test('respects a callback ref that returns its own cleanup, and does not call it again with null', () => {
+    const cleanup = vi.fn();
+    const consumerRef = vi.fn(() => cleanup);
+    const { container, unmount } = renderWithPlayer(
+      <Player.Controls ref={consumerRef}>
+        <Player.PlayButton />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector('[data-playdeck-part="controls"]');
+    expect(consumerRef).toHaveBeenCalledExactlyOnceWith(region);
+
+    unmount();
+
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(consumerRef).toHaveBeenCalledOnce();
+  });
+
+  // Guard: an object ref's `current` is set to `null` by `assignRef` itself
+  // (there is no consumer cleanup to run for an object ref), unaffected by
+  // the fix above.
+  test('a ref object ends with current === null on unmount', () => {
+    const ref = createRef<HTMLDivElement>();
+    const { unmount } = renderWithPlayer(
+      <Player.Controls ref={ref}>
+        <Player.PlayButton />
+      </Player.Controls>,
+      controlsState()
+    );
+    expect(ref.current).not.toBeNull();
+
+    unmount();
+
+    expect(ref.current).toBeNull();
+  });
+
+  // Guard: a fresh inline callback ref each render is a consumer ref identity
+  // change, not a detach -- React runs the previous callback's cleanup (or
+  // calls it with `null`) and then calls the new callback with the live
+  // node, independent of the fix above. `containerRef`-dependent behavior
+  // (the scoped shortcut layer) keeps working across that churn too.
+  test('a fresh consumer callback ref each render still reaches the region, and scoped shortcuts still work', () => {
+    const calls: (Element | null)[] = [];
+    const { container, spies, rerender } = renderWithPlayer(
+      <Player.Controls
+        ref={(node) => {
+          calls.push(node);
+        }}
+      >
+        <Player.PlayButton />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    expect(calls.at(-1)).toBe(region);
+
+    rerender(
+      <Player.Root loading="interaction" source="/tracer.mp4">
+        <Player.Controls
+          ref={(node) => {
+            calls.push(node);
+          }}
+        >
+          <Player.PlayButton />
+        </Player.Controls>
+      </Player.Root>
+    );
+
+    expect(calls.at(-1)).toBe(region);
+    region.focus();
+    fireEvent.keyDown(region, { key: ' ' });
+    expect(spies.play).toHaveBeenCalledTimes(1);
   });
 
   test('Space and K toggle playback when the region is focused', () => {
@@ -3293,6 +3726,11 @@ describe('Controls container and scoped shortcuts', () => {
     expect(spies.mute).not.toHaveBeenCalled();
   });
 
+  // This test fires no blur at all before the capability transition
+  // unmounts the button, matching Firefox's own ordering: a Playwright
+  // probe of the bundled Firefox (151.0) on 2026-09-28 found that focusing
+  // a `<button>` and then removing it fires no blur or focusout on it at
+  // all.
   test('restores focus to the region when a focused control unmounts', async () => {
     const { container, emit } = renderWithPlayer(
       <Player.Controls>
@@ -3300,6 +3738,10 @@ describe('Controls container and scoped shortcuts', () => {
       </Player.Controls>,
       controlsState({ fullscreen: false })
     );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    const focusSpy = vi.spyOn(region, 'focus');
     const button = screen.getByRole('button', { name: 'Enter fullscreen' });
     button.focus();
     expect(document.activeElement).toBe(button);
@@ -3310,14 +3752,49 @@ describe('Controls container and scoped shortcuts', () => {
         fullscreen: unavailable
       })
     );
+    await waitFor(() => expect(document.activeElement).toBe(region));
+    expect(document.activeElement).not.toBe(document.body);
+    // A legitimate restore must not scroll the page to bring the region
+    // into view.
+    expect(focusSpy).toHaveBeenCalledWith({ preventScroll: true });
+  });
+
+  test('restores focus to the region when the browser blurs the control before removing it', async () => {
+    // A Playwright probe of the bundled Chromium (149.0.7827.55) on
+    // 2026-09-28 found that focusing a `<button>` and then removing it
+    // fires `blur`/`focusout` on it with `relatedTarget: null`, with
+    // `isConnected` reading `true` if checked synchronously inside the
+    // listener. This test reproduces that ordering directly: it blurs the
+    // still-mounted button, then unmounts it via the capability transition
+    // with no time for the deferred check to run in between. By the time
+    // that check actually runs (a microtask later), the unmount below has
+    // already completed, so it correctly finds the button disconnected and
+    // leaves the restore flag set.
+    const { container, emit } = renderWithPlayer(
+      <Player.Controls>
+        <Player.FullscreenButton />
+      </Player.Controls>,
+      controlsState({ fullscreen: false })
+    );
     const region = container.querySelector<HTMLElement>(
       '[data-playdeck-part="controls"]'
     )!;
+    const button = screen.getByRole('button', { name: 'Enter fullscreen' });
+    button.focus();
+    expect(document.activeElement).toBe(button);
+    button.blur();
+    expect(button.isConnected).toBe(true);
+    emit(
+      capabilities({
+        seek: available,
+        setVolume: available,
+        fullscreen: unavailable
+      })
+    );
     await waitFor(() => expect(document.activeElement).toBe(region));
-    expect(document.activeElement).not.toBe(document.body);
   });
 
-  test('does not re-steal focus after an outside click drops focus to body', () => {
+  test('does not re-steal focus after an outside click drops focus to body', async () => {
     const { container, emit } = renderWithPlayer(
       <Player.Controls>
         <Player.FullscreenButton />
@@ -3330,6 +3807,10 @@ describe('Controls container and scoped shortcuts', () => {
     // Clicking empty page area drops focus to <body> with no capability change.
     button.blur();
     expect(document.activeElement).toBe(document.body);
+    // Let the blur's deferred check run and see the button still connected
+    // -- the fix's own signal that this was a genuine abandonment, not a
+    // control being removed.
+    await Promise.resolve();
     // Frequent non-capability ticks (volume, currentTime) must not yank focus
     // back into the region.
     emit({ volume: 0.6 });
@@ -3339,5 +3820,593 @@ describe('Controls container and scoped shortcuts', () => {
     )!;
     expect(document.activeElement).toBe(document.body);
     expect(document.activeElement).not.toBe(region);
+    // A capability transition -- the trigger the restore effect actually
+    // watches for -- fires after the same blur, and must not re-steal
+    // focus either.
+    emit(
+      capabilities({
+        seek: unavailable,
+        setVolume: available,
+        fullscreen: available
+      })
+    );
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  test('does not restore focus when a genuinely abandoned control later unmounts for an unrelated reason', async () => {
+    const { emit } = renderWithPlayer(
+      <Player.Controls>
+        <Player.FullscreenButton />
+      </Player.Controls>,
+      controlsState({ fullscreen: false })
+    );
+    const button = screen.getByRole('button', { name: 'Enter fullscreen' });
+    button.focus();
+    expect(document.activeElement).toBe(button);
+    // A click on non-focusable content: blur fires with relatedTarget null
+    // while the button stays connected and mounted.
+    button.blur();
+    expect(button.isConnected).toBe(true);
+    // Let the deferred check settle before anything else happens, so it
+    // reads the abandonment correctly instead of racing the unmount below.
+    await Promise.resolve();
+    expect(document.activeElement).toBe(document.body);
+    // The same control the user already left now unmounts, for an
+    // unrelated reason (its own capability going unavailable). Focus was
+    // already abandoned, so this must not steal it back into the region.
+    emit(
+      capabilities({
+        seek: available,
+        setVolume: available,
+        fullscreen: unavailable
+      })
+    );
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  test('a re-focus inside the region overrides a stale blur, so the region still restores focus when that control unmounts', async () => {
+    const { container, emit } = renderWithPlayer(
+      <Player.Controls>
+        <Player.FullscreenButton />
+      </Player.Controls>,
+      controlsState({ fullscreen: false })
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    const button = screen.getByRole('button', { name: 'Enter fullscreen' });
+    button.focus();
+    // A click-away blurs the button with relatedTarget null while it is
+    // still connected -- ordinarily read as abandonment once the deferred
+    // check below runs.
+    button.blur();
+    // The user comes straight back before that check has had a chance to
+    // run.
+    button.focus();
+    expect(document.activeElement).toBe(button);
+    // Let the stale blur's deferred check run; it must not undo the
+    // re-focus.
+    await Promise.resolve();
+    expect(document.activeElement).toBe(button);
+    // The same control now unmounts while legitimately focused -- the
+    // region must still restore focus.
+    emit(
+      capabilities({
+        seek: available,
+        setVolume: available,
+        fullscreen: unavailable
+      })
+    );
+    await waitFor(() => expect(document.activeElement).toBe(region));
+  });
+
+  // A consumer's own control, shown or hidden by the consumer's own state --
+  // nothing in `gatedSignature` moves when this unmounts.
+  const ConsumerControl = ({ show }: { show: boolean }): ReactNode =>
+    show ? <button type="button">Consumer control</button> : null;
+
+  // A consumer's own control gated on a capability it reads for itself, the
+  // same way `Player.FullscreenButton` gates on it internally.
+  const ConsumerFullscreenButton = (): ReactNode => {
+    const fullscreenStatus = Player.usePlayerState(
+      (state) => state.capabilities.fullscreen.status
+    );
+    return fullscreenStatus === 'available' ? (
+      <button type="button">Consumer fullscreen control</button>
+    ) : null;
+  };
+
+  const rootTree = (children: ReactNode): ReactNode => (
+    <Player.Root loading="interaction" source="/tracer.mp4">
+      {children}
+    </Player.Root>
+  );
+
+  test('does not restore focus after a later capability change when a consumer removes its own focused control and the browser fires no blur', async () => {
+    const { rerender, emit } = renderWithPlayer(
+      <Player.Controls>
+        <ConsumerControl show />
+      </Player.Controls>,
+      controlsState()
+    );
+    const button = screen.getByRole('button', { name: 'Consumer control' });
+    button.focus();
+    expect(document.activeElement).toBe(button);
+    // The consumer's own state removes its control -- no blur fires here at
+    // all, the Firefox side of the dated Playwright probe cited in
+    // `Controls`' `onBlur` comment (controls.tsx).
+    act(() => {
+      rerender(
+        rootTree(
+          <Player.Controls>
+            <ConsumerControl show={false} />
+          </Player.Controls>
+        )
+      );
+    });
+    expect(document.activeElement).toBe(document.body);
+    // A later, unrelated capability change must not pull focus back in: the
+    // removal above was not a capability transition, so nothing restored it
+    // in the commit that dropped focus.
+    emit(
+      capabilities({
+        seek: available,
+        setVolume: available,
+        fullscreen: unavailable
+      })
+    );
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  test('does not restore focus after a later capability change when a consumer removes its own focused control after the browser blurs it first', async () => {
+    const { rerender, emit } = renderWithPlayer(
+      <Player.Controls>
+        <ConsumerControl show />
+      </Player.Controls>,
+      controlsState()
+    );
+    const button = screen.getByRole('button', { name: 'Consumer control' });
+    button.focus();
+    // The blur fires with relatedTarget null while the node is still
+    // attached -- the still-connected instant of the Chromium side of the
+    // dated Playwright probe cited in `Controls`' `onBlur` comment
+    // (controls.tsx) -- so the region's deferred `isConnected` check has
+    // not run by the time the removal below completes.
+    button.blur();
+    expect(button.isConnected).toBe(true);
+    act(() => {
+      rerender(
+        rootTree(
+          <Player.Controls>
+            <ConsumerControl show={false} />
+          </Player.Controls>
+        )
+      );
+    });
+    expect(button.isConnected).toBe(false);
+    emit(
+      capabilities({
+        seek: available,
+        setVolume: available,
+        fullscreen: unavailable
+      })
+    );
+    expect(document.activeElement).toBe(document.body);
+    // Let the deferred blur check run too: it finds the node detached and
+    // correctly does nothing either way, but must not be the thing masking
+    // a failure in the assertion above.
+    await Promise.resolve();
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  // Guard: exercises the pre-existing same-commit restore path, unchanged by
+  // this fix, with a consumer's own control instead of a Playdeck part --
+  // confirms the restore does not depend on which component removed the
+  // node. Passes against the unfixed code too.
+  test('restores focus into the region when a consumer control gated on its own capability read is removed by that capability going unavailable', async () => {
+    const { container, emit } = renderWithPlayer(
+      <Player.Controls>
+        <ConsumerFullscreenButton />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    const button = screen.getByRole('button', {
+      name: 'Consumer fullscreen control'
+    });
+    button.focus();
+    expect(document.activeElement).toBe(button);
+    emit(
+      capabilities({
+        seek: available,
+        setVolume: available,
+        fullscreen: unavailable
+      })
+    );
+    await waitFor(() => expect(document.activeElement).toBe(region));
+  });
+
+  test('leaves an unmodified ArrowDown to a native radio group outside the player in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const group = document.createElement('div');
+    group.setAttribute('role', 'radiogroup');
+    const first = document.createElement('input');
+    first.type = 'radio';
+    first.name = 'outside-group';
+    const second = document.createElement('input');
+    second.type = 'radio';
+    second.name = 'outside-group';
+    group.append(first, second);
+    document.body.append(group);
+    try {
+      first.focus();
+      expect(fireEvent.keyDown(first, { key: 'ArrowDown' })).toBe(true);
+      expect(spies.setVolume).not.toHaveBeenCalled();
+    } finally {
+      group.remove();
+    }
+  });
+
+  test('leaves an unmodified arrow key to a native range input outside the player in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const range = document.createElement('input');
+    range.type = 'range';
+    document.body.append(range);
+    try {
+      range.focus();
+      expect(fireEvent.keyDown(range, { key: 'ArrowLeft' })).toBe(true);
+      expect(spies.seekBy).not.toHaveBeenCalled();
+    } finally {
+      range.remove();
+    }
+  });
+
+  test('leaves an unmodified arrow key to a select outside the player in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const select = document.createElement('select');
+    const option = document.createElement('option');
+    option.value = '1';
+    select.append(option);
+    document.body.append(select);
+    try {
+      select.focus();
+      expect(fireEvent.keyDown(select, { key: 'ArrowLeft' })).toBe(true);
+      expect(spies.seekBy).not.toHaveBeenCalled();
+    } finally {
+      select.remove();
+    }
+  });
+
+  test('leaves an unmodified arrow key to a focused tablist outside the player in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const tablist = document.createElement('div');
+    tablist.setAttribute('role', 'tablist');
+    tablist.tabIndex = 0;
+    document.body.append(tablist);
+    try {
+      tablist.focus();
+      expect(fireEvent.keyDown(tablist, { key: 'ArrowLeft' })).toBe(true);
+      expect(spies.seekBy).not.toHaveBeenCalled();
+    } finally {
+      tablist.remove();
+    }
+  });
+
+  test('leaves an unmodified arrow key to an element nested inside a role container outside the player in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const grid = document.createElement('div');
+    grid.setAttribute('role', 'grid');
+    const cell = document.createElement('div');
+    cell.setAttribute('role', 'gridcell');
+    cell.tabIndex = 0;
+    grid.append(cell);
+    document.body.append(grid);
+    try {
+      cell.focus();
+      expect(fireEvent.keyDown(cell, { key: 'ArrowLeft' })).toBe(true);
+      expect(spies.seekBy).not.toHaveBeenCalled();
+    } finally {
+      grid.remove();
+    }
+  });
+
+  test('still runs arrow-key shortcuts globally for ordinary content outside the player', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const outside = document.createElement('div');
+    outside.tabIndex = 0;
+    document.body.append(outside);
+    try {
+      outside.focus();
+      expect(fireEvent.keyDown(outside, { key: 'ArrowLeft' })).toBe(false);
+      expect(spies.seekBy).toHaveBeenCalledWith(-5);
+    } finally {
+      outside.remove();
+    }
+  });
+
+  test("still owns arrow keys on the player's own slider under global shortcuts", () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.SeekSlider />
+      </Player.Controls>,
+      controlsState()
+    );
+    const seekInput = container.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="seek-slider-input"]'
+    )!;
+    seekInput.focus();
+    expect(fireEvent.keyDown(seekInput, { key: 'ArrowLeft' })).toBe(false);
+    expect(spies.seekBy).toHaveBeenCalledWith(-5);
+  });
+
+  test('still owns arrow keys on a player-composed slider that sits outside Controls but inside the viewport', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Viewport>
+        <Player.SeekSlider />
+        <Player.Controls global>
+          <Player.Time />
+        </Player.Controls>
+      </Player.Viewport>,
+      controlsState()
+    );
+    const seekInput = container.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="seek-slider-input"]'
+    )!;
+    seekInput.focus();
+    expect(fireEvent.keyDown(seekInput, { key: 'ArrowLeft' })).toBe(false);
+    expect(spies.seekBy).toHaveBeenCalledWith(-5);
+  });
+
+  test('still exempts a native radio group entirely outside the player, even once a viewport is in the tree', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Viewport>
+        <Player.Controls global>
+          <Player.Time />
+        </Player.Controls>
+      </Player.Viewport>,
+      controlsState()
+    );
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    document.body.append(radio);
+    try {
+      radio.focus();
+      expect(fireEvent.keyDown(radio, { key: 'ArrowDown' })).toBe(true);
+      expect(spies.setVolume).not.toHaveBeenCalled();
+    } finally {
+      radio.remove();
+    }
+  });
+
+  test('leaves PageUp and PageDown to <body> in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    expect(fireEvent.keyDown(document.body, { key: 'PageUp' })).toBe(true);
+    expect(fireEvent.keyDown(document.body, { key: 'PageDown' })).toBe(true);
+    expect(spies.seekBy).not.toHaveBeenCalled();
+  });
+
+  test('leaves PageUp and PageDown to a plain scrollable div outside the player in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const scrollable = document.createElement('div');
+    scrollable.tabIndex = 0;
+    document.body.append(scrollable);
+    try {
+      scrollable.focus();
+      expect(fireEvent.keyDown(scrollable, { key: 'PageUp' })).toBe(true);
+      expect(fireEvent.keyDown(scrollable, { key: 'PageDown' })).toBe(true);
+      expect(spies.seekBy).not.toHaveBeenCalled();
+    } finally {
+      scrollable.remove();
+    }
+  });
+
+  test('leaves PageUp and PageDown to a grid outside the player in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const grid = document.createElement('div');
+    grid.setAttribute('role', 'grid');
+    grid.tabIndex = 0;
+    document.body.append(grid);
+    try {
+      grid.focus();
+      expect(fireEvent.keyDown(grid, { key: 'PageUp' })).toBe(true);
+      expect(fireEvent.keyDown(grid, { key: 'PageDown' })).toBe(true);
+      expect(spies.seekBy).not.toHaveBeenCalled();
+    } finally {
+      grid.remove();
+    }
+  });
+
+  test('leaves PageUp and PageDown to a tablist outside the player in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const tablist = document.createElement('div');
+    tablist.setAttribute('role', 'tablist');
+    tablist.tabIndex = 0;
+    document.body.append(tablist);
+    try {
+      tablist.focus();
+      expect(fireEvent.keyDown(tablist, { key: 'PageUp' })).toBe(true);
+      expect(fireEvent.keyDown(tablist, { key: 'PageDown' })).toBe(true);
+      expect(spies.seekBy).not.toHaveBeenCalled();
+    } finally {
+      tablist.remove();
+    }
+  });
+
+  // The boundary check requires an `HTMLElement`, but a focusable SVG (or
+  // any other non-HTML) target outside the player is exempted too: nothing
+  // narrower than "provably inside the boundary" counts as inside it.
+  test('leaves PageUp and PageDown to a focusable SVG outside the player in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('tabindex', '0');
+    document.body.append(svg);
+    try {
+      svg.focus();
+      expect(fireEvent.keyDown(svg, { key: 'PageUp' })).toBe(true);
+      expect(fireEvent.keyDown(svg, { key: 'PageDown' })).toBe(true);
+      expect(spies.seekBy).not.toHaveBeenCalled();
+    } finally {
+      svg.remove();
+    }
+  });
+
+  // The rule is keyed on the PageUp/PageDown keys, not on the action they
+  // resolve to: a consumer who rebinds PageUp to another action gets the
+  // same in-region-only treatment for whatever action answers it. Frees
+  // `PageUp` from the default `seekForwardLarge` binding first, so
+  // `toggleFullscreen` is genuinely what the key resolves to rather than
+  // losing to `seekForwardLarge`'s own unnamed default (still `PageUp`) in
+  // `resolveShortcutAction`'s action order.
+  test('leaves a PageUp rebound to another action to the page outside the player in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls
+        global
+        shortcuts={{ seekForwardLarge: 'l', toggleFullscreen: 'PageUp' }}
+      >
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const outside = document.createElement('div');
+    outside.tabIndex = 0;
+    document.body.append(outside);
+    try {
+      outside.focus();
+      expect(fireEvent.keyDown(outside, { key: 'PageUp' })).toBe(true);
+      expect(spies.requestFullscreen).not.toHaveBeenCalled();
+      expect(spies.seekBy).not.toHaveBeenCalled();
+    } finally {
+      outside.remove();
+    }
+  });
+
+  // Guard: the same rebinding, pressed inside the region, resolves to the
+  // rebound action rather than being left to the page -- the in-region half
+  // of the pair above, and what makes the README's rebinding example true.
+  // Passes unfixed: in-region rebinding is untouched by this fix.
+  test('applies a PageUp rebound to another action inside the region in global mode', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls
+        global
+        shortcuts={{ seekForwardLarge: 'l', toggleFullscreen: 'PageUp' }}
+      >
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    region.focus();
+    fireEvent.keyDown(region, { key: 'PageUp' });
+    expect(spies.requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(spies.seekBy).not.toHaveBeenCalled();
+  });
+
+  // Guard: PageUp/PageDown still seek ten seconds inside the player region
+  // in global mode -- the pre-existing behaviour the fix must not touch.
+  // Passes unfixed.
+  test('still seeks ten seconds on PageUp and PageDown inside the region in global mode', () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.SeekSlider />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    region.focus();
+    expect(fireEvent.keyDown(region, { key: 'PageUp' })).toBe(false);
+    expect(spies.seekBy).toHaveBeenLastCalledWith(10);
+    expect(fireEvent.keyDown(region, { key: 'PageDown' })).toBe(false);
+    expect(spies.seekBy).toHaveBeenLastCalledWith(-10);
+    const seekInput = container.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="seek-slider-input"]'
+    )!;
+    seekInput.focus();
+    expect(fireEvent.keyDown(seekInput, { key: 'PageUp' })).toBe(false);
+    expect(fireEvent.keyDown(seekInput, { key: 'PageDown' })).toBe(false);
+    expect(spies.seekBy.mock.calls).toEqual([[10], [-10], [10], [-10]]);
+  });
+
+  // Guard: j and l are not page keys, so the fix must leave them seeking
+  // globally regardless of target. Passes unfixed.
+  test('still seeks on j and l outside the player in global mode', () => {
+    const { spies } = renderWithPlayer(
+      <Player.Controls global>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const outside = document.createElement('div');
+    outside.tabIndex = 0;
+    document.body.append(outside);
+    try {
+      outside.focus();
+      expect(fireEvent.keyDown(outside, { key: 'l' })).toBe(false);
+      expect(spies.seekBy).toHaveBeenLastCalledWith(10);
+      expect(fireEvent.keyDown(outside, { key: 'j' })).toBe(false);
+      expect(spies.seekBy).toHaveBeenLastCalledWith(-10);
+    } finally {
+      outside.remove();
+    }
   });
 });

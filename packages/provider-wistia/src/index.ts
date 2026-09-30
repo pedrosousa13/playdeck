@@ -18,6 +18,7 @@ import {
 import { createWistiaAttachment } from './attachment.js';
 import { createWistiaBoundary } from './boundary.js';
 import { createWistiaPlayback } from './playback.js';
+import { createWistiaPosterAvailability } from './poster-availability.js';
 import { createWistiaPresentation } from './presentation.js';
 
 export type { WistiaMountElement } from './adapter-values.js';
@@ -86,6 +87,17 @@ export type WistiaProviderOptions = {
    */
   readonly startTime?: number;
   readonly transparentLetterbox?: boolean;
+  /**
+   * Resolve `PlayerCapabilities.providerPoster` and `PlayerState.providerPosterUrl`
+   * against Wistia's own oEmbed record. Opt-in: without it, this adapter never
+   * asks Wistia for a thumbnail, so no request discloses the viewer before a
+   * consumer has asked for the provider's own poster. Not to be confused with
+   * `poster` above, which hands Wistia's own chrome a still a *consumer*
+   * already has; this instead asks Wistia for one. `Root`'s `poster="provider"`
+   * folds this in the same way `controls` and `loop` are folded (ADR-0004), so
+   * `PlayerProviderOptions` omits the key.
+   */
+  readonly resolvePoster?: boolean;
 };
 
 type WistiaCommand =
@@ -109,8 +121,11 @@ export type WistiaProviderAdapter = ProviderAdapter &
 // What this adapter does not drive at all, for either of two reasons. Aurora
 // has a `videoQuality()` coarse setter and a captions API, but neither is wired
 // here, so `selectQuality` and `selectTextTrack` report unavailable rather than
-// staying forever "unknown". `pictureInPicture` and `airPlay` have no surface
-// to wire at all: `PublicApi` declares no member for either.
+// staying forever "unknown". `pictureInPicture`, `airPlay` and
+// `remotePlayback` have no surface to wire at all: `PublicApi` declares no
+// member for any of the three, and playback runs inside Wistia's own
+// `<wistia-player>`, which carries no media element this adapter has a
+// handle to.
 const outOfScope: Availability = { status: 'unavailable', reason: 'provider' };
 
 // Every command this adapter never has a live handle for, no matter which one
@@ -195,6 +210,11 @@ export const createWistiaProvider = (
   // every time report, seek and restart.
   const boundary = createWistiaBoundary(options);
 
+  const posterAvailability = createWistiaPosterAvailability({
+    source,
+    options
+  });
+
   const playback = createWistiaPlayback(mount, {
     emit,
     isStale: (player) => attachment.isStale(player),
@@ -218,17 +238,29 @@ export const createWistiaProvider = (
       setVolume: playback.setVolumeAvailability(),
       setPlaybackRate: playback.setPlaybackRateAvailability(),
       selectQuality: outOfScope,
+      selectQualityAuto: outOfScope,
       selectTextTrack: outOfScope,
+      selectAudioTrack: outOfScope,
       // Wistia's chapters are an inbound embed-option plugin: the embedder
       // supplies the list, and no documented read-back accessor exists (#182).
       chapters: outOfScope,
+      // `PublicApi` has no seekable-range accessor and no dedicated live-edge
+      // member. `attachment.ts`'s `liveFragment` already reuses `duration()`
+      // as the moving edge for the at-edge tolerance, purely because it is the
+      // closest thing available -- not because it is an actionable seek
+      // target this adapter is prepared to land a viewer on. With nothing to
+      // build a real one from, this reports the same verdict as every other
+      // surface `PublicApi` never grew.
+      liveEdge: outOfScope,
       // `PublicApi.requestFullscreen()` / `cancelFullscreen()`.
       fullscreen: available,
       pictureInPicture: outOfScope,
       airPlay: outOfScope,
+      remotePlayback: outOfScope,
       // Chromeless is a plain set of embed attributes, declared in Wistia's own
       // `Attributes` and gated by no account tier.
-      customControls: available
+      customControls: available,
+      providerPoster: posterAvailability.availability()
     };
   }
 
@@ -236,6 +268,7 @@ export const createWistiaProvider = (
     emit,
     options,
     getCapabilities: playerCapabilities,
+    posterAvailability,
     playback,
     presentation,
     clearStateListeners: () => listeners.clear()

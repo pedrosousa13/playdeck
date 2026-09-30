@@ -70,7 +70,8 @@ const base = import.meta.env.BASE_URL;
    * field by then, so the typing test below has already returned.
    */
   (() => {
-    const open = () => document.dispatchEvent(new CustomEvent('playdeck:search-open'));
+    const open = () =>
+      document.dispatchEvent(new CustomEvent('playdeck:search-open'));
     let pending = false;
     let ready = false;
 

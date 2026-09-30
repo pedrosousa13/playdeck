@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { createRef } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { createYouTubeProvider } from '@playdeck/provider-youtube';
 import * as Player from '../src/index';
@@ -203,7 +204,7 @@ test('re-attaches the YouTube adapter when the youtube option bag changes', asyn
   expect(harness.fakes[0]!.counts().destroyCount).toBe(1);
 });
 
-test('keeps the installed adapter when a value-equal youtube option bag is passed again', async () => {
+test('keeps the installed YouTube adapter when Root re-renders with an unchanged controls prop', async () => {
   const { rerender } = render(
     <Player.Root
       controls
@@ -226,6 +227,49 @@ test('keeps the installed adapter when a value-equal youtube option bag is passe
     <Player.Root
       controls
       loading="eager"
+      source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+  await act(async () => undefined);
+
+  expect(mockedCreateYouTubeProvider).toHaveBeenCalledTimes(1);
+});
+
+// #628: the trap the design guards against, mirrored from `hls.test.tsx`'s own
+// version of this test. `providerOptions={{ youtube: { host: '...' } }}`
+// written inline is a new object every render, exactly as a consumer writing
+// it in JSX would produce. Without `providerBagEqual` comparing the bag by
+// value, this looks like a change on every render and tears the embed down
+// and rebuilds it, losing playback position -- the same hazard `loadIframeApi`
+// caused before #628 removed it from this bag, only now impossible to
+// reintroduce because every remaining key is a `PrimitiveOptionBag` primitive.
+test('keeps the installed YouTube adapter when a value-equal provider option bag is passed again', async () => {
+  const { rerender } = render(
+    <Player.Root
+      loading="eager"
+      providerOptions={{ youtube: { host: 'https://www.youtube.com' } }}
+      source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(mockedCreateYouTubeProvider).toHaveBeenCalledTimes(1)
+  );
+
+  // A fresh object literal with the same value, as an inline prop produces on
+  // every render.
+  rerender(
+    <Player.Root
+      loading="eager"
+      providerOptions={{ youtube: { host: 'https://www.youtube.com' } }}
       source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
     >
       <Player.Viewport>
@@ -329,6 +373,46 @@ test('replays desired preferences once the YouTube provider is ready', async () 
   );
 });
 
+test('does not publish a refusedCommand for a controlled preference while the embed is not yet ready', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  render(
+    <Player.Root
+      loading="eager"
+      muted
+      playbackRate={1.5}
+      ref={handle}
+      source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
+      volume={0.5}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  // Read synchronously, before the mocked lazy `createYouTubeProvider`
+  // import resolves: no provider is attached yet at this point, which is
+  // exactly when a command issued against one would be refused.
+  expect(handle.current?.getState().refusedCommand).toBeNull();
+
+  await waitFor(() =>
+    expect(mockedCreateYouTubeProvider).toHaveBeenCalledTimes(1)
+  );
+  expect(handle.current?.getState().refusedCommand).toBeNull();
+
+  const fake = harness.fakes[0]!;
+  emitYouTubeReady(fake);
+
+  await waitFor(() =>
+    expect(fake.counts()).toMatchObject({
+      muteCount: 1,
+      playbackRateCount: 1,
+      volumeCount: 1
+    })
+  );
+  expect(handle.current?.getState().refusedCommand).toBeNull();
+});
+
 test('replays uncontrolled default preferences once the provider is ready', async () => {
   render(
     <Player.Root
@@ -413,12 +497,17 @@ test('renders no Playdeck control layer over a ready YouTube embed', async () =>
         setVolume: { status: 'available' },
         setPlaybackRate: { status: 'available' },
         selectQuality: { status: 'unavailable', reason: 'provider' },
+        selectQualityAuto: { status: 'unavailable', reason: 'provider' },
         selectTextTrack: { status: 'unavailable', reason: 'source' },
+        selectAudioTrack: { status: 'unavailable', reason: 'provider' },
         chapters: { status: 'unavailable', reason: 'provider' },
+        liveEdge: { status: 'unavailable', reason: 'provider' },
         fullscreen: { status: 'available' },
         pictureInPicture: { status: 'unavailable', reason: 'provider' },
         airPlay: { status: 'unavailable', reason: 'provider' },
-        customControls: { status: 'unavailable', reason: 'policy' }
+        remotePlayback: { status: 'unavailable', reason: 'provider' },
+        customControls: { status: 'unavailable', reason: 'policy' },
+        providerPoster: { status: 'available' }
       }
     });
   });

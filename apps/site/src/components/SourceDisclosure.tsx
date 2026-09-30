@@ -1,5 +1,5 @@
 /**
- * The "here is the file" disclosure under each composition on `/archetypes`,
+ * The "here is the file" disclosure under each composition on `/examples`,
  * rebuilt on shadcn's `Collapsible` for #542 phase 3. It replaces a native
  * `<details>`, on the maintainer's call that shadcn is the site's de facto
  * design system — see `SiteNavSheet.tsx` for the same swap made a phase
@@ -12,7 +12,7 @@
  * knowingly for both disclosures on this site. What it does not cost is the
  * source itself — see `forceMount` below.
  *
- * The highlighted code is not rendered here. `archetypes.astro` runs Shiki at
+ * The highlighted code is not rendered here. `examples.astro` runs Shiki at
  * build time and passes the result as children, so this island ships the
  * disclosure and none of the highlighting, and the file is in the served HTML
  * whether or not React ever runs.
@@ -47,7 +47,7 @@ export default function SourceDisclosure({ path, children }: Props) {
        * be a real loss rather than a detail: the file would be absent from the
        * served HTML, so a reader with no script would have no source on a page
        * whose whole claim is that the running player and its real source are
-       * both here. `e2e/site-archetypes.spec.ts` reads a line out of the
+       * both here. `e2e/site-examples.spec.ts` reads a line out of the
        * closed well for the same reason. A native `<details>` kept its
        * contents in the DOM while closed and this keeps that property.
        *
@@ -58,7 +58,7 @@ export default function SourceDisclosure({ path, children }: Props) {
        */}
       <CollapsibleContent forceMount className="data-[state=closed]:hidden">
         {/* `source__well` is kept as the name of this box rather than replaced
-         * by its utilities: it is what `e2e/site-archetypes.spec.ts` reads the
+         * by its utilities: it is what `e2e/site-examples.spec.ts` reads the
          * printed source through, and a class that says what the element is
          * survives a restyle in a way a list of utilities does not. */}
         <div className="source__well max-h-[32rem] overflow-auto [scrollbar-width:thin]">

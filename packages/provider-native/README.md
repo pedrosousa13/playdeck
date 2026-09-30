@@ -7,10 +7,63 @@ progressive MP4/WebM, and HLS in browsers that play it natively (Safari, iOS).
 pnpm add @playdeck/provider-native
 ```
 
+Driving the `<video>`/`<audio>` element is plain DOM, so this package has no
+React dependency of its own; see "Without React" below for driving a
+`PlayerController` yourself. `@playdeck/react`, which supplies the primitives
+above, is React 19 only.
+
 `@playdeck/react` loads this for you when the source resolves to `video` — an
 `.mp4` or `.webm` path, or an explicit `{ type: 'video' }` source; see
-[Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md#the-other-three-providers). Install
-it directly only if you are driving a `PlayerController` yourself.
+[Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md#the-other-three-providers).
+
+<!-- example:provider-setup-native -->
+
+```tsx
+import * as Player from '@playdeck/react';
+
+// A native source is an `.mp4`/`.webm` URL in the `source` prop.
+// `loop`, `startTime` and `endTime` are `Player.Root`'s own props on every
+// provider (ADR-0004), never keys in a provider's option bag — native takes no
+// `providerOptions` key of its own at all.
+export const ClipWithCaptions = () => (
+  <Player.Root
+    loop
+    startTime={30}
+    endTime={45}
+    source="https://example.com/clip.mp4"
+  >
+    <Player.Viewport>
+      {/* `textTracks` reaches native playback directly, unlike the embed
+          providers, where only captions a provider discovers for itself are
+          available. */}
+      <Player.Media
+        textTracks={[
+          { src: '/captions.en.vtt', srcLang: 'en', label: 'English' }
+        ]}
+      />
+      <Player.Captions />
+      <Player.Controls>
+        <Player.PlayButton />
+        <Player.SeekSlider />
+        <Player.Time type="current" />
+        <Player.CaptionsButton />
+        <Player.PipButton />
+        {/* Renders only where there is a receiver to cast to. */}
+        <Player.AirPlayButton />
+        <Player.FullscreenButton />
+      </Player.Controls>
+      <Player.ErrorDisplay />
+    </Player.Viewport>
+  </Player.Root>
+);
+```
+
+<!-- /example -->
+
+## Without React
+
+Reach for this package directly when you are writing a provider adapter, or
+hosting a player somewhere other than React.
 
 <!-- example:provider-native -->
 
@@ -54,23 +107,35 @@ export const play = (): Promise<unknown> => controller.play();
   bounds.
 - **A `startTime` the source cannot be positioned at** publishes a non-fatal
   `configuration` notice on `PlayerState.error` rather than disappearing. The
-  offset is applied once, when metadata arrives; it is bounded by the media's
-  own duration, so an offset past the end of the clip is still refused, and the
-  element's `seekable` ranges decide whether the element will move at all rather
-  than where it lands — a window that does not reach the offset is a refusal,
-  never a nudge onto its nearest edge. The playhead is then read back to confirm
-  it arrived, so an element that takes the write and stays put is reported too.
-  The notice is how you tell any of that apart from a setting you mis-wired. It
-  does not make the offset apply.
+  offset is considered exactly once per load, at the first `loadedmetadata`;
+  it is bounded by the media's own duration, so an offset past the end of the
+  clip is still refused, and the element's `seekable` ranges decide whether the
+  element will move at all rather than where it lands — a window that does not
+  reach the offset is a refusal, never a nudge onto its nearest edge. The
+  playhead is then read back to confirm it arrived, so an element that takes
+  the write and stays put is reported too. The notice is how you tell any of
+  that apart from a setting you mis-wired. It does not make the offset apply.
 
-  **The read-back is not yet reliable on WebKit.** It reads `currentTime` in the
-  same tick as the write, and WebKit sometimes clamps before that read and
-  sometimes answers with the value it was just given — so an offset it declines
-  is reported on some loads and dropped in silence on others, leaving the
-  playhead at its load position with no notice. It is a race, measured across
-  two CI runs; chromium and firefox report it correctly on every attempt.
-  Tracked as #567. Treat the refusal notice as a guarantee on chromium and
-  firefox, and as a race on WebKit, until that lands.
+  **The playhead is confirmed on the same tick, and again once the element
+  reports it is no longer seeking, which is what makes the notice reliable on
+  WebKit too.** The first read is in the same tick as the write; chromium and
+  firefox clamp before the write's setter returns, so that read already sees a
+  refusal there. Where it does not, the provider watches `media.seeking`, the
+  same flag the HTML seek algorithm itself clears once a seek concludes,
+  refusal or not, and takes its deferred read the moment that flag reads
+  false -- catching an engine whose setter answers the write before its own
+  seek has finished deciding.
+
+  **A refusal at that single attempt is permanent for the load.** Nothing
+  reconsiders it afterward — not a `seekable` window that later widens past
+  the requested offset, not any other change of state before the next load.
+  The `configuration` notice above is the record of the refusal: once it has
+  fired for a load, nothing re-applies the offset or retracts the notice for
+  that same load. Only a fresh load — a new source, or an explicit `retry` —
+  gives the offset another attempt, and that attempt's own decision replaces
+  the previous one: a retry whose reload reaches the requested offset
+  withdraws the notice, leaving `PlayerState.error` clear, exactly as a retry
+  that refuses again keeps it standing.
 
 - **`selectQuality`** is `unavailable` with reason `source`: the browser picks
   its own rendition for native HLS and there is nothing to enumerate. It is not
@@ -78,12 +143,27 @@ export const play = (): Promise<unknown> => controller.play();
 - **`airPlay`** follows WebKit's `webkitplaybacktargetavailabilitychanged`, so
   it means "there is a receiver to cast to", not "this browser has the picker
   API". It goes back to `unavailable` when the route disappears.
+- **`remotePlayback`** follows the standards-based Remote Playback API's own
+  `remote.watchAvailability()` the same way `airPlay` follows WebKit's event:
+  `unavailable`/`browser` where the element has no `remote` object at all,
+  `unavailable`/`provider` where it does but no device is currently reachable,
+  and `available` only once one is. `PlayerState.remotePlayback` then reflects
+  `remote.state` (`connecting`/`connected`/`disconnected`) for as long as the
+  capability stays `available`, and is `null` otherwise. This is the route
+  `showRemotePlaybackPicker()` (`remote.prompt()`) reaches Chromecast through —
+  distinct from the separate, unimplemented Cast SDK.
 - **Captions** are Playdeck's to draw by default (`captionRendering: 'custom'`);
   `setCaptionRenderer('native')` hands them back to the browser's own renderer.
+  `VTTCue.text` can carry WebVTT tags and character references, so cue markup
+  reaches `TextCue.text` as plain text — tags stripped, entities decoded.
 - **`live`** comes from the element's own signals: an endless `duration` and the
   moving `seekable` window, measured against the playhead. Never from the source
   URL. A file with a finite duration reports `null`, and the value is published
   again only when it changes.
+- **`liveEdge`** is `available` once the element is live and its own seekable
+  window has a finite end — the only notion of a live edge a plain media
+  element has, with no target latency of its own. `seekToLiveEdge()` lands on
+  the largest such end.
 - **`commandsReady`** is declared after `media.load()`, because `load()` resets
   `playbackRate` and anything applied earlier would be silently undone.
 - **Chapters** come from a `kind="chapters"` text track. Its mode is moved to

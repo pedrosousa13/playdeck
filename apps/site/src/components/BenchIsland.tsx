@@ -46,77 +46,98 @@
  * deliberately empty, so it carries no ambient `ImportMetaEnv` declaration.
  * `SearchCommand.tsx` resolves the same global the same way.
  */
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject
+} from 'react';
 import { createPortal } from 'react-dom';
 import * as Player from '@playdeck/react';
 /*
  * ---- how the skin switch applies a real stylesheet -------------------------
  *
- * `theme` is the library's one opt-in stylesheet, and the switch has to be able
- * to apply it and take it away again without shipping it to a reader who never
- * presses the switch. Three ways were available.
- *
- * A plain `import '@playdeck/react/theme.css'` — what `HeroPlayer.astro` did —
- * is loaded for everybody and can never be removed, so `none` would be a lie.
- *
- * A dynamic `import('@playdeck/react/theme.css')` defers the cost, but Vite
- * turns a dynamically imported stylesheet into a chunk that injects a `<style>`
- * element on evaluation, and nothing hands back a handle to remove it. Pressing
- * `theme` once would make `none` unreachable for the rest of the page's life.
- *
- * `?url` is the third and is what this uses. Vite emits `theme.css` as its own
- * hashed asset and this import is the string address of it, so no byte of the
- * stylesheet is in the page's own CSS or JavaScript. The effect below appends a
- * `<link>` at `theme` and removes it at `none`, which is the same mechanism a
- * consumer's bundler performs at build time, done at a reader's request
- * instead. `none` therefore really is no CSS: no rule in the document matches a
- * `[data-playdeck-part]` element except the geometry `Bench.astro` writes, and
- * geometry is the consumer's in both positions — the library's own stylesheet
- * says so in as many words, and states only appearance.
+ * Both skins are real, authored stylesheets now, and the switch has to be able
+ * to load whichever one is selected without ever having both in the document at
+ * once. `?url` is the mechanism: Vite emits each stylesheet as its own hashed
+ * asset and this import is the string address of it, so no byte of either is in
+ * the page's own CSS or JavaScript. The effect below appends a `<link>` at
+ * whichever href the current skin resolves to and removes it on cleanup, the
+ * same mechanism a consumer's bundler performs at build time, done at a
+ * reader's request instead — now swapping between two real stylesheets rather
+ * than adding and removing one.
  */
 import themeHref from '@playdeck/react/theme.css?url';
-import type { PlayerProvider } from '@playdeck/core';
+import dockedHref from '@playdeck/react/docked.css?url';
+import type { PlayerProvider, PlayerSource } from '@playdeck/core';
 import {
   benchSources,
   readySources,
+  resolvePlayerSource,
+  POSTER_SIZES,
   type BenchCredit,
   type BenchPoster
 } from '@/bench-sources';
-import {
-  buildComposition,
-  type BenchPosition,
-  type SkinName
-} from '@/bench-composition';
+import { type BenchPosition, type SkinName } from '@/bench-composition';
+import { BENCH_CONTROLS, type BenchControlName } from '@/bench-controls';
 import { QUIET_START, quietLine, recordLoad } from '@/bench-quiet';
+import { revealsOnly } from '@/bench-surface-toggle';
+/*
+ * The settings menu's content, in its own component so the composition panel
+ * can print exactly what mounts (`bench-composition.ts`'s `<QualityAndRateMenu />`)
+ * rather than transcribing every line of it by hand. `examples/react-menus.tsx`'s
+ * `RateMenu` is the consumer-facing version of the same reasoning, wrapping
+ * `Player.SettingsMenu` around the same content for a reader of the examples --
+ * see `BenchSettingsMenu.tsx`'s own comment for why the two do not share code.
+ */
+import { QualityAndRateMenu } from './BenchSettingsMenu';
 import BenchSwitches from './BenchSwitches';
+import BenchStats from './BenchStats';
 import CompositionPanel from './CompositionPanel';
 
 interface Props {
   /** `import.meta.env.BASE_URL`, read in `Bench.astro` and passed down. */
   readonly base: string;
+  /** `Bench.astro`'s four precomputed strings, keyed `${provider}:${skin}`. */
+  readonly compositions: Readonly<Record<string, string>>;
+  /** The same four keys, holding the plain source `compositions` highlights. */
+  readonly compositionSources: Readonly<Record<string, string>>;
 }
 
 /**
- * The bundle a position resolves to: the URL, the poster, the frame's
- * intrinsic dimensions, the start time and the credit, all read off one
- * `benchSources` entry so they can never drift apart from each other.
- * `sourceUrl` and `poster` are already resolved against the site's base path;
- * `startTime` is `0` on every entry today, so a press plays the film from its
- * own beginning rather than promising the moment the poster happens to show --
- * see the field's own comment in `bench-sources.ts` for why that replaced an
- * earlier version that pinned it to the poster's own timestamp.
- * `aspectRatio` is the CSS-ready `'width / height'` string, computed here
- * once from the two integers `bench-sources.ts` carries rather than a rounded
- * decimal anywhere -- `2048 / 858` is exact where `2.39` is not.
+ * The bundle a position resolves to: the URL, what `Player.Root` actually
+ * mounts, the poster, the frame's intrinsic dimensions, the start time and
+ * the credit, all read off one `benchSources` entry so they can never drift
+ * apart from each other. `sourceUrl` and `poster` are already resolved
+ * against the site's base path; `startTime` is `0` on every entry today, so a
+ * press plays the film from its own beginning rather than promising the
+ * moment the poster happens to show -- see the field's own comment in
+ * `bench-sources.ts` for why that replaced an earlier version that pinned it
+ * to the poster's own timestamp. `aspectRatio` is the CSS-ready
+ * `'width / height'` string, computed here once from the two integers
+ * `bench-sources.ts` carries rather than a rounded decimal anywhere --
+ * `2048 / 858` is exact where `2.39` is not.
+ *
+ * `sourceUrl` and `playerSource` are two different facts and neither can
+ * stand in for the other. `sourceUrl` is always a plain URL -- the quiet
+ * line's `recordLoad` needs one to read an origin off, and the no-JavaScript
+ * fallback in `Bench.astro` needs one for a real `href`. `playerSource` is
+ * what `Player.Root`'s own `source` prop receives, which for `hls` is an
+ * explicit object with its engine pinned rather than that same URL --
+ * `bench-sources.ts`'s `resolvePlayerSource` owns the difference; this file
+ * only carries both of what it returns.
  *
  * Derived here rather than remembered separately, because `BenchPosition`
- * carries the provider and its URL and the two must not drift: `buildComposition`
- * prints the URL and stays pure by having no opinion about where one came
- * from, so something has to hold them together and it is the press that does
- * it. The poster, dimensions, start time and credit ride along with the same
- * lookup for the same reason -- `bench-sources.ts` bundles all of it into one
- * object per provider precisely so that nothing here can pick up the URL for
- * one position and the poster, shape, start time or credit for another.
+ * carries the provider and its source and the two must not drift:
+ * `buildComposition` prints the source and stays pure by having no opinion
+ * about where it came from, so something has to hold them together and it is
+ * the press that does it. The poster, dimensions, start time and credit ride
+ * along with the same lookup for the same reason -- `bench-sources.ts`
+ * bundles all of it into one object per provider precisely so that nothing
+ * here can pick up the source for one position and the poster, shape, start
+ * time or credit for another.
  *
  * The throw is the same shape `index.astro` uses for a missing bundle target.
  * `benchSources` is built from a `Record<PlayerProvider, …>` and is therefore
@@ -125,6 +146,7 @@ interface Props {
  */
 type ResolvedSource = {
   readonly sourceUrl: string;
+  readonly playerSource: PlayerSource;
   readonly poster: BenchPoster;
   readonly aspectRatio: string;
   readonly startTime: number;
@@ -140,6 +162,7 @@ const entryFor = (provider: PlayerProvider, base: string): ResolvedSource => {
   }
   return {
     sourceUrl: entry.source(base),
+    playerSource: resolvePlayerSource(entry, base),
     poster: entry.poster(base),
     aspectRatio: `${entry.width} / ${entry.height}`,
     startTime: entry.startTime,
@@ -176,7 +199,8 @@ const ControlBar = ({ fromKeyboardRef }: ControlBarProps) => {
     activation: snapshot.activation,
     playing: snapshot.playback === 'playing',
     muted: snapshot.muted,
-    fullscreen: snapshot.fullscreen
+    fullscreen: snapshot.fullscreen,
+    pictureInPicture: snapshot.pictureInPicture
   }));
   /*
    * Where the keyboard goes when the affordance it was standing on disappears.
@@ -204,6 +228,73 @@ const ControlBar = ({ fromKeyboardRef }: ControlBarProps) => {
     fromKeyboardRef.current = false;
     playButton.current?.focus();
   }, [fromKeyboardRef, ready]);
+  /*
+   * Keyed by `BenchControlName`, so the tuple in `bench-controls.ts` is the one
+   * place either the mounted tree here or the printed tree in
+   * `bench-composition.ts` can grow or shrink from: a name added there and not
+   * answered here is a missing key on a total `Record` and does not compile.
+   *
+   * The values are elements rather than component references, because two of
+   * them are not a component alone -- `playButton` carries the `ref` the focus
+   * move above writes into, and `timeDuration` carries the separator that
+   * belongs in front of it. A table of components could hold neither.
+   *
+   * The separator is the page's own text rather than a gap opened in CSS,
+   * because a skin that draws no rule between the two `<time>` elements renders
+   * them flush against each other as `1:2410:34`. That reads as a defect rather
+   * than as an unstyled control, and a consumer writing this bar by hand would
+   * put a separator in for the same reason, so the composition prints one. It
+   * travels with `timeDuration` rather than taking an eleventh entry of its
+   * own, because it is consumer text and not a part.
+   */
+  const controls: Record<BenchControlName, ReactNode> = {
+    seekSlider: <Player.SeekSlider />,
+    playButton: (
+      <Player.PlayButton ref={playButton}>
+        {state.playing ? <Player.PauseIcon /> : <Player.PlayIcon />}
+      </Player.PlayButton>
+    ),
+    muteButton: (
+      <Player.MuteButton>
+        {state.muted ? <Player.MutedIcon /> : <Player.VolumeHighIcon />}
+      </Player.MuteButton>
+    ),
+    volumeSlider: <Player.VolumeSlider />,
+    timeCurrent: <Player.Time type="current" />,
+    timeDuration: (
+      <>
+        <span aria-hidden="true"> / </span>
+        <Player.Time type="duration" />
+      </>
+    ),
+    captionsButton: <Player.CaptionsButton />,
+    settingsMenu: (
+      <Player.SettingsMenu>
+        <Player.SettingsMenuTrigger aria-label="Settings" />
+        <Player.SettingsMenuContent>
+          <QualityAndRateMenu />
+        </Player.SettingsMenuContent>
+      </Player.SettingsMenu>
+    ),
+    pipButton: (
+      <Player.PipButton>
+        {state.pictureInPicture ? (
+          <Player.PipExitIcon />
+        ) : (
+          <Player.PipEnterIcon />
+        )}
+      </Player.PipButton>
+    ),
+    fullscreenButton: (
+      <Player.FullscreenButton>
+        {state.fullscreen ? (
+          <Player.FullscreenExitIcon />
+        ) : (
+          <Player.FullscreenEnterIcon />
+        )}
+      </Player.FullscreenButton>
+    )
+  };
   return (
     /*
      * A focusable region that owns the media keyboard map — Space, the arrows,
@@ -212,7 +303,16 @@ const ControlBar = ({ fromKeyboardRef }: ControlBarProps) => {
      * Each control is capability-gated by the library rather than by this page.
      * `Player.FullscreenButton` is the visible instance: it renders only while
      * the fullscreen capability reads `available`, so where fullscreen is
-     * refused it is absent rather than present and dead.
+     * refused it is absent rather than present and dead. `VolumeSlider`,
+     * `CaptionsButton`, the settings menu and `PipButton` are gated the same
+     * way, which is why mounting all ten costs a provider that refuses some of
+     * them nothing.
+     *
+     * Rendered by mapping over `BENCH_CONTROLS` rather than by writing the
+     * children out here, because the theme's grid splits row one from row two
+     * by source order and has no wrapper element to split on: the order in the
+     * tuple *is* the layout, and one list nothing can reorder by hand is what
+     * keeps it that way.
      *
      * Hidden until the activation has produced a player, which is the mirror of
      * the affordance's own render condition — the bar arrives exactly as the
@@ -223,32 +323,9 @@ const ControlBar = ({ fromKeyboardRef }: ControlBarProps) => {
      * at once, without unmounting a subtree that is about to come back.
      */
     <Player.Controls hidden={!ready}>
-      <Player.PlayButton ref={playButton}>
-        {state.playing ? <Player.PauseIcon /> : <Player.PlayIcon />}
-      </Player.PlayButton>
-      <Player.MuteButton>
-        {state.muted ? <Player.MutedIcon /> : <Player.VolumeHighIcon />}
-      </Player.MuteButton>
-      <Player.SeekSlider />
-      {/*
-       * The separator is the page's own text rather than a gap opened in CSS,
-       * because under the `none` skin there is no CSS to open one and the two
-       * `<time>` elements render flush against each other as `1:2410:34`. That
-       * reads as a defect rather than as an unstyled control, which is the one
-       * thing the `none` position must not do: it is here to show what ships,
-       * and what ships is not broken. A consumer writing this by hand would put
-       * a separator in for the same reason, so the composition prints one.
-       */}
-      <Player.Time type="current" />
-      <span aria-hidden="true"> / </span>
-      <Player.Time type="duration" />
-      <Player.FullscreenButton>
-        {state.fullscreen ? (
-          <Player.FullscreenExitIcon />
-        ) : (
-          <Player.FullscreenEnterIcon />
-        )}
-      </Player.FullscreenButton>
+      {BENCH_CONTROLS.map((name) => (
+        <Fragment key={name}>{controls[name]}</Fragment>
+      ))}
     </Player.Controls>
   );
 };
@@ -292,14 +369,52 @@ const ControlBar = ({ fromKeyboardRef }: ControlBarProps) => {
  * The empty fragment is how a `Player` button is given no visible content: the
  * library falls back to printing its own English wording for `children` that
  * are nullish, and this control's whole face is the picture behind it.
+ *
+ * ---- the reveal-only guard on a coarse pointer (2026-09-04, #622) -----------
+ *
+ * A tap here also wakes the bar: `Viewport`'s idle-reset listener sits on
+ * `pointerdown` and this button is inside it, so the same gesture that
+ * reaches `PlayButton`'s own `onClick` has already reset `data-idle` by the
+ * time that click fires. On a coarse pointer with the bar hidden, letting
+ * both happen means the first tap after the bar faded both reveals it and
+ * pauses a clip the reader has not yet seen the controls for -- two outcomes
+ * from one gesture where only one was asked for.
+ *
+ * `onPointerDownCapture` is what makes reading "was it hidden before this
+ * tap" possible at all: React dispatches capture handlers against the root
+ * container before the native event ever reaches `Viewport`'s own
+ * bubble-phase listener, so this runs first and records the pre-tap state
+ * (`revealOnlyRef`) before anything has reset it. `onClick` then reads that
+ * recorded state and prevents the default only there, which is what stops
+ * `PlayButton`'s own handler (`if (!event.defaultPrevented) ... togglePlaybackWithOrigin`)
+ * from running. `revealsOnly` (`bench-surface-toggle.ts`) is the pure
+ * decision; this component is only the plumbing that gets it the two facts
+ * it needs. `apps/site/test/bench-surface-toggle.test.ts` covers the truth
+ * table.
  */
 const SurfaceToggle = () => {
   const ready = Player.usePlayerState(
     (snapshot) => snapshot.activation === 'ready'
   );
+  const revealOnlyRef = useRef(false);
   if (!ready) return null;
   return (
-    <Player.PlayButton data-surface-toggle="" tabIndex={-1}>
+    <Player.PlayButton
+      data-surface-toggle=""
+      onClick={(event) => {
+        if (revealOnlyRef.current) event.preventDefault();
+      }}
+      onPointerDownCapture={(event) => {
+        const viewport = event.currentTarget.closest(
+          '[data-playdeck-part="viewport"]'
+        );
+        revealOnlyRef.current = revealsOnly(
+          matchMedia('(pointer: coarse)').matches,
+          viewport?.getAttribute('data-idle') === 'true'
+        );
+      }}
+      tabIndex={-1}
+    >
       <></>
     </Player.PlayButton>
   );
@@ -315,10 +430,12 @@ const SurfaceToggle = () => {
  */
 const Stage = ({
   poster,
-  skin
+  skin,
+  source
 }: {
   readonly poster: BenchPoster;
   readonly skin: SkinName;
+  readonly source: PlayerProvider;
 }) => {
   /*
    * How the activation was given, carried from the press to the render that
@@ -332,12 +449,15 @@ const Stage = ({
   const fromKeyboardRef = useRef(false);
   return (
     /*
-     * `data-bench-skin` is what scopes `Bench.astro`'s one appearance reset to
-     * the `none` position. It rides on the viewport rather than on
-     * `.bench__stage` because the viewport is React's: the attribute then
-     * arrives in the same commit as the state it reports, where writing it onto
-     * the Astro element would mean a `setAttribute` in an effect and a frame in
-     * which the document and the switch disagree.
+     * `data-bench-skin` is what scopes `Bench.astro`'s docked-only layout
+     * rules -- the viewport's two-row grid, its `::before` ratio box, and the
+     * control bar's own row -- to the `docked` position; the badge-redraw
+     * rule needs no such scoping, since both skins hit the same defect. It
+     * rides on the viewport rather than on `.bench__stage` because the
+     * viewport is React's: the attribute then arrives in the same commit as
+     * the state it reports, where writing it onto the Astro element would
+     * mean a `setAttribute` in an effect and a frame in which the document
+     * and the switch disagree.
      */
     <Player.Viewport data-bench-skin={skin}>
       <Player.Media />
@@ -357,19 +477,34 @@ const Stage = ({
        * clip the control beside it is labelled to play, so describing it would
        * announce the same thing twice to a reader who cannot see either.
        *
-       * `srcSet` carries both widths `bench-sources.ts` ships -- 1024w and the
-       * film's own 2048w -- and `sizes` is `100vw` rather than a measurement of
-       * this frame's actual CSS width at every breakpoint: the frame is never
-       * wider than the viewport, so `100vw` never under-selects and asks a
-       * browser to pick the smaller file only where the viewport itself is
-       * narrow. `src` stays the 1024w file, for the one reader whose browser
-       * reads neither attribute. */}
-      <Player.Poster>
+       * `srcSet` carries both widths `bench-sources.ts` ships for whichever
+       * position is selected. `sizes` is `POSTER_SIZES`, that file's one
+       * exported description of the stage's real CSS width at every
+       * breakpoint (not `100vw`, which overstates it: the stage is narrower
+       * than the viewport above the breakpoint `index.astro`'s `.page` rule
+       * sets, so `100vw` asked a browser to resolve a wider image than the
+       * box ever shows -- #611). It is the same string the document-head
+       * preload link `index.astro` renders and the `<noscript>` fallback in
+       * `Bench.astro` both carry, which is what keeps this island from
+       * fetching a second variant once it mounts over that preload. `src`
+       * stays the narrower file, for the one reader whose browser reads
+       * neither attribute. `fetchPriority="high"`: this is the page's LCP
+       * candidate.
+       *
+       * `showWhilePaused` only for `youtube`: that is the one position whose
+       * iframe draws its own chrome -- a title bar, a "more videos" shelf, a
+       * pause glyph -- over an idle embed once nothing on this side covers
+       * it, and the poster reappearing while paused is what covers it back
+       * up. `vimeo` and every native position already show their own paused
+       * frame underneath, which is what the library's default (off) leaves
+       * alone. */}
+      <Player.Poster showWhilePaused={source === 'youtube'}>
         <Player.PosterImage
           alt=""
           src={poster.src}
           srcSet={poster.srcSet}
-          sizes="100vw"
+          sizes={POSTER_SIZES}
+          fetchPriority="high"
         />
       </Player.Poster>
       {/* Before the control bar and after the picture, which is the order the
@@ -493,6 +628,34 @@ const QuietLine = ({ sourceUrl }: { readonly sourceUrl: string }) => {
 };
 
 /**
+ * What HLS is, for a reader who is not a video person and does not recognise
+ * the word the source switch prints. Shown only for the `hls` position --
+ * the other three positions are named by host, not by protocol, and carry no
+ * word that needs unpacking the same way.
+ *
+ * Worded around this bench's own clip rather than HLS in general: three
+ * qualities and bandwidth-driven switching are what
+ * `scripts/media-sprite-fright.mjs`'s ladder and hls.js's own adaptive
+ * bitrate selection actually do here (`e2e/site-bench.spec.ts`'s stats-readout
+ * test pins the same three-rung ladder), not a claim about every HLS stream
+ * anywhere.
+ *
+ * `bench__explainer` is `.bench__quiet`'s own treatment under a name of its
+ * own -- `--text-fn`, mono, `--color-ink-subtle` -- because this paragraph
+ * qualifies the switch above it rather than captioning it, the same relation
+ * `.bench__quiet` has to the frame, but it is a different sentence with a
+ * different lifetime (present only on one position, not replaced on every
+ * press), so it gets its own class in `Bench.astro`'s stylesheet rather than
+ * borrowing the quiet line's.
+ */
+const HlsExplainer = () => (
+  <p data-bench-explainer className="bench__explainer">
+    HLS, HTTP Live Streaming: the clip is cut into short segments at three
+    qualities, and the player switches between them as your bandwidth changes.
+  </p>
+);
+
+/**
  * The CC BY credit for whichever film the source switch has selected.
  *
  * `Bench.astro` prints this same markup as static text inside `<noscript>`,
@@ -543,40 +706,78 @@ const Credit = ({ credit }: { readonly credit: BenchCredit }) => (
  * mount node as `--bench-aspect-ratio` -- the custom property
  * `.bench__stage`'s own rule in `Bench.astro` reads -- the same way
  * `Bench.astro` sets it inline for the position the page rests on before this
- * component ever mounts. */
+ * component ever mounts.
+ *
+ * `data-bench-skin` is mirrored onto the same mount node for the same reason:
+ * `docked`'s second row makes `Player.Viewport` -- which carries this
+ * attribute itself, see `Stage` below -- taller than this outer box's own
+ * ratio-locked cell can hold, and `Bench.astro`'s `.bench__stage[data-bench-skin='docked']`
+ * rule is what stops constraining that cell's height once a reader is on that
+ * skin. Written here rather than left for `Bench.astro`'s own markup to carry
+ * a default, because `Bench.astro` renders before this component ever mounts:
+ * `#bench-stage` carries no `data-bench-skin` until this effect has run, the
+ * same reason `--bench-aspect-ratio` above is script-written and
+ * not printed inline for every position in advance. */
 const StagePortal = ({
   poster,
   aspectRatio,
-  skin
+  skin,
+  source
 }: {
   readonly poster: BenchPoster;
   readonly aspectRatio: string;
   readonly skin: SkinName;
+  readonly source: PlayerProvider;
 }) => {
   const [mount] = useState(() => document.getElementById('bench-stage'));
   useEffect(() => {
     mount?.style.setProperty('--bench-aspect-ratio', aspectRatio);
   }, [mount, aspectRatio]);
+  const isFirstSkinRender = useRef(true);
+  useEffect(() => {
+    if (mount === null) return;
+    mount.setAttribute('data-bench-skin', skin);
+
+    if (isFirstSkinRender.current) {
+      isFirstSkinRender.current = false;
+      return;
+    }
+    /*
+     * The crossfade (2026-09-03): a hard drop to 0.6 opacity with no
+     * transition, then removed on the next animation frame so the return to
+     * 1 crosses `.bench__stage`'s own `transition: opacity 240ms`. Skipped
+     * outright under reduced motion, rather than relying on the site's
+     * global 0.01ms transition-duration collapse: that rule only shortens a
+     * transition that was going to run anyway, and `DESIGN.md`'s "Entry
+     * motion" section holds a visible reveal like this one to "removed, not
+     * shortened" -- the same reason `index.astro`'s own entrance is gated on
+     * a media query rather than left to that global rule.
+     */
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return;
+    }
+    mount.setAttribute('data-stage-flip', '');
+    requestAnimationFrame(() => {
+      mount.removeAttribute('data-stage-flip');
+    });
+  }, [mount, skin]);
   if (mount === null) return null;
-  return createPortal(<Stage poster={poster} skin={skin} />, mount);
+  return createPortal(
+    <Stage poster={poster} skin={skin} source={source} />,
+    mount
+  );
 };
 
-const BenchIsland = ({ base }: Props) => {
+const BenchIsland = ({ base, compositions, compositionSources }: Props) => {
   /*
-   * `theme` is the resting position, and the reasoning is worth keeping because
-   * the opposite was tried first.
-   *
-   * `none` is the honest one: it applies no CSS at all, which is what the
-   * library actually ships. But an unstyled player is what a reader meets
-   * before they have pressed anything, and it reads as a broken embed rather
-   * than as an argument. The maintainer looked at both and said so. Leading
-   * with it sells the library badly, because the first impression is a player
-   * that appears not to work rather than a library that gets out of your way.
-   *
-   * So the page opens on the one opt-in stylesheet the library publishes, and
-   * `none` is the switch a reader presses to see what is underneath. The
-   * demonstration survives the reversal intact. What changes is which of the
-   * two a reader has to ask for.
+   * `theme` rests at every width now (2026-09-04, reversing the width-keyed
+   * default this comment used to describe): the idle fade makes the floating
+   * bar a sound phone layout on its own, fading while playing and returning
+   * on a tap or a keystroke, so there is no width below which a reader is
+   * better served by a default they cannot see the switch to leave. See
+   * `theme.css`'s own "below 48rem" comment for the fuller account and
+   * `docs/superpowers/specs/2026-09-02-bench-two-themes-design.md`'s dated
+   * note for the ruling this replaces.
    */
   const [position, setPosition] = useState<BenchPosition & ResolvedSource>(
     () => {
@@ -599,18 +800,67 @@ const BenchIsland = ({ base }: Props) => {
   );
 
   // The skin, applied and removed as a real `<link>` — see the import above
-  // for why that rather than an import of either kind. The cleanup is what
-  // makes `none` mean what it says.
+  // for why that rather than an import of either kind. Always exactly one
+  // `<link>` in the head: every position now ships a stylesheet, so this is a
+  // swap between two hrefs rather than a conditional add and remove.
   useEffect(() => {
-    if (position.skin !== 'theme') return;
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = themeHref;
+    link.href = position.skin === 'theme' ? themeHref : dockedHref;
     document.head.append(link);
     return () => {
       link.remove();
     };
   }, [position.skin]);
+
+  // `Bench.astro`'s frontmatter precomputes one highlighted string per
+  // reachable (source, skin) pair -- see its own comment for why that is
+  // exhaustive. The throw below is safe only because Task 5 already landed:
+  // `position.skin` can no longer be `'none'`, so every reachable `position`
+  // has an entry here.
+  const html = compositions[`${position.source}:${position.skin}`];
+  if (html === undefined) {
+    throw new Error(
+      `BenchIsland: no precomputed composition for ${position.source}:${position.skin}.`
+    );
+  }
+
+  const source = compositionSources[`${position.source}:${position.skin}`];
+  if (source === undefined) {
+    throw new Error(
+      `BenchIsland: no precomputed source for ${position.source}:${position.skin}.`
+    );
+  }
+
+  /*
+   * The changed line indices between the previous render's composition and
+   * this one, 1-indexed to match the `data-line` attribute `Bench.astro`'s
+   * `markLineNumbers` transformer stamps on each Shiki line span.
+   *
+   * A ref rather than state: this only has to be right for the render it is
+   * read in (`CompositionPanel`'s own effect, keyed on `html`), and setting
+   * state here would ask React for a render this component does not need.
+   * `Player.Root`'s own `controlledMuted.current = muted` pattern does the
+   * same thing for the same reason (see its comment).
+   */
+  /* eslint-disable react-hooks/refs -- read and written in the same render,
+   * deliberately, to compare against the previous render's value; see the
+   * comment above. `QuietLine`'s `lastSourceUrl` does the same thing for the
+   * same reason (see its comment). */
+  const previousSourceRef = useRef(source);
+  const changedLines: readonly number[] = (() => {
+    const previous = previousSourceRef.current;
+    previousSourceRef.current = source;
+    if (previous === source) return [];
+    const previousLines = previous.split('\n');
+    const nextLines = source.split('\n');
+    const changed: number[] = [];
+    for (let index = 0; index < nextLines.length; index++) {
+      if (nextLines[index] !== previousLines[index]) changed.push(index + 1);
+    }
+    return changed;
+  })();
+  /* eslint-enable react-hooks/refs */
 
   return (
     /*
@@ -646,7 +896,7 @@ const BenchIsland = ({ base }: Props) => {
      */
     <Player.Root
       loading="interaction"
-      source={position.sourceUrl}
+      source={position.playerSource}
       startTime={position.startTime}
       defaultMuted
     >
@@ -654,13 +904,19 @@ const BenchIsland = ({ base }: Props) => {
         poster={position.poster}
         aspectRatio={position.aspectRatio}
         skin={position.skin}
+        source={position.source}
       />
-      <Credit credit={position.credit} />
-      <QuietLine sourceUrl={position.sourceUrl} />
-      {/* The readout: the switches and what the provider answered on one side,
-       * the composition they built on the other, stacked below 48rem. */}
-      <div className="grid items-start gap-[var(--space-6)] md:grid-cols-2">
-        <div className="grid gap-[var(--space-4)]">
+      {/* The readout: the two switch groups in their own row, the mono line
+       * under that -- the credit, the HLS explainer on the one position it
+       * applies to, and the quiet line, wrapping under 48rem
+       * (2026-09-03) -- the live stats readout under that, and the
+       * composition full width last. The credit moved here from directly
+       * under the picture: it is a fact about the switches' current
+       * position the same way the explainer and the quiet line are, not a
+       * caption on the frame, so the picture's own bottom edge now meets the
+       * sweep with nothing under it. */}
+      <div className="grid gap-[var(--space-6)]">
+        <div className="flex flex-wrap items-end justify-between gap-[var(--space-4)]">
           <BenchSwitches
             onSkin={(skin: SkinName) =>
               setPosition((current) => ({ ...current, skin }))
@@ -675,8 +931,14 @@ const BenchIsland = ({ base }: Props) => {
             skin={position.skin}
             source={position.source}
           />
+          <div className="flex flex-wrap items-baseline gap-x-[var(--space-4)] gap-y-[var(--space-1)]">
+            <Credit credit={position.credit} />
+            {position.source === 'hls' ? <HlsExplainer /> : null}
+            <QuietLine sourceUrl={position.sourceUrl} />
+          </div>
         </div>
-        <CompositionPanel composition={buildComposition(position)} />
+        <BenchStats />
+        <CompositionPanel html={html} changedLines={changedLines} />
       </div>
     </Player.Root>
   );
@@ -689,3 +951,12 @@ const BenchIsland = ({ base }: Props) => {
  * what React reports in a stack trace and in the devtools tree.
  */
 export default BenchIsland;
+
+/*
+ * Test-visibility export, not part of the island's public surface: nothing
+ * else in production code imports it. It exists so the composition-order test
+ * (`apps/storybook/stories/seek-slider-order.contract.test.ts`) can render the
+ * site's control bar on its own, under a mock player, without pulling in the
+ * bench sources and the rest of `BenchIsland`'s DOM.
+ */
+export { ControlBar };

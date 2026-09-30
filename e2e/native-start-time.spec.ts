@@ -90,42 +90,8 @@ test('applies a start offset a range-serving origin can satisfy', async ({
 // what a `startTime` that vanishes looks like from outside and what #418 and
 // #465 together exist to make impossible.
 test('never drops a start offset in silence on an origin without byte ranges', async ({
-  browserName,
   page
 }) => {
-  // WebKit produces the forbidden third state — playhead at 0, nothing
-  // published — but only sometimes, and the "sometimes" is the point.
-  //
-  // Two CI runs on this branch, both on WebKit, both with chromium and firefox
-  // passing:
-  //   run 1: failed on the initial attempt and both retries.
-  //   run 2: PASSED on the initial attempt, failed on retry 1.
-  // So this is a race, not a flat engine limitation. The provider's read-back
-  // (`provider-native/src/playback.ts`, `playheadAfterMovingTo`) reads
-  // `currentTime` in the same tick as the write; WebKit sometimes clamps before
-  // that read and sometimes answers with the value it was just given, and only
-  // the second case concludes a write landed that never did. Which side of the
-  // race a load falls on is what varies.
-  //
-  // That is #567's to fix, by re-reading on a turn the engine has had a chance
-  // to clamp in — a design decision, and one that cannot be iterated locally
-  // because WebKit does not launch on the development machine.
-  //
-  // `fixme` and not `fail`, and the reason is the race. `fail` requires the
-  // body to fail, so on a run that lands the passing side it reports "Expected
-  // to fail, but passed" and Playwright books the test flaky — which does not
-  // fail the job, so the suite goes green while a real intermittent defect sits
-  // underneath it. That is the exact false-comfort this branch exists to
-  // remove. A skip is at least honest about telling you nothing.
-  //
-  // The cost is that this no longer expires on its own. #567 is the expiry
-  // instead, and it is cited from here, the `startTime` JSDoc, the provider
-  // README and the changeset.
-  test.fixme(
-    browserName === 'webkit',
-    'WebKit sometimes answers the written value before clamping, so the read-back intermittently misses the drop — #567'
-  );
-
   const body = await readFile(clip);
   await page.route('**/tracer-10s.mp4', async (route) =>
     route.fulfill({
@@ -144,10 +110,30 @@ test('never drops a start offset in silence on an origin without byte ranges', a
   await page.goto(story);
   await initialPositionApplied(page);
 
-  const { playhead, refused } = await outcome(page);
-
-  expect(
-    Math.abs(playhead - START_TIME) <= TOLERANCE || refused,
-    `playhead ${playhead}, refusal published: ${refused}`
-  ).toBe(true);
+  // `initialPositionApplied` resolves once the provider's synchronous
+  // read-back has run, and on WebKit that read can report success on a write
+  // the engine goes on to abandon -- the notice this asserts then lands on the
+  // deferred confirmation `applyInitialPosition` schedules a turn later
+  // (`provider-native/src/playback.ts`). Polling gives that turn a chance to
+  // run before the forbidden third state -- playhead at 0, nothing published
+  // -- is reported as this test's failure.
+  let last: Outcome = { playhead: Number.NaN, refused: false };
+  try {
+    await expect
+      .poll(
+        async () => {
+          last = await outcome(page);
+          return (
+            Math.abs(last.playhead - START_TIME) <= TOLERANCE || last.refused
+          );
+        },
+        { timeout: 5_000 }
+      )
+      .toBe(true);
+  } catch (cause) {
+    throw new Error(
+      `playhead ${last.playhead}, refusal published: ${last.refused}`,
+      { cause }
+    );
+  }
 });

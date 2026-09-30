@@ -251,7 +251,7 @@ test('forwards the Root controls prop to createVimeoProvider', async () => {
     expect(mockedCreateVimeoProvider).toHaveBeenCalledTimes(1)
   );
   const [, , options] = mockedCreateVimeoProvider.mock.calls[0]!;
-  expect(options).toEqual({ controls: true });
+  expect(options).toEqual({ controls: true, resolvePoster: false });
 });
 
 test('reaches createVimeoProvider as chromeless when controls is unset', async () => {
@@ -270,7 +270,7 @@ test('reaches createVimeoProvider as chromeless when controls is unset', async (
     expect(mockedCreateVimeoProvider).toHaveBeenCalledTimes(1)
   );
   const [, , options] = mockedCreateVimeoProvider.mock.calls[0]!;
-  expect(options).toEqual({ controls: undefined });
+  expect(options).toEqual({ controls: undefined, resolvePoster: false });
 });
 
 test('forwards the vimeo provider option bag to createVimeoProvider', async () => {
@@ -293,7 +293,8 @@ test('forwards the vimeo provider option bag to createVimeoProvider', async () =
   expect(options).toEqual({
     controls: undefined,
     customControls: true,
-    dnt: false
+    dnt: false,
+    resolvePoster: false
   });
 });
 
@@ -317,15 +318,21 @@ test('forwards suppressSeoMetadata to createVimeoProvider', async () => {
     expect(mockedCreateVimeoProvider).toHaveBeenCalledTimes(1)
   );
   const [, , options] = mockedCreateVimeoProvider.mock.calls[0]!;
-  expect(options).toEqual({ controls: undefined, suppressSeoMetadata: true });
+  expect(options).toEqual({
+    controls: undefined,
+    resolvePoster: false,
+    suppressSeoMetadata: true
+  });
 });
 
 // SIDEPRO's regression, mirrored from `youtube.test.tsx`: `providerOptionsEqual`
 // in `use-activation.ts` must compare the `vimeo` bag by value, or a changed
 // bag looks unchanged and the embed never re-attaches to pick it up. This is
-// the trap: delete the `providerBagEqual(left?.vimeo, right?.vimeo)` line and
-// this test fails, because the second render is then judged equal to the
-// first and `createVimeoProvider` is never called again.
+// the trap: confirmed by adding `if (key === 'vimeo') continue;` at the top
+// of that function's own key loop and running
+// `pnpm vitest run packages/react/test/vimeo.test.tsx`: this test failed,
+// because the second render is then judged equal to the first and
+// `createVimeoProvider` is never called again -- reverted afterwards.
 test('re-attaches the Vimeo adapter when the controls prop changes', async () => {
   const { rerender } = render(
     <Player.Root
@@ -359,7 +366,7 @@ test('re-attaches the Vimeo adapter when the controls prop changes', async () =>
     expect(mockedCreateVimeoProvider).toHaveBeenCalledTimes(2)
   );
   const [, , options] = mockedCreateVimeoProvider.mock.calls[1]!;
-  expect(options).toEqual({ controls: true });
+  expect(options).toEqual({ controls: true, resolvePoster: false });
   expect(harness.fakes[0]!.counts().destroyCount).toBe(1);
 });
 

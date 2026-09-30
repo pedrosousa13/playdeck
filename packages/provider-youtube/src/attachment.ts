@@ -3,6 +3,7 @@ import {
   loadFailure,
   preReadyCapabilities,
   providerEvent,
+  youTubePosterUrl,
   type EmitProviderState
 } from './adapter-values.js';
 import type { YouTubeBoundary } from './boundary.js';
@@ -230,7 +231,7 @@ export const createYouTubeAttachment = (
     const target = ownerDocument.createElement('iframe');
     target.src = youTubeEmbedUrl(host, videoId, {
       autoplay: 0,
-      // Deliberately Vimeo's polarity (`provider-vimeo/src/attachment.ts:72`):
+      // Deliberately Vimeo's polarity (`provider-vimeo/src/attachment.ts:163`):
       // unset and `false` both mean chromeless.
       controls: controls === true ? 1 : 0,
       // `loop` alone is a documented no-op on a single-video embed: YouTube
@@ -254,7 +255,7 @@ export const createYouTubeAttachment = (
     // The `Referer` leaves with this frame's first request, so the policy has
     // to be here before the element is, which is why the frame is built here
     // rather than left to the API. Vimeo's embed already declares the same one
-    // (`provider-vimeo/src/attachment.ts:272`).
+    // (`provider-vimeo/src/attachment.ts:418`).
     target.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
     // The rest is the attribute set the iframe API writes onto the frame it
     // builds on the `<div>` path, restated verbatim so this frame is granted
@@ -272,8 +273,28 @@ export const createYouTubeAttachment = (
     target.setAttribute('width', '100%');
     target.setAttribute('height', '100%');
     // The API's own frame carries `frameBorder="0"`; this is that, spelled the
-    // way the Vimeo embed spells it (`provider-vimeo/src/attachment.ts:277`).
+    // way the Vimeo embed spells it (`provider-vimeo/src/attachment.ts:423`).
     target.style.border = '0';
+    // Chromeless mode (`controls` unset or `false`) hands the whole surface to
+    // a consumer's own controls, and this is the one thing none of the player
+    // vars above reach: `modestbranding` is retired, and nothing in
+    // `youTubeEmbedUrl`'s query string stops YouTube's own title bar from
+    // drawing on pointer-hover, or its "More videos" shelf from drawing on
+    // pause. Both are the iframe's own document reacting to the pointer
+    // entering it, so the fix is to keep the pointer out of the iframe
+    // altogether rather than to ask YouTube not to draw them, which nothing
+    // here can do. `pointer-events: none` removes the iframe from hit testing
+    // -- unlike a covering element, it cannot be defeated by a stacking-order
+    // mistake a mile away in a consumer's own CSS -- so the pointer falls
+    // through to whatever the consumer layers above this mount, and a click
+    // there still reaches it. `controls: true` is the one mode this must not
+    // touch: there the iframe's own chrome IS the consumer's chosen control
+    // surface, and pressing YouTube's own play button is a supported path (see
+    // this file's `controls` player var above, and "a resume from the
+    // provider chrome" in `provider-youtube/test/index.test.ts`).
+    if (controls !== true) {
+      target.style.pointerEvents = 'none';
+    }
     mount.appendChild(target);
     playerTarget = target;
     // Handed a frame that already exists, the API adopts it instead of building
@@ -352,7 +373,8 @@ export const createYouTubeAttachment = (
       emit({
         lifecycle: 'loading',
         activation: 'loading-provider',
-        capabilities: preReadyCapabilities()
+        capabilities: preReadyCapabilities(),
+        providerPosterUrl: youTubePosterUrl(videoId)
       });
     },
     load: async () => {

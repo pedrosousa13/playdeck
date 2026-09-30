@@ -74,10 +74,11 @@ const preview: Preview = {
           // among the things a visitor is meant to look at.
           'Archetypes',
           'Theme',
-          // Both hit the network or exist to be driven by e2e, so they sit
+          // These hit the network or exist to be driven by e2e, so they sit
           // below everything a visitor reads.
           'Real playback',
-          'Fixtures'
+          'Fixtures',
+          'Behaviour plugins'
         ]
       }
     }

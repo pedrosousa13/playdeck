@@ -27,9 +27,14 @@ import {
 } from '../src/internal-controller';
 import * as Player from '../src/index';
 
-vi.mock('../src/provider-loaders', async () => {
+vi.mock('../src/provider-loaders', async (importOriginal) => {
   const { createNativeProvider } = await import('@playdeck/provider-native');
   return {
+    // `detectSourceWithProviders` is spread in from the real module: `root.tsx`
+    // calls it unconditionally to resolve `detectedSource`, and none of this
+    // file's fixtures pass a `providers` prop, so the real implementation is
+    // exactly `detectSource` under a different name for this suite's purposes.
+    ...(await importOriginal<typeof import('../src/provider-loaders')>()),
     // Keep legacy provider assertions synchronous; activation.test.tsx covers
     // the real Promise boundary and the loader's real async contract directly.
     loadProvider: ({
@@ -170,6 +175,15 @@ const confirmMetadataReady = (media: HTMLVideoElement): void => {
     value: 1
   });
   fireEvent.loadedMetadata(media);
+};
+
+// Core calls `provider.load()` one microtask after `attach()`, not
+// synchronously, so an assertion made right after `render`/`fireEvent` would
+// pass whether or not a reload actually happened. Drains enough microtasks to
+// clear that queue, then one macrotask for good measure.
+const flush = async (): Promise<void> => {
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
 test('exposes playback preferences without accepting a playing prop', () => {
@@ -391,6 +405,37 @@ test('reconciles controlled preferences without reporting prop-driven confirmati
   expect(onMutedChange).not.toHaveBeenCalled();
   expect(onVolumeChange).not.toHaveBeenCalled();
   expect(onPlaybackRateChange).not.toHaveBeenCalled();
+});
+
+test('does not refuse a controlled preference before any provider attaches, and still seeds it once one does', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  const player = (muted: boolean, volume: number, playbackRate: number) => (
+    <LegacyRoot
+      loading="interaction"
+      muted={muted}
+      playbackRate={playbackRate}
+      ref={handle}
+      source="/tracer.mp4"
+      volume={volume}
+    >
+      <Player.Media />
+    </LegacyRoot>
+  );
+  const { rerender } = render(player(true, 0.4, 1.5));
+
+  expect(handle.current?.getState().refusedCommand).toBeNull();
+
+  rerender(player(false, 0.8, 1.75));
+
+  expect(handle.current?.getState().refusedCommand).toBeNull();
+
+  act(() => handle.current?.activateFromInteraction());
+  const media =
+    await screen.findByLabelText<HTMLVideoElement>('Playdeck media');
+  await waitFor(() => expect(media.muted).toBe(false));
+  expect(media.volume).toBe(0.8);
+  expect(media.playbackRate).toBe(1.75);
+  expect(handle.current?.getState().refusedCommand).toBeNull();
 });
 
 test('supersedes a delayed muted confirmation after a rapid controlled reversal', () => {
@@ -1110,6 +1155,7 @@ test('hands back only the declared PlayerHandle surface through the ref', () => 
     'requestPictureInPicture',
     'exitPictureInPicture',
     'showAirPlayPicker',
+    'showRemotePlaybackPicker',
     'retry',
     'whenReady'
   ];
@@ -1685,6 +1731,19 @@ test('tracks poster image request state and preserves its explicit image attribu
   expect(onError).toHaveBeenCalledOnce();
 });
 
+test('defaults the poster image to strict-origin-when-cross-origin, and lets a consumer override it', () => {
+  const { PosterImage } = posterPrimitives;
+  const { container, rerender } = render(<PosterImage src="/poster.jpg" />);
+  const image = container.querySelector('img')!;
+
+  expect(image.getAttribute('referrerpolicy')).toBe(
+    'strict-origin-when-cross-origin'
+  );
+
+  rerender(<PosterImage referrerPolicy="no-referrer" src="/poster.jpg" />);
+  expect(image.getAttribute('referrerpolicy')).toBe('no-referrer');
+});
+
 test('rejects an unsafe poster image src exactly as an absent prop, and permits every safe form', () => {
   const { PosterImage } = posterPrimitives;
   const { container, rerender } = render(
@@ -1748,12 +1807,10 @@ test('drops rejected srcSet candidates and keeps the surviving ones, permitting 
   );
   expect(image.getAttribute('srcset')).toBe('/good-2x.jpg 2x');
 
-  // A `data:` URI's syntax requires a comma before its payload, so splitting
-  // on the comma (rather than running a full srcset parser) breaks this
-  // single candidate into two pieces -- but both happen to carry a refused
-  // scheme (`data:` and `javascript:`), so the candidate still contributes
-  // no survivor. That is the fail-closed trade-off the comma split accepts
-  // (#236), demonstrated rather than merely asserted.
+  // A `data:` URI's syntax requires a comma before its payload, which stays
+  // inside this one candidate's URL (the comma is not whitespace, so it
+  // never ends the URL run) -- the whole candidate is refused as one
+  // `data:`-scheme value, not split into pieces first.
   rerender(
     <PosterImage srcSet="data:text/plain,javascript:evil 1x, /good-2x.jpg 2x" />
   );
@@ -1777,6 +1834,73 @@ test('drops rejected srcSet candidates and keeps the surviving ones, permitting 
   rerender(<PosterImage srcSet="javascript:alert(1) 1x, blob:whatever 2x" />);
   expect(image.getAttribute('srcset')).toBeNull();
   expect(image.getAttribute('data-state')).toBe('idle');
+});
+
+test('keeps a single srcSet candidate whose URL contains a comma unsplit and unmodified', () => {
+  const { PosterImage } = posterPrimitives;
+  const { container } = render(
+    <PosterImage srcSet="https://res.cloudinary.com/d/image/upload/w_400,c_fill/a.jpg 400w" />
+  );
+  const image = container.querySelector('img')!;
+  expect(image.getAttribute('srcset')).toBe(
+    'https://res.cloudinary.com/d/image/upload/w_400,c_fill/a.jpg 400w'
+  );
+});
+
+test('parses a multi-candidate srcSet with a comma inside one URL into the right count, URL and descriptor per candidate', () => {
+  const { PosterImage } = posterPrimitives;
+  const { container } = render(
+    <PosterImage srcSet="https://res.cloudinary.com/d/image/upload/w_400,c_fill/a.jpg 400w, /narrow.jpg 200w" />
+  );
+  const image = container.querySelector('img')!;
+  expect(image.getAttribute('srcset')).toBe(
+    'https://res.cloudinary.com/d/image/upload/w_400,c_fill/a.jpg 400w, /narrow.jpg 200w'
+  );
+});
+
+test('ends a candidate at its own trailing comma with no descriptor, and still parses the candidate after it on its own', () => {
+  const { PosterImage } = posterPrimitives;
+  const { container } = render(
+    <PosterImage srcSet="/a.jpg, //example.com/b.jpg 400w" />
+  );
+  const image = container.querySelector('img')!;
+  // The second candidate's leading `//` is resolved on its own -- proof it
+  // was parsed apart from the first, not carried along as one string: a
+  // `//` in the middle of a combined string would not start it and so would
+  // never reach `resolveNetworkPath`'s rewrite.
+  expect(image.getAttribute('srcset')).toBe(
+    '/a.jpg, https://example.com/b.jpg 400w'
+  );
+});
+
+test('tolerates extra whitespace around candidate separators', () => {
+  const { PosterImage } = posterPrimitives;
+  const { container } = render(
+    <PosterImage srcSet="  //example.com/a.jpg 1x  ,  /b.jpg 2x  " />
+  );
+  const image = container.querySelector('img')!;
+  expect(image.getAttribute('srcset')).toBe(
+    'https://example.com/a.jpg 1x, /b.jpg 2x'
+  );
+});
+
+test('treats a second open-paren met while already inside parens as ordinary text, not nested depth, when scanning a descriptor', () => {
+  const { PosterImage } = posterPrimitives;
+  const { container } = render(
+    <PosterImage srcSet="/a.jpg x((y),z), //example.com/b.jpg 2x" />
+  );
+  const image = container.querySelector('img')!;
+  // The spec's descriptor tokenizer has a boolean "in parens" state: the
+  // first `)` always exits it, so the candidate boundary is the comma right
+  // after `y)`, not the one after the second, unmatched `z)`. A balanced
+  // nesting counter would instead treat that first `)` as only closing one
+  // level of two, carry the comma after it into the same descriptor, and
+  // end up with one candidate fewer -- observable here because it also
+  // swallows the leading `//` of the next URL into the same raw string,
+  // which never reaches `resolveNetworkPath`'s rewrite from there.
+  expect(image.getAttribute('srcset')).toBe(
+    '/a.jpg x((y), z), https://example.com/b.jpg 2x'
+  );
 });
 
 test('settles a poster image given only rejected src and srcSet in idle, and never validates sizes', () => {
@@ -1865,6 +1989,104 @@ test('hides the poster only for confirmed playback or the current media frame', 
   fireEvent.loadedData(firstMedia);
   expect(poster.getAttribute('data-state')).toBe('visible');
   fireEvent.loadedData(secondMedia);
+  expect(poster.getAttribute('data-state')).toBe('hidden');
+});
+
+// The embed providers this covers (YouTube, Vimeo) draw their own chrome --
+// a title bar, a "more videos" shelf -- over an idle iframe once nothing on
+// this side of the frame covers it, and that chrome shows up while paused,
+// not only before the first play. `'paused'` (`PosterState`, `player-context.ts`)
+// is what `data-state` reports for that -- always, so a stylesheet or a test
+// can tell a paused-after-playing source apart from one that never played --
+// but `Poster` only shows itself again there when `showWhilePaused` asks for
+// it. Off (the default) is what a native `<video>` or HLS source needs:
+// covering its own paused frame with the poster would be a regression no
+// consumer asked for.
+test('reports paused in data-state once confirmed playback pauses, but stays hidden by default', () => {
+  const { Poster } = posterPrimitives;
+  render(
+    <LegacyRoot source="/tracer.mp4">
+      <Player.Viewport>
+        <Player.Media />
+        <Poster>
+          <span>Pauseable poster</span>
+        </Poster>
+      </Player.Viewport>
+    </LegacyRoot>
+  );
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
+  const poster = screen.getByText('Pauseable poster').parentElement!;
+
+  expect(poster.getAttribute('data-state')).toBe('visible');
+  expect(poster.style.visibility).toBe('visible');
+
+  fireEvent.play(media);
+  expect(poster.getAttribute('data-state')).toBe('hidden');
+  expect(poster.style.visibility).toBe('hidden');
+
+  fireEvent.pause(media);
+  expect(poster.getAttribute('data-state')).toBe('paused');
+  expect(poster.style.visibility).toBe('hidden');
+
+  fireEvent.play(media);
+  expect(poster.getAttribute('data-state')).toBe('hidden');
+  expect(poster.style.visibility).toBe('hidden');
+});
+
+test('shows the poster again once confirmed playback pauses when showWhilePaused is set, and hides it again on resume', () => {
+  const { Poster } = posterPrimitives;
+  render(
+    <LegacyRoot source="/tracer.mp4">
+      <Player.Viewport>
+        <Player.Media />
+        <Poster showWhilePaused>
+          <span>Opted-in pauseable poster</span>
+        </Poster>
+      </Player.Viewport>
+    </LegacyRoot>
+  );
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
+  const poster = screen.getByText('Opted-in pauseable poster').parentElement!;
+
+  fireEvent.play(media);
+  expect(poster.getAttribute('data-state')).toBe('hidden');
+  expect(poster.style.visibility).toBe('hidden');
+
+  fireEvent.pause(media);
+  expect(poster.getAttribute('data-state')).toBe('paused');
+  expect(poster.style.visibility).toBe('visible');
+
+  fireEvent.play(media);
+  expect(poster.getAttribute('data-state')).toBe('hidden');
+  expect(poster.style.visibility).toBe('hidden');
+});
+
+// A decoded frame with no confirmed play behind it (`onLoadedData` in
+// `root.tsx`) is the native-`<video>` case above, `hides the poster only for
+// confirmed playback or the current media frame` -- the element shows that
+// frame on its own account regardless of the poster, so there is nothing a
+// pause here needs to uncover. This is what tells that source apart from one
+// that actually played: a stray `pause` event with no confirmed `playing`
+// ever behind it must not read as the new `'paused'` state.
+test('a decoded frame with no confirmed play stays hidden through a stray pause event', () => {
+  const { Poster } = posterPrimitives;
+  render(
+    <LegacyRoot source="/tracer.mp4">
+      <Player.Viewport>
+        <Player.Media />
+        <Poster>
+          <span>Unplayed poster</span>
+        </Poster>
+      </Player.Viewport>
+    </LegacyRoot>
+  );
+  const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
+  const poster = screen.getByText('Unplayed poster').parentElement!;
+
+  fireEvent.loadedData(media);
+  expect(poster.getAttribute('data-state')).toBe('hidden');
+
+  fireEvent.pause(media);
   expect(poster.getAttribute('data-state')).toBe('hidden');
 });
 
@@ -2645,8 +2867,10 @@ test('sizes the native video to fill its viewport and letterbox by default', () 
   expect(video.style.objectFit).toBe('contain');
 });
 
-test('an inline ref on Media does not reload the provider on parent re-renders', () => {
-  const loadSpy = vi.spyOn(HTMLMediaElement.prototype, 'load');
+test('an inline ref on Media does not reload the provider on parent re-renders', async () => {
+  const loadSpy = vi
+    .spyOn(HTMLMediaElement.prototype, 'load')
+    .mockImplementation(() => undefined);
   const Harness = () => {
     const [tick, setTick] = useState(0);
     return (
@@ -2659,15 +2883,55 @@ test('an inline ref on Media does not reload the provider on parent re-renders',
     );
   };
   const { getByText } = render(<Harness />);
+  await flush();
   const loadsAfterMount = loadSpy.mock.calls.length;
 
   fireEvent.click(getByText('tick'));
+  await flush();
   fireEvent.click(getByText('tick'));
+  await flush();
   fireEvent.click(getByText('tick'));
+  await flush();
 
   // A volatile consumer ref must not churn the internal media registration,
   // which would tear down and reload the provider on every render.
   expect(loadSpy.mock.calls.length).toBe(loadsAfterMount);
+});
+
+test('forwards an object ref on Media to the native video element, and null on unmount', async () => {
+  const ref = createRef<HTMLVideoElement>();
+  const { unmount } = render(
+    <LegacyRoot source="/clip.mp4">
+      <Player.Media ref={ref} />
+    </LegacyRoot>
+  );
+  await flush();
+
+  expect(ref.current?.tagName).toBe('VIDEO');
+
+  unmount();
+
+  expect(ref.current).toBeNull();
+});
+
+test('forwards a callback ref on Media to the native video element, and null on unmount', async () => {
+  const consumerRef = vi.fn();
+  const { unmount } = render(
+    <LegacyRoot source="/clip.mp4">
+      <Player.Media ref={consumerRef} />
+    </LegacyRoot>
+  );
+  await flush();
+
+  expect(consumerRef).toHaveBeenCalledOnce();
+  expect(consumerRef.mock.calls[0][0]?.tagName).toBe('VIDEO');
+
+  unmount();
+
+  // No cleanup returned from the callback above, so detaching calls it again
+  // with `null` rather than invoking a returned cleanup.
+  expect(consumerRef).toHaveBeenCalledTimes(2);
+  expect(consumerRef.mock.calls[1][0]).toBeNull();
 });
 
 test('forwards a ref to the poster container', () => {

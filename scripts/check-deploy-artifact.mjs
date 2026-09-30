@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Proves the deployed surface works where it is served from, against the built
+// Proves the deployed site works where it is served from, against the built
 // artifact rather than against the configuration that produced it (#519).
 //
 // The bug this exists to catch is #435: a root-absolute URL emitted by a build
@@ -41,7 +41,7 @@ const process = globalThis.process;
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
-// Where the surface is served from. The site is at the root, which is what the
+// Where the site is served from. The site is at the root, which is what the
 // deploy serves it at, so the artifact under test is the artifact that ships.
 const sitePath = '/';
 const artifactDir = join(repoRoot, 'deploy-dist');
@@ -59,6 +59,155 @@ const mimeTypes = {
 };
 
 /**
+ * `apps/site/public/_redirects`, parsed the way Cloudflare Workers static
+ * assets read it: one `source destination [code]` rule per line, blank lines
+ * and `#` comments skipped. Read once at server start rather than per request
+ * — the artifact under test does not change while this server is up.
+ *
+ * @param {string} directory
+ * @returns {Promise<{ source: string; destination: string; code: number }[]>}
+ */
+const loadRedirects = async (directory) => {
+  const text = await readFile(join(directory, '_redirects'), 'utf8').catch(
+    () => ''
+  );
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('#'))
+    .map((line) => {
+      const [source, destination, code] = line.split(/\s+/);
+      return { source, destination, code: code ? Number(code) : 302 };
+    });
+};
+
+/**
+ * The destination for a request path, if `_redirects` names one. Only the
+ * subset of Cloudflare's matching this artifact's own `_redirects` uses: an
+ * exact match, or a `*` splat at the end of the source matching any suffix.
+ *
+ * @param {{ source: string; destination: string; code: number }[]} rules
+ * @param {string} pathname
+ */
+const matchRedirect = (rules, pathname) => {
+  for (const rule of rules) {
+    if (rule.source === pathname) return rule;
+    if (
+      rule.source.endsWith('/*') &&
+      pathname.startsWith(rule.source.slice(0, -1))
+    ) {
+      return rule;
+    }
+  }
+  return null;
+};
+
+/**
+ * The five headers `apps/site/public/_headers` promises for every path, and
+ * the exact value each one has to carry (#758's ruling: the cheap headers,
+ * no CSP — a `script-src`/`default-src` would have to trust
+ * `analytics.pedrosousa.me`, and trusting it does nothing to stop a
+ * compromised analytics script from rewriting the page, which is the threat
+ * that matters here; a strict policy also risks breaking the bench's embeds in
+ * ways that would only show up after a deploy). The reason lives beside the
+ * file it describes, in `apps/site/public/_headers` itself.
+ * @type {readonly { name: string; value: string }[]}
+ */
+export const REQUIRED_HEADERS = [
+  { name: 'X-Content-Type-Options', value: 'nosniff' },
+  { name: 'X-Frame-Options', value: 'SAMEORIGIN' },
+  { name: 'Content-Security-Policy', value: "frame-ancestors 'self'" },
+  { name: 'Strict-Transport-Security', value: 'max-age=31536000' },
+  { name: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' }
+];
+
+/**
+ * `apps/site/public/_headers`, parsed the way Cloudflare Workers static
+ * assets read it: an unindented, non-comment, non-blank line names a rule's
+ * path, and every indented `Name: Value` line under it is one header that
+ * rule applies. Blank lines and `#` comments are skipped, the same subset
+ * `loadRedirects` above already uses for `_redirects`. Only the shape this
+ * artifact's own `_headers` uses — one path, its headers indented under it —
+ * is parsed; Cloudflare's fuller syntax (globs other than a trailing `/*`,
+ * `!`-negated values, per-header modifiers) is out of scope, exactly as
+ * `matchRedirect` above only understands the `_redirects` shapes this repo
+ * writes.
+ * @param {string} text
+ * @returns {{ path: string; headers: { name: string; value: string }[] }[]}
+ */
+export const parseHeaders = (text) => {
+  /** @type {{ path: string; headers: { name: string; value: string }[] }[]} */
+  const rules = [];
+  /** @type {{ path: string; headers: { name: string; value: string }[] } | undefined} */
+  let current;
+
+  for (const rawLine of text.split('\n')) {
+    if (rawLine.trim() === '' || /^\s*#/.test(rawLine)) continue;
+
+    if (/^\s/.test(rawLine)) {
+      const line = rawLine.trim();
+      const colon = line.indexOf(':');
+      if (current && colon !== -1) {
+        current.headers.push({
+          name: line.slice(0, colon).trim(),
+          value: line.slice(colon + 1).trim()
+        });
+      }
+      continue;
+    }
+
+    current = { path: rawLine.trim(), headers: [] };
+    rules.push(current);
+  }
+
+  return rules;
+};
+
+/**
+ * Which of `REQUIRED_HEADERS` a `/*` rule's own headers fail to carry —
+ * missing entirely, or present with a different value. Names compared
+ * case-insensitively, since header names are, and values compared exactly,
+ * since a header's value is not.
+ * @param {readonly { name: string; value: string }[]} headers
+ * @returns {string[]}
+ */
+export const missingHeaders = (headers) => {
+  const byLowerName = new Map(
+    headers.map((header) => [header.name.toLowerCase(), header.value])
+  );
+  return REQUIRED_HEADERS.filter(
+    (required) =>
+      byLowerName.get(required.name.toLowerCase()) !== required.value
+  ).map((required) => required.name);
+};
+
+/**
+ * Every reason `_headers`, as read from the artifact, does not carry #758's
+ * five headers on `/*` — `text` is `null` when the file is missing, which
+ * `readFile(...).catch(() => null)` at the call site produces. Pure and
+ * exported so the parsing above and the artifact/browser plumbing below can
+ * be tested apart: a decoding bug here should not need a built site to
+ * reproduce, the same reasoning `scripts/check-rendered-fences.mjs` gives for
+ * exporting its own parsing functions.
+ * @param {string | null} text
+ * @returns {string[]}
+ */
+export const evaluateHeaders = (text) => {
+  if (text === null) {
+    return ['_headers is missing from the artifact.'];
+  }
+
+  const rule = parseHeaders(text).find((candidate) => candidate.path === '/*');
+  if (!rule) {
+    return ["_headers carries no '/*' rule."];
+  }
+
+  return missingHeaders(rule.headers).map(
+    (name) => `/* is missing or has the wrong value for ${name}.`
+  );
+};
+
+/**
  * Serves the assembled artifact at the origin root, which is what the Worker
  * does with the directory `wrangler.jsonc` names. The 404 is load-bearing
  * rather than incidental: `not_found_handling` is `"none"` precisely so a miss
@@ -68,12 +217,20 @@ const mimeTypes = {
  * @param {string} directory
  */
 const serveArtifact = async (directory) => {
+  const redirects = await loadRedirects(directory);
   const server = createServer(async (request, response) => {
     const { pathname } = new URL(request.url ?? '/', 'http://127.0.0.1');
     const notFound = () => {
       response.writeHead(404);
       response.end();
     };
+
+    const redirect = matchRedirect(redirects, pathname);
+    if (redirect) {
+      response.writeHead(redirect.code, { location: redirect.destination });
+      response.end();
+      return;
+    }
 
     const relative = pathname.slice(1);
     try {
@@ -125,29 +282,76 @@ const serveArtifact = async (directory) => {
  *
  * @param {import('@playwright/test').Page} page
  * @param {string[]} failures
- * @param {string} surface
+ * @param {string} name
  */
-const recordFailures = (page, failures, surface) => {
+const recordFailures = (page, failures, name) => {
   page.on('response', (response) => {
     const status = response.status();
     if (status >= 400) {
-      failures.push(`${surface}: ${status} for ${response.url()}`);
+      failures.push(`${name}: ${status} for ${response.url()}`);
     }
   });
   page.on('requestfailed', (request) => {
     const reason = request.failure()?.errorText ?? 'no reason given';
-    failures.push(
-      `${surface}: request failed for ${request.url()} (${reason})`
-    );
+    failures.push(`${name}: request failed for ${request.url()} (${reason})`);
   });
   page.on('console', (message) => {
     const text = message.text();
     if (message.type() !== 'error') return;
-    failures.push(`${surface}: console error — ${text}`);
+    failures.push(`${name}: console error — ${text}`);
   });
   page.on('pageerror', (error) => {
-    failures.push(`${surface}: uncaught ${error.message}`);
+    failures.push(`${name}: uncaught ${error.message}`);
   });
+};
+
+/**
+ * `apps/site/public/_headers`, read straight off the artifact directory
+ * rather than through `origin`: `serveArtifact` above answers a request with
+ * whatever `_redirects` says and the file on disk, and applies no header —
+ * unlike the Worker `wrangler.jsonc` names, which reads `_headers` itself and
+ * needs no code here to do it. So a check of what a response over `origin`
+ * carries would prove nothing about the header, only about this harness's own
+ * server. What is checked instead, with `evaluateHeaders` above, is what the
+ * artifact promises: that `_headers` is there, and that its `/*` rule carries
+ * #758's five headers.
+ * @param {string} directory
+ * @param {string[]} failures
+ */
+const checkHeaders = async (directory, failures) => {
+  const text = await readFile(join(directory, '_headers'), 'utf8').catch(
+    () => null
+  );
+  for (const problem of evaluateHeaders(text)) {
+    failures.push(`headers: ${problem}`);
+  }
+};
+
+/**
+ * `/archetypes/` was the page's address before it was renamed to `/examples/`
+ * (#628). `apps/site/public/_redirects` is what keeps a link to the old
+ * address working, and `serveArtifact` above is what makes this artifact
+ * honour it the way the Worker does — so this is a check of the artifact, the
+ * same as `checkSite` below, and not a check of the browser following a
+ * redirect it already knows how to follow.
+ *
+ * @param {import('@playwright/test').Browser} browser
+ * @param {string} origin
+ * @param {string[]} failures
+ */
+const checkRedirect = async (browser, origin, failures) => {
+  const page = await browser.newPage();
+  recordFailures(page, failures, 'redirect');
+  await page.goto(`${origin}/archetypes/`);
+  const landed = new URL(page.url());
+  if (landed.pathname !== '/examples/') {
+    failures.push(
+      `redirect: /archetypes/ resolved to ${landed.pathname}, not /examples/.`
+    );
+  }
+  await page.getByRole('heading', { name: 'Examples', exact: true }).waitFor();
+  await page.waitForLoadState('networkidle');
+  await page.close();
 };
 
 /**
@@ -234,70 +438,84 @@ const checkSite = async (browser, origin, failures) => {
   }
 };
 
-const shouldBuild = !process.argv.includes('--no-build');
-if (shouldBuild) {
-  // The site is built the way `.github/workflows/deploy-site.yml` builds it.
-  // Nothing has to be stripped from the environment to make that true: the
-  // site's prefix is the literal `base: '/'` in `apps/site/astro.config.ts`,
-  // and no part of the site build reads an environment variable to find it.
-  //
-  // The packages come first, and they are a prerequisite rather than a surface:
-  // the site's landing page renders the gzipped size of every bundle
-  // `pnpm test:budgets` gates, measured at build time from the module that gate
-  // measures with, and that module reads build output. Building them here is
-  // what makes `pnpm test:deploy` prove the tree under test rather than
-  // whichever `dist/` happened to be lying around. `deploy-site.yml` runs the
-  // same filter for the same reason, and `pnpm run` resolves it
-  // topologically, so a package is built after the packages it depends on.
-  console.log('--- Building the packages the site measures ---');
-  execFileSync('pnpm', ['--filter', './packages/*', 'build'], {
-    cwd: repoRoot,
-    stdio: 'inherit'
-  });
+async function main() {
+  const shouldBuild = !process.argv.includes('--no-build');
+  if (shouldBuild) {
+    // The site is built the way `.github/workflows/deploy-site.yml` builds it.
+    // Nothing has to be stripped from the environment to make that true: the
+    // site's prefix is the literal `base: '/'` in `apps/site/astro.config.ts`,
+    // and no part of the site build reads an environment variable to find it.
+    //
+    // The packages come first, and they are a prerequisite rather than something
+    // served: the site's landing page renders the gzipped size of every bundle
+    // `pnpm test:budgets` reports, measured at build time from the module that
+    // script measures with, and that module reads build output. Building them here is
+    // what makes `pnpm test:deploy` prove the tree under test rather than
+    // whichever `dist/` happened to be lying around. `deploy-site.yml` runs the
+    // same filter for the same reason, and `pnpm run` resolves it
+    // topologically, so a package is built after the packages it depends on.
+    console.log('--- Building the packages the site measures ---');
+    execFileSync('pnpm', ['--filter', './packages/*', 'build'], {
+      cwd: repoRoot,
+      stdio: 'inherit'
+    });
 
-  console.log(`--- Building @playdeck/site for ${sitePath} ---`);
-  execFileSync('pnpm', ['--filter', '@playdeck/site', 'build'], {
-    cwd: repoRoot,
-    stdio: 'inherit'
-  });
+    console.log(`--- Building @playdeck/site for ${sitePath} ---`);
+    execFileSync('pnpm', ['--filter', '@playdeck/site', 'build'], {
+      cwd: repoRoot,
+      stdio: 'inherit'
+    });
 
-  // The deploy's own assembly, imported rather than restated: two copies would
-  // drift, and a harness that went green against a shape the deploy no longer
-  // produces is worse than no harness.
-  await assembleDeploy(artifactDir);
-  console.log(`--- Assembled the artifact at ${artifactDir} ---`);
-} else {
-  console.log(`--- Reusing the artifact at ${artifactDir} (--no-build) ---`);
-}
-
-const { origin, close } = await serveArtifact(resolve(artifactDir));
-/** @type {string[]} */
-const failures = [];
-/** @type {import('@playwright/test').Browser | undefined} */
-let browser;
-try {
-  browser = await chromium.launch({ headless: true });
-  console.log(`--- Visiting ${origin}${sitePath} ---`);
-  await checkSite(browser, origin, failures);
-} catch (error) {
-  // A thrown navigation or a locator that timed out is itself a failure, and
-  // reporting it beside the recorded ones keeps the run to one report.
-  failures.push(error instanceof Error ? error.message : String(error));
-} finally {
-  try {
-    await browser?.close();
-  } finally {
-    await close();
+    // The deploy's own assembly, imported rather than restated: two copies would
+    // drift, and a harness that went green against a shape the deploy no longer
+    // produces is worse than no harness.
+    await assembleDeploy(artifactDir);
+    console.log(`--- Assembled the artifact at ${artifactDir} ---`);
+  } else {
+    console.log(`--- Reusing the artifact at ${artifactDir} (--no-build) ---`);
   }
+
+  const { origin, close } = await serveArtifact(resolve(artifactDir));
+  /** @type {string[]} */
+  const failures = [];
+  /** @type {import('@playwright/test').Browser | undefined} */
+  let browser;
+  try {
+    console.log(`--- Checking ${artifactDir}/_headers ---`);
+    await checkHeaders(resolve(artifactDir), failures);
+
+    browser = await chromium.launch({ headless: true });
+    console.log(`--- Visiting ${origin}${sitePath} ---`);
+    await checkSite(browser, origin, failures);
+    await checkRedirect(browser, origin, failures);
+  } catch (error) {
+    // A thrown navigation or a locator that timed out is itself a failure, and
+    // reporting it beside the recorded ones keeps the run to one report.
+    failures.push(error instanceof Error ? error.message : String(error));
+  } finally {
+    try {
+      await browser?.close();
+    } finally {
+      await close();
+    }
+  }
+
+  if (failures.length > 0) {
+    console.error(
+      `\nThe deployed artifact does not work as served (#519):\n${failures
+        .map((failure) => `  ${failure}`)
+        .join('\n')}`
+    );
+    process.exit(1);
+  }
+
+  console.log(`\nThe site loads correctly at ${sitePath}.`);
 }
 
-if (failures.length > 0) {
-  console.error(
-    `\nThe deployed artifact does not work as served (#519):\n${failures
-      .map((failure) => `  ${failure}`)
-      .join('\n')}`
-  );
-  process.exit(1);
+// Only when run as a command, the same guard `scripts/assemble-deploy.mjs`
+// uses and for the reason it gives: `scripts/check-deploy-artifact.test.mjs`
+// imports the parsing functions above, and an import must not build the site,
+// launch a browser or exit the process as a side effect.
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  await main();
 }
-
-console.log(`\nThe site loads correctly at ${sitePath}.`);

@@ -79,14 +79,37 @@ consumer-supplied URL prop and provider option alike (#219, #236). A refused
 value is treated exactly as if the prop were absent — never a throw.
 _Avoid_: whitelist, sanitise, safe URL
 
+**Availability**:
+The answer to "can this player do this, right now" for one capability, published
+as the closed union `Availability` and carried per capability on
+`PlayerCapabilities`. Three states: `available`; `unknown` with a reason
+(`not-ready`, `provider-check`); `unavailable` with a reason (`browser`,
+`provider`, `provider-plan`, `provider-build`, `source`, `policy`). The reason is
+part of the answer and not decoration — `unknown` and `unavailable` are only
+honest when they say why, which is what lets a control explain itself rather than
+merely vanish. A control whose command the active provider cannot honour renders
+nothing rather than rendering disabled. One named exception: `LiveIndicator` is
+an indicator rather than a control — it reports that the stream is live, it
+offers no command — so where `liveEdge` is unavailable it stays mounted as a
+non-interactive badge. Hiding it would suppress something true because a
+different capability is missing.
+
+The marketing site draws the same three states as its own colour roles
+(`--color-available`, `--color-unknown`, `--color-unavailable`) and binds them:
+colour there carries this domain meaning and is never spent on decoration, and a
+state is always drawn as its own word rather than a bare dot.
+_Avoid_: capability state, capability status, support level
+
 **Refused surface**:
 The name of one consumer-supplied URL prop the shared allowlist can refuse
 outside a provider, published as the closed union `RefusedUrlSurface`:
-`poster src`, `poster srcSet`, `nativePoster`, `textTracks src` and
-`mediaSession artwork`. A surface names the prop an operator has to go and fix
-and never the value that was refused, so a Notice built from one carries no
-consumer text at all. It is a prop name, not a component instance: several
-instances can refuse the same surface at once.
+`poster src`, `poster srcSet`, `nativePoster`, `textTracks src`,
+`mediaSession artwork`, `thumbnails`, `thumbnails cue image` and
+`providerOptions`. A surface
+names the prop an operator has to go and fix and never the value that was
+refused, so a Notice built from one carries no consumer text at all. It is a
+prop name, not a component instance: several instances can refuse the same
+surface at once.
 _Avoid_: field, key, call site
 
 **Refused source**:
@@ -161,16 +184,19 @@ wins, and whichever of the two is in force is the **effective step**, which the
 echo tolerance takes half of. A window with no extent to divide — one that has
 not arrived, a zero-length one, or the infinity a live source publishes for its
 duration — steps by that same second. Distinct from the shortcut layer's seek
-distance, which is a fixed five seconds through `seekBy` and is not derived from
-anything (ADR-0005).
+distances: `seekSeconds` fixes two, five seconds and ten, both issued through
+`seekBy` and neither derived from anything (ADR-0005).
 _Avoid_: granularity, resolution, increment, tick
 
 **Requested origin**:
 Where a command the library issued came from — a control a person operated, an
 untagged public command, an autoplay attempt. Held from the moment the command
 is issued until the provider reports the change that confirms it, and used in
-place of the `provider` an adapter stamps every report of its own with. Distinct
-from a requested value: this is who asked, not what for.
+place of the `provider` an adapter stamps its own reports with by default.
+`system` is the one exception an adapter stamps itself: the native provider's
+loop restart marks the `play` it raises for a wrap, so the viewport's ownership
+survives it instead of reading as a viewer taking over (#673). Distinct from a
+requested value: this is who asked, not what for.
 _Avoid_: source, trigger, cause
 
 **Chapter**:
@@ -179,6 +205,56 @@ player state beside a capability that says whether the provider can report any
 at all. No provider reports where a chapter ends, so every end is derived: each
 chapter ends where the next begins, and the last where the media does.
 _Avoid_: segment, marker, cue point
+
+**Audio track**:
+One selectable audio rendition, published as an ordered collection whose
+entries carry their own selection (`active`) rather than a sibling
+`selectedId` field on player state, the shape a text track's
+`selectedTextTrackId` and a quality's `selectedQualityId` both use. The split
+follows the underlying surfaces rather than inventing one: hls.js's own
+audio-tracks controller enforces "at most one enabled" on the track itself,
+with no separate selection slot to mirror. The DOM's own `AudioTrackList`
+carries no such guarantee for audio -- unlike `VideoTrackList`, it permits
+more than one track enabled at once -- so the native provider enforces that
+same exclusivity itself on selection, keeping both providers answering from
+the same per-entry shape. The native provider answers from `AudioTrackList`
+where the browser exposes it and reports unavailable (`browser`) where it
+does not; the HLS provider answers from hls.js's own audio tracks on that
+engine and from the media element on native HLS.
+_Avoid_: alternate audio -- HLS's and hls.js's own manifest term for the same
+renditions (`EXT-X-MEDIA:TYPE=AUDIO`); the right word when describing the
+manifest, not this player-state concept
+
+**Thumbnail cue**:
+One entry of the WebVTT sprite-cue file `SeekSlider`'s `thumbnails` prop
+names: a time span, an image URL, and an optional `region` in sprite
+pixels -- parsed from the payload's `#xywh=` fragment -- cropping one frame
+out of a shared sprite sheet rather than each cue naming its own image.
+Parsed and held by the primitive itself rather than published on player
+state the way a Chapter or an Audio track is: nothing about it depends on a
+provider. The parser is `@playdeck/core/thumbnails`, a subpath of its own so
+that a consumer who never sets the prop never downloads it -- `SeekSlider`
+reaches the whole preview, that parser included, through a dynamic import
+(#727).
+_Avoid_: sprite frame, thumbnail track, preview image
+
+**Behaviour plugin**:
+A convention, not a component this package ships: a component mounted inside
+`Player.Root` that observes player state through `usePlayerState` and, where
+it needs to react, issues commands through `usePlayerActions`. Observing
+alone is a complete instance of the convention — nothing requires a given
+plugin to call both hooks. It renders nothing and holds no player state of
+its own: the player stays the single owner of what it is doing, and a plugin
+that needs a value twice reads `usePlayerState` again rather than caching what
+it last read.
+
+Distinct from a **Supplied provider**, and the distinction is what each one
+drives. A supplied provider is a new source kind, registered through
+`Player.Root`'s `providers` prop, that becomes the one active
+`ProviderAdapter` the player itself drives. A behaviour plugin drives nothing
+— it is composed as an ordinary sibling in the tree, reacting to whichever
+provider is already active, and never becomes the player's provider.
+_Avoid_: plugin, observer
 
 ### Loading
 
@@ -209,6 +285,27 @@ separates nothing has no gate at all. It holds back autoplay only — a viewer
 who presses play is never made to wait.
 _Avoid_: play threshold gate, autoplay lock
 
+**Playback ownership**:
+Whether the viewport itself, rather than a viewer or an API caller, is
+responsible for the playback currently running (or last stopped) under
+`loading: 'viewport'`. Read off the `'autoplay'` origin `#playWithOrigin` and
+`#pauseWithOrigin` already carry: only a `play` reporting that origin makes the
+viewport's exit-crossing free to pause it, and only a `pause` reporting it
+makes a later re-entry free to resume it. A viewer's or an API caller's own
+play or pause is ownership released, not ownership taken, so a scroll crossing
+never touches it either way (#309).
+
+One `play` that reports no origin at all keeps ownership rather than releasing
+it: a `'provider'` play arriving while ownership already reads `'auto-paused'`.
+An engine that manages viewport playback of muted autoplaying video itself
+resumes what the exit-crossing paused without Playdeck issuing any command, so
+there is no origin to carry and `'provider'` is the honest answer — the origin
+is not rewritten to say otherwise. Ownership is what reinterprets it, and only
+in that one state: the engine is continuing exactly the playback this strategy
+paused, which is the opposite of a takeover. In every other ownership state an
+unowned play still releases ownership.
+_Avoid_: autoplay flag, ownership flag, playback flag
+
 **Buffered window**:
 What `PlayerState.buffered` reports — the ranges a provider has said are
 loaded, and deliberately not an instantaneous mirror of what its media element
@@ -222,6 +319,23 @@ a point, because an engine carries its ranges across one and they stay true. A
 window that merely moves — a DVR window dropping ranges off its start — is
 non-empty at every step and is published like any other reading.
 _Avoid_: buffer, buffer level, download progress
+
+**Live edge**:
+The provider's own answer to where live playback is happening right now,
+published on `PlayerLiveState` as `offsetFromEdge` — how far behind it
+playback is, in whole seconds, `0` at or ahead of it — and gated by its own
+capability, `capabilities.liveEdge`, told apart the way `chapters`'s is: a
+provider that cannot report one at all answers `unavailable`/`provider`, a
+source that simply is not live answers `unavailable`/`source`. Whole seconds
+because `liveStateEqual` is what every adapter consults to decide whether a
+changed value is worth publishing, and an unrounded float would differ on
+essentially every `timeupdate`; whole seconds is also the resolution `Time`
+renders at. `PlayerController.seekToLiveEdge()` always lands on the
+provider's own notion of this edge rather than one the controller computes:
+hls.js's `liveSyncPosition`, deliberately behind the raw seekable end, on
+that engine; the raw seekable end itself on the native and native-HLS
+engines, the only notion of an edge a plain media element has.
+_Avoid_: live position, DVR edge, broadcast edge
 
 **Recovered autoplay**:
 Playback that started only because the audible attempt was refused by policy and
@@ -302,8 +416,13 @@ a viewer asked for something and got nothing. Others already gate themselves,
 so the window is not uniform across the library. No control presents it.
 
 A play refused this way is also a **Refused play**, deliberately, because the
-two end at different moments. `retry` raises the same reason from a guard that
-has a provider in hand, so it is not one of these.
+two end at different moments. `retry` with no provider is refused by the same
+no-provider path in `#command` as every other command, but silently. It has a
+second, separate refusal site in `retry` itself, once a provider exists, when
+the provider or the generation moves under the attempt. Publishing one of the
+pair while the other stayed silent would make the field's absence mean two
+different things, which is why neither publishes and `retry` is left out of the
+`PlayerCommand` vocabulary.
 _Avoid_: dropped command, swallowed click, queued command
 
 ### Adapters
@@ -338,12 +457,27 @@ fall-back behaviour it degraded to stands unchanged. A provider reports one
 through a state patch; a consumer-supplied URL prop the shared allowlist refuses
 — every one except `source`, which is a **Refused source** and reports its own
 value — is reported by `reportRefusedUrl`, which names the refused surface and
-never the value, and which returns a disposer the reporter holds for as long as it keeps
-refusing that surface — so the notice stands while any reporter's registration
-stands, and is withdrawn only by the reporter that made it. Held as controller
-state and surfaced on `PlayerState.error` like any other error, but never a
-failure: it never masks a standing error, and it never drives a transition into
-the error lifecycle. There is one slot and no event carries the loser, so two
+never the value. Both register into ONE internal registry `PlayerController`
+holds, keyed by a token private to each registration. A provider re-emitting a
+notice it never withdrew is restating one claim, not making a second, so a
+matching provider notice replaces its predecessor in place and the disposer of
+the emit that stands is the one that withdraws it (#681). Matching is by the
+declared `PlayerError` fields, and a notice carrying anything beyond them
+matches nothing — registering twice costs memory, where merging two notices an
+operator needs told apart is a wrong answer. `reportRefusedUrl` is deliberately
+outside this: its registrations are one per refused surface reported, all
+holding the same shared value, so they register — and withdraw —
+independently, a refusal standing while at least one reporter still holds it. `reportRefusedUrl`
+hands its caller the registration's disposer directly; a provider gets its own
+back through its state-patch listener's return value, and holds it to withdraw
+a notice whose condition a later load no longer meets — `startTime` in
+`provider-native` is the first to (#475). A provider's own notices are dropped
+together with that provider on a swap or a detach; a refused-URL registration
+is not, because it describes a consumer prop no provider ever saw. Held as
+controller state and surfaced on `PlayerState.error` like any other error, but
+never a failure: it never masks a standing error, and it never drives a
+transition into the error lifecycle. There is one slot and no event carries the
+loser, so two
 notices standing at once are ranked rather than ordered: each declares a
 severity — `protective` where a control that protects the viewer fired, an
 untrusted URL blocked or a privacy opt-out that did not take, and
@@ -384,6 +518,19 @@ the vocabulary that describes the third-party runtime a consumer supplied rather
 than the provider, the browser, the media or a policy.
 _Avoid_: hls light, the small build, the slim build
 
+**Supplied provider**:
+A source kind registered through `Player.Root`'s `providers` prop rather than
+shipped by this package — a `detect`/`load` pair keyed by the kind's own name
+(`ProviderRegistration`, `packages/react/src/provider-loaders.ts`). `detect`
+turns a URL into that kind's own source object, or declines; `load` is a lazy
+factory, called once a source of that kind is detected, that resolves to the
+function which builds the running `ProviderAdapter` — the same interface every
+built-in loader produces. Tried only after all five built-in kinds refuse, so
+a supplied kind can never intercept a URL a built-in host already claims —
+which is also why `hls`, `video`, `youtube`, `vimeo` and `wistia` are reserved
+names it cannot register under.
+_Avoid_: plugin, custom provider, provider plugin
+
 ### Styling
 
 See [ADR-0001](docs/adr/0001-structural-css-ships-inline.md) for why structural
@@ -397,6 +544,29 @@ type scale, the one-gradient rule and the four audit constraints. That system is
 not the player's theme — `packages/react/theme.css` ships to consumers and
 shares no tokens with it, and the two are deliberately separate.
 
+**Archetype**:
+A composed example player standing for a whole class of real product — the
+streaming-service layout and the course-platform layout, served on
+`/examples` and documented in `docs/archetypes.md`. An archetype is a
+composition built from the same published primitives a consumer would use, not a
+preset or a variant the library ships: what it demonstrates is that the markup
+is yours. It is a _player_, never a kind of page — which page treatment a route
+is served in is its **Stance**.
+_Avoid_: template, preset, demo, variant
+
+**Workbench**:
+The Storybook build — where primitives are exercised in isolation, where the
+deterministic story run and the visual checks live, and where a local media
+fixture is available that the marketing site cannot serve. Distinct from the
+marketing site, which argues to a reader; the workbench is for proving a
+component behaves. Nothing publishes it: the deployed artifact is the site
+alone ([ADR-0007](docs/adr/0007-the-deployed-artifact-is-the-site-alone.md)), and
+the workbench is a development tool for this repository whose stories are browser
+tests. The site and the workbench are named individually; there is no collective
+noun for the two, and `surface` in particular is not one — that word names a
+refused prop, above.
+_Avoid_: playground, sandbox, storybook (lower-case, as a common noun)
+
 **Stance**:
 Which of the marketing site's two page treatments a route is served in:
 `argument` for `/`, `document` for every other route. `Base.astro` takes it as a
@@ -407,7 +577,8 @@ holding every route to the stance `DESIGN.md` assigns it. A separate axis from t
 `documentation` prop, which decides only whether a page is in the search index:
 `/design` is `documentation={false}` and `stance="document"`. Site-only — it
 says nothing about a player.
-_Avoid_: mode, register, treatment, archetype
+_Avoid_: mode, register, treatment, archetype — **Archetype** above is a
+composed example player, and using it for a page treatment would collide with it
 
 **Provider asymmetry readout**:
 The table on the marketing site's provider index that asks the same three
@@ -444,6 +615,25 @@ _Avoid_: theming, skin
 A CSS custom property a primitive reads inline with a fallback, so a consumer
 can change a value from a stylesheet without importing one.
 _Avoid_: variable, custom property
+
+**Token contract**:
+The versioned, checked table of every `--playdeck-*` token's name, role,
+default and reading parts, in `packages/react/README.md`'s `## Theming`
+section. `test/tokens.contract.test.ts` derives both sides from source —
+`theme.css`, `docked.css` and every primitive in `packages/react/src` — and
+fails on a token missing from the table, a row nothing reads, or a Parts
+column that disagrees with the rules (ADR-0008). Not `theme.css`'s own header
+comment, which only points a reader at this table (#734).
+_Avoid_: token table, theme docs
+
+**Starter theme**:
+`examples/css-starter-theme.css`, a minimal stylesheet a consumer copies
+rather than builds from the token contract by hand — a handful of tokens set
+on the `viewport` part, layered after `theme.css` rather than replacing it.
+Documented in `Theme.mdx`'s own **Starter theme** section and mounted live by
+a story in `theme.stories.tsx`, the same convention every other
+`examples/css-*.css` fixture follows.
+_Avoid_: theme starter, boilerplate theme
 
 **Output**:
 Something the library states about itself for a consumer's CSS or tests to

@@ -20,12 +20,17 @@ export const freezeCapabilities = (
     setVolume: freezeAvailability(capabilities.setVolume),
     setPlaybackRate: freezeAvailability(capabilities.setPlaybackRate),
     selectQuality: freezeAvailability(capabilities.selectQuality),
+    selectQualityAuto: freezeAvailability(capabilities.selectQualityAuto),
     selectTextTrack: freezeAvailability(capabilities.selectTextTrack),
+    selectAudioTrack: freezeAvailability(capabilities.selectAudioTrack),
     chapters: freezeAvailability(capabilities.chapters),
+    liveEdge: freezeAvailability(capabilities.liveEdge),
     fullscreen: freezeAvailability(capabilities.fullscreen),
     pictureInPicture: freezeAvailability(capabilities.pictureInPicture),
     airPlay: freezeAvailability(capabilities.airPlay),
-    customControls: freezeAvailability(capabilities.customControls)
+    customControls: freezeAvailability(capabilities.customControls),
+    providerPoster: freezeAvailability(capabilities.providerPoster),
+    remotePlayback: freezeAvailability(capabilities.remotePlayback)
   });
 
 export const freezeError = (error: PlayerError): PlayerError =>
@@ -58,8 +63,8 @@ export const autoplayConfigurationError = (): PlayerError =>
     message: 'Muted autoplay conflicts with a controlled unmuted state.'
   });
 
-// One notice per refused surface, written here rather than at the five call
-// sites so no caller can compose one of its own. Each names the prop and says
+// One notice per refused surface, written here rather than at each call site
+// so no caller can compose one of its own. Each names the prop and says
 // what was done instead, the shape of the one notice #318 wrote both halves for
 // ("The host option was rejected, so the default host was used."); the two
 // Wistia notices of that change name the option and the expectation it failed
@@ -71,8 +76,8 @@ export const autoplayConfigurationError = (): PlayerError =>
 // retry would refuse the same value again (#198).
 //
 // Built once and shared rather than per call. A `PlayerError` is frozen and
-// these five carry nothing controller-specific, so one value per surface is
-// enough — and it lets `reportRefusedUrl` decide by identity whether the
+// none of these carry anything controller-specific, so one value per surface
+// is enough — and it lets `reportRefusedUrl` decide by identity whether the
 // published notice actually changed, instead of comparing message text.
 //
 // The array below is the tie-break: the state has one error slot, so several
@@ -82,12 +87,12 @@ export const autoplayConfigurationError = (): PlayerError =>
 // whether the pass is a mount or an update, and a notice that changed wording
 // for that reason would be unreadable to a monitoring system.
 //
-// All five are `'protective'`, without exception and whatever the surface
-// decorates: what each of them reports is the shared allowlist blocking an
-// untrusted URL, which is a security control firing and not a presentation
-// option being ignored. So none of them can be pushed out of the slot by a
-// provider reporting a cosmetic rejection (#368).
-const REFUSED_URL_NOTICES: Record<RefusedUrlSurface, PlayerError> = {
+// Every one of these is `'protective'`, without exception and whatever the
+// surface decorates: what each of them reports is the shared allowlist
+// blocking an untrusted URL, which is a security control firing and not a
+// presentation option being ignored. So none of them can be pushed out of
+// the slot by a provider reporting a cosmetic rejection (#368).
+export const REFUSED_URL_NOTICES: Record<RefusedUrlSurface, PlayerError> = {
   'poster src': freezeError({
     category: 'configuration',
     fatal: false,
@@ -127,6 +132,28 @@ const REFUSED_URL_NOTICES: Record<RefusedUrlSurface, PlayerError> = {
     severity: 'protective',
     message:
       'A mediaSession artwork src URL was rejected, so that artwork entry was dropped.'
+  }),
+  thumbnails: freezeError({
+    category: 'configuration',
+    fatal: false,
+    recoverable: false,
+    severity: 'protective',
+    message:
+      'The thumbnails URL was rejected, so no seek-preview thumbnails were requested.'
+  }),
+  'thumbnails cue image': freezeError({
+    category: 'configuration',
+    fatal: false,
+    recoverable: false,
+    severity: 'protective',
+    message: 'A thumbnails cue image URL was rejected, so that cue was dropped.'
+  }),
+  providerOptions: freezeError({
+    category: 'configuration',
+    fatal: false,
+    recoverable: false,
+    severity: 'protective',
+    message: 'A providerOptions URL was rejected, so that option was dropped.'
   })
 };
 
@@ -144,23 +171,33 @@ type RankOf<Surfaces, Each = Surfaces> = [Surfaces] extends [never]
     ? readonly [Each, ...RankOf<Exclude<Surfaces, Each>>]
     : never;
 
+// `thumbnails`, `thumbnails cue image` and `providerOptions` are appended at
+// the end rather than inserted alongside the surface each is closest in kind
+// to: appending can only ever add a new lowest-priority tie-break, so it
+// cannot change which notice wins for any pair of surfaces that already
+// existed — inserting one higher would have silently reworded what an
+// existing consumer's error already says whenever it ties against something
+// above it.
 const REFUSED_URL_SURFACE_RANK = [
   'poster src',
   'poster srcSet',
   'nativePoster',
   'textTracks src',
-  'mediaSession artwork'
+  'mediaSession artwork',
+  'thumbnails',
+  'thumbnails cue image',
+  'providerOptions'
 ] as const satisfies RankOf<RefusedUrlSurface>;
 
 // The notice the standing refusal registrations publish, or `undefined` when
-// none stands. An empty tally returns `undefined` rather than a notice because
-// a notice says a refusal stands right now, not that one once happened: keyed
-// to the latter, a consumer who cleaned the poisoned field would keep the error
+// none stands. An empty set returns `undefined` rather than a notice because a
+// notice says a refusal stands right now, not that one once happened: keyed to
+// the latter, a consumer who cleaned the poisoned field would keep the error
 // for the controller's life. Only membership is read — how many reporters
 // stand behind a surface is `PlayerController`'s bookkeeping, not this
 // function's business (#330).
 export const standingRefusedUrlNotice = (
-  refused: ReadonlyMap<RefusedUrlSurface, unknown>
+  refused: ReadonlySet<RefusedUrlSurface>
 ): PlayerError | undefined => {
   const surface = REFUSED_URL_SURFACE_RANK.find((candidate) =>
     refused.has(candidate)
@@ -255,6 +292,53 @@ export const mostImportantNotice = (
         : held,
     undefined
   );
+
+// Every field a `PlayerError` declares, listed rather than chained through
+// `&&` so `RankOf` can make the list exhaustive: a field added to the type
+// fails to compile until it is named here, instead of silently widening what
+// counts as the same notice.
+const NOTICE_IDENTITY = [
+  'category',
+  'fatal',
+  'recoverable',
+  'severity',
+  'message',
+  'cause'
+] as const satisfies RankOf<keyof PlayerError>;
+
+// Whether two registered notices are the same notice restated rather than two
+// notices standing at once — the question `PlayerController`'s `#registerNotice`
+// asks of a re-emit, and the one thing identity cannot answer: the controller
+// freezes every notice it is handed, so a provider re-emitting the very same
+// singleton hands it a fresh object each time (#681).
+//
+// The value stands in for the identity instead, field by field with
+// `Object.is`. `cause` is `unknown` and can hold anything, so it is compared by
+// reference like the rest: two notices carrying two different `Error`s are two
+// notices, and a provider whose re-emit mints a new `cause` each time matches
+// nothing and registers again. That is the direction to be wrong in — it costs
+// the memory this is about, where matching too eagerly would collapse two
+// notices an operator needs told apart, which is a wrong answer.
+//
+// Nothing beyond these fields is compared, and a notice carrying anything
+// beyond them matches nothing at all. `freezeError` is `Object.freeze({
+// ...error })`, so an own property an adapter outside this repo hangs on a
+// notice survives onto the published `PlayerError` rather than being dropped —
+// which means two such notices differing ONLY there are genuinely different
+// and comparing just the declared fields would collapse them. Refusing to
+// match either of them registers both, the same direction `cause` is wrong in
+// above: it costs the memory this issue is about instead of merging two
+// notices an operator needs told apart. `cause` remains where anything beyond
+// the declared shape belongs.
+const onlyDeclaredFields = (notice: PlayerError): boolean =>
+  Object.keys(notice).every((key) =>
+    (NOTICE_IDENTITY as readonly string[]).includes(key)
+  );
+
+export const noticesMatch = (left: PlayerError, right: PlayerError): boolean =>
+  onlyDeclaredFields(left) &&
+  onlyDeclaredFields(right) &&
+  NOTICE_IDENTITY.every((field) => Object.is(left[field], right[field]));
 
 export const destroyProviderSafely = (provider: ProviderAdapter): void => {
   try {

@@ -147,20 +147,22 @@ export const createNativePresentation = (
     emit({ capabilities: getCapabilities() });
   };
 
-  const onFullscreenChange = (originalEvent: Event): void =>
+  const onFullscreenChange = (originalEvent: Event): void => {
     emit(
       { fullscreen: ownerDocument.fullscreenElement === media },
       providerEvent('fullscreenchange', originalEvent, {
         fullscreen: ownerDocument.fullscreenElement === media
       })
     );
-  const onPictureInPictureChange = (originalEvent: Event): void =>
+  };
+  const onPictureInPictureChange = (originalEvent: Event): void => {
     emit(
       { pictureInPicture: ownerDocument.pictureInPictureElement === media },
       providerEvent('pictureinpicturechange', originalEvent, {
         pictureInPicture: ownerDocument.pictureInPictureElement === media
       })
     );
+  };
   const onWebKitFullscreenChange = (originalEvent: Event): void => {
     const fullscreen = originalEvent.type === 'webkitbeginfullscreen';
     emit(

@@ -10,15 +10,19 @@
     "tsBuildInfoFile": "../node_modules/.cache/tsbuildinfo/e2e.tsbuildinfo"
   },
   "references": [{ "path": "../packages/react" }],
-  // `contrast.ts` is listed by hand rather than reached through a project
-  // reference: it belongs to `packages/react/tsconfig.test.json`, which is a
-  // `noEmit` project and so cannot be referenced. Both projects type-check the
-  // same source file, which is the point — `thumb-contrast.spec.ts` measures the
+  // `contrast.ts` and `highlight-ms.ts` are listed by hand rather than reached
+  // through a project reference: each belongs to a `noEmit` project
+  // (`packages/react/tsconfig.test.json`, `apps/site/tsconfig.json`) and so
+  // cannot be referenced. `contrast.ts` -- both projects type-check the same
+  // source file, which is the point -- `thumb-contrast.spec.ts` measures the
   // boundaries `theme.test.ts` computes, and the two are only comparable while
-  // one module does the WCAG maths for both (#190).
+  // one module does the WCAG maths for both (#190). `highlight-ms.ts` -- same
+  // reason: `site-bench.spec.ts` and `CompositionPanel.tsx` both build off
+  // the one `HIGHLIGHT_MS` (#744).
   "include": [
     ".",
     "../playwright.config.ts",
-    "../packages/react/test/contrast.ts"
+    "../packages/react/test/contrast.ts",
+    "../apps/site/src/components/highlight-ms.ts"
   ]
 }

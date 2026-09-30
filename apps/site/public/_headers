@@ -1,0 +1,21 @@
+# Cloudflare Workers static assets read this the same way it reads
+# `_redirects` beside it — no Worker script needed, since `wrangler.jsonc`
+# publishes this build as an assets-only Worker.
+#
+# No `script-src` or `default-src` here (#758's ruling: the cheap headers, no
+# CSP). This site loads a third-party analytics script from
+# analytics.pedrosousa.me, so a script-restricting policy would have to trust
+# that origin — and trusting it does nothing to stop a compromised analytics
+# script from rewriting the page, which is the realistic threat on a
+# documentation site with no accounts, sessions or user data to protect. A
+# strict policy also risks breaking the bench's YouTube/Vimeo embeds on `/`
+# in ways that would only surface after a deploy. `frame-ancestors 'self'` is
+# the one CSP directive kept: the site frames nothing of its own that another
+# origin needs to embed, so `'self'` (over `'none'`) costs nothing today and
+# keeps any future page that frames another same-origin page working.
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Content-Security-Policy: frame-ancestors 'self'
+  Strict-Transport-Security: max-age=31536000
+  Referrer-Policy: strict-origin-when-cross-origin

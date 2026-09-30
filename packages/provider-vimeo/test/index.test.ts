@@ -21,6 +21,7 @@ import {
   type TextCue,
   type VimeoSource
 } from '@playdeck/core';
+import { captureRethrows } from '@playdeck/test-support/capture-rethrows';
 import { available } from '../src/adapter-values';
 import {
   createVimeoAttachment,
@@ -39,6 +40,7 @@ import {
 } from '../src/index';
 import type { VimeoSdkChapter, VimeoSdkQuality } from '../src/loader';
 import { createVimeoPlayback } from '../src/playback';
+import { createVimeoPosterAvailability } from '../src/poster-availability';
 import { createVimeoPresentation } from '../src/presentation';
 import { createVimeoQualityLevels } from '../src/quality-levels';
 import { createVimeoTextTracks } from '../src/text-tracks';
@@ -300,6 +302,7 @@ const attachWithoutValidation = async (
   const noopEmit = (): void => undefined;
 
   const chromeless = createVimeoChromelessAvailability({ source, options });
+  const posterAvailability = createVimeoPosterAvailability({ source, options });
   const boundary = createVimeoBoundary(options);
 
   const playback = createVimeoPlayback(mount, {
@@ -341,12 +344,17 @@ const attachWithoutValidation = async (
       setVolume: playback.setVolumeAvailability(),
       setPlaybackRate: playback.setPlaybackRateAvailability(),
       selectQuality: qualityLevels.selectQualityAvailability(),
+      selectQualityAuto: qualityLevels.selectQualityAutoAvailability(),
       selectTextTrack: textTracks.selectTextTrackAvailability(),
+      selectAudioTrack: { status: 'unavailable', reason: 'provider' },
       chapters: chapters.chaptersAvailability(),
+      liveEdge: { status: 'unavailable', reason: 'provider' },
       fullscreen: available,
       pictureInPicture: presentation.pictureInPictureAvailability(),
       airPlay: { status: 'unavailable', reason: 'provider' },
-      customControls: chromeless.customControlsAvailability()
+      remotePlayback: { status: 'unavailable', reason: 'provider' },
+      customControls: chromeless.customControlsAvailability(),
+      providerPoster: posterAvailability.availability()
     };
   }
 
@@ -355,6 +363,7 @@ const attachWithoutValidation = async (
     options,
     getCapabilities: playerCapabilities,
     chromeless,
+    posterAvailability,
     playback,
     presentation,
     qualityLevels,
@@ -554,11 +563,105 @@ test('emits confirmed ready state from the embedded player', async () => {
     seek: { status: 'available' },
     setVolume: { status: 'available' },
     selectTextTrack: { status: 'available' },
+    selectAudioTrack: { status: 'unavailable', reason: 'provider' },
     fullscreen: { status: 'available' },
     customControls: { status: 'available' },
     selectQuality: { status: 'available' },
-    airPlay: { status: 'unavailable', reason: 'provider' }
+    airPlay: { status: 'unavailable', reason: 'provider' },
+    liveEdge: { status: 'unavailable', reason: 'provider' }
   });
+});
+
+// `@vimeo/player` (2.30.4, this package's own dependency) has no live concept
+// anywhere in its type definitions or its shipped `dist/player.js` -- no
+// method, property or event named for a live stream -- so there is no surface
+// to build a live edge on. This adapter's `seekable` is synthesised as
+// `[{ start: 0, end: duration }]` (`playback.ts`) rather than sourced from the
+// SDK's own `getSeekable()`, which only sharpens the point: nothing here
+// reads a real seekable window in the first place.
+test('reports liveEdge as unavailable for the provider, with no seekToLiveEdge command', async () => {
+  const { patches, provider } = await setup({ fake: { duration: 62 } });
+
+  expect(readyPatch(patches).capabilities).toMatchObject({
+    liveEdge: { status: 'unavailable', reason: 'provider' }
+  });
+  expect(provider.seekToLiveEdge).toBeUndefined();
+});
+
+// --- provider-supplied poster (#556) ---
+//
+// Red: with the `options.resolvePoster !== true` guard removed from
+// `poster-availability.ts`'s `probe()`, this failed on `fetchMock` having
+// been called (and, because the shared oEmbed request now fired for poster
+// on every attach, "sends no oEmbed request when custom controls were not
+// requested" further down failed the same way). With `posterFromOutcome`
+// mutated to always answer unavailable/source, "resolves its own poster from
+// the oEmbed thumbnail once resolvePoster is requested" below failed on
+// `providerPoster` (`{ status: 'available' }` expected, `{ status:
+// 'unavailable', reason: 'source' }` received).
+
+test('sends no oEmbed request for a poster when resolvePoster was not requested', async () => {
+  fetchMock.mockImplementation(() => {
+    throw new Error('fetch should not have been called');
+  });
+  const { patches } = await setup();
+  expect(readyPatch(patches).capabilities).toMatchObject({
+    providerPoster: { status: 'unknown', reason: 'provider-check' }
+  });
+  expect(readyPatch(patches).providerPosterUrl).toBeNull();
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test('resolves its own poster from the oEmbed thumbnail once resolvePoster is requested', async () => {
+  fetchMock.mockResolvedValue(
+    Response.json({
+      account_type: 'pro',
+      thumbnail_url: 'https://i.vimeocdn.com/video/example.jpg'
+    })
+  );
+  const { patches } = await setup({ options: { resolvePoster: true } });
+  const ready = readyPatch(patches);
+  expect(ready.capabilities).toMatchObject({
+    providerPoster: { status: 'available' }
+  });
+  expect(ready.providerPosterUrl).toBe(
+    'https://i.vimeocdn.com/video/example.jpg'
+  );
+});
+
+test('reports providerPoster unavailable/source when the record carries no thumbnail', async () => {
+  fetchMock.mockResolvedValue(Response.json({ account_type: 'pro' }));
+  const { patches } = await setup({ options: { resolvePoster: true } });
+  const ready = readyPatch(patches);
+  expect(ready.capabilities).toMatchObject({
+    providerPoster: { status: 'unavailable', reason: 'source' }
+  });
+  expect(ready.providerPosterUrl).toBeNull();
+});
+
+// Red: with `createVimeoProvider`'s two probes reverted to each building its
+// own private `createVimeoOembedRequest` instance instead of sharing one,
+// this failed with "expected \"vi.fn()\" to be called 1 times, but got 2
+// times".
+test('resolves the poster and the chromeless plan from one shared oEmbed request (#556)', async () => {
+  fetchMock.mockResolvedValue(
+    Response.json({
+      account_type: 'pro',
+      thumbnail_url: 'https://i.vimeocdn.com/video/example.jpg'
+    })
+  );
+  const { patches } = await setup({
+    options: { customControls: true, resolvePoster: true }
+  });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  const ready = readyPatch(patches);
+  expect(ready.capabilities).toMatchObject({
+    customControls: { status: 'available' },
+    providerPoster: { status: 'available' }
+  });
+  expect(ready.providerPosterUrl).toBe(
+    'https://i.vimeocdn.com/video/example.jpg'
+  );
 });
 
 test('reports text-track selection unavailable when the video has no tracks', async () => {
@@ -926,6 +1029,94 @@ test('publishes the chromeless notice when it is the only one', async () => {
   expect(await publishedNotice({ customControls: true })).toContain(
     'could not be completed'
   );
+});
+
+// #475: a notice a provider never withdraws has to survive a `retry()`
+// untouched -- withdrawal is the provider's own act, never a side effect of
+// retrying. `suppressSeoMetadata` is the case the brief names: the SDK reads
+// its guard once, while the module evaluates, so this attachment never calls
+// back to take the notice away, on a retry or otherwise.
+test('leaves a still-true suppression notice standing after a retry', async () => {
+  sdkState.seoMetadataSuppressed = false;
+  const controller = new PlayerController();
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdk = createFakeSdk();
+  sdkState.load = () => Promise.resolve(sdk.Sdk);
+  const provider = createVimeoProvider(mount, publicSource, {
+    suppressSeoMetadata: true
+  });
+  const settled = new Promise<void>((resolve) => {
+    const stop = controller.subscribe((state) => {
+      if (state.lifecycle !== 'ready' && state.lifecycle !== 'error') return;
+      stop();
+      resolve();
+    });
+  });
+  controller.setProvider(provider);
+  await settled;
+
+  expect(controller.getState().error?.message).toContain('did not take effect');
+
+  await controller.retry();
+
+  expect(controller.getState().error?.message).toContain('did not take effect');
+});
+
+// #681, at the concrete path it was found on: `start()` re-checks the
+// suppression and re-emits, `retry()` calls `start()` again, and this
+// attachment never withdraws the notice -- so every retry used to leave one
+// more registration behind for the rest of the provider's life.
+//
+// The registry is private and the published slot cannot see into it -- the
+// fold picks one winner however many entries stand behind it -- so what this
+// reads it through is the one contract that reaches it from outside: the
+// disposer the controller hands back per notice-carrying patch. Collecting
+// them is the test standing in for a provider that does withdraw; this
+// attachment deliberately never calls one, which is the whole reason the entry
+// it leaves has to be the same entry each time. Three emits and one disposal
+// clearing the slot is that claim: against the accumulating registry, the
+// third emit's disposer withdrew the third of three entries and the notice two
+// others still held stayed published.
+test('leaves one registration behind however many times a retry re-emits', async () => {
+  sdkState.seoMetadataSuppressed = false;
+  const controller = new PlayerController();
+  const mount = document.createElement('div') as VimeoMountElement;
+  document.body.appendChild(mount);
+  const sdk = createFakeSdk();
+  sdkState.load = () => Promise.resolve(sdk.Sdk);
+  const provider = createVimeoProvider(mount, publicSource, {
+    suppressSeoMetadata: true
+  });
+  const withdrawals: Array<() => void> = [];
+  const observed: ProviderAdapter = {
+    ...provider,
+    subscribe: (listener) =>
+      provider.subscribe((patch, event) => {
+        const withdraw = listener(patch, event) as (() => void) | undefined;
+        if (withdraw) withdrawals.push(withdraw);
+        return withdraw;
+      })
+  };
+  const settled = new Promise<void>((resolve) => {
+    const stop = controller.subscribe((state) => {
+      if (state.lifecycle !== 'ready' && state.lifecycle !== 'error') return;
+      stop();
+      resolve();
+    });
+  });
+  controller.setProvider(observed);
+  await settled;
+
+  await controller.retry();
+  await controller.retry();
+
+  expect(withdrawals).toHaveLength(3);
+  expect(controller.getState().error?.message).toContain('did not take effect');
+
+  withdrawals[2]?.();
+
+  expect(controller.getState().error).toBeNull();
 });
 
 test('honors an explicit Do-Not-Track opt-out', async () => {
@@ -3494,24 +3685,6 @@ test('stays ready when a chapterchange answers with a non-list', async () => {
 // The deliberate throws below are rethrown on a fresh task so they still reach
 // uncaught-error handling; captured rather than run, which is what keeps them
 // from landing in the runner as an unhandled error.
-const captureRethrows = (): unknown[] => {
-  const errors: unknown[] = [];
-  const real = globalThis.queueMicrotask;
-  // Wrapped rather than replaced: the fixtures schedule microtasks of their
-  // own, and swallowing those would stall the very load these tests drive.
-  globalThis.queueMicrotask = (task: () => void) =>
-    real(() => {
-      try {
-        task();
-      } catch (error) {
-        errors.push(error);
-      }
-    });
-  onTestFinished(() => {
-    globalThis.queueMicrotask = real;
-  });
-  return errors;
-};
 
 // #95, reached through the adapter's own fan-out rather than the controller's
 // (#233): a bare `Set.forEach` stops at the first throw, so every subscriber

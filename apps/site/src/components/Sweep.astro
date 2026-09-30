@@ -48,17 +48,15 @@ const { form } = Astro.props;
 const gradientId = nextSweepId();
 ---
 
-{
-  /* The graphic is decorative in both forms and is hidden from assistive
-   * technology in both. What differs is the box around it: the hairline is a
-   * real separator and keeps the role, so a reader who cannot see the sweep
-   * still hears that the sections are divided; the accent divides nothing and
-   * is hidden outright.
-   *
-   * A `<div role="separator">` rather than an `<hr>` because `hr` is a void
-   * element: it can hold no `<svg>`, so the only way to give it the sweep is a
-   * CSS background — the construct this component exists to avoid. */
-}
+{/* The graphic is decorative in both forms and is hidden from assistive
+ * technology in both. What differs is the box around it: the hairline is a
+ * real separator and keeps the role, so a reader who cannot see the sweep
+ * still hears that the sections are divided; the accent divides nothing and
+ * is hidden outright.
+ *
+ * A `<div role="separator">` rather than an `<hr>` because `hr` is a void
+ * element: it can hold no `<svg>`, so the only way to give it the sweep is a
+ * CSS background — the construct this component exists to avoid. */}
 <div
   class="sweep"
   data-form={form}

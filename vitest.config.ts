@@ -4,34 +4,83 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   resolve: {
-    alias: {
+    // Array form, not the equivalent `Record<string, string>` shorthand: a
+    // plain string `find` matches by *prefix* (`find` itself, or `find + '/'`),
+    // so a bare `@playdeck/react` entry there also intercepts subpath imports
+    // like `@playdeck/react/theme.css` and rewrites them against `index.tsx`,
+    // 404ing (`BenchIsland.tsx` imports `@playdeck/react/theme.css?url` for a
+    // `<link>` tag's `href`, which is what `seek-slider-order.contract.test.ts`
+    // exercises by importing `BenchIsland.tsx`). Two of these packages have a
+    // subpath to protect, and they want opposite things from it. For
+    // `@playdeck/react` the answer is to get out of the way: the pnpm
+    // workspace already symlinks it into `apps/site/node_modules` and its
+    // `package.json` already maps `./theme.css` and `./docked.css` to the real
+    // files, so once the alias stops swallowing the subpath, plain Node
+    // resolution answers it. For `@playdeck/core/thumbnails` it is not, since
+    // Node resolution would answer with the package's built `dist`, and every
+    // other alias here exists precisely so a test runs the source it is
+    // testing -- so that subpath gets an alias of its own, to the module the
+    // bare specifier's own alias would never reach. `/^@playdeck\/react$/` and
+    // `/^@playdeck\/core$/`, anchored, are what narrow each match to the bare
+    // specifier only.
+    alias: [
       // `apps/site`'s own alias, the one `astro.config.ts`, its `tsconfig.json`
       // and `components.json` all declare, repeated here so a unit test can
       // import a component that uses it. Nothing outside that app writes
       // `@/`, so a single entry covers it.
-      '@': fileURLToPath(new URL('./apps/site/src', import.meta.url)),
-      '@playdeck/core': fileURLToPath(
-        new URL('./packages/core/src/index.ts', import.meta.url)
-      ),
-      '@playdeck/react': fileURLToPath(
-        new URL('./packages/react/src/index.tsx', import.meta.url)
-      ),
-      '@playdeck/provider-native': fileURLToPath(
-        new URL('./packages/provider-native/src/index.ts', import.meta.url)
-      ),
-      '@playdeck/provider-hls': fileURLToPath(
-        new URL('./packages/provider-hls/src/index.ts', import.meta.url)
-      ),
-      '@playdeck/provider-youtube': fileURLToPath(
-        new URL('./packages/provider-youtube/src/index.ts', import.meta.url)
-      ),
-      '@playdeck/provider-vimeo': fileURLToPath(
-        new URL('./packages/provider-vimeo/src/index.ts', import.meta.url)
-      ),
-      '@playdeck/provider-wistia': fileURLToPath(
-        new URL('./packages/provider-wistia/src/index.ts', import.meta.url)
-      )
-    }
+      {
+        find: '@',
+        replacement: fileURLToPath(new URL('./apps/site/src', import.meta.url))
+      },
+      {
+        find: /^@playdeck\/core$/,
+        replacement: fileURLToPath(
+          new URL('./packages/core/src/index.ts', import.meta.url)
+        )
+      },
+      {
+        find: /^@playdeck\/core\/thumbnails$/,
+        replacement: fileURLToPath(
+          new URL('./packages/core/src/thumbnails.ts', import.meta.url)
+        )
+      },
+      {
+        find: /^@playdeck\/react$/,
+        replacement: fileURLToPath(
+          new URL('./packages/react/src/index.tsx', import.meta.url)
+        )
+      },
+      {
+        find: '@playdeck/provider-native',
+        replacement: fileURLToPath(
+          new URL('./packages/provider-native/src/index.ts', import.meta.url)
+        )
+      },
+      {
+        find: '@playdeck/provider-hls',
+        replacement: fileURLToPath(
+          new URL('./packages/provider-hls/src/index.ts', import.meta.url)
+        )
+      },
+      {
+        find: '@playdeck/provider-youtube',
+        replacement: fileURLToPath(
+          new URL('./packages/provider-youtube/src/index.ts', import.meta.url)
+        )
+      },
+      {
+        find: '@playdeck/provider-vimeo',
+        replacement: fileURLToPath(
+          new URL('./packages/provider-vimeo/src/index.ts', import.meta.url)
+        )
+      },
+      {
+        find: '@playdeck/provider-wistia',
+        replacement: fileURLToPath(
+          new URL('./packages/provider-wistia/src/index.ts', import.meta.url)
+        )
+      }
+    ]
   },
   test: {
     environment: 'happy-dom',
@@ -42,7 +91,10 @@ export default defineConfig({
     include: [
       'packages/**/*.test.{ts,tsx}',
       'apps/site/test/**/*.test.{ts,tsx}',
-      'apps/storybook/stories/**/*.contract.test.ts',
+      // `.tsx` alongside `.ts`: `react-behaviour-plugin.contract.test.tsx`
+      // renders `Player.Root` and needs JSX, which a `.ts`-only glob would
+      // have silently left out of every run of `pnpm test`.
+      'apps/storybook/stories/**/*.contract.test.{ts,tsx}',
       // Lives beside the module it tests (e2e/background-image-scan.ts): a
       // project that *imports* from another project needs that project to
       // emit declarations, and the `e2e` project deliberately does not

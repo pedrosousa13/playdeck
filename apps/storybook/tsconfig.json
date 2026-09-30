@@ -20,27 +20,61 @@
     "paths": {
       "@playdeck/core": ["../../packages/core/dist/index.d.ts"],
       "@playdeck/provider-hls": ["../../packages/provider-hls/dist/index.d.ts"],
-      "@playdeck/react": ["../../packages/react/dist/index.d.ts"]
+      "@playdeck/provider-native": [
+        "../../packages/provider-native/dist/index.d.ts"
+      ],
+      "@playdeck/react": ["../../packages/react/dist/index.d.ts"],
+      // `apps/site`'s own alias, so `seek-slider-order.contract.test.ts` can
+      // typecheck its import of `BenchIsland.tsx` the same way it resolves at
+      // runtime (`vitest.config.ts` declares the matching `@` alias for that
+      // app's `src`). Mapped to source rather than to a built declaration,
+      // unlike the packages above: `apps/site` publishes nothing, so there is
+      // no `dist/*.d.ts` to point at.
+      "@/*": ["../site/src/*"]
     },
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
   "references": [
     { "path": "../../packages/core" },
     { "path": "../../packages/provider-hls" },
+    { "path": "../../packages/provider-native" },
     { "path": "../../packages/react" }
   ],
-  // The two archetype compositions are named one by one rather than swept in
-  // with a glob. Both surfaces mount the same file — Storybook as a story, the
-  // site as an island — and the story here imports them, so this project has to
-  // list them or `tsc` refuses a file it is compiling but was not told about.
-  // They are also members of the `examples` project, which checks them against
-  // the same declarations; being in two projects costs a second check and
-  // nothing else, and it is what keeps `examples/` the single source.
+  // The examples this project's own stories import are named one by one
+  // rather than swept in with a glob. The two archetype compositions mount
+  // the same file on both surfaces — Storybook as a story, the site as an
+  // island — and `provider-setup-file-adapter.tsx` is the real adapter
+  // `supplied-provider.stories.tsx` drives; a story importing any of them
+  // means this project has to list it or `tsc` refuses a file it is
+  // compiling but was not told about. Each is also a member of the
+  // `examples` project, which checks it against the same declarations;
+  // being in two projects costs a second check and nothing else, and it is
+  // what keeps `examples/` the single source.
   "include": [
     ".storybook/**/*",
     "stories/**/*",
     "vitest.config.ts",
     "../../examples/archetype-streaming-service.tsx",
-    "../../examples/archetype-course-platform.tsx"
-  ]
+    "../../examples/archetype-course-platform.tsx",
+    "../../examples/provider-setup-file-adapter.tsx",
+    "../../examples/react-behaviour-plugin.tsx",
+    // `seek-slider-order.contract.test.ts` imports `BenchIsland.tsx` (via the
+    // `@/*` mapping above), and project references can't stand in for the
+    // rest of that module's transitive `@/...` imports here the way they do
+    // for `@playdeck/react` and `@playdeck/core`: `apps/site` cannot be a
+    // project reference (`noEmit`, TS6310, same restriction `e2e`'s own
+    // reference in the root `tsconfig.json` runs into), so `tsc -b` has to see
+    // every file that import chain reaches or it refuses each one as outside
+    // this project's file list (TS6307). `apps/site/tsconfig.json` already
+    // type-checks the same files on its own; this is a second, cheap check of
+    // the same source, not a second source of truth -- the same trade the two
+    // archetype examples above already make against the `examples` project.
+    "../site/src/**/*.ts",
+    "../site/src/**/*.tsx"
+  ],
+  // The one file under `apps/site/src` that `apps/site/tsconfig.json` itself
+  // excludes, for the same reason: it imports `astro:content`, a virtual
+  // module whose declarations exist only in Astro's generated `.astro/`
+  // directory, which this project does not read either.
+  "exclude": ["../site/src/content.config.ts"]
 }

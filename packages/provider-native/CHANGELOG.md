@@ -1,5 +1,210 @@
 # @playdeck/provider-native
 
+## 1.1.0
+
+### Minor Changes
+
+- 7deed3e: A provider can supply its own poster, and `Player.Root` can ask for it
+
+  The library had a poster sink and no poster source: `Player.Poster` and
+  `Player.PosterImage` render whatever a consumer hands them, and nothing ever
+  asked a provider what still it would use on its own. YouTube, Vimeo and
+  Wistia each know one; native files and HLS manifests do not.
+
+  `PlayerCapabilities` gains `providerPoster`, in the vocabulary `Availability`
+  already defines. YouTube answers `available` immediately — its still is
+  `https://i.ytimg.com/vi/<id>/hqdefault.jpg`, derivable from the video id alone
+  and costing no request. (`hqdefault.jpg`, deliberately not
+  `maxresdefault.jpg`: the larger file 404s silently on a video that was never
+  uploaded at a high enough resolution to have one, where `hqdefault.jpg` is
+  generated for every upload.) Vimeo and Wistia answer `unknown: 'provider-check'`
+  and resolve to `available` or `unavailable: 'source'` once a dedicated oEmbed
+  request settles — opt-in, exactly like Vimeo's existing `customControls`
+  probe, so a consumer who never asks for a poster never causes the request.
+  Native and HLS answer `unavailable: 'source'` immediately: a file and a
+  manifest have no still of their own. `PlayerState` gains a matching
+  `providerPosterUrl: string | null`, `null` until the capability resolves to
+  `available`.
+
+  `@playdeck/react`'s `Player.Root` gains a `poster` prop, taking a URL, a
+  `ResponsivePoster`, or the literal `'provider'`. `'provider'` opts a Vimeo or
+  Wistia source into its oEmbed probe (folded into the provider's own option
+  bag the way `controls` and `loop` already are — ADR-0004) and, once the
+  still resolves, feeds it to any `Player.Poster` that renders no children of
+  its own as its default image. A `Player.Poster` given children keeps
+  rendering exactly those, unconditionally — a consumer-supplied poster always
+  wins. A consumer who sets no `poster` prop sees no behavioural change at all:
+  nothing resolves, nothing is requested, and `Player.Poster` renders only what
+  it always has.
+
+  `@playdeck/core`'s `PlayerCapabilities` and `PlayerState` both gain a required
+  field: any object built to satisfy either type — a custom provider adapter, a
+  test fixture — needs the new field before it type-checks again. It ships in a
+  minor because no released version of Playdeck has a consumer to break.
+
+### Patch Changes
+
+- 1df041b: Document that a refused `startTime` is permanent for the load
+
+  The README already said an initial `startTime` offset is applied once, when
+  metadata arrives, but said nothing about what a refusal at that attempt means
+  going forward — whether the offset is retried once the seekable window catches
+  up, or whether the refusal stands for the rest of the load. A reader had no
+  way to answer that short of reading `applyInitialPosition`.
+
+  The README now says a refusal at that single attempt is permanent for the
+  load: nothing revisits it later, including a `seekable` window that goes on
+  to widen past the requested offset, and the existing `configuration` notice
+  on `PlayerState.error` is the record of the refusal. This documents behaviour
+  the provider already has — `applyInitialPosition` latches `positioned` before
+  it decides anything, so the offset is considered exactly once per load
+  whatever the answer — and does not change it. The `never reconsiders the
+startTime once the window widens (#466)` case in
+  `e2e/start-time-above-seekable-end.spec.ts` continues to pin exactly this.
+
+- f582807: Let a provider withdraw a configuration notice it published, so a retried `startTime` refusal does not outlive the reload that satisfies it
+
+  `PlayerController` held a provider's most important `configuration` notice
+  in a single field, cleared only when the provider was swapped, detached, or
+  destroyed. `retry()` applied a null error, but the patch that followed
+  refilled the slot from that still-set field, so the clear never survived its
+  own patch — the exact defect #418's `startTime` notice made reachable: a
+  `startTime` refused on one load, followed by a `retry()` whose reload
+  satisfied the offset, still reported the first load's refusal for the rest
+  of the provider's life.
+
+  `PlayerController`'s `subscribe` wiring now hands back a disposer for every
+  notice-carrying patch, the same shape `reportRefusedUrl`'s own disposer
+  already has — one mechanism, not two doing the same job. A provider holds it
+  and calls it once a later decision no longer needs the notice it published;
+  withdrawal is the provider's own act, never a side effect of retrying, so a
+  notice nothing withdraws — Vimeo's `suppressSeoMetadata`, decided once at
+  attach and never re-emitted — survives a `retry()` untouched.
+
+  `provider-native`'s `startTime` seam is the first caller: it withdraws its
+  own notice at the start of every load's decision, before deciding that load,
+  so a `retry()` whose reload reaches the requested offset leaves
+  `PlayerState.error` clear.
+
+- 6b24591: Apply `startTime` against the media's duration, and confirm the playhead got there
+
+  The offset used to be clamped into the element's `seekable` ranges, which asked
+  one attribute two questions it cannot both answer. On an origin that serves no
+  byte ranges the window at the first `loadedmetadata` is zero-length or a
+  fraction of the clip, while the element's own `duration` is already correct — 10
+  on a ten-second clip in 96 of 96 measured loads across chromium and firefox — so
+  the clamp answered with a position from a window that had not filled in yet.
+
+  Now the duration supplies the bound, which is what still refuses an offset past
+  the end of the media, and `seekable` decides only whether the element will move
+  at all. A window that does not reach the offset is a refusal rather than an
+  instruction to land on its nearest edge, so a live source no longer answers a
+  `startTime` below its DVR window with the back of that window.
+
+  The playhead is then read back to confirm it arrived. That closes the case this
+  change would otherwise have opened: a chromium element reporting `seekable
+[[0, 0]]` declines a write permanently — it still sat at 0 after `readyState 4`
+  and the whole clip buffered — so a duration-bounded offset written there would
+  have reported success while doing nothing. Where the playhead did not reach the
+  offset, the non-fatal `configuration` notice on `PlayerState.error` reports it,
+  as it already did for the offsets that never got written.
+
+  The notice's message no longer names the seekable window, since that is no
+  longer the only thing that can refuse an offset.
+
+  The read-back is a same-tick read, and a same-tick read alone is not enough on
+  WebKit, which sometimes clamps before it and sometimes answers `currentTime`
+  with the value it was just given. So the playhead is read back a second time
+  too, on a later turn, and the notice is published there instead if the engine
+  still has not moved by then — which is what makes the guarantee hold on WebKit
+  as well as on chromium and firefox.
+
+- f6c086c: Show React first in every provider README
+
+  `@playdeck/react` is the only renderer Playdeck ships, but every provider
+  README led with core-level construction code and left a React consumer to
+  translate it themselves. Each provider README now opens with a compiled
+  `Player.Root` example — YouTube and Vimeo reuse the fixtures already proven in
+  the provider setup guide, and native, HLS and Wistia each get a new one. The
+  neutral, core-level example moves under a new "Without React" heading, kept
+  verbatim, for the two cases where it is still the right tool: writing a
+  provider adapter, or hosting a player somewhere other than React.
+
+  `@playdeck/core`'s README states the same ordering: React is the default path
+  for building UI, and using core directly is a deliberate choice with its own
+  reasons, rather than the implicit default it read as before. Nothing about the
+  layering changed — core and the providers still know nothing about React.
+
+- 7356cef: Confirm a start position once the engine stops seeking, not on a fixed delay
+
+  The provider's `startTime` refusal notice was decided from a single, same-tick
+  read of `currentTime` after the write. Chromium and firefox clamp before that
+  write's setter returns, so the read already sees the refusal there, but WebKit's
+  clamp can land after the setter returns — so the read sometimes saw the value it
+  was just given rather than where the engine settled, and an offset the element
+  went on to abandon was reported as applied. Measured on 2026-09-01 across two
+  CI runs of the same WebKit case: the first run failed the initial attempt and
+  both retries, and the second run passed the initial attempt and failed a
+  retry, with chromium and firefox passing throughout both runs — a race, not a
+  flat WebKit limitation, where the same source, offset and engine produced the
+  forbidden silent drop on some loads and not others.
+
+  A single deferred read on a fixed delay after the write is not a fix for that
+  race, and CI measured one failing rather than assumed it: scheduled on the very
+  next macrotask, it still reported the playhead at 0 with no notice on two
+  attempts of three on 2026-09-06, because WebKit's own seek task — which finds
+  the empty `seekable` and aborts the seek — is not reliably ordered ahead of a
+  read at any fixed delay.
+
+  Where the same-tick read now reports success, the provider instead polls
+  `media.seeking` — the flag the HTML seek algorithm itself clears once a seek
+  concludes, whether it completed or was aborted, with no `seeked` fired on the
+  abort path. The deferred read runs the moment that flag reads false, so it is
+  confirmed rather than guessed. It publishes the notice if the playhead is
+  still below the offset by more than the existing tolerance; a playhead found
+  ahead of it is playback that started, not a refusal, so that publishes
+  nothing. A seek that never stops is treated as stalled media rather than a
+  refusal and the check gives up on it after fifteen seconds without publishing.
+  The check drops silently instead of publishing where a retry has reloaded the
+  source, a seek command has moved the playhead, or the provider has been
+  destroyed in the meantime, so the notice still lands at most once per load.
+
+  Chromium and firefox already clamped synchronously, so their behaviour is
+  unchanged.
+
+- eb6232e: Stop a player parked on `endTime` from seeking over and over
+
+  A native player that reached its `endTime` corrected the playhead back onto the
+  boundary on every `timeupdate` it received there, and each correction is a
+  write to `currentTime` — a seek, which reports a `timeupdate` of its own at the
+  position it just landed on. That report is still on the boundary, so it asked
+  for the same correction again. Measured on 2026-09-02 in chromium, driving a
+  local 10 second MP4 from a standalone rig: 3,010 `seeking`, 3,024 `timeupdate`
+  and 3,009 `seeked` events in a three-second window at the boundary, with no sign
+  of settling.
+
+  The correction is now issued only where it has somewhere to move — the playhead
+  is neither on `endTime` nor still sitting where the last correction left it —
+  so a parked player is left alone and an overshoot is still pulled back,
+  including one that arrives after playback has already ended. The second half
+  matters because an element need not land on the value written: the seek
+  algorithm clamps into `seekable` and engines snap to a frame, so a playhead that
+  settles just past the boundary would otherwise keep asking to be corrected.
+
+  The position and the `ended` state were correct throughout; what was wrong was
+  the work and what the player said about itself. `PlayerState.seeking` was
+  raised by every one of those seeks and read `true` on a player that had
+  stopped, which is what a seek indicator or a scrubber disabled while seeking
+  was reading. It now returns to `false` and stays there.
+
+  The HLS provider composes the native adapter, so it inherits this.
+
+- Updated dependencies [f582807]
+- Updated dependencies [f6c086c]
+- Updated dependencies [7deed3e]
+- Updated dependencies [2902590]
+  - @playdeck/core@1.1.0
+
 ## 1.0.0
 
 ### Major Changes

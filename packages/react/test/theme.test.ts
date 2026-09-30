@@ -11,6 +11,10 @@ import { describe, expect, test } from 'vitest';
 // only mean anything side by side if the formula behind them is literally the
 // same one.
 import { contrast, over, parseColor } from './contrast';
+import {
+  tokenDefault as tokenDefaultIn,
+  withoutPhoneDockingBlock
+} from './token-default';
 
 /**
  * One stylesheet the file-shaped suite below runs against, with the inventory
@@ -130,8 +134,10 @@ const fixtures: readonly StylesheetFixture[] = [
         '-moz-range-track',
         '-webkit-slider-thumb'
       ],
-      // No `linear-gradient` -- docked.css draws no scrim.
-      functions: ['calc', 'env', 'rgb', 'var'],
+      // `linear-gradient` joins the list once the seek fill becomes a
+      // two-stop gradient like theme.css's own (#594's follow-up spec) --
+      // docked.css still draws no scrim, which is a different rule.
+      functions: ['calc', 'env', 'linear-gradient', 'rgb', 'var'],
       forcedColorsSliderNeedles: [
         '::-moz-range-track',
         '::-moz-range-progress',
@@ -341,15 +347,17 @@ describe.each(fixtures)(
       // An explicit `inline-size`/`block-size` on the activation part beats a
       // consumer's own padding or `min-height` however they write it, because a
       // used value is not a fallback — imposing the badge look on any labelled
-      // affordance rather than offering it as a default. Measured on the
-      // fixed-size rule, a button carrying the `white-space: nowrap` label
-      // "Watch the trailer" at 16px system-ui: the box stayed 64px wide while
-      // its own content wanted 96.55px on chromium and 111.83px on firefox, so
-      // the label ran outside the circle drawn for an icon. Under the floor
-      // below the same button measures 120.55px and 135.83px and the icon-only
-      // one is still 64px square. A `min-*` floor keeps that default and
-      // lets anything wider grow, and `border-radius: 2rem` draws the circle at
-      // that size and a pill past it, where `50%` would draw an ellipse.
+      // affordance rather than offering it as a default. Recorded when this was
+      // written, 2026-09-03, under pinned Playwright (1.61.1), on the
+      // fixed-size rule: a button carrying the `white-space: nowrap` label
+      // "Watch the trailer" at 16px system-ui had a box that stayed 64px wide
+      // while its own content wanted 96.55px on chromium and 111.83px on
+      // firefox, so the label ran outside the circle drawn for an icon; under
+      // the floor below, the same button measured 120.55px and 135.83px and
+      // the icon-only one was still 64px square. Not re-measured since. A
+      // `min-*` floor keeps that default and lets anything wider grow, and
+      // `border-radius: 2rem` draws the circle at that size and a pill past
+      // it, where `50%` would draw an ellipse.
       const activationRule = withoutComments.match(
         /:where\(\[data-playdeck-part='activation'\]\)\s*\{[^}]*\}/
       )?.[0];
@@ -406,11 +414,12 @@ describe.each(fixtures)(
     // cannot honour it: an absent `CaptionsButton` would take the margin with
     // it, and the group would collapse back to the start.
     //
-    // Measured from a rendered bar composed in the contract order at 640px:
+    // Recorded when this was written, 2026-09-03, under pinned Playwright
+    // (1.61.1), from a rendered bar composed in the contract order at 640px:
     // without this the row packs left and the gap between the duration `Time`
-    // and `CaptionsButton` is the bar's own 4px `gap`; with it that gap is
-    // 152.2px on Chromium and 152.25px on Firefox, and the trailing group sits
-    // flush against the bar's inner end.
+    // and `CaptionsButton` is the bar's own 4px `gap`; with it that gap was
+    // 152.2px on Chromium and 152.25px on Firefox, and the trailing group sat
+    // flush against the bar's inner end. Not re-measured since.
     test('pushes the trailing controls to the end with the duration Time', () => {
       expect(withoutComments).toMatch(
         /\[data-playdeck-part='time'\]\[data-time-type='duration'\][^{]*\{[^}]*margin-inline-end:\s*auto/
@@ -418,18 +427,20 @@ describe.each(fixtures)(
     });
 
     // The slider keeps its box at rest and only its paint changes, so no
-    // neighbour moves when it appears. Measured by driving the Theme/Theme
+    // neighbour moves when it appears. Recorded when this was written,
+    // 2026-09-03, under pinned Playwright (1.61.1), by driving the Theme/Theme
     // story, whose bar is `position: absolute; inset: auto 0 0 0` inside a
     // relatively positioned 640px viewport: at rest and revealed alike the
-    // slider is 80x44 at x=120, and the gap from the mute button's inline end
-    // to the duration `Time` is 88px — identical in both states, on chromium
-    // and on firefox. What does change is `opacity` 0 -> 1 and
-    // `pointer-events` `none` -> `auto`, on hovering the mute button, on
-    // moving the pointer from it onto the slider, and on focusing the slider;
-    // all three return to rest when the pointer leaves and the input blurs.
-    // Under an emulated coarse pointer (`matchMedia('(pointer: coarse)')`
-    // true) the same slider computes `display: none` and measures 0x0, and
-    // that 88px gap collapses to the bar's own 4px.
+    // slider was 80x44 at x=120, and the gap from the mute button's inline
+    // end to the duration `Time` was 88px — identical in both states, on
+    // chromium and on firefox; not re-measured since. What does change is
+    // `opacity` 0 -> 1 and `pointer-events` `none` -> `auto`, on hovering the
+    // mute button, on moving the pointer from it onto the slider, and on
+    // focusing the slider; all three return to rest when the pointer leaves
+    // and the input blurs. Under an emulated coarse pointer
+    // (`matchMedia('(pointer: coarse)')` true) the same slider computes
+    // `display: none` and measures 0x0, and that 88px gap collapses to the
+    // bar's own 4px.
     test('hides the volume slider at rest on a fine pointer and reveals it on hover or focus', () => {
       expect(withoutComments).toMatch(
         /@media\s*\(\s*pointer:\s*fine\s*\)\s*\{[^]*?opacity:\s*0;[^]*?pointer-events:\s*none;[^]*?\}/
@@ -471,13 +482,14 @@ describe.each(fixtures)(
     // painting the control in the user's own palette. Unguarded, #190's Gecko
     // volume slider flattened to `Canvas` -- the progress fill and the unfilled
     // track alike at `rgb(255 255 255)`, 1.00:1, so the slider stated no value
-    // at all. #415's seek slider is held out of the mode for the same reason and
-    // at a measured price, which `theme.css` records where it draws that
-    // control: positioning the input there takes the loaded range from 21.00:1
-    // against the unfilled one to 1.00:1 on Chromium, and drawing the control
-    // there flattens Gecko's thumb to between 2.05:1 and 2.85:1 against the
-    // canvas. Any stylesheet that draws the same controls buys the same trade,
-    // which is why the guard is asserted per fixture against the needles that
+    // at all. #415's seek slider is held out of the mode for the same reason,
+    // at a measured price recorded when this comment was introduced,
+    // 2026-08-24, under pinned Playwright (1.61.1), not re-measured since:
+    // positioning the input there took the loaded range from 21.00:1 against
+    // the unfilled one to 1.00:1 on Chromium, and drawing the control there
+    // flattened Gecko's thumb to between 2.05:1 and 2.85:1 against the canvas.
+    // Any stylesheet that draws the same controls buys the same trade, which
+    // is why the guard is asserted per fixture against the needles that
     // fixture names.
     // `e2e/thumb-contrast.spec.ts` measures that from rendered pixels; this
     // asserts the structural reason for it, which costs no browser and fails in
@@ -506,6 +518,48 @@ describe.each(fixtures)(
       const elsewhere =
         withoutComments.slice(0, start) + withoutComments.slice(end + 1);
       expect(names.filter((name) => elsewhere.includes(name))).toEqual([]);
+    });
+
+    // The mobile bottom sheet (issue #594's follow-up): below 48rem both
+    // menus leave the picture. A popover anchored above the trigger cannot
+    // fit inside a letterboxed 16:9 stage as short as ~184px tall, so the
+    // menu becomes a `position: fixed` sheet pinned to the viewport's own
+    // bottom -- not the stage's, which is what `inset: auto 0 0 0` needs the
+    // containing-block check elsewhere in this branch for -- capped at 70dvh
+    // and scrollable past it, with a scrim behind it. The scrim is a
+    // `box-shadow` spread past any real viewport rather than a `::before`:
+    // a pseudo-element cannot sit inside `:where()` (Selectors 4 forbids it),
+    // so a rule painting one could never pass the specificity-zero test
+    // above, and unlike the shadow it would also need its own carve-out from
+    // `SettingsMenuContent`'s outside-pointerdown close, since a pointerdown
+    // on a pseudo-element targets its host rather than reaching past it.
+    test('below 48rem, both menus become a fixed bottom sheet with a scrim', () => {
+      const sheetRule =
+        /:where\(\[data-playdeck-part='settings-menu'\]\)\s*\{\s*position:\s*fixed;\s*inset:\s*auto 0 0 0;\s*max-block-size:\s*70vh;\s*overflow-y:\s*auto;[^}]*\}/.exec(
+          withoutComments
+        );
+      expect(sheetRule).not.toBeNull();
+      // Rounded top corners, not all four: a sheet flush with the viewport's
+      // own edges on the other three.
+      expect(sheetRule![0]).toMatch(
+        /border-radius:\s*var\(--playdeck-radius-large,\s*0\.5rem\)\s+var\(--playdeck-radius-large,\s*0\.5rem\)\s+0\s+0;/
+      );
+      // The bottom safe-area inset, added to the block padding rather than
+      // replacing it.
+      expect(sheetRule![0]).toMatch(
+        /padding-block-end:\s*calc\(\s*var\(--playdeck-space-2,\s*0\.5rem\)\s*\+\s*var\(--playdeck-safe-bottom,\s*env\(safe-area-inset-bottom,\s*0px\)\)\s*\)/
+      );
+      expect(sheetRule![0]).toMatch(
+        /box-shadow:\s*0 0 0 100vmax rgb\(0 0 0 \/ 0\.5\);/
+      );
+
+      // The 44px hit target, restated for the sheet: the phone control-bar
+      // query elsewhere in this file shrinks `--playdeck-control-size` to
+      // 2.5rem (40px), and the menu items inherit that variable unless this
+      // rule overrides it back up.
+      expect(withoutComments).toMatch(
+        /:where\(\s*\[data-playdeck-part='menu-item'\],\s*\[data-playdeck-part='menu-radio-item'\]\s*\)\s*\{\s*min-block-size:\s*2\.75rem;\s*\}/
+      );
     });
 
     test(`is reachable as @playdeck/react/${label} and shipped in the tarball`, async () => {
@@ -595,43 +649,17 @@ describe('theme contract', () => {
 // not a typical case. Widening the target to a worst-case video ground is a
 // deliberate, recorded simplification of #190, not an oversight here.
 
-/**
- * The default a token is read with, taken from the shipped file rather than
- * restated here. That is the point: editing a default without editing the
- * ratios below has to fail, or this check drifts away from what ships.
- *
- * Every `var()` read of a token has to agree on its fallback -- the backdrop is
- * read by two rules -- so disagreement is itself a failure, and so is a token
- * this file only declares, since a declaration would beat a consumer's
- * inherited value and there would be no `var(name, default)` to find.
- */
-const tokenDefault = (name: string): string => {
-  const reads = new RegExp(`var\\(\\s*${name}\\s*,\\s*`, 'g');
-  const defaults = new Set<string>();
-  for (
-    let read = reads.exec(withoutComments);
-    read !== null;
-    read = reads.exec(withoutComments)
-  ) {
-    // Scan to the `)` that closes this `var()`, so a nested `rgb(...)` in the
-    // fallback position is taken whole.
-    const start = read.index + read[0].length;
-    let depth = 1;
-    let end = start;
-    for (; end < withoutComments.length && depth > 0; end++) {
-      if (withoutComments[end] === '(') depth++;
-      else if (withoutComments[end] === ')') depth--;
-    }
-    defaults.add(withoutComments.slice(start, end - 1).trim());
-  }
-  if (defaults.size !== 1)
-    throw new Error(
-      `${name}: expected one fallback default in theme.css, found ${
-        defaults.size === 0 ? 'none' : [...defaults].join(' / ')
-      }`
-    );
-  return [...defaults][0];
-};
+// `tokenDefault` and `withoutPhoneDockingBlock` are shared with
+// tokens.contract.test.ts, which builds the same kind of default off a wider
+// corpus -- see `./token-default.ts` for what each does and why. Every
+// `var()` read of a token has to agree on its fallback -- the backdrop is
+// read by two rules -- so disagreement is itself a failure, and so is a token
+// this file only declares, since a declaration would beat a consumer's
+// inherited value and there would be no `var(name, default)` to find.
+const preparedThemeSource = withoutPhoneDockingBlock(withoutComments);
+
+const tokenDefault = (name: string): string =>
+  tokenDefaultIn(preparedThemeSource, name, 'theme.css');
 
 describe('slider non-text contrast', () => {
   const backdrop = parseColor(tokenDefault('--playdeck-color-backdrop'));
@@ -731,9 +759,13 @@ describe('slider non-text contrast', () => {
   // are the ones composited here rather than an engine's. The two answers still
   // differ, and by design: these ratios composite onto `--playdeck-color-backdrop`
   // alone, while the story they are measured on has a ground of `rgb(11 14 19)`.
-  // Rendered against arithmetic: 3.55:1 against 3.13:1 for the ring on the
-  // track, 13.73:1 against 13.35:1 for the ring on the loaded range, 3.86:1
-  // against 4.26:1 for the loaded range on the track. Not all one direction, and
+  // Rendered against arithmetic (the rendered half is
+  // `e2e/thumb-contrast.spec.ts`'s own figure, recorded when this comment was
+  // introduced, 2026-08-24, under pinned Playwright (1.61.1) and not
+  // re-measured since; the arithmetic half is this file's own and reproduces
+  // on every run): 3.55:1 against 3.13:1 for the ring on the track, 13.73:1
+  // against 13.35:1 for the ring on the loaded range, 3.86:1 against 4.26:1
+  // for the loaded range on the track. Not all one direction, and
   // that is what a lighter ground does rather than a discrepancy: it lifts a
   // translucent white further where less of that white is opaque, so the track
   // gains more than the range above it and the boundary between the two closes
@@ -817,12 +849,39 @@ describe('docked.css text contrast', () => {
     { name: 'on-surface vs surface (light)', fg: '#1c1c1e', bg: '#f4f4f2' },
     { name: 'on-surface vs surface (dark)', fg: '#ededed', bg: '#141416' },
     { name: 'accent vs surface (light)', fg: '#2b52d6', bg: '#f4f4f2' },
-    { name: 'accent vs surface (dark)', fg: '#3ea6ff', bg: '#141416' }
+    { name: 'accent vs surface (dark)', fg: '#3ea6ff', bg: '#141416' },
+    // The duration `Time`'s own dimmed colour (#594's follow-up): opacity
+    // read as still-animating to `e2e/site-landing.spec.ts`'s
+    // `unsettled()` helper under reduced motion, so both sheets dim this
+    // text with a colour token instead. Checked here rather than assumed,
+    // the same as every other pair in this suite.
+    { name: 'duration vs surface (light)', fg: '#5c5c5c', bg: '#f4f4f2' },
+    { name: 'duration vs surface (dark)', fg: '#a3a3a3', bg: '#141416' }
   ];
 
   test.each(textPairs)('$name clears 4.5:1', ({ fg, bg }) => {
     const ratio = contrast(parseColor(fg), parseColor(bg));
     expect(ratio).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // The margins stated, pinned so a token move has to restate what it did
+  // rather than quietly spending headroom -- the same shape as `docked.css
+  // slider non-text contrast`'s own `states the ratio of every boundary`.
+  test('states the ratio of every text pair', () => {
+    const stated = Object.fromEntries(
+      textPairs.map(({ name, fg, bg }) => [
+        name,
+        `${contrast(parseColor(fg), parseColor(bg)).toFixed(2)}:1`
+      ])
+    );
+    expect(stated).toEqual({
+      'on-surface vs surface (light)': '15.45:1',
+      'on-surface vs surface (dark)': '15.72:1',
+      'accent vs surface (light)': '5.81:1',
+      'accent vs surface (dark)': '7.10:1',
+      'duration vs surface (light)': '6.07:1',
+      'duration vs surface (dark)': '7.29:1'
+    });
   });
 });
 
@@ -1024,22 +1083,367 @@ describe('theme.css overlay rules (not shared with docked.css)', () => {
     );
   });
 
-  // Two declarations inside one `max-width: 48rem` query, and no third: the
-  // narrow fallback flattens the scrim and drops the volume slider, and says
-  // nothing about where the bar sits. A `position` written here would be
-  // layered `:where()` CSS, which the unlayered rule a real composition uses to
-  // float the bar beats whatever this file said — so the query claims only what
-  // it can deliver. Moving the bar out of the overlay is `docked.css`'s job,
-  // and that theme never puts it there to begin with.
-  test('flattens the scrim and drops the volume slider below 48rem', () => {
-    const query = withoutComments.match(
-      /@media\s*\(\s*max-width:\s*48rem\s*\)\s*\{[^]*?\n {2}\}/
-    )?.[0];
-    expect(query).toBeDefined();
-    expect(query).toMatch(
-      /background:\s*var\(--playdeck-color-surface,\s*rgb\(0 0 0 \/ 0\.72\)\)/
+  /**
+   * The whole `@media (max-width: 48rem)` block's text, walked by brace depth
+   * rather than matched by a fixed-line regex -- other blocks in this file
+   * nest their own `@media`, so a fixed-line match is not safe to reuse here
+   * even though this particular block no longer nests one itself.
+   */
+  const phoneBlock = (): string => {
+    const query = /@media\s*\(\s*max-width:\s*48rem\s*\)/.exec(withoutComments);
+    expect(query).not.toBeNull();
+    const start = query!.index;
+    let depth = 0;
+    let end = withoutComments.indexOf('{', start);
+    for (; end < withoutComments.length; end++) {
+      if (withoutComments[end] === '{') depth++;
+      else if (withoutComments[end] === '}' && --depth === 0) break;
+    }
+    return withoutComments.slice(start, end + 1);
+  };
+
+  // The maintainer's reversal on 2026-09-04: this query docked the bar below
+  // the picture below 48rem, and no longer does. The idle fade this describe
+  // block's first test already pins is what made that unnecessary -- a bar
+  // that fades while playing and returns on a tap or a keystroke is a sound
+  // phone layout without leaving the picture, so below 48rem the bar stays
+  // exactly where the base rules put it: positioned over the picture, painted
+  // with the scrim, and still faded by `data-idle`. `docked.css` is what a
+  // reader who wants the bar out of the picture still chooses.
+  test('stays overlaid below 48rem, with data-idle still able to hide it', () => {
+    const query = phoneBlock();
+
+    // No `position: static`, no `grid-row`, no grid on the viewport: the
+    // three declarations that took the bar out of the picture are gone
+    // entirely, not merely reworded.
+    expect(query).not.toMatch(/position:\s*static/);
+    expect(query).not.toMatch(/grid-row/);
+    expect(query).not.toMatch(/display:\s*grid/);
+    expect(query).not.toMatch(/grid-template-rows/);
+
+    // No flat surface colours in place of the scrim, and no dark-scheme
+    // repeat of them -- both were docking's, and both are gone with it.
+    expect(query).not.toMatch(/--playdeck-color-surface/);
+    expect(query).not.toMatch(/--playdeck-color-on-surface/);
+    expect(query).not.toMatch(/--playdeck-color-hairline/);
+    expect(query).not.toMatch(
+      /@media\s*\(\s*prefers-color-scheme:\s*dark\s*\)/
     );
+
+    // The opaque phone-only track/buffered fallback was docking's flat
+    // surface needing more contrast than the translucent scrim default; gone
+    // with the surface it was drawn for.
+    expect(query).not.toMatch(/--playdeck-color-track/);
+    expect(query).not.toMatch(/--playdeck-color-buffered/);
+
+    // And the override that kept the bar visible through `data-idle` is
+    // gone too, which is what lets the fade this describe block's first
+    // test pins reach a phone again.
+    expect(query).not.toMatch(/data-idle/);
+  });
+
+  // The row-two arithmetic (#622): five buttons plus the times overflowed
+  // 375px onto a third row at the desktop control size. `docked.css` carries
+  // its own copy of this test, since the two files share no import.
+  test('sizes the control bar for one row below 48rem', () => {
+    const query = phoneBlock();
+
+    expect(query).toMatch(
+      /:where\(\[data-playdeck-part='controls'\]\)\s*\{[^}]*gap:\s*0;/
+    );
+    expect(query).toMatch(
+      /padding-left:\s*calc\(\s*var\(--playdeck-space-1,\s*0\.25rem\)/
+    );
+    expect(query).toMatch(
+      /padding-right:\s*calc\(\s*var\(--playdeck-space-1,\s*0\.25rem\)/
+    );
+    // The bar's own height trim (2026-09-04): top and bottom halved the same
+    // way left and right already were, the safe-area calc on the bottom edge
+    // kept.
+    expect(query).toMatch(
+      /padding-top:\s*var\(--playdeck-space-1,\s*0\.25rem\);/
+    );
+    expect(query).toMatch(
+      /padding-bottom:\s*calc\(\s*var\(--playdeck-space-1,\s*0\.25rem\)/
+    );
+    // Still the button box's own desktop-independent size; 2.75rem (44px) is
+    // the desktop-only default the token's own doc comment records.
+    expect(query).toMatch(/--playdeck-control-size:\s*2\.5rem;/);
+    // Neither touch-target floor moves in this query any more (#736): both
+    // are read by the primitives as the `min-width`/`min-height` themselves,
+    // and Playdeck commits to WCAG 2.2 SC 2.5.5's 44px minimum for both, so
+    // leaving them unset here is what keeps every button and the seek row at
+    // the locked 2.75rem regardless of the smaller box set above.
+    expect(query).not.toMatch(/--playdeck-control-min-size:/);
+    expect(query).not.toMatch(/--playdeck-seek-slider-min-block-size:/);
+
+    expect(query).toMatch(
+      /:where\(\[data-playdeck-part='time'\]\)\s*\{[^}]*padding-inline:\s*var\(--playdeck-space-1,\s*0\.25rem\);/
+    );
+
     expect(query).toMatch(/volume-slider'\][^]*?display:\s*none/);
-    expect(query).not.toMatch(/position:/);
+  });
+
+  // `pip-button` joins the volume slider under a coarse pointer (#622): a
+  // touchscreen already offers picture-in-picture from its own system
+  // chrome, so this is the one button a phone loses nothing by dropping --
+  // and dropping it is what lets row two's remaining four buttons plus the
+  // times fit one line. Read from the whole file rather than `phoneBlock()`:
+  // this rule is gated on pointer, not on width, the same as the volume
+  // slider's own long-standing `(pointer: coarse)` rule beside it.
+  test('hides pip-button under a coarse pointer, alongside the volume slider', () => {
+    const coarseQuery =
+      /@media\s*\(\s*pointer:\s*coarse\s*\)\s*\{([^]*?)\n {2}\}/.exec(
+        withoutComments
+      );
+    expect(coarseQuery).not.toBeNull();
+    const body = coarseQuery![1];
+    expect(body).toMatch(/data-playdeck-part='volume-slider'/);
+    expect(body).toMatch(/data-playdeck-part='pip-button'/);
+    expect(body).toMatch(/display:\s*none;/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The control surface's own gradient scrim, against the text it sits behind.
+//
+// #599's axe pass (`e2e/theme-a11y.spec.ts`) tolerates a `color-contrast`
+// finding on the current/duration `<time>` whenever the control bar is
+// visible: axe-core reports `messageKey: bgGradient` ("Element's background
+// color could not be determined due to a background gradient") for any text
+// over `--playdeck-overlay-scrim`'s `linear-gradient`, the same tool
+// limitation #760 already documents for text over a rasterised video frame
+// (`messageKey: imgNode`) -- axe has no rule that resolves either kind of
+// background, so it reports "needs review" rather than a verdict. This is the
+// arithmetic that finding stands in for.
+//
+// Scoped to this file's own default backdrop deliberately: `ThemedPlayer`
+// (`.storybook/theme.tsx`'s render target, the composition the axe pass
+// scans) mounts no `Player.Media`/`Player.Poster`, so nothing paints behind
+// the bar but `--playdeck-color-backdrop` itself -- unlike #760's cue, which
+// has to clear 4.5:1 against arbitrary video content because a real
+// `<video>` sits behind it. Both stops turning out equal to the backdrop
+// below is what makes one sample of the gradient stand for the whole of it.
+describe('theme.css overlay-scrim text contrast (#599)', () => {
+  const backdrop = parseColor(tokenDefault('--playdeck-color-backdrop'));
+
+  // `--playdeck-overlay-scrim`'s own default is one `var()` fallback --
+  // `linear-gradient(to top, rgb(0 0 0 / 0.78), rgb(0 0 0 / 0) 65%)` -- read
+  // whole by `tokenDefault`'s paren walk, then split on its two `rgb(...)`
+  // colour stops. Not a general gradient parser: this file has exactly one
+  // gradient token to check, and a general parser is not owed for one.
+  const scrimDefault = tokenDefault('--playdeck-overlay-scrim');
+  const stops = [...scrimDefault.matchAll(/rgb\([^)]*\)/g)].map(
+    (match) => match[0]
+  );
+
+  test('the scrim default has exactly two colour stops', () => {
+    expect(stops).toHaveLength(2);
+  });
+
+  const opaqueEnd = over(parseColor(stops[0]), backdrop);
+  const transparentEnd = over(parseColor(stops[1]), backdrop);
+
+  test('both ends of the gradient composite to the same colour as the backdrop', () => {
+    // Both stops are `rgb(0 0 0 / a)` at whatever alpha -- pure black over a
+    // pure black backdrop composites to pure black regardless of alpha, so
+    // the gradient is invisible against this file's own default backdrop:
+    // every point along it is the one colour below, not a range axe has
+    // reason to distrust a single sample of.
+    expect(opaqueEnd).toEqual(backdrop);
+    expect(transparentEnd).toEqual(backdrop);
+  });
+
+  // The current time inherits `color` from the viewport rule (the base
+  // `time` rule sets no colour of its own); the duration half dims by its own
+  // token instead of `opacity`, for the reason stated beside
+  // `--playdeck-color-duration`'s own read above.
+  const onSurface = parseColor(tokenDefault('--playdeck-color-on-surface'));
+  const duration = over(
+    parseColor(tokenDefault('--playdeck-color-duration')),
+    backdrop
+  );
+
+  test('states the composited ratio of both time segments against the scrim', () => {
+    expect({
+      'current time (on-surface) vs the scrim': `${contrast(onSurface, backdrop).toFixed(2)}:1`,
+      'duration (dimmed) vs the scrim': `${contrast(duration, backdrop).toFixed(2)}:1`
+    }).toEqual({
+      'current time (on-surface) vs the scrim': '21.00:1',
+      'duration (dimmed) vs the scrim': '8.34:1'
+    });
+  });
+
+  test('both clear 4.5:1', () => {
+    expect(contrast(onSurface, backdrop)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(duration, backdrop)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+// Demonstrated red (#599): with `--playdeck-color-duration`'s default
+// darkened from `rgb(255 255 255 / 0.64)` to `rgb(10 10 10 / 0.64)`, both
+// tests above failed with the real composited numbers:
+//
+//   AssertionError: expected { …(2) } to deeply equal { …(2) }
+//   - Expected
+//   + Received
+//     {
+//       "current time (on-surface) vs the scrim": "21.00:1",
+//   -   "duration (dimmed) vs the scrim": "8.34:1",
+//   +   "duration (dimmed) vs the scrim": "1.04:1",
+//     }
+//
+//   AssertionError: expected 1.0388514538942513 to be greater than or equal
+//   to 4.5
+//
+// Reverted, both passed again at the stated ratios. This is also the
+// substitute `e2e/theme-a11y.spec.ts`'s own `knownIncomplete` comment points
+// back to: the same mutation left that file's axe pass green, because
+// axe-core's `bgGradient` classification never resolves a background either
+// way -- it does not depend on the foreground colour it is declining to
+// judge. This describe's arithmetic is what the tolerated `color-contrast`
+// finding actually depends on, and it is what a genuine regression here would
+// really fail.
+
+// ---------------------------------------------------------------------------
+// docked.css's own copy of the row-two arithmetic (#622). Not the parameterised
+// `describe.each` above: that suite's assertions are shared shape, and this one
+// is a query only this file carries -- `theme.css` was never docked to begin
+// with, so it needs no width-scoped sizing of its own; see this file's own
+// `sizes the control bar for one row below 48rem` test.
+describe('docked.css phone sizing (not shared with theme.css)', () => {
+  const phoneBlock = (): string => {
+    const query = /@media\s*\(\s*max-width:\s*48rem\s*\)/.exec(
+      dockedWithoutComments
+    );
+    expect(query).not.toBeNull();
+    const start = query!.index;
+    let depth = 0;
+    let end = dockedWithoutComments.indexOf('{', start);
+    for (; end < dockedWithoutComments.length; end++) {
+      if (dockedWithoutComments[end] === '{') depth++;
+      else if (dockedWithoutComments[end] === '}' && --depth === 0) break;
+    }
+    return dockedWithoutComments.slice(start, end + 1);
+  };
+
+  test('sizes the control bar for one row below 48rem', () => {
+    const query = phoneBlock();
+
+    expect(query).toMatch(
+      /:where\(\[data-playdeck-part='controls'\]\)\s*\{[^}]*gap:\s*0;/
+    );
+    expect(query).toMatch(
+      /padding-left:\s*calc\(\s*var\(--playdeck-space-1,\s*0\.25rem\)/
+    );
+    expect(query).toMatch(
+      /padding-right:\s*calc\(\s*var\(--playdeck-space-1,\s*0\.25rem\)/
+    );
+    // Same trim as theme.css's own copy; see that file's comments.
+    expect(query).toMatch(
+      /padding-top:\s*var\(--playdeck-space-1,\s*0\.25rem\);/
+    );
+    expect(query).toMatch(
+      /padding-bottom:\s*calc\(\s*var\(--playdeck-space-1,\s*0\.25rem\)/
+    );
+    // Still the button box's own desktop-independent size; 2.75rem (44px) is
+    // the desktop-only default the token's own doc comment records in
+    // theme.css.
+    expect(query).toMatch(/--playdeck-control-size:\s*2\.5rem;/);
+    // Neither touch-target floor moves in this query any more (#736); see
+    // theme.css's own copy of this test.
+    expect(query).not.toMatch(/--playdeck-control-min-size:/);
+    expect(query).not.toMatch(/--playdeck-seek-slider-min-block-size:/);
+
+    expect(query).toMatch(
+      /:where\(\[data-playdeck-part='time'\]\)\s*\{[^}]*padding-inline:\s*var\(--playdeck-space-1,\s*0\.25rem\);/
+    );
+  });
+
+  // `pip-button` joins the volume slider under a coarse pointer (#622), the
+  // same reasoning as `theme.css`'s own copy of this test.
+  test('hides pip-button under a coarse pointer, alongside the volume slider', () => {
+    const coarseQuery =
+      /@media\s*\(\s*pointer:\s*coarse\s*\)\s*\{([^]*?)\n {2}\}/.exec(
+        dockedWithoutComments
+      );
+    expect(coarseQuery).not.toBeNull();
+    const body = coarseQuery![1];
+    expect(body).toMatch(/data-playdeck-part='volume-slider'/);
+    expect(body).toMatch(/data-playdeck-part='pip-button'/);
+    expect(body).toMatch(/display:\s*none;/);
+  });
+});
+
+// The proof `e2e/a11y.spec.ts` points to for its docked and headless
+// `color-contrast`/`imgNode` pins (#760). Lifting the cue clear of the
+// control row moved it off the one opaque surface axe could resolve a
+// background against (the bar) and onto the picture, where axe-core has no
+// rule that rasterises a `<video>`/`<img>` behind translucent text and
+// reports `needs review` instead of a verdict. That is a real limit of the
+// tool, not evidence either way about the text -- so this checks the text
+// arithmetically, against the two ends of what a video frame behind it can
+// be, rather than assuming the `needs review` is safe to wave through.
+//
+// `--playdeck-caption-color` and `--playdeck-caption-background` are read
+// only inline, by `captionCueBoxStyle` in `captions.tsx` -- never by
+// `theme.css` or `docked.css` (confirmed here, not assumed: neither file's
+// text contains either name) -- so one default composite covers every
+// surface this package ships: unthemed, `theme.css` and `docked.css` alike.
+const captionsSource = await readFile(
+  new URL('../src/captions.tsx', import.meta.url),
+  'utf8'
+);
+
+describe('caption cue contrast against arbitrary video content (#760)', () => {
+  test('neither shipped stylesheet overrides the caption colour or background tokens', () => {
+    expect(themeSource).not.toMatch(/--playdeck-caption-(color|background)/);
+    expect(dockedSource).not.toMatch(/--playdeck-caption-(color|background)/);
+  });
+
+  const cueColor = parseColor(
+    tokenDefaultIn(captionsSource, '--playdeck-caption-color', 'captions.tsx')
+  );
+  const cueBackground = parseColor(
+    tokenDefaultIn(
+      captionsSource,
+      '--playdeck-caption-background',
+      'captions.tsx'
+    )
+  );
+
+  // `over` requires an opaque ground (contrast.ts), which a video frame
+  // always is -- these two are its ends, not a sample of it.
+  const videoExtremes = {
+    white: { red: 1, green: 1, blue: 1, alpha: 1 },
+    black: { red: 0, green: 0, blue: 0, alpha: 1 }
+  };
+
+  test.each(Object.entries(videoExtremes))(
+    'clears 4.5:1 over a %s video frame',
+    (_name, ground) => {
+      const composited = over(cueBackground, ground);
+      expect(contrast(cueColor, composited)).toBeGreaterThanOrEqual(4.5);
+    }
+  );
+
+  // Pinned so a token move has to restate what it did rather than quietly
+  // spending headroom, the same shape as `docked.css text contrast`'s own
+  // `states the ratio of every text pair`. A white video frame is the worse
+  // of the two by a wide margin -- 75% black over white composites to
+  // rgb(64, 64, 64), where white text still clears 4.5:1 with room to
+  // spare, and 75% black over black composites to black, where it clears by
+  // a wide margin instead of a comfortable one.
+  test('states the ratio for each end', () => {
+    const stated = Object.fromEntries(
+      Object.entries(videoExtremes).map(([name, ground]) => [
+        name,
+        `${contrast(cueColor, over(cueBackground, ground)).toFixed(2)}:1`
+      ])
+    );
+    expect(stated).toEqual({
+      white: '10.41:1',
+      black: '21.00:1'
+    });
   });
 });

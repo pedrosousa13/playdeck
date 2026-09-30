@@ -6,8 +6,13 @@
     "types": ["node", "vitest/globals"],
     // Not inherited from `tsconfig.json`: this project extends the base
     // config directly, so the `@/*` alias `tsconfig.json` and `astro.config.ts`
-    // both declare has to be repeated here for the same source tree to resolve.
-    "paths": { "@/*": ["./src/*"] },
+    // both declare has to be repeated here for the same source tree to
+    // resolve. `@playdeck/react` for the same reason `tsconfig.json` states
+    // it: the target is the built declarations.
+    "paths": {
+      "@/*": ["./src/*"],
+      "@playdeck/react": ["../../packages/react/dist/index.d.ts"]
+    },
     // Outside the package for the same reason `tsconfig.json`'s own
     // `tsBuildInfoFile` is: there is no persistent `dist/` here for a
     // buildinfo to live in, since `astro build` clears its output directory

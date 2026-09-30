@@ -65,6 +65,7 @@ export type PlayerHandle = Pick<
   | 'requestPictureInPicture'
   | 'exitPictureInPicture'
   | 'showAirPlayPicker'
+  | 'showRemotePlaybackPicker'
   | 'retry'
   | 'whenReady'
 > &
@@ -78,8 +79,18 @@ export type PlayerHandle = Pick<
 
 export type PlayerActions = Omit<PlayerHandle, 'getState' | 'subscribe' | 'on'>;
 
+// `'paused'` is `'hidden'`'s own source having played at least once, now
+// sitting on `playback: 'paused'` rather than `'playing'` -- the frame the
+// poster stood in for is still there, but so is whatever an embed provider
+// draws over an idle iframe once nothing covers it. `Poster` (`poster.tsx`)
+// treats it as visible, same as `'visible'`, so a consumer who never asked
+// for this reads no difference; `data-state` still names it apart because
+// the reason a paused source shows its poster is not the reason a source
+// that has never played does.
+export type PosterState = 'visible' | 'hidden' | 'paused';
+
 export const PlayerContext = createContext<PlayerContextValue | null>(null);
-export const PosterContext = createContext<'visible' | 'hidden'>('visible');
+export const PosterContext = createContext<PosterState>('visible');
 
 export const usePlayer = (): PlayerContextValue => {
   const player = useContext(PlayerContext);
@@ -90,8 +101,7 @@ export const usePlayer = (): PlayerContextValue => {
   return player;
 };
 
-export const usePosterState = (): 'visible' | 'hidden' =>
-  useContext(PosterContext);
+export const usePosterState = (): PosterState => useContext(PosterContext);
 
 // Registers a standing refusal for as long as `refused` holds, and disposes it
 // when it stops holding, when the surface changes, or when the calling
@@ -253,6 +263,7 @@ export const collectPlayerActions = (
   requestPictureInPicture: controller.requestPictureInPicture,
   exitPictureInPicture: controller.exitPictureInPicture,
   showAirPlayPicker: controller.showAirPlayPicker,
+  showRemotePlaybackPicker: controller.showRemotePlaybackPicker,
   retry: controller.retry,
   whenReady: controller.whenReady
 });

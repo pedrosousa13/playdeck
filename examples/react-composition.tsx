@@ -23,6 +23,8 @@ export const Clip = () => (
         <Player.PipButton />
         {/* Renders only where there is somewhere to cast to. */}
         <Player.AirPlayButton />
+        {/* Renders only where a Remote Playback API device is reachable. */}
+        <Player.RemotePlaybackButton />
         <Player.FullscreenButton />
       </Player.Controls>
     </Player.Viewport>

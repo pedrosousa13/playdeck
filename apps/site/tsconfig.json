@@ -11,7 +11,14 @@
     // `@/*` -> `src/*`, matching the alias `astro.config.ts` registers for
     // Vite and the alias `components.json` declares for shadcn's tooling. Only
     // for `tsc`'s own resolution; the build's is the Vite alias above.
-    "paths": { "@/*": ["./src/*"] },
+    // `@playdeck/react` is stated rather than left to node resolution: the
+    // target is the built declarations, which is what node resolution already
+    // reaches through the package's `exports`, and the reference below is
+    // what makes `tsc -b` build them first.
+    "paths": {
+      "@/*": ["./src/*"],
+      "@playdeck/react": ["../../packages/react/dist/index.d.ts"]
+    },
     // Outside the package, unlike `apps/storybook`, which writes its own to
     // `dist/`. Here `dist/` is Astro's *output* directory: `astro build` clears
     // it, so a buildinfo kept there is destroyed by every build, and one written

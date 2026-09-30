@@ -10,9 +10,14 @@ export const live = deriveLiveState({
   currentTime: 3594
 });
 
-// -> { isLive: true, atLiveEdge: true }. `null` means "not live, or not yet
-// known" — a control should not claim either until it is.
+// -> { isLive: true, atLiveEdge: true, offsetFromEdge: 6 }. `null` means "not
+// live, or not yet known" — a control should not claim either until it is.
 export const atEdge = live?.atLiveEdge ?? false;
+
+// Whole seconds, `0` at or ahead of the edge — the resolution `Time` renders
+// at, and why `liveStateEqual` compares it: an unrounded float would differ
+// on essentially every `timeupdate` and republish `live` many times a second.
+export const behindBy = live?.offsetFromEdge ?? 0;
 
 // Omitting `atEdgeThreshold` uses the shared tolerance every adapter uses.
 // Pass one only to answer a different question than the players do.

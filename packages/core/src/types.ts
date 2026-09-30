@@ -45,9 +45,12 @@ export type PlayerError = {
 };
 
 // The consumer-supplied URL props the shared allowlist governs outside a
-// provider — the five surfaces #320 routed through `isPermittedSourceUrl` and
-// left silent. Named for the prop the consumer wrote, because the prop is what
-// the operator has to go and fix.
+// provider: the five surfaces #320 routed through `isPermittedSourceUrl` and
+// left silent, plus `thumbnails` and `thumbnails cue image`, added when the
+// seek-preview VTT parser gained its own URLs to check, and `providerOptions`,
+// added when a supplied kind's own option bag gained the same gate its
+// resolved source already had (#752). Named for the prop the consumer wrote,
+// because the prop is what the operator has to go and fix.
 //
 // A closed union rather than a `string`, deliberately. `reportRefusedUrl` is
 // reached from React components holding the value that was just refused, and a
@@ -61,7 +64,10 @@ export type RefusedUrlSurface =
   | 'poster srcSet'
   | 'nativePoster'
   | 'textTracks src'
-  | 'mediaSession artwork';
+  | 'mediaSession artwork'
+  | 'thumbnails'
+  | 'thumbnails cue image'
+  | 'providerOptions';
 
 export type TextTrackKind = 'subtitles' | 'captions';
 export type TextTrackReadiness = 'idle' | 'loading' | 'loaded' | 'error';
@@ -75,10 +81,30 @@ export type TextTrack = {
   readonly readiness: TextTrackReadiness;
 };
 
+// One selectable audio rendition, published as an ordered collection with its
+// own selection carried on each entry rather than in a sibling
+// `selectedAudioTrackId` field, the shape `TextTrack`/`selectedTextTrackId`
+// and `PlayerQuality`/`selectedQualityId` both use. hls.js's own audio-tracks
+// controller enforces "at most one enabled" on the track itself, with no
+// separate selection slot to mirror; the DOM's own `AudioTrackList` carries
+// no such guarantee for audio, so the native provider enforces that same
+// exclusivity itself on selection, keeping both providers answering from the
+// same per-entry shape.
+export type AudioTrack = {
+  readonly id: string;
+  readonly label: string;
+  readonly language: string | null;
+  readonly active: boolean;
+};
+
 export type TextCue = {
   readonly id: string | null;
   readonly startTime: number;
   readonly endTime: number;
+  // Plain text: every provider publishes a cue through `plainCueText`
+  // (`@playdeck/core`) first, which strips WebVTT tag spans and decodes
+  // character references, so this never carries markup for a consumer or the
+  // default renderer to interpret.
   readonly text: string;
 };
 
@@ -162,9 +188,37 @@ export type TimeRange = { readonly start: number; readonly end: number };
 export type PlayerLiveState = {
   readonly isLive: boolean;
   readonly atLiveEdge: boolean;
+  // How far behind the provider's live edge playback is, in whole seconds —
+  // `0` at or ahead of the edge. Quantized to the second deliberately:
+  // `liveStateEqual` is what every adapter consults to decide whether a new
+  // `live` value is worth publishing, and an unrounded float would differ on
+  // essentially every `timeupdate`, republishing `live` many times a second.
+  // Whole seconds is also the resolution `Time` renders at.
+  readonly offsetFromEdge: number;
 } | null;
 
-export type PlayerProvider = 'native' | 'hls' | 'youtube' | 'vimeo' | 'wistia';
+// The Remote Playback API's own three connection states
+// (`RemotePlaybackState`), plus `null` both while `capabilities.remotePlayback`
+// has not resolved to `available` and once it has settled on `unavailable` --
+// the capability is what tells those two apart, the same pairing
+// `capabilities.providerPoster` and `providerPosterUrl` already are. Once
+// `available`, this reflects the element's own `remote.state` directly.
+export type PlayerRemotePlaybackState =
+  'connecting' | 'connected' | 'disconnected' | null;
+
+// Closed over the five built-in kinds by default (`Extra` defaults to
+// `never`, which a union absorbs without contributing a member), mirroring
+// `PlayerSource`'s own widening below rather than inventing a second shape --
+// every existing bare usage, `PlayerState.provider` and `PlayerEventFor.provider`
+// among them, keeps typechecking against exactly the five-member union it
+// always did. `Extra` is `@playdeck/react`'s own seam again: `ProviderAdapter`
+// opens through it too, so a supplied kind's own factory
+// (`packages/react/src/provider-loaders.ts`'s `ProviderAdapterFactory`) can
+// report its own identity on `ProviderAdapter.provider` the same way it
+// already writes its own `PlayerSource` shape -- a supplied provider needs
+// both types open, which is why they are widened the same way.
+export type PlayerProvider<Extra = never> =
+  'native' | 'hls' | 'youtube' | 'vimeo' | 'wistia' | Extra;
 
 export type HlsEngine = 'native' | 'hls.js';
 
@@ -180,16 +234,53 @@ export type PlayerCapabilities = {
   readonly setVolume: Availability;
   readonly setPlaybackRate: Availability;
   readonly selectQuality: Availability;
+  // Whether an automatic-choice item belongs beside the published rungs --
+  // not derivable from `selectQuality` alone, because a provider can accept
+  // `selectQuality` for a real rung while refusing `selectQuality(null)` for
+  // auto. `@playdeck/provider-vimeo` is exactly that: it reports
+  // `selectQuality` available whenever its ladder has rungs, but its own
+  // `getQualities()` list does not always carry an `auto` entry, and
+  // `selectQuality(null)` resolves `unsupported` where it does not
+  // (`quality-levels.ts`'s `adopt`). `@playdeck/provider-hls` never splits
+  // the two: `currentLevel = -1` honours auto whenever hls.js has a ladder
+  // at all. `QualityMenu` gates its Auto row on this rather than on
+  // `selectQuality`, so a provider in the vimeo shape never renders a radio
+  // item that silently does nothing when chosen.
+  readonly selectQualityAuto: Availability;
   readonly selectTextTrack: Availability;
+  readonly selectAudioTrack: Availability;
   // Whether the provider can report chapters at all, which is what tells a
   // provider that cannot ('unavailable' with the `provider` reason) apart from
   // a source that simply has none (the `source` reason) — both publish an
   // empty `chapters` collection (#182).
   readonly chapters: Availability;
+  // Whether the provider can report a live edge to seek to at all, told apart
+  // the same way `chapters` is: `unavailable` with `provider` means the
+  // provider has no way to answer this for any source, and `unavailable` with
+  // `source` means this particular source is not live.
+  readonly liveEdge: Availability;
   readonly fullscreen: Availability;
   readonly pictureInPicture: Availability;
   readonly airPlay: Availability;
   readonly customControls: Availability;
+  // Whether the provider can supply its own still for `PlayerState.providerPosterUrl`,
+  // told apart the same way `chapters` is: `'provider-check'` means asking costs
+  // a round trip whose answer has not landed yet, `unavailable` with `source`
+  // means the media itself has no such still (a native file, an HLS manifest),
+  // and `available` means the URL on the snapshot is good to use. YouTube
+  // answers `available` immediately -- its still is derivable from the video id
+  // alone, no request required.
+  readonly providerPoster: Availability;
+  // Whether the element exposes the Remote Playback API at all, which is what
+  // tells a browser that lacks it ('unavailable' with the `browser` reason)
+  // apart from one that has it but sees no receiver right now ('unavailable'
+  // with the `provider` reason) -- both publish `PlayerState.remotePlayback:
+  // null`, the same pairing `providerPoster` and `providerPosterUrl` already
+  // are. `chapters` disambiguates its two cases the same way but does it over
+  // an empty collection rather than a `null`, so this cites the null-valued
+  // pair. The Cast SDK is a separate, unimplemented route and out of scope
+  // here.
+  readonly remotePlayback: Availability;
 };
 
 // A play command that was turned down, as `PlayerState.refusedPlay` publishes
@@ -235,17 +326,20 @@ export type PlayerCommand =
   | 'play'
   | 'pause'
   | 'seek'
+  | 'seekToLiveEdge'
   | 'mute'
   | 'unmute'
   | 'setVolume'
   | 'setPlaybackRate'
   | 'selectQuality'
   | 'selectTextTrack'
+  | 'selectAudioTrack'
   | 'requestFullscreen'
   | 'exitFullscreen'
   | 'requestPictureInPicture'
   | 'exitPictureInPicture'
-  | 'showAirPlayPicker';
+  | 'showAirPlayPicker'
+  | 'showRemotePlaybackPicker';
 
 // A command turned down because no provider was attached, as
 // `PlayerState.refusedCommand` publishes it. It is the general half of
@@ -381,6 +475,7 @@ export type PlayerState = {
   readonly capabilities: PlayerCapabilities;
   readonly error: PlayerError | null;
   readonly textTracks: readonly TextTrack[];
+  readonly audioTracks: readonly AudioTrack[];
   // Ordered by ascending `startTime`, and empty both where the provider cannot
   // report chapters and where the source has none — `capabilities.chapters` is
   // what tells those two apart. Never routed through `textTracks`: nothing
@@ -390,6 +485,13 @@ export type PlayerState = {
   readonly chapters: readonly Chapter[];
   readonly selectedTextTrackId: string | null;
   readonly captionRendering: CaptionRendering;
+  // The provider's own still, and `null` both while `capabilities.providerPoster`
+  // has not resolved to `available` and once it has settled on `unavailable` --
+  // the capability is what tells those two apart, the same pairing
+  // `capabilities.chapters` and `chapters` already are.
+  readonly providerPosterUrl: string | null;
+  // See `PlayerRemotePlaybackState`.
+  readonly remotePlayback: PlayerRemotePlaybackState;
   // Declared by the provider adapter, not derived here: it means a command
   // issued now is accepted *and* will not be undone by a load that has yet to
   // run. Core cannot compute it — the four adapters open their command guards
@@ -453,6 +555,24 @@ export type ProviderEvent = {
   [Type in PlayerEventType]: ProviderEventFor<Type>;
 }[PlayerEventType];
 
+// `void`, not `void | (() => void)`, and deliberately: this is the type every
+// `ProviderAdapter.subscribe` implementation is written against, in this
+// package's own tests among many others, and widening it to a proper union
+// would drop the "a void-returning callback's actual return value is ignored"
+// leniency TypeScript grants the bare type — turning every one of those
+// implementations that happens to end its listener in a non-`void` expression
+// into a compile error unrelated to what it is testing.
+//
+// A `PlayerController` subscription hands its OWN listener's caller a real
+// disposer at runtime regardless — the withdrawal path for a `configuration`
+// notice the patch it was given carried, the same shape
+// `PlayerController.reportRefusedUrl` already returns to a consumer reporting
+// a refused URL. See `PlayerController`'s `subscribe` wiring, and
+// `NativePlaybackOptions.startTime`, the first caller (#475): the one seam
+// that reads the value back out stores subscribers under a wider LOCAL type
+// instead of a cast, right where that seam calls the listener — see
+// `provider-native`'s `index.ts` for why a bare `void`-typed function is
+// assignable there without one.
 export type ProviderStateListener = (
   patch: ProviderStatePatch,
   event?: ProviderEvent
@@ -475,15 +595,29 @@ export type VimeoSource = { type: 'vimeo'; videoId: string; hash?: string };
 
 export type WistiaSource = { type: 'wistia'; mediaId: string };
 
-export type PlayerSource =
+// Closed over the five built-in kinds by default (`Extra` defaults to
+// `never`, which a union absorbs without contributing a member), so every
+// existing caller -- `apps/site/src/bench-sources.ts`'s `resolvePlayerSource`
+// among them -- keeps typechecking against exactly the union it always did,
+// with no type argument to add. `Extra` is `@playdeck/react`'s own seam: a
+// `Player.Root` given a `providers` prop opens it to that prop's own source
+// shapes (`packages/react/src/provider-loaders.ts`'s `SuppliedSource`), so a
+// supplied kind's `source` value typechecks the same way `{ type: 'youtube',
+// videoId }` already does, without widening what every consumer who never
+// passes `providers` is allowed to write here.
+export type PlayerSource<Extra = never> =
   | string
   | VideoFileSource
   | HlsSource
   | YouTubeSource
   | VimeoSource
-  | WistiaSource;
+  | WistiaSource
+  | Extra;
 
-export type ResolvedPlayerSource = Exclude<PlayerSource, string>;
+export type ResolvedPlayerSource<Extra = never> = Exclude<
+  PlayerSource<Extra>,
+  string
+>;
 
 // `unsupported-format` is the one of these four that names a cause rather than
 // describing a shape. It is a well-formed URL whose path ends in a streaming
@@ -519,8 +653,12 @@ export type SourceDetectionFailure = {
 export type SourceDetectionResult =
   SourceDetectionSuccess | SourceDetectionFailure;
 
-export type ProviderAdapter = {
-  provider: PlayerProvider;
+// `Extra` mirrors `PlayerProvider`'s own parameter directly -- a supplied
+// kind's own adapter factory is what actually produces this value, so this is
+// the type that has to open for `provider:` below to hold a supplied kind's
+// identity without a cast at the point the factory builds one.
+export type ProviderAdapter<Extra = never> = {
+  provider: PlayerProvider<Extra>;
   attach: () => void | Promise<void>;
   load: () => void | Promise<void>;
   destroy: () => void | Promise<void>;
@@ -529,17 +667,20 @@ export type ProviderAdapter = {
   pause?: () => Promise<CommandResult>;
   seekTo?: (time: number) => Promise<CommandResult>;
   seekBy?: (offset: number) => Promise<CommandResult>;
+  seekToLiveEdge?: () => Promise<CommandResult>;
   selectQuality?: (id: string | null) => Promise<CommandResult>;
   mute?: () => Promise<CommandResult>;
   unmute?: () => Promise<CommandResult>;
   setVolume?: (volume: number) => Promise<CommandResult>;
   setPlaybackRate?: (rate: number) => Promise<CommandResult>;
   selectTextTrack?: (track: string | null) => Promise<CommandResult>;
+  selectAudioTrack?: (id: string) => Promise<CommandResult>;
   requestFullscreen?: () => Promise<CommandResult>;
   exitFullscreen?: () => Promise<CommandResult>;
   requestPictureInPicture?: () => Promise<CommandResult>;
   exitPictureInPicture?: () => Promise<CommandResult>;
   showAirPlayPicker?: () => Promise<CommandResult>;
+  showRemotePlaybackPicker?: () => Promise<CommandResult>;
   retry?: () => Promise<CommandResult>;
   subscribeCues?: (listener: (cues: readonly TextCue[]) => void) => () => void;
   // A side channel like `subscribeCues`, and deliberately not `PlayerState`:

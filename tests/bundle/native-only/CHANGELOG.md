@@ -1,5 +1,20 @@
 # @playdeck/bundle-native-only
 
+## 0.0.4
+
+### Patch Changes
+
+- Updated dependencies [f6bf30b]
+- Updated dependencies [d36f242]
+- Updated dependencies [2096dc1]
+- Updated dependencies [687260f]
+- Updated dependencies [f42f118]
+- Updated dependencies [dc71c32]
+- Updated dependencies [7deed3e]
+- Updated dependencies [62b13f2]
+- Updated dependencies [80e35be]
+  - @playdeck/react@1.1.0
+
 ## 0.0.3
 
 ### Patch Changes

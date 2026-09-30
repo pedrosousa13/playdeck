@@ -1,7 +1,10 @@
 import { expect, test } from 'vitest';
 import Hls from 'hls.js';
 import HlsLight from 'hls.js/light';
-import { hlsBuildSupportsSubtitles } from '../src/adapter-values';
+import {
+  hlsBuildSupportsAudioTracks,
+  hlsBuildSupportsSubtitles
+} from '../src/adapter-values';
 
 // The one assumption `hlsBuildSupportsSubtitles` rests on, checked against the
 // installed hls.js rather than against a fake of it. Everything else about the
@@ -25,14 +28,21 @@ test('the light build ships no subtitle controller, which is what it saves', () 
   expect(hlsBuildSupportsSubtitles(HlsLight)).toBe(false);
 });
 
-// Not read by this package, and asserted anyway: they are the rest of what the
-// light build drops, and a capability that comes to depend on any of them wants
-// this file to already say whether it is there. Alternate audio is the live one
-// -- `PlayerCapabilities` has no audio-track member today, and would need this
-// same discrimination on the day it gains one.
-test('the light build drops alternate audio and EME alongside subtitles', () => {
+test('the full build registers the audio-track controller on DefaultConfig', () => {
   expect(typeof Hls.DefaultConfig.audioTrackController).toBe('function');
-  expect(typeof Hls.DefaultConfig.emeController).toBe('function');
+  expect(hlsBuildSupportsAudioTracks(Hls)).toBe(true);
+});
+
+test('the light build ships no audio-track controller, which is what it saves', () => {
   expect(HlsLight.DefaultConfig.audioTrackController).toBeUndefined();
+  expect(hlsBuildSupportsAudioTracks(HlsLight)).toBe(false);
+});
+
+// Not read by this package, and asserted anyway: EME is the rest of what the
+// light build drops alongside subtitles and alternate audio, and a
+// capability that comes to depend on it wants this file to already say
+// whether it is there.
+test('the light build also drops EME alongside subtitles and alternate audio', () => {
+  expect(typeof Hls.DefaultConfig.emeController).toBe('function');
   expect(HlsLight.DefaultConfig.emeController).toBeUndefined();
 });

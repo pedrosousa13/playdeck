@@ -52,6 +52,15 @@ export const browserUnavailable: Availability = {
   reason: 'browser'
 };
 
+// `hqdefault.jpg`, not `maxresdefault.jpg`: the larger file is only generated
+// for uploads at a resolution high enough to have one and 404s silently on
+// every other video, where `hqdefault.jpg` is generated for every upload
+// (#556). Derivable from the id alone, so this costs no request and the
+// capability below is `available` from the first patch rather than passing
+// through `unknown` first.
+export const youTubePosterUrl = (videoId: string): string =>
+  `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+
 const fixedCapabilities = {
   // Enumerable but not selectable, so nothing is offered. Measured against the
   // live IFrame API (#82): `getAvailableQualityLevels()` reports a real ladder,
@@ -61,13 +70,32 @@ const fixedCapabilities = {
   // Asking for `tiny` failed exactly like asking for `hd720`, which is what
   // rules out a bandwidth or viewport ceiling rather than a discarded argument.
   selectQuality: providerUnavailable,
+  // Selection itself is unavailable, so there is no auto mode to offer
+  // alongside it either.
+  selectQualityAuto: providerUnavailable,
+  // The IFrame Player API documents no audio-track method and no
+  // audio-track event, so this is a verdict rather than an 'unknown'.
+  selectAudioTrack: providerUnavailable,
   // The IFrame Player API documents no chapter method and no chapter event,
   // and the Data API's video resource has no chapter property either. Nothing
   // resolves this later, so it is a verdict rather than an 'unknown' (#182).
   chapters: providerUnavailable,
+  // `getDuration()`, `getCurrentTime()` and `getVideoLoadedFraction()` are the
+  // IFrame Player API's whole surface here -- no seekable-range accessor at
+  // all, so the start of a DVR window is not expressible and neither is an
+  // edge to seek to. `getDuration()` is not a stand-in for one either: on a
+  // 24/7 DVR stream it answered a fixed value for 150 seconds while the
+  // playhead advanced (measured in the comment above the `PLAYING` branch in
+  // `playback.ts`, and #403), so it is a snapshot rather than a value tracking
+  // the edge.
+  liveEdge: providerUnavailable,
   pictureInPicture: providerUnavailable,
   airPlay: providerUnavailable,
-  customControls: policyUnavailable
+  // The IFrame Player API is an `<iframe>`, not a media element -- there is
+  // no `remote` object for it to expose.
+  remotePlayback: providerUnavailable,
+  customControls: policyUnavailable,
+  providerPoster: available
 } as const;
 
 export const preReadyCapabilities = (): PlayerCapabilities => ({

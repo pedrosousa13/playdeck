@@ -34,9 +34,10 @@ export { PLAYER_READY_TIMEOUT_MS } from './attachment.js';
 export type YouTubeProviderOptions = {
   /**
    * Show YouTube's own player chrome. Unset and `false` both mean chromeless
-   * -- deliberately Vimeo's polarity (`provider-vimeo/src/attachment.ts:62`,
-   * `options.controls === true ? '1' : '0'`), so the two providers cannot
-   * drift.
+   * -- deliberately Vimeo's polarity (`vimeoEmbedUrl` in
+   * `provider-vimeo/src/attachment.ts`, which sets the embed's `controls`
+   * search param from `options.controls === true ? '1' : '0'`), so the two
+   * providers cannot drift.
    */
   readonly controls?: boolean;
   /**

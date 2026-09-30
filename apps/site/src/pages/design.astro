@@ -66,34 +66,28 @@ const inks = [
 ] as const;
 ---
 
-{
-  /* `documentation={false}`: this sheet documents the site rather than the
-   * library, and it is a wall of token names. Indexed, it would answer a query
-   * for "surface" or "accent" ahead of the package that uses the word, which is
-   * the only place a reader of these documents means it. */
-}
+{/* `documentation={false}`: this sheet documents the site rather than the
+ * library, and it is a wall of token names. Indexed, it would answer a query
+ * for "surface" or "accent" ahead of the package that uses the word, which is
+ * the only place a reader of these documents means it. */}
 <Base title="Playdeck visual system — design reference" documentation={false}>
-  {
-    /* The sheet is public and unlisted: served at its own address, absent from
-     * the header's destinations, and linked from nowhere — the `/` link
-     * this comment used to name went out with the landing page that carried
-     * it. It still takes the shared header, because unlisted is not walled off:
-     * a reader who typed the address, or followed one out of an issue, needs
-     * the same way back into the site that every other page gives them. */
-  }
+  {/* The sheet is public and unlisted: served at its own address, absent from
+   * the header's destinations, and linked from nowhere — the `/` link
+   * this comment used to name went out with the landing page that carried
+   * it. It still takes the shared header, because unlisted is not walled off:
+   * a reader who typed the address, or followed one out of an issue, needs
+   * the same way back into the site that every other page gives them. */}
   <SiteHeader crumbs={[{ label: 'Visual system' }]} documentation={false} />
 
   <main class="page">
     <section class="hero">
-      {
-        /* This heading deliberately does not read "Playdeck".
-         * `scripts/check-deploy-artifact.mjs` identifies the site's root
-         * document in a browser by a heading named exactly that, which is how
-         * the deployed artifact is proven to serve the site rather than
-         * something else at the origin root. Two documents answering to the
-         * name would make that identification ambiguous, and this sheet is a
-         * reference rather than a page of the site. */
-      }
+      {/* This heading deliberately does not read "Playdeck".
+       * `scripts/check-deploy-artifact.mjs` identifies the site's root
+       * document in a browser by a heading named exactly that, which is how
+       * the deployed artifact is proven to serve the site rather than
+       * something else at the origin root. Two documents answering to the
+       * name would make that identification ambiguous, and this sheet is a
+       * reference rather than a page of the site. */}
       <h1>The visual system</h1>
       <p class="lead">
         Not a page of the site: every colour, face and size the site is allowed
@@ -111,43 +105,39 @@ const inks = [
         to read the answer.
       </p>
       <ul class="states">
-        {
-          capabilities.map(({ state, provider, reason }) => (
-            <li class="state" data-state={state}>
-              <span class="state__dot" aria-hidden="true" />
-              <span class="state__provider">{provider}</span>
-              <span class="state__word">{state}</span>
-              <span class="state__reason">{reason}</span>
-            </li>
-          ))
-        }
+        {capabilities.map(({ state, provider, reason }) => (
+          <li class="state" data-state={state}>
+            <span class="state__dot" aria-hidden="true" />
+            <span class="state__provider">{provider}</span>
+            <span class="state__word">{state}</span>
+            <span class="state__reason">{reason}</span>
+          </li>
+        ))}
       </ul>
     </section>
 
-    {
-      /* Wrapped rather than given a class, because Astro's scoped styles are
-       * scoped by an attribute it stamps on this page's own elements: a class
-       * handed to a component lands on markup the page's stylesheet cannot
-       * select. The box the page owns carries the rhythm; the sweep inside it
-       * carries the paint. */
-    }
-    <div class="rule"><Sweep form="hairline" /></div>
+    {/* Wrapped rather than given a class, because Astro's scoped styles are
+     * scoped by an attribute it stamps on this page's own elements: a class
+     * handed to a component lands on markup the page's stylesheet cannot
+     * select. The box the page owns carries the rhythm; the sweep inside it
+     * carries the paint. */}
+    <div class="rule">
+      <Sweep form="hairline" />
+    </div>
 
     <section class="section">
       <h2>Type</h2>
       <ul class="specimens">
-        {
-          typeScale.map(({ token, use }) => (
-            <li class="specimen">
-              <p class="specimen__sample" style={`font-size: var(${token})`}>
-                Provider capability, resolved before a click
-              </p>
-              <p class="specimen__meta">
-                <code>{token}</code> <span class="specimen__use">{use}</span>
-              </p>
-            </li>
-          ))
-        }
+        {typeScale.map(({ token, use }) => (
+          <li class="specimen">
+            <p class="specimen__sample" style={`font-size: var(${token})`}>
+              Provider capability, resolved before a click
+            </p>
+            <p class="specimen__meta">
+              <code>{token}</code> <span class="specimen__use">{use}</span>
+            </p>
+          </li>
+        ))}
       </ul>
     </section>
 
@@ -157,36 +147,32 @@ const inks = [
         <div class="panel">
           <h3>Surfaces</h3>
           <ul class="swatches">
-            {
-              surfaces.map(({ token, use }) => (
-                <li class="swatch">
-                  <span
-                    class="swatch__chip"
-                    style={`background-color: var(${token})`}
-                    aria-hidden="true"
-                  />
-                  <code>{token}</code>
-                  <span class="swatch__use">{use}</span>
-                </li>
-              ))
-            }
+            {surfaces.map(({ token, use }) => (
+              <li class="swatch">
+                <span
+                  class="swatch__chip"
+                  style={`background-color: var(${token})`}
+                  aria-hidden="true"
+                />
+                <code>{token}</code>
+                <span class="swatch__use">{use}</span>
+              </li>
+            ))}
           </ul>
         </div>
 
         <div class="panel">
           <h3>Ink</h3>
           <ul class="swatches">
-            {
-              inks.map(({ token, use }) => (
-                <li class="swatch">
-                  <span class="swatch__ink" style={`color: var(${token})`}>
-                    Aa
-                  </span>
-                  <code>{token}</code>
-                  <span class="swatch__use">{use}</span>
-                </li>
-              ))
-            }
+            {inks.map(({ token, use }) => (
+              <li class="swatch">
+                <span class="swatch__ink" style={`color: var(${token})`}>
+                  Aa
+                </span>
+                <code>{token}</code>
+                <span class="swatch__use">{use}</span>
+              </li>
+            ))}
           </ul>
         </div>
       </div>

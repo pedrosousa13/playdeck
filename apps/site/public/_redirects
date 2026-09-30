@@ -1,0 +1,6 @@
+# `/archetypes/` was renamed to `/examples/`. Cloudflare Workers static assets
+# read this file the same way Cloudflare Pages does (no Worker script needed —
+# `wrangler.jsonc` publishes this build as an assets-only Worker), so a shared
+# link to the old address still resolves.
+/archetypes    /examples/  301
+/archetypes/*  /examples/  301

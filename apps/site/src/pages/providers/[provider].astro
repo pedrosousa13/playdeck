@@ -99,13 +99,11 @@ const contents = headings.filter(
 ---
 
 <Base title={`${current.title} — Playdeck provider setup`}>
-  {
-    /* No `Provider setup` ancestor here any more (#542 phase 2), for the
-     * reason `src/pages/reference/[pkg].astro` gives: the site nav already
-     * marks the `Providers` section with `aria-current`, so an ancestor
-     * repeating it in the trail read as the same landmark twice rather than
-     * two different ones. The leaf is this provider's own name. */
-  }
+  {/* No `Provider setup` ancestor here any more (#542 phase 2), for the
+   * reason `src/pages/reference/[pkg].astro` gives: the site nav already
+   * marks the `Providers` section with `aria-current`, so an ancestor
+   * repeating it in the trail read as the same landmark twice rather than
+   * two different ones. The leaf is this provider's own name. */}
   <SiteHeader crumbs={[{ label: current.title }]} />
 
   <div class="shell">
@@ -121,35 +119,29 @@ const contents = headings.filter(
       }}
       contents={contents}
     >
-      {
-        /* The adapter this page is about, at the foot of the rail. It is the
-         * one question the document does not answer on every page — it names
-         * the package for YouTube and Vimeo and for nobody else — and the
-         * answer is a link rather than a sentence, because what that adapter
-         * reports is written in its README and this site already renders it.
-         *
-         * Slotted for the same reason the version is on a reference page: it
-         * belongs to this route, and a prop for it on the shared rail would
-         * describe both routes by naming what one of them carries. */
-      }
+      {/* The adapter this page is about, at the foot of the rail. It is the
+       * one question the document does not answer on every page — it names
+       * the package for YouTube and Vimeo and for nobody else — and the
+       * answer is a link rather than a sentence, because what that adapter
+       * reports is written in its README and this site already renders it.
+       *
+       * Slotted for the same reason the version is on a reference page: it
+       * belongs to this route, and a prop for it on the shared rail would
+       * describe both routes by naming what one of them carries. */}
       <p class="rail__packages" slot="foot">
         <span class="rail__packages-label">
           {packages.length === 1 ? 'package' : 'packages'}
         </span>
-        {
-          packages.map((entry) => (
-            <a href={packageUrl(entry.dir)}>{entry.name}</a>
-          ))
-        }
+        {packages.map((entry) => (
+          <a href={packageUrl(entry.dir)}>{entry.name}</a>
+        ))}
       </p>
     </DocRail>
 
-    {
-      /* The `h1` is the provider's name and the rest is the document. This page
-       * writes one word of its own — that name — and it is the name the source
-       * gave the section or the bold lead that was dropped in its favour, so
-       * even that is read rather than chosen. */
-    }
+    {/* The `h1` is the provider's name and the rest is the document. This page
+     * writes one word of its own — that name — and it is the name the source
+     * gave the section or the bold lead that was dropped in its favour, so
+     * even that is read rather than chosen. */}
     <main class="doc">
       <h1>{current.title}</h1>
       <Content />
@@ -157,7 +149,9 @@ const contents = headings.filter(
   </div>
 
   <footer class="foot">
-    <div class="foot__rule"><Sweep form="hairline" /></div>
+    <div class="foot__rule">
+      <Sweep form="hairline" />
+    </div>
     <p>
       <a href={providersUrl}>All providers</a>
     </p>

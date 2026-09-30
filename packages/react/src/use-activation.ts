@@ -18,14 +18,24 @@ import {
 } from 'react';
 import {
   loadProvider,
+  suppliedProviderRegistrationKeyFor,
   type PlayerMediaMount,
-  type ResolvedProviderOptions
+  type PlayerProviders,
+  type ResolvedProviderOptions,
+  type SuppliedProviderSource
 } from './provider-loaders.js';
 
 export type {
+  ConsumerProviders,
   PlayerMediaMount,
   PlayerProviderOptions,
-  ResolvedProviderOptions
+  PlayerProviders,
+  ProviderAdapterFactory,
+  ProviderRegistration,
+  ResolvedProviderOptions,
+  SuppliedProviderOptions,
+  SuppliedProviderSource,
+  SuppliedSource
 } from './provider-loaders.js';
 
 export type PlayerLoadingStrategy = 'eager' | 'viewport' | 'interaction';
@@ -57,6 +67,12 @@ export type UseActivationOptions = {
   readonly prepareMedia: (media: PlayerMediaMount) => void;
   readonly preload: PlayerPreload;
   readonly providerOptions?: ResolvedProviderOptions;
+  // Passed straight through to `loadProvider`'s own `providers` field once
+  // loading actually happens (below); this hook makes no decision on the
+  // strength of it. `Root`'s own `detectSource` layer (`provider-loaders.ts`'s
+  // `detectSourceWithProviders`) is what already decided whether the source
+  // this hook is loading came from one of these registrations at all.
+  readonly providers?: PlayerProviders;
   readonly source: SourceDetectionResult;
 };
 
@@ -70,7 +86,23 @@ type Session = {
   started: boolean;
   playGateOpen: boolean;
   queuedPlay: boolean;
+  playbackOwnership: PlaybackOwnership;
 };
+
+// Who is responsible for the playback currently running (or last stopped) on
+// this session, read by the observer callback to decide whether an exit or a
+// re-entry is this hook's to act on (#309). `'none'` covers both "nothing is
+// playing" and "a viewer or an API caller is driving it" -- the two cases
+// this hook must never touch on a crossing, so they share the value that
+// tells the observer to leave playback alone. `'autoplaying'` is set only by
+// a `play` event whose origin is `'autoplay'`, which only this hook's own
+// `controller.playWithOrigin('autoplay')` and `Root`'s own autoplay attempt
+// ever issue -- so seeing it back is proof the viewport (or the autoplay
+// configuration it armed) started this playback, not a viewer. `'auto-paused'`
+// is set only by the pause this hook itself issues on exit, and is what tells
+// a later re-entry there is something of its own to resume rather than a
+// viewer's deliberate pause to leave alone.
+type PlaybackOwnership = 'none' | 'autoplaying' | 'auto-paused';
 
 type ActivationConfiguration =
   'valid' | 'invalid-interaction-autoplay' | 'invalid-play-threshold';
@@ -147,7 +179,11 @@ const nativeOptionsEqual = (
 // is a new object on every render, and a reference compare would tear the embed
 // down and rebuild it each time. Own keys rather than each declared field, so
 // this stays correct as a provider's options grow, and shallow because every
-// option a provider bag declares is a primitive.
+// option a provider bag declares is meant to be a primitive: every bag is
+// guarded by `PrimitiveOptionBag` (`provider-loaders.ts`), so a field that
+// stopped being one fails to compile there (#579) rather than needing this
+// comparison to change -- which is what let `hls` add a `build` option, and
+// `youtube` lose its `loadIframeApi` one, without either touching this file.
 //
 // Every key either side declares, compared as a value: a key set to `undefined`
 // therefore equals that key being absent, and an absent bag equals an empty one.
@@ -174,14 +210,30 @@ const providerBagEqual = (
   return [...keys].every((key) => Object.is(left?.[key], right?.[key]));
 };
 
-// One line per provider key, as `nativeOptionsEqual` names its own three.
+// Every top-level key either bag carries -- the four built-in ones
+// (`wistia`, `youtube`, `vimeo`, `hls`) and, once a consumer's `providers`
+// prop opens up a further key, that one too -- compared bag by bag with
+// `providerBagEqual`, for the same reason that function itself exists: an
+// inline `providerOptions={{ acme: { … } }}` literal is a new object on every
+// render, and a reference compare on either level would tear a provider down
+// and rebuild it each time (#579, extended to a supplied kind's own key on
+// the same terms). One merged key set rather than one named line per key,
+// unlike `nativeOptionsEqual` above: that function's three fields are fixed
+// forever, while this one's keys grow by one every time a consumer's
+// `providers` prop does, and a named line could only ever enumerate the four
+// this package ships loaders for.
 const providerOptionsEqual = (
   left: ResolvedProviderOptions | undefined,
   right: ResolvedProviderOptions | undefined
-): boolean =>
-  providerBagEqual(left?.wistia, right?.wistia) &&
-  providerBagEqual(left?.youtube, right?.youtube) &&
-  providerBagEqual(left?.vimeo, right?.vimeo);
+): boolean => {
+  const leftBags = left as Record<string, Record<string, unknown>> | undefined;
+  const rightBags = right as
+    Record<string, Record<string, unknown>> | undefined;
+  for (const key in { ...leftBags, ...rightBags }) {
+    if (!providerBagEqual(leftBags?.[key], rightBags?.[key])) return false;
+  }
+  return true;
+};
 
 // A browser can report an intersection ratio a hair under the geometrically
 // exact value it is crossing -- documented for `threshold: 1`, where subpixel
@@ -286,6 +338,19 @@ const unsupportedError = (message: string) => ({
 // button below a small viewport.
 const MAX_SOURCE_ECHO = 120;
 
+// The node budget `JSON.stringify`'s own replacer, below, bounds its
+// recursion to. A refused explicit source object can be a diamond -- the
+// same nested object reached through several sibling branches -- and
+// `JSON.stringify` does not deduplicate a shared reference: it re-visits and
+// re-serialises one in full for every path that reaches it, so a diamond
+// deep enough to still be within `provider-loaders.ts`'s own
+// `MAX_SUPPLIED_SOURCE_DEPTH` can cost time exponential in that depth to
+// stringify, well before this function ever gets to truncate the result.
+// Generous for any legitimate source -- the deepest one is a handful of
+// fields -- while still keeping that cost bounded regardless of how much an
+// arbitrary refused value shares with itself.
+const MAX_SOURCE_ECHO_NODES = 500;
+
 // The rejected value as a message can carry it. Echoed verbatim rather than
 // filtered: `ErrorDisplay` renders the message as a React text child
 // (`loading-error.tsx:318`, `:345`), which escapes it, so the value a consumer
@@ -298,9 +363,21 @@ const echoSource = (input: unknown): string => {
     rendered = input;
   } else {
     try {
-      // `undefined`, a function and a symbol all render as `undefined` here, so
-      // there is a fall-back for them as well as for a value that throws.
-      rendered = JSON.stringify(input) ?? `of type ${typeof input}`;
+      let nodes = 0;
+      // The replacer runs once per value `JSON.stringify` visits, at every
+      // depth, before deciding whether to recurse into it -- swapping a
+      // value for a placeholder once `nodes` is spent is what stops that
+      // recursion, the same way `copySuppliedSourceValue`'s own node budget
+      // (`provider-loaders.ts`) stops the copy's. Once one branch of a
+      // diamond has spent the whole budget, the very first call for its
+      // sibling branch already sees `nodes` over budget and is replaced
+      // immediately, so the second half of an exponential shape is never
+      // actually walked.
+      rendered =
+        JSON.stringify(input, (_key, value) => {
+          nodes += 1;
+          return nodes > MAX_SOURCE_ECHO_NODES ? '…' : value;
+        }) ?? `of type ${typeof input}`;
     } catch {
       // A `source` that cannot be rendered at all -- circular, or a hostile
       // `toJSON` -- still has to produce a message rather than throw out of the
@@ -308,10 +385,24 @@ const echoSource = (input: unknown): string => {
       rendered = `of type ${typeof input}`;
     }
   }
+  // Short-circuits before `Array.from` ever runs over the whole of `rendered`:
+  // cheap insurance alongside the node budget above, so this stays safe even
+  // for a `rendered` this function did not itself just build (the plain
+  // string branch above). `rendered.length` (UTF-16 units) is cheap to read
+  // regardless of that length, and never under-counts code points, so a
+  // `rendered` this short is never truncated and `Array.from` is never
+  // reached for it.
+  if (rendered.length <= MAX_SOURCE_ECHO) return rendered;
   // By code point, not by code unit: slicing a string at a UTF-16 boundary can
   // cut a surrogate pair in half, and the lone surrogate left behind renders as
   // U+FFFD. A source url can carry an astral character in a path or a query.
-  const points = Array.from(rendered);
+  // `Array.from` still runs by code point, but only over a bounded prefix --
+  // twice `MAX_SOURCE_ECHO` code units plus one, which covers at least that
+  // many code points even where every one of them is a surrogate pair -- so
+  // this remains cheap and safe for a `rendered` of any length, exactly the
+  // exponential case above included, rather than materialising every code
+  // point of it merely to throw the excess away a line later.
+  const points = Array.from(rendered.slice(0, (MAX_SOURCE_ECHO + 1) * 2));
   return points.length > MAX_SOURCE_ECHO
     ? `${points.slice(0, MAX_SOURCE_ECHO).join('')}…`
     : rendered;
@@ -400,6 +491,23 @@ const PROVIDER_LABELS: Record<ResolvedPlayerSource['type'], string> = {
   youtube: 'YouTube'
 };
 
+// A supplied kind's own label: `suppliedProviderRegistrationKeyFor`
+// (`provider-loaders.ts`) when it has one, `type` otherwise. That map holds
+// an entry exactly when `type` does not route to a registration `loadProvider`
+// can reach (`ownEntry(providers, source.type)`) -- missing, non-string, or a
+// non-empty string naming no entry of `providers` -- recorded by the detect
+// loop that produced this source, at the one place that still knows which
+// registration ran. Whenever the map holds nothing, `type` already is the
+// registration `loadProvider` found and called, so it is used directly.
+const suppliedProviderLabel = (
+  source: ResolvedPlayerSource<SuppliedProviderSource>
+): string | undefined => {
+  const key = suppliedProviderRegistrationKeyFor(source);
+  if (key !== undefined) return key;
+  const { type } = source;
+  return typeof type === 'string' ? type : undefined;
+};
+
 // Names the provider, which is knowable from the resolved source, and stops
 // there, which the reason is not: `loadProvider` rejects for a chunk the
 // network never delivered, a CSP that refused it, a missing media mount and an
@@ -413,15 +521,29 @@ const PROVIDER_LABELS: Record<ResolvedPlayerSource['type'], string> = {
 // document is the step both audiences can take, and its provider-load section
 // is what forwards to the CSP origins list -- one place to keep true, rather
 // than a second link maintained here.
-const providerError = (cause: unknown, type: ResolvedPlayerSource['type']) => ({
-  category: 'provider' as const,
-  cause,
-  fatal: false,
-  recoverable: true,
-  message: `Unable to load the ${PROVIDER_LABELS[type]} provider. Playdeck cannot say why: the rejection it caught is on this error's cause. See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for what to check.`
-});
+const providerError = (
+  cause: unknown,
+  source: ResolvedPlayerSource<SuppliedProviderSource>
+) => {
+  const { type } = source;
+  const label = Object.hasOwn(PROVIDER_LABELS, type)
+    ? PROVIDER_LABELS[type as ResolvedPlayerSource['type']]
+    : suppliedProviderLabel(source);
+  return {
+    category: 'provider' as const,
+    cause,
+    fatal: false,
+    recoverable: true,
+    message: `Unable to load the ${label} provider. Playdeck cannot say why: the rejection it caught is on this error's cause. See https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for what to check.`
+  };
+};
 
-const destroyStale = (adapter: ProviderAdapter): void => {
+// `ProviderAdapter<string>`, not the bare `ProviderAdapter`: the adapter this
+// destroys is whatever `loadProvider` resolved to, which is honestly typed
+// that wide (`provider-loaders.ts`'s own `loadProvider` doc comment) since a
+// supplied kind's own factory can report any identity. Destruction never
+// reads `provider` at all, so the wider type costs this function nothing.
+const destroyStale = (adapter: ProviderAdapter<string>): void => {
   try {
     void Promise.resolve(adapter.destroy()).catch(() => undefined);
   } catch {
@@ -438,6 +560,17 @@ const disconnectObserver = (
     // A stale observer cannot remain authoritative.
   }
 };
+
+// How long after an owned resume the viewport observer re-sync below runs, in
+// milliseconds (#746). Zero: the re-sync only needs to run on a later task
+// than the `play` event that granted ownership, not after any particular
+// wall-clock delay, so the shortest boundary the platform offers is enough.
+// `setTimeout` rather than `requestAnimationFrame`: a player that autoplayed
+// before its tab lost visibility can still be scrolled -- by a viewer
+// returning to it, or by a layout shift -- while the tab is hidden, and a
+// hidden document's `requestAnimationFrame` callbacks are throttled or
+// suspended where a macrotask timer still runs.
+const OBSERVER_RESYNC_DELAY_MS = 0;
 
 export const useActivation = (
   options: UseActivationOptions
@@ -474,7 +607,8 @@ export const useActivation = (
     sourceKey: currentKey,
     started: false,
     playGateOpen: false,
-    queuedPlay: false
+    queuedPlay: false,
+    playbackOwnership: 'none'
   });
   const latestInputsRef = useRef<ActivationInputs>({
     configuration: currentConfiguration,
@@ -486,7 +620,30 @@ export const useActivation = (
   const mediaRef = useRef<PlayerMediaMount | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const observerRef = useRef<ObserverRegistration | undefined>(undefined);
+  // Set only by the ownership listener effect below, on an owned resume, and
+  // cleared once `resyncViewportObserver` (below) has run or the observation
+  // it would resync is no longer current (#746). At most one pending: a
+  // resume that lands while an earlier one's re-check is still pending needs
+  // no second timer, because the callback re-reads ownership and the
+  // registration when it actually runs rather than at the time it was
+  // scheduled.
+  const resyncTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined
+  );
   const loadingGeneration = useRef<number | undefined>(undefined);
+  // Holds the standing registration `loadProvider`'s `reportRefusedUrl`
+  // callback below makes, the same shape `useRefusedUrlReport`
+  // (`player-context.ts`) holds through an effect's own cleanup -- this hook
+  // has no per-render boolean to key an effect on, since a supplied kind's
+  // own option bag is only ever read inside the async load itself, so the
+  // withdrawal has to be managed by hand instead. Disposed unconditionally at
+  // the start of every load (below) before a fresh one is made only if this
+  // load also refuses something, which is what lets a consumer who fixes the
+  // option clear the notice on the very next load rather than carry it
+  // forever (#752).
+  const suppliedProviderOptionDispose = useRef<(() => void) | undefined>(
+    undefined
+  );
   const [mediaVersion, setMediaVersion] = useState(0);
   const [viewportVersion, setViewportVersion] = useState(0);
   const [committedIdentity, setCommittedIdentity] = useState<
@@ -537,6 +694,7 @@ export const useActivation = (
       active.started = false;
       active.playGateOpen = false;
       active.queuedPlay = false;
+      active.playbackOwnership = 'none';
       loadingGeneration.current = undefined;
       disconnectObserver(observerRef.current);
       observerRef.current = undefined;
@@ -647,8 +805,77 @@ export const useActivation = (
       disconnectObserver(registration);
       observerRef.current = undefined;
     }
+    // A registration change: whatever the re-sync below was scheduled to
+    // resync is no longer the current one, so the timer is withdrawn rather
+    // than left to find that out for itself when it fires (#746).
+    if (resyncTimeout.current !== undefined) {
+      clearTimeout(resyncTimeout.current);
+      resyncTimeout.current = undefined;
+    }
     viewportRef.current = viewport;
     setViewportVersion((version) => version + 1);
+  }, []);
+
+  // The backstop #746 diagnosed WebKit needing: while ownership is
+  // `'autoplaying'`, auto-pause has so far depended entirely on the observer
+  // callback below delivering an exit crossing. The diagnosis found that on
+  // WebKit under load, the crossing that follows an engine-driven resume --
+  // WebKit resumes muted autoplaying video on its own re-entry, confirmed by
+  // #695's `engineResumedOwnPause` carve-out in the ownership listener below
+  // -- is sometimes never delivered to *any* `IntersectionObserver` watching
+  // the target, even a second, independent one instrumented alongside the
+  // real one. When that happens the observer's own last-reported state stays
+  // stuck at "out", so the exit that follows is not a crossing from its point
+  // of view either, and nothing ever pauses.
+  //
+  // Re-observing forces a fresh read rather than waiting on one. Per the
+  // IntersectionObserver spec, a target that is freshly `observe()`d is
+  // always queued an initial notification carrying its actual current
+  // geometry, with no "last reported" state of its own to be stuck --
+  // unlike a target that has been watched continuously, which the browser
+  // reports only on a genuine change from what it last reported. `unobserve`
+  // then `observe` on the same target, same observer, produces exactly that
+  // fresh notification: if the target is still in view, this only re-arms the
+  // observer's crossing state with nothing else changing; if it is already
+  // out of view -- the case this backstop exists for -- the fresh entry runs
+  // through the very same callback, so the very same `meetsThreshold` rule
+  // and the very same `'autoplaying'` ownership guard the callback already
+  // applies to a delivered exit pause it exactly as that exit would have.
+  //
+  // Bounded to the one re-check scheduled per owned resume (the `play`
+  // listener below), never a loop: nothing here re-arms itself, and the
+  // guards below -- ownership, plus the same identity checks
+  // `isCurrentObservation` inside the observer effect makes -- are what stop
+  // a re-check that outlives what it was scheduled for from doing anything.
+  const resyncViewportObserver = useCallback(() => {
+    resyncTimeout.current = undefined;
+    const active = session.current;
+    // Never for a pause or a playback this hook does not own -- the same
+    // restriction the observer callback's own exit branch applies. A viewer
+    // or a consumer who has since taken ownership must never be paused by a
+    // re-check this hook scheduled for playback it used to own.
+    if (active.playbackOwnership !== 'autoplaying') return;
+    const registration = observerRef.current;
+    const inputs = latestInputsRef.current;
+    if (
+      !registration ||
+      viewportRef.current !== registration.target ||
+      active.sourceKey !== registration.sourceKey ||
+      active.loading !== registration.loading ||
+      active.configuration !== registration.configuration ||
+      inputs.sourceKey !== registration.sourceKey ||
+      inputs.loading !== registration.loading ||
+      inputs.configuration !== registration.configuration
+    ) {
+      return;
+    }
+    try {
+      registration.observer.unobserve(registration.target);
+      registration.observer.observe(registration.target);
+    } catch {
+      // The observer callback remains the primary signal either way; an
+      // observer that refuses to be re-armed is no worse off than it was.
+    }
   }, []);
 
   const activateFromInteraction = useCallback(() => {
@@ -761,14 +988,18 @@ export const useActivation = (
 
   useEffect(() => {
     if (options.loading !== 'viewport') return;
-    // The observer is kept until *both* gates have been crossed, not until the
-    // provider has been activated: under a deferred `playThreshold` the same
-    // observer still owes a play crossing after it has reported the load one.
-    // So the settled test is both, and while only one has landed this effect
-    // stays willing to rebuild -- otherwise a re-run for any other reason would
-    // run its cleanup, disconnect the observer and leave the play threshold
-    // with nothing watching for it.
-    if (session.current.started && session.current.playGateOpen) return;
+    // No longer bails out once both gates have been crossed (#309): a
+    // `loading: 'viewport'` observer used to exist only long enough to report
+    // the load and play crossings, after which the callback below
+    // self-disconnected and nothing this effect could rebuild remained to
+    // reuse. Now the observer lives for the whole session, so it can go on
+    // reporting exit and re-entry crossings for as long as the player is
+    // mounted under this strategy -- what tears it down is the cleanup below,
+    // the unmount effect at the end of this hook and `registerViewport`
+    // observing a new target, never this effect returning early. The
+    // target/margin/threshold identity check further down (`currentObserver?.
+    // target === viewport && ...`) is what still stops this from rebuilding an
+    // observer that has nothing new to watch for.
     if (refusedMessage !== undefined) {
       options.controller.setActivation({
         activation: 'error',
@@ -875,14 +1106,45 @@ export const useActivation = (
           ) {
             openPlayGate();
           }
-          // Both gates, so a deferred `playThreshold` keeps the observer that
-          // reported the load crossing. Where the two thresholds are equal --
-          // every consumer who set at most one of them -- the same entry meets
-          // both, so this disconnects in the callback that activated, exactly
-          // as it did before there were two gates to cross.
-          if (!active.started || !active.playGateOpen) return;
-          disconnectObserver(registration);
-          observerRef.current = undefined;
+          // Both gates crossing no longer disconnects the observer (#309): a
+          // player that scrolled into view and started playing needs this
+          // still watching for the exit that should pause it, and the
+          // re-entry that should resume it, for as long as the session lasts.
+          //
+          // Exit and re-entry are read from the *latest* entry a batch
+          // carries for this target, not from `entries.some(...)` the way the
+          // two crossings above are. A single callback can report an enter
+          // immediately followed by an exit -- the browser coalesces rapid
+          // scroll-throughs into one batch -- and `some(meetsThreshold)` would
+          // read that batch as "still in view" because the enter entry is in
+          // there too. The latest entry is the target's most recent reported
+          // state, which is the one exit and re-entry have to agree with.
+          const latest = entries
+            .filter((entry) => entry.target === viewport)
+            .at(-1);
+          if (latest) {
+            // Only playback this hook itself started is this hook's to pause:
+            // `playbackOwnership` reads `'autoplaying'` only after a `play`
+            // event confirmed with the `'autoplay'` origin, which is set by
+            // the controller-event listener effect below and never by a
+            // viewer's or an API caller's own play (#309).
+            if (
+              !meetsThreshold(latest, options.playThreshold) &&
+              active.playbackOwnership === 'autoplaying'
+            ) {
+              void options.controller.pauseWithOrigin('autoplay');
+            }
+            // Symmetrically, only a pause this hook itself issued -- recorded
+            // as `'auto-paused'` by the same listener effect -- is resumed on
+            // re-entry. A viewer's own deliberate pause reads `'none'` and is
+            // never overridden here.
+            if (
+              meetsThreshold(latest, options.playThreshold) &&
+              active.playbackOwnership === 'auto-paused'
+            ) {
+              void options.controller.playWithOrigin('autoplay');
+            }
+          }
         },
         {
           rootMargin: options.loadMargin,
@@ -946,6 +1208,109 @@ export const useActivation = (
     viewportVersion
   ]);
 
+  // Tracks whose playback is currently running (or last stopped), read by the
+  // observer callback above to decide whether an exit or a re-entry is this
+  // hook's to act on (#309). Only under `loading: 'viewport'`: the observer
+  // that reads `playbackOwnership` is only ever built under that strategy, so
+  // a listener installed under any other one would update a session field
+  // nothing consults. An effect of its own rather than folded into the
+  // viewport effect above, because it does not participate in that effect's
+  // rebuild conditions -- it has nothing to rebuild, only to subscribe and
+  // unsubscribe -- and tying it to the same dependency array would tear the
+  // listeners down and reinstall them on every observer rebuild for no
+  // reason.
+  //
+  // `event.origin === 'autoplay'` is the seam the issue names: `'autoplay'`
+  // is set only by this hook's own `controller.playWithOrigin('autoplay')`
+  // (the re-entry resume below) and by `Root`'s own autoplay attempt, which is
+  // what a `loading: 'viewport'` session with `autoplay` set arms in the first
+  // place. `'provider'` joins it under one condition: ownership already reads
+  // `'auto-paused'`, which only this hook's own exit pause ever sets, so a
+  // `'provider'` play landing there is an engine resuming the very playback we
+  // paused rather than a takeover -- confirmed of WebKit, which manages
+  // viewport playback of muted autoplaying video itself and resumes it
+  // without Playdeck ever issuing a play, leaving no pending origin for the
+  // controller to confirm (#695). A genuine takeover is unaffected: a viewer's
+  // or a caller's play is confirmed through a pending origin and arrives as
+  // `'user'` or `'api'`, never falling back to `'provider'` at all -- and
+  // outside `'auto-paused'`, a `'provider'` play still drops ownership to
+  // `'none'` exactly as before, so this is not a general "unowned plays become
+  // autoplay" rule. Any other origin, in any other ownership state, drops to
+  // `'none'` so a later exit leaves that playback alone -- every origin but
+  // `'system'`, which is the exception the next paragraph describes and the
+  // one origin this listener does not write ownership for at all. `pause` is
+  // the mirror
+  // image: only a pause carrying the `'autoplay'` origin is this hook's own,
+  // recorded as `'auto-paused'` so a later re-entry knows there is something
+  // of its own to resume; every other pause -- a viewer pressing the button
+  // included -- is a deliberate stop that re-entry must never override.
+  // `ended` always returns to `'none'`: there is nothing left running for a
+  // later exit to pause, and nothing paused for a later re-entry to resume.
+  //
+  // `'system'` is neither a grant nor a drop (#673): it is
+  // `provider-native`'s own label for a loop restart's `play` event --
+  // `restartFromBoundary` in `playback.ts` continuing playback it started,
+  // not a new play the viewer took over with. Ownership must survive the
+  // wrap rather than being reset OR (re-)granted by it, so a `'system'` play
+  // is read here and left alone: whatever ownership already stood --
+  // `'autoplaying'` for a viewport session still crossing its own
+  // boundaries, `'none'` for one a viewer already took over -- carries
+  // forward unchanged. `'auto-paused'` is the third state it can find, and
+  // it is left alone too rather than corrected: reaching it means the media
+  // is playing while the record says this hook paused it, which takes an
+  // engine resuming our own pause and publishing no play event at all --
+  // #695's WebKit behaviour minus the `'provider'` play that fix keys on. If
+  // that is ever observed, widening #695's rule above is where it belongs;
+  // guessing at it from a loop wrap here would grant ownership this hook
+  // never established.
+  //
+  // Only the `play` listener has this case. `'system'` is emitted at exactly
+  // one site (`playback.ts`'s `onPlay`), so no `'system'` pause exists for
+  // the `pause` listener below to leave alone, and none is anticipated here.
+  //
+  // A `play` that grants `'autoplaying'` ownership -- a first autoplay start
+  // as much as a re-entry resume, engine-driven or not -- also schedules
+  // `resyncViewportObserver` (#746), the one place ownership actually
+  // transitions into `'autoplaying'` and so the one place the backstop can be
+  // scheduled from, independent of whether the observer's own crossing ever
+  // arrives to report the exit that follows. One pending timer at a time:
+  // see `resyncTimeout`'s own comment above for why a second scheduled while
+  // one is already pending is redundant rather than useful.
+  useEffect(() => {
+    if (options.loading !== 'viewport') return;
+    const controller = options.controller;
+    const unsubscribePlay = controller.on('play', (event) => {
+      if (event.origin === 'system') return;
+      const engineResumedOwnPause =
+        event.origin === 'provider' &&
+        session.current.playbackOwnership === 'auto-paused';
+      const owned = event.origin === 'autoplay' || engineResumedOwnPause;
+      session.current.playbackOwnership = owned ? 'autoplaying' : 'none';
+      if (owned && resyncTimeout.current === undefined) {
+        resyncTimeout.current = setTimeout(
+          resyncViewportObserver,
+          OBSERVER_RESYNC_DELAY_MS
+        );
+      }
+    });
+    const unsubscribePause = controller.on('pause', (event) => {
+      session.current.playbackOwnership =
+        event.origin === 'autoplay' ? 'auto-paused' : 'none';
+    });
+    const unsubscribeEnded = controller.on('ended', () => {
+      session.current.playbackOwnership = 'none';
+    });
+    return () => {
+      unsubscribePlay();
+      unsubscribePause();
+      unsubscribeEnded();
+      if (resyncTimeout.current !== undefined) {
+        clearTimeout(resyncTimeout.current);
+        resyncTimeout.current = undefined;
+      }
+    };
+  }, [options.controller, options.loading, resyncViewportObserver]);
+
   useEffect(() => {
     const active = session.current;
     const media = mediaRef.current;
@@ -982,11 +1347,29 @@ export const useActivation = (
     };
     loadOptions.prepareMedia(media);
     controller.setActivation({ activation: 'loading-provider' });
+    // Withdrawn unconditionally before every load, whether or not this one
+    // turns out to refuse anything: a fresh load answers the question fresh,
+    // and a notice this hook itself made is the only one it is safe to
+    // withdraw on nothing more than "a new load started" (#752).
+    suppliedProviderOptionDispose.current?.();
+    suppliedProviderOptionDispose.current = undefined;
     void loadProvider({
       media,
       nativeOptions,
       providerOptions,
-      source: source.source as ResolvedPlayerSource
+      providers: loadOptions.providers,
+      // Stale by the time a superseded load's own `registration.load()`
+      // resolves, `isCurrentLoad()` guards it here too -- otherwise a load
+      // this hook has already moved on from could still plant a notice, and
+      // this hook's own dispose bookkeeping above would then be holding the
+      // wrong load's registration.
+      reportRefusedUrl: (surface) => {
+        if (!isCurrentLoad()) return () => undefined;
+        const dispose = controller.reportRefusedUrl(surface);
+        suppliedProviderOptionDispose.current = dispose;
+        return dispose;
+      },
+      source: source.source as ResolvedPlayerSource<SuppliedProviderSource>
     })
       .then((adapter) => {
         if (
@@ -1005,7 +1388,15 @@ export const useActivation = (
         const queuePlay = session.current.queuedPlay;
         session.current.queuedPlay = false;
         if (!queuePlay) {
-          controller.setProvider(adapter);
+          // `PlayerController.setProvider` (`@playdeck/core`) is typed
+          // against the bare, five-only `ProviderAdapter` -- core has no
+          // notion of a supplied kind, and never reads `provider` as
+          // anything but an opaque value to echo onto `PlayerState.provider`.
+          // The cast is exactly as safe as `provider-loaders.ts`'s own
+          // `const builtin = source as ResolvedPlayerSource`: it narrows a
+          // type that is honestly wider back to what this boundary's public
+          // signature promises, without changing what value crosses it.
+          controller.setProvider(adapter as ProviderAdapter);
           return;
         }
         // A queued user play has to be issued after this provider has loaded.
@@ -1039,22 +1430,45 @@ export const useActivation = (
           dispose();
           void controller.playWithOrigin('user');
         };
-        controller.setProvider({
-          ...adapter,
-          load: () => {
-            const result = adapter.load();
-            if (
-              !isCurrentLoad() ||
-              controller.getState().activation === 'error'
-            ) {
-              dispose();
-              return result;
+        // The proxy's target is an empty object, never `adapter` itself: a
+        // frozen adapter -- `Object.freeze` over the returned object
+        // literal, a plausible factory pattern -- makes every own property
+        // non-configurable and non-writable, and the spec requires a `get`
+        // trap to report such a property's exact own value back. A bound
+        // function is never that value, so a proxy targeting the frozen
+        // adapter throws on the very first property read. An empty target
+        // owns no property for that invariant to pin a forwarded value
+        // against -- every read below goes through `get` instead.
+        //
+        // Every property but `load` reads through to `adapter`, bound to it
+        // before it is returned: a method reading a `#private` field checks
+        // the exact instance that declared it, not what is reachable
+        // through a prototype chain, so it has to run with `adapter` itself
+        // as `this` regardless of what reached it. `load` is the one
+        // property this proxy replaces outright, to insert the queued-play
+        // hook below.
+        const wrappedAdapter = new Proxy({} as ProviderAdapter, {
+          get: (_target, property) => {
+            if (property === 'load') {
+              return () => {
+                const result = adapter.load();
+                if (
+                  !isCurrentLoad() ||
+                  controller.getState().activation === 'error'
+                ) {
+                  dispose();
+                  return result;
+                }
+                loaded = true;
+                playWhenLoaded();
+                return result;
+              };
             }
-            loaded = true;
-            playWhenLoaded();
-            return result;
+            const value = Reflect.get(adapter, property, adapter);
+            return typeof value === 'function' ? value.bind(adapter) : value;
           }
         });
+        controller.setProvider(wrappedAdapter);
         subscription.unsubscribe = controller.subscribe((state) => {
           if (disposed) return;
           if (!isCurrentLoad() || state.activation === 'error') {
@@ -1074,7 +1488,10 @@ export const useActivation = (
         if (!isCurrentLoad()) return;
         controller.setActivation({
           activation: 'error',
-          error: providerError(cause, source.source.type)
+          error: providerError(
+            cause,
+            source.source as ResolvedPlayerSource<SuppliedProviderSource>
+          )
         });
       });
   }, [currentKey, mediaVersion, sourceCommitted]);
@@ -1085,6 +1502,14 @@ export const useActivation = (
       disconnectObserver(observerRef.current);
       observerRef.current = undefined;
       optionsRef.current.controller.setProvider(undefined);
+      // `setProvider(undefined)` above clears a `{ kind: 'provider' }` notice
+      // but deliberately leaves a `{ kind: 'refused-url' }` one standing
+      // (`player-controller.ts`) -- it describes a consumer prop no provider
+      // ever saw. This hook's own registration has to be withdrawn here
+      // instead, the same way `useRefusedUrlReport`'s effect cleanup
+      // withdraws one on unmount, or it would survive this hook after
+      // nothing is left to own it (#752).
+      suppliedProviderOptionDispose.current?.();
     },
     []
   );

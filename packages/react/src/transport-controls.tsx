@@ -1,4 +1,5 @@
 import type { PlayerProvider, TimeRange } from '@playdeck/core';
+import { formatTime } from './format-time.js';
 import {
   controlTargetStyle,
   useLoadingPresentation,
@@ -9,7 +10,12 @@ import {
   requestAnswered,
   ECHO_DEADLINE_MS
 } from './optimistic-request.js';
-import { usePlayer, usePlayerState } from './player-context.js';
+import { permittedUrl } from './permitted-url.js';
+import {
+  usePlayer,
+  usePlayerState,
+  useRefusedUrlReport
+} from './player-context.js';
 import {
   useEffect,
   useId,
@@ -19,15 +25,46 @@ import {
   type Ref
 } from 'react';
 
-const formatTime = (totalSeconds: number): string => {
-  const clamped = Math.max(0, Math.floor(totalSeconds));
-  const hours = Math.floor(clamped / 3600);
-  const minutes = Math.floor((clamped % 3600) / 60);
-  const seconds = clamped % 60;
-  const pad = (value: number): string => String(value).padStart(2, '0');
-  return hours > 0
-    ? `${hours}:${pad(minutes)}:${pad(seconds)}`
-    : `${minutes}:${pad(seconds)}`;
+// The thumbnail preview, loaded only when a consumer asks for it.
+//
+// `thumbnails.tsx` holds the whole feature -- the cue fetch, the parser it
+// reaches in `@playdeck/core/thumbnails`, the crop geometry and the
+// `thumbnail` part's JSX -- and this is the only reference to it anywhere in
+// the package, so a bundler emits all of it in a chunk that nothing in the
+// eager graph imports. A control bar that never sets `thumbnails` does not
+// download it (#727); `Player.Root`'s provider loading (`provider-loaders.ts`)
+// makes the same trade for the provider adapters.
+//
+// Started from the prop's presence rather than from the first hover, which is
+// the difference between a preview that is ready when a viewer reaches for it
+// and one that misses the gesture that asked for it. The WebVTT file stays on
+// the first-interaction schedule it has always been on -- this loads the code,
+// `useThumbnailCues` still decides when to load the cues.
+type ThumbnailPreviewModule = typeof import('./thumbnails.js');
+
+const useThumbnailPreview = (
+  enabled: boolean
+): ThumbnailPreviewModule['ThumbnailPreview'] | null => {
+  const [loaded, setLoaded] = useState<ThumbnailPreviewModule | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    let live = true;
+    void import('./thumbnails.js')
+      .then((module) => {
+        if (live) setLoaded(module);
+      })
+      .catch(() => {
+        // A chunk that fails to load leaves the slider exactly as it is
+        // without the prop: no part, no preview, and nothing reported. The
+        // preview is decorative and `aria-hidden`, so there is no
+        // degradation here worth a notice of its own -- the same silence a
+        // cue file that fails to fetch already settles on.
+      });
+    return () => {
+      live = false;
+    };
+  }, [enabled]);
+  return loaded?.ThumbnailPreview ?? null;
 };
 
 // How many digits sit after the point, including the ones `String` hides in
@@ -257,6 +294,17 @@ export type SeekSliderProps = ComponentPropsWithRef<'div'> & {
   // consumer onChange is chained after the seek, and a consumer
   // aria-describedby is composed with the buffered description, not replaced.
   readonly inputProps?: ComponentPropsWithRef<'input'>;
+  // The URL of a WebVTT sprite-cue file (`packages/core`'s `parseThumbnailCues`
+  // format): with it set, the slider renders a `thumbnail` part showing the
+  // cue image and region for the previewed time -- the pointer's position
+  // while hovering, or the input's own value while it holds keyboard focus
+  // and no pointer is active. The file loads lazily, on the first such
+  // interaction, never at mount (`thumbnails.ts`'s `useThumbnailCues`). Goes
+  // through the same source allowlist as every other URL prop in this
+  // package; a refused URL renders no thumbnail and reports the `'thumbnails'`
+  // surface, and a refused cue image reports `'thumbnails cue image'` and
+  // drops only that cue.
+  readonly thumbnails?: string;
 };
 
 // The scrubbable range: [0, duration] for VOD, or the seekable window extent
@@ -491,6 +539,22 @@ const useSeekPreview = (
   return { preview, seek };
 };
 
+// The wrapper's and the input's own floor, below. A `var()` read rather than
+// the literal `44` they both used to carry, the same move #622 made for every
+// button-shaped control's own target (`controlTargetStyle` in
+// `loading-error.tsx`): an inline style beats any stylesheet, so a fixed
+// number here would leave a theme's "below 48rem" query with nothing to
+// shrink. A token of its own rather than a second read of
+// `--playdeck-control-size` -- the row this floor sizes shares a line with
+// the button-shaped controls' own row only in the sense that both sit inside
+// the `Controls` part; `controlTargetStyle`'s row keeps its own
+// size at every width this package ships a phone query for, and coupling the
+// two would move one every time a theme moves the other. Falls back to
+// `2.75rem`, the same 44px desktop lock every other control-target floor in
+// this package defaults to, for a bare consumer with no stylesheet loaded.
+const SEEK_SLIDER_MIN_BLOCK_SIZE =
+  'var(--playdeck-seek-slider-min-block-size, 2.75rem)';
+
 // `aria-label` is the one prop this component accepts at the wrapper level and
 // renders somewhere else, and that asymmetry is deliberate. Everything else a
 // consumer writes at the top level describes the box — layout, classes, data
@@ -509,8 +573,10 @@ export const SeekSlider = ({
   children,
   inputProps,
   style,
+  thumbnails,
   ...props
 }: SeekSliderProps) => {
+  const { controller } = usePlayer();
   const { buffered, currentTime, duration, provider, seekable, status } =
     usePlayerState((state) => ({
       buffered: state.buffered,
@@ -538,11 +604,49 @@ export const SeekSlider = ({
     provider,
     seekEchoTolerance(grid)
   );
+  // The allowlisted `thumbnails` URL, resolved unconditionally (like every
+  // other consumer URL prop in this package) so the hooks below it -- and the
+  // capability gate right after -- see a stable call order regardless of
+  // `status`. A refused URL reports the `'thumbnails'` surface and never
+  // reaches `ThumbnailPreview`, so nothing is fetched for it.
+  const resolvedThumbnails = permittedUrl(thumbnails);
+  useRefusedUrlReport(
+    controller,
+    'thumbnails',
+    thumbnails !== undefined && resolvedThumbnails === undefined
+  );
+  const ThumbnailPreview = useThumbnailPreview(
+    resolvedThumbnails !== undefined
+  );
+  // The interaction the preview reads, recorded here rather than in the
+  // chunk that reads it: the pointer's x within this wrapper as a fraction
+  // of its width, and whether the input holds focus. Two pieces of state,
+  // and the arithmetic for one of them, are what stays behind when the rest
+  // of the feature moves out of the eager graph -- and they have to stay,
+  // because the events that produce them land on elements this component
+  // owns. It also settles the timing: a hover that arrives before the chunk
+  // does is recorded rather than dropped, so the preview that follows is the
+  // one that gesture asked for instead of the next one.
+  const [pointerFraction, setPointerFraction] = useState<number | null>(null);
+  const [inputFocused, setInputFocused] = useState(false);
+  const trackPointer = (clientX: number, target: Element): void => {
+    if (resolvedThumbnails === undefined) return;
+    const rect = target.getBoundingClientRect();
+    setPointerFraction(
+      rect.width > 0
+        ? Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
+        : 0
+    );
+  };
+  // A held preview is clamped like media time is: the window it was asked
+  // against can have moved on before the seek was answered. Computed above
+  // the capability gate, unlike every other render-only value below it,
+  // because `ThumbnailPreview` takes it as a prop and the hooks above have to
+  // run before the gate too, to keep this component's hook call order stable
+  // across every value `status` takes.
+  const value = window ? snapToStep(preview ?? currentTime, min, max, grid) : 0;
   if (status !== 'available') return null;
   const hasDuration = typeof duration === 'number' && duration > 0;
-  // A held preview is clamped like media time is: the window it was asked
-  // against can have moved on before the seek was answered.
-  const value = window ? snapToStep(preview ?? currentTime, min, max, grid) : 0;
   // The geometry below is `aria-hidden`, so this description is the extent's
   // only route to assistive technology (#189) — read on demand, never a live
   // region, because `buffered` moves many times a second.
@@ -562,7 +666,33 @@ export const SeekSlider = ({
       data-provider={provider ?? undefined}
       data-playdeck-part="seek-slider"
       data-state={window ? 'ready' : 'idle'}
-      style={{ position: 'relative', minHeight: 44, ...style }}
+      onPointerEnter={(event) => {
+        trackPointer(event.clientX, event.currentTarget);
+        props.onPointerEnter?.(event);
+      }}
+      onPointerLeave={(event) => {
+        setPointerFraction(null);
+        props.onPointerLeave?.(event);
+      }}
+      onPointerMove={(event) => {
+        trackPointer(event.clientX, event.currentTarget);
+        props.onPointerMove?.(event);
+      }}
+      style={{
+        position: 'relative',
+        minHeight: SEEK_SLIDER_MIN_BLOCK_SIZE,
+        ...style,
+        // After `...style`, so a consumer's own `style` cannot reintroduce
+        // what this overrides: a right-to-left ancestor mirrors the native
+        // range input below -- its thumb sits at the right edge at time
+        // zero -- while `seek-progress`, the buffered ranges and the
+        // thumbnail preview's pointer math all keep positioning themselves
+        // left-to-right regardless, which would leave the visible thumb
+        // disagreeing with the fill it is meant to track. Pinning it here,
+        // inherited, keeps the whole seek bar reading as one direction
+        // matching a video's own playback direction, not the page's.
+        direction: 'ltr'
+      }}
     >
       <div aria-hidden="true" data-playdeck-part="seek-buffered">
         {window
@@ -618,12 +748,24 @@ export const SeekSlider = ({
         data-playdeck-part="seek-slider-input"
         max={max}
         min={min}
+        onBlur={(event) => {
+          setInputFocused(false);
+          inputProps?.onBlur?.(event);
+        }}
         onChange={(event) => {
           const next = Number(event.currentTarget.value);
           if (window && Number.isFinite(next)) seek(next);
           inputProps?.onChange?.(event);
         }}
-        style={{ width: '100%', minHeight: 44, ...inputProps?.style }}
+        onFocus={(event) => {
+          if (resolvedThumbnails !== undefined) setInputFocused(true);
+          inputProps?.onFocus?.(event);
+        }}
+        style={{
+          width: '100%',
+          minHeight: SEEK_SLIDER_MIN_BLOCK_SIZE,
+          ...inputProps?.style
+        }}
         type="range"
         value={value}
       />
@@ -635,6 +777,37 @@ export const SeekSlider = ({
         >
           {share}% loaded
         </span>
+      )}
+      {/* The `thumbnail` part, rendered by the chunk that owns it -- see
+          `useThumbnailPreview` at the top of this file. Absent until that
+          chunk resolves, which is a request started at mount rather than at
+          the first hover, and which paints nothing when it arrives: the part
+          is `position: absolute` inside this wrapper, so it displaces
+          nothing, and it arrives `hidden` unless a gesture is already
+          waiting for it. */}
+      {ThumbnailPreview === null || resolvedThumbnails === undefined ? null : (
+        /* eslint-disable-next-line react-hooks/static-components -- Nothing
+           is created during render here: `ThumbnailPreview` is a module
+           export, and `useThumbnailPreview` above only holds whichever value
+           `import()` resolved to. Its identity changes exactly once, from
+           `null` to that export, so React reconciles every render after the
+           first as the same component type and the state-resetting hazard
+           this rule names cannot arise. `lazy()` plus `<Suspense>` is the
+           shape the rule would accept, and it was not taken: a chunk that
+           fails to load would then throw into the consumer's tree with no
+           error boundary of ours between, over an `aria-hidden` preview that
+           is meant to degrade to nothing. */
+        <ThumbnailPreview
+          controller={controller}
+          hasWindow={window !== null}
+          inputFocused={inputFocused}
+          min={min}
+          permittedUrl={permittedUrl}
+          pointerFraction={pointerFraction}
+          span={span}
+          url={resolvedThumbnails}
+          value={value}
+        />
       )}
       {children}
     </div>
@@ -655,25 +828,33 @@ export const SeekSlider = ({
 export type TimeProps = Omit<ComponentPropsWithRef<'time'>, 'ref'> & {
   readonly ref?: Ref<HTMLElement>;
   readonly type?: 'current' | 'duration' | 'remaining';
+  // The word `type="current"` renders once playback is within the live
+  // edge's tolerance (`state.live.atLiveEdge`), in place of an offset.
+  // Localisable because it is the one piece of text this part ever renders
+  // untranslated on its own account — everything else is a formatted number.
+  readonly liveLabel?: string;
 };
 
 export const Time = ({
   children,
+  liveLabel = 'LIVE',
   ref,
   type = 'current',
   ...props
 }: TimeProps) => {
-  const { currentTime, duration, provider } = usePlayerState((state) => ({
+  const { currentTime, duration, live, provider } = usePlayerState((state) => ({
     currentTime: state.currentTime,
     duration: state.duration,
+    live: state.live,
     provider: state.provider
   }));
   const hasDuration = typeof duration === 'number' && Number.isFinite(duration);
   // `null` for a total this source does not have — a live stream, or one whose
   // duration has not arrived. `0` was the defect (#248): `formatTime(0)` renders
   // `0:00`, and a viewer reads a zero-length video rather than an untimed one.
-  // `current` never reaches it, because `currentTime` means the same thing on a
-  // live source as on a VOD one, so a `current` instance is always the `<time>`
+  // `current` never reaches it, because on a live source it reports
+  // `live.offsetFromEdge` in place of `currentTime` (below) rather than
+  // falling back to `null`, so a `current` instance is always the `<time>`
   // below.
   const seconds =
     type === 'duration'
@@ -684,7 +865,16 @@ export const Time = ({
         ? hasDuration
           ? Math.max(0, duration - currentTime)
           : null
-        : currentTime;
+        : // A live source has no fixed start `current` counts up from that
+          // means anything to a viewer. What varies instead, and what
+          // `CONTEXT.md`'s "Live edge" entry already names, is how far behind
+          // the provider's own edge playback has fallen —
+          // `live.offsetFromEdge`, already in the whole seconds this
+          // component renders at (`live-state.ts`). `type="duration"` never
+          // reaches here: `hasDuration` is false for every live source
+          // (`duration` is published `null`/`Infinity` while live), so it
+          // takes the branch above instead.
+          (live?.offsetFromEdge ?? currentTime);
 
   // Not a `<time>`: there is no time here to mark up. Keeping the element and
   // emptying it would leave a `<time>` with neither a `datetime` nor parseable
@@ -729,7 +919,13 @@ export const Time = ({
 
   const formatted = formatTime(seconds);
   const display =
-    type === 'remaining' && seconds > 0 ? `-${formatted}` : formatted;
+    type === 'current' && live !== null
+      ? live.atLiveEdge
+        ? liveLabel
+        : `-${formatted}`
+      : type === 'remaining' && seconds > 0
+        ? `-${formatted}`
+        : formatted;
 
   return (
     <time

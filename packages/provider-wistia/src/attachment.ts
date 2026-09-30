@@ -32,6 +32,7 @@ import {
   type WistiaPlayerElement
 } from './loader.js';
 import { toPlaybackState, type WistiaPlayback } from './playback.js';
+import type { WistiaPosterAvailability } from './poster-availability.js';
 import type { WistiaPresentation } from './presentation.js';
 
 const loadFailure = (cause: unknown): PlayerError => ({
@@ -213,6 +214,10 @@ export type WistiaAttachmentDeps = {
   readonly options: WistiaEmbedOptions;
   // The host's capabilities snapshot, for the state published on ready.
   readonly getCapabilities: () => PlayerCapabilities;
+  readonly posterAvailability: Pick<
+    WistiaPosterAvailability,
+    'probe' | 'adopt' | 'cancel' | 'url'
+  >;
   readonly playback: Pick<WistiaPlayback, 'adopt' | 'handlers'>;
   readonly presentation: Pick<WistiaPresentation, 'handlers'>;
   // Drops the host's provider-state subscribers on destroy.
@@ -246,6 +251,7 @@ export const createWistiaAttachment = (
     emit,
     options,
     getCapabilities,
+    posterAvailability,
     playback,
     presentation,
     clearStateListeners
@@ -472,6 +478,7 @@ export const createWistiaAttachment = (
     // discard. Both callers have already moved the generation on, so a tick
     // that had already been scheduled would publish for a player on its way out.
     stopLiveEdgePoll();
+    posterAvailability.cancel();
     const element = activeElement;
     const api = activeApi;
     const release = releaseHandle;
@@ -566,6 +573,10 @@ export const createWistiaAttachment = (
     try {
       const element = buildElement(thisGeneration);
       const handle = activeHandle;
+      // Started alongside the player bundle load rather than after it, so the
+      // request is in flight while the embed loads instead of adding its own
+      // latency on top.
+      const posterProbe = posterAvailability.probe();
       await loadWistiaPlayer();
       // Teardown settles the handshake with nothing rather than leaving it
       // pending, so one check after it covers both awaits above. The deadline
@@ -618,6 +629,9 @@ export const createWistiaAttachment = (
         volume: api.volume(),
         playbackRate: api.playbackRate() ?? 1
       });
+      const posterProbeResult = await posterProbe;
+      if (isStale(thisGeneration, element)) return { ok: true };
+      posterAvailability.adopt(posterProbeResult);
       emit(
         {
           lifecycle: 'ready',
@@ -634,7 +648,8 @@ export const createWistiaAttachment = (
           // media data that answers it arrived before the handshake, so the
           // host learns liveness at the same moment as everything else.
           ...liveFragment(api),
-          capabilities: getCapabilities()
+          capabilities: getCapabilities(),
+          providerPosterUrl: posterAvailability.url()
         },
         providerEvent('ready', undefined)
       );

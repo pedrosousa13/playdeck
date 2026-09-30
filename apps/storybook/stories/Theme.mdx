@@ -95,9 +95,10 @@ it either way.
 Everything worth changing is a custom property, read as `var(--name, default)`.
 The file declares none of them bar the two activation tokens noted below, which
 is deliberate: a declaration — even on the player element — would beat a value
-you set on an ancestor, because a declaration always wins over inheritance. Reading with fallbacks means you can
-set tokens **anywhere above the player**, or on the player itself, and they take
-effect. It also means nothing leaks into the surrounding document.
+you set on an ancestor, because a declaration always wins over inheritance.
+Reading with fallbacks means you can set tokens **anywhere above the player**,
+or on the player itself, and they take effect. It also means nothing leaks into
+the surrounding document.
 
 {/* example:ignore three token declarations, showing where tokens go rather than a stylesheet to copy */}
 
@@ -116,57 +117,45 @@ Baseline in May 2023, later than the floor Playdeck declares (Chrome 99, Firefox
 Safari 15.4). Use it if your target is newer — nothing in the theme requires or
 prevents either.
 
-| Group      | Tokens                                                                                                                                                                                                                                                         |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Color      | `--playdeck-color-surface`, `--playdeck-color-on-surface`, `--playdeck-color-accent`, `--playdeck-color-track`, `--playdeck-color-buffered`, `--playdeck-color-thumb-ring`, `--playdeck-color-focus`, `--playdeck-color-backdrop`, `--playdeck-color-hairline` |
-| Type       | `--playdeck-font-family`, `--playdeck-font-size`, `--playdeck-font-size-small`, `--playdeck-line-height`                                                                                                                                                       |
-| Spacing    | `--playdeck-space-1`, `--playdeck-space-2`, `--playdeck-space-3`                                                                                                                                                                                               |
-| Shape      | `--playdeck-radius`, `--playdeck-radius-large`                                                                                                                                                                                                                 |
-| Controls   | `--playdeck-control-size`, `--playdeck-control-icon-size`, `--playdeck-control-hover`, `--playdeck-slider-thickness`                                                                                                                                           |
-| Activation | `--playdeck-activation-size`, `--playdeck-activation-fill`, `--playdeck-activation-border`                                                                                                                                                                     |
-| Overlays   | `--playdeck-overlay-opacity`, `--playdeck-overlay-scrim`                                                                                                                                                                                                       |
-| Motion     | `--playdeck-transition-duration`, `--playdeck-transition-easing`                                                                                                                                                                                               |
-| Safe area  | `--playdeck-safe-bottom`, `--playdeck-safe-left`, `--playdeck-safe-right`                                                                                                                                                                                      |
-| Poster     | `--playdeck-poster-fit`, `--playdeck-poster-position`                                                                                                                                                                                                          |
+Every token's name, role, default and which parts read it is the versioned
+contract in the [`@playdeck/react` README](https://github.com/pedrosousa13/playdeck/tree/main/packages/react#theming) —
+kept in sync with `theme.css` and `docked.css` by a test, so it is never a
+second copy for an edit here to forget. Two of those tokens are declared by
+both stylesheets rather than only read (`--playdeck-activation-fill` and
+`--playdeck-activation-border`, so a bare player never paints the user agent's
+own button face over its poster): set them on the `activation` part itself,
+not on an ancestor, since a declaration there is what beats a stylesheet's own.
 
-**The two activation paint tokens are declared, not only read.**
-`ActivationButton` writes `background-color` and `border` on itself inline, as
-reads of `--playdeck-activation-fill` and `--playdeck-activation-border`, so a
-player carrying no stylesheet at all never paints the user agent's own button
-face over its poster. Both stylesheets therefore _declare_ that pair on
-`[data-playdeck-part='activation']` rather than only reading it — which is what
-lets a value you set on the part itself beat the stylesheet's, since the nearest
-declaration in the inheritance chain wins. Set them on the part, not on an
-ancestor. A `style` prop passed to `ActivationButton` is spread after the
-primitive's own styles and wins outright either way.
+### Starter theme
 
-**`--playdeck-activation-size` is a floor, not a size.** The activation part is
-`fit-content` with `--playdeck-activation-size` as its `min-inline-size` and
-`min-block-size`, so icon-only content still measures a 4rem badge while a
-label grows the box past it.
+A minimal theme to copy, overriding a handful of tokens on the viewport part —
+the ancestor every other part inherits a token from unless something closer
+overrides it:
 
-**`--playdeck-color-hairline` is `docked.css`'s alone.** It paints the 1px rule
-between the docked bar and the picture, and the settings and captions menu's own
-border. `theme.css` neither reads nor needs it: its scrim supplies both edges.
+{/* example:css-starter-theme */}
 
-**`docked.css` reads the same names with defaults of its own.** Its bar is a
-neutral surface rather than a scrim over the picture, so the colours it paints
-from mostly carry two defaults each — a light one in the cascade's normal
-position and a dark one repeated inside a `@media (prefers-color-scheme: dark)`
-block at the foot of the file — while a token whose `theme.css` default already
-suits both, such as `--playdeck-color-backdrop` behind the media, is read
-unchanged. Spacing, control sizing, typography, motion, safe area and the
-activation size keep `theme.css`'s defaults throughout. Each file's header
-comment lists its own, so read `packages/react/docked.css` for docked's rather
-than assuming the theme's.
+```css
+/* A minimal starter theme: copy this file and change the values that matter
+   to you, or drop it as-is. It does not replace @playdeck/react/theme.css --
+   import that first, the same way you always do, then this file after it. It
+   only overrides a handful of its tokens, set on the viewport part, the
+   ancestor every other part inherits a token from unless something closer
+   overrides it.
 
-**`--playdeck-control-size` has a floor.** The 44×44 px minimum touch target is
-enforced by the primitives with an inline `min-width`/`min-height`, so a smaller
-value is clamped up rather than obeyed. That is intentional: an accessibility
-minimum is not a style choice. Larger values work normally.
+   Every name below is a documented token: see the token contract in this
+   package's own README for the full list, each one's default, and which
+   parts read it. */
 
-The two poster tokens are read by `Player.PosterImage` itself rather than by the
-stylesheet, so they apply with or without the theme.
+[data-playdeck-part='viewport'] {
+  --playdeck-color-accent: #7c3aed;
+  --playdeck-color-accent-tint: #c4b5fd;
+  --playdeck-radius: 0.25rem;
+  --playdeck-radius-large: 0.5rem;
+  --playdeck-control-size: 3rem;
+}
+```
+
+{/* /example */}
 
 **`accent-color` reaches less of a slider than you might expect.** With this
 stylesheet mounted the seek slider is drawn by it on all three engines — that is

@@ -78,6 +78,55 @@ test('reports a ladder with rungs as selectable', () => {
   });
 });
 
+// Demonstrated red (docs/agents/demonstrated-red.md): the naturally
+// unfixed baseline for this getter is its own absence -- with
+// `selectQualityAutoAvailability` and its tracking variable removed from
+// `quality-levels.ts` and this call left in place, the file failed to
+// typecheck (`Property 'selectQualityAutoAvailability' does not exist on
+// type 'VimeoQualityLevels'`), which is not the runtime failure this
+// convention is about. Substitute mutation instead: pointed the getter at
+// `selectQualityAvailability` (the pre-#653 conflation of "selection" with
+// "auto"), and ran the whole suite:
+//
+//   × refuses auto -- selectQualityAuto -- when the ladder carries no auto
+//     entry
+//
+//   Test Files  1 failed | 90 passed (91)
+//        Tests  1 failed | 2306 passed (2307)
+//
+// Reverted, all 2307 passed again.
+test('refuses auto -- selectQualityAuto -- when the ladder carries no auto entry', () => {
+  const { qualityLevels } = createHarness();
+  // Real rungs, no `auto` entry -- the exact shape `selectQuality(null)`
+  // resolving `unsupported` above pins at the command level; this pins the
+  // same shape at the capability level.
+  qualityLevels.adopt([rung('720p'), rung('480p')]);
+  expect(qualityLevels.selectQualityAvailability()).toEqual({
+    status: 'available'
+  });
+  expect(qualityLevels.selectQualityAutoAvailability()).toEqual({
+    status: 'unavailable',
+    reason: 'source'
+  });
+});
+
+test('offers auto -- selectQualityAuto -- when the ladder carries an auto entry', () => {
+  const { qualityLevels } = createHarness();
+  qualityLevels.adopt([rung('auto'), rung('720p')]);
+  expect(qualityLevels.selectQualityAutoAvailability()).toEqual({
+    status: 'available'
+  });
+});
+
+test('refuses auto -- selectQualityAuto -- on a ladder with no rungs at all', () => {
+  const { qualityLevels } = createHarness();
+  qualityLevels.adopt(undefined);
+  expect(qualityLevels.selectQualityAutoAvailability()).toEqual({
+    status: 'unavailable',
+    reason: 'source'
+  });
+});
+
 test('refuses a rung the player never offered without calling the SDK', async () => {
   const { qualityLevels, player, patches } = createHarness();
   qualityLevels.adopt([rung('auto'), rung('720p')]);

@@ -35,6 +35,17 @@ export type HlsSubtitleTrackLike = {
   readonly type?: string;
 };
 
+// Structural slice of hls.js's `MediaPlaylist` for an alternate-audio track,
+// as delivered on `AUDIO_TRACKS_UPDATED`/`instance.audioTracks`. Same shape
+// as `HlsSubtitleTrackLike` minus `type`, which only distinguishes subtitles
+// from closed captions.
+export type HlsAudioTrackLike = {
+  readonly id?: number;
+  readonly name: string;
+  readonly lang?: string;
+  readonly default: boolean;
+};
+
 // hls.js's `CuesParsedData.cues` is typed `any` upstream: it carries either
 // WebVTT cues or CEA-608/708 caption cues, both produced by the same
 // internal `Cues.newCue` helper and both exposing this shape. This is the
@@ -48,6 +59,7 @@ export type HlsParsedCueLike = {
 
 export type HlsConfigLike = {
   readonly renderTextTracksNatively?: boolean;
+  readonly preferManagedMediaSource?: boolean;
 };
 
 export type HlsInstanceLike = {
@@ -58,6 +70,8 @@ export type HlsInstanceLike = {
   readonly liveSyncPosition?: number | null;
   readonly subtitleTracks: ReadonlyArray<HlsSubtitleTrackLike>;
   subtitleTrack: number;
+  readonly audioTracks: ReadonlyArray<HlsAudioTrackLike>;
+  audioTrack: number;
   // Method shorthand, not a property-typed function, and deliberately so:
   // method parameters are checked bivariantly, so a real hls.js `Hls`, whose
   // `on` only accepts its own `keyof HlsListeners`, satisfies this. Written as
@@ -89,21 +103,43 @@ export type HlsConstructorLike = {
     readonly SUBTITLE_TRACKS_UPDATED: string;
     readonly SUBTITLE_TRACK_SWITCH: string;
     readonly CUES_PARSED: string;
+    readonly AUDIO_TRACKS_UPDATED: string;
+    readonly AUDIO_TRACK_SWITCHING: string;
   };
   readonly ErrorTypes: {
     readonly NETWORK_ERROR: string;
     readonly MEDIA_ERROR: string;
   };
-  // Read by `hlsBuildSupportsSubtitles` alone, and optional because a build
-  // that does not expose it is treated as capable rather than as incapable.
+  // Read by `hlsBuildSupportsSubtitles`/`hlsBuildSupportsAudioTracks` alone,
+  // and optional because a build exposing no `DefaultConfig` at all reads as
+  // capable rather than as incapable.
   readonly DefaultConfig?: {
     readonly subtitleTrackController?: unknown;
+    readonly audioTrackController?: unknown;
   };
 };
 
 export type HlsModuleLoader = () => Promise<{
   readonly default: HlsConstructorLike;
 }>;
+
+export type HlsBuild = 'full' | 'light';
+
+// hls.js publishes stricter generic event signatures than the minimal
+// structural surface this adapter consumes, so the dynamic module boundary
+// narrows through a cast instead of importing hls.js types eagerly -- true of
+// both builds, since `hls.js/light` exports the same class shape.
+//
+// `createHlsProvider`'s `build` option resolves through this map rather than
+// through a consumer-supplied `loadHls`: it is the primitive `build` stands
+// in for, so a `PlayerProviderOptions.hls` bag (`@playdeck/react`) can carry
+// `{ build: 'light' }` through `Player.Root` without ever passing a function
+// across that boundary. `loadHls` itself is unaffected and stays the way to
+// pin a version or serve hls.js from somewhere else.
+export const hlsBuildLoaders: Record<HlsBuild, HlsModuleLoader> = {
+  full: () => import('hls.js'),
+  light: () => import('hls.js/light')
+};
 
 /**
  * Whether the hls.js build in hand carries the machinery that surfaces subtitle
@@ -130,6 +166,16 @@ export type HlsModuleLoader = () => Promise<{
 export const hlsBuildSupportsSubtitles = (Hls: HlsConstructorLike): boolean =>
   Hls.DefaultConfig === undefined ||
   typeof Hls.DefaultConfig.subtitleTrackController === 'function';
+
+// Same reading as `hlsBuildSupportsSubtitles`, off the sibling
+// `audioTrackController` field: `hls.js/light` ships no `AudioTrackController`
+// and no `AudioStreamController` either, so it parses a manifest's
+// alternate-audio renditions, reports them once on `MANIFEST_PARSED`, and
+// never emits `AUDIO_TRACKS_UPDATED` for them -- the same gap
+// `hlsBuildSupportsSubtitles`'s own doc comment describes for subtitles.
+export const hlsBuildSupportsAudioTracks = (Hls: HlsConstructorLike): boolean =>
+  Hls.DefaultConfig === undefined ||
+  typeof Hls.DefaultConfig.audioTrackController === 'function';
 
 export const readMediaRanges = (
   ranges: globalThis.TimeRanges

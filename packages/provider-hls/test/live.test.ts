@@ -14,7 +14,7 @@ test('detects a live stream from infinite duration alone (neutral URL, no hint)'
   // No isLiveHint and no URL involved: liveness comes purely from duration.
   expect(
     deriveLiveState({ ...base, duration: Number.POSITIVE_INFINITY })
-  ).toEqual({ isLive: true, atLiveEdge: true });
+  ).toEqual({ isLive: true, atLiveEdge: true, offsetFromEdge: 0 });
 });
 
 test('treats a finite duration with no live hint as not live', () => {
@@ -28,7 +28,7 @@ test('treats a NaN/unknown duration with no hint as not live without emitting Na
 test('honors an explicit hls.js live hint even when duration is finite', () => {
   expect(
     deriveLiveState({ ...base, duration: 3600, isLiveHint: true })
-  ).toEqual({ isLive: true, atLiveEdge: true });
+  ).toEqual({ isLive: true, atLiveEdge: true, offsetFromEdge: 0 });
 });
 
 test('treats a false live hint as not live even when duration is infinite (stream ended)', () => {
@@ -44,14 +44,16 @@ test('treats a false live hint as not live even when duration is infinite (strea
 test('reports behind-edge when the current time trails the seekable end', () => {
   expect(deriveLiveState({ ...base, currentTime: 2 })).toEqual({
     isLive: true,
-    atLiveEdge: false
+    atLiveEdge: false,
+    offsetFromEdge: 8
   });
 });
 
 test('reports at-edge within the tolerance of the seekable end', () => {
   expect(deriveLiveState({ ...base, currentTime: 8.5 })).toEqual({
     isLive: true,
-    atLiveEdge: true
+    atLiveEdge: true,
+    offsetFromEdge: 2
   });
 });
 
@@ -63,14 +65,14 @@ test('tracks a moving seekable window when computing the live edge', () => {
       seekable: [{ start: 30, end: 40 }],
       currentTime: 31
     })
-  ).toEqual({ isLive: true, atLiveEdge: false });
+  ).toEqual({ isLive: true, atLiveEdge: false, offsetFromEdge: 9 });
   expect(
     deriveLiveState({
       ...base,
       seekable: [{ start: 30, end: 40 }],
       currentTime: 39.5
     })
-  ).toEqual({ isLive: true, atLiveEdge: true });
+  ).toEqual({ isLive: true, atLiveEdge: true, offsetFromEdge: 1 });
 });
 
 test('prefers an explicit live edge over the seekable end', () => {
@@ -82,7 +84,7 @@ test('prefers an explicit live edge over the seekable end', () => {
       currentTime: 18,
       liveEdge: 18.5
     })
-  ).toEqual({ isLive: true, atLiveEdge: true });
+  ).toEqual({ isLive: true, atLiveEdge: true, offsetFromEdge: 1 });
 });
 
 test('never yields NaN or negative edge state with an empty seekable window', () => {
@@ -92,7 +94,7 @@ test('never yields NaN or negative edge state with an empty seekable window', ()
     seekable: [],
     currentTime: 0
   });
-  expect(result).toEqual({ isLive: true, atLiveEdge: true });
+  expect(result).toEqual({ isLive: true, atLiveEdge: true, offsetFromEdge: 0 });
 });
 
 test('clamps a current time ahead of the edge to at-edge (never negative distance)', () => {
@@ -103,5 +105,5 @@ test('clamps a current time ahead of the edge to at-edge (never negative distanc
       seekable: [{ start: 0, end: 10 }],
       currentTime: 12
     })
-  ).toEqual({ isLive: true, atLiveEdge: true });
+  ).toEqual({ isLive: true, atLiveEdge: true, offsetFromEdge: 0 });
 });

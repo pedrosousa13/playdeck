@@ -62,13 +62,11 @@ const railName = (name) => (scoped ? name.slice(scope.length) : name);
 ---
 
 <Base title={`${current.name} — Playdeck reference`}>
-  {
-    /* No `Reference` ancestor here any more (#542 phase 2): the site nav in
-     * `SiteHeader.astro` already marks that section with `aria-current`, so a
-     * second `Reference` sitting in the trail immediately beside it read as
-     * the same word twice rather than as two landmarks. The trail's leaf is
-     * this package's own name, which the nav does not say. */
-  }
+  {/* No `Reference` ancestor here any more (#542 phase 2): the site nav in
+   * `SiteHeader.astro` already marks that section with `aria-current`, so a
+   * second `Reference` sitting in the trail immediately beside it read as
+   * the same word twice rather than as two landmarks. The trail's leaf is
+   * this package's own name, which the nav does not say. */}
   <SiteHeader crumbs={[{ label: current.name }]} />
 
   <div class="shell">
@@ -87,35 +85,33 @@ const railName = (name) => (scoped ? name.slice(scope.length) : name);
       }}
       contents={contents}
     >
-      {
-        /* The version, at the foot of the rail rather than above the document's
-         * own title. A line of small type sitting on top of an `h1` is the
-         * eyebrow `DESIGN.md` names as a generated-interface tell, and this one
-         * would have restated the heading underneath it.
-         *
-         * Slotted rather than passed as a prop, because it is the one thing in
-         * this rail that belongs to this route alone: a provider setup page has
-         * no version to state, and an optional `version` prop on the shared
-         * component would describe both pages by naming what one of them has. */
-      }
+      {/* The version, at the foot of the rail rather than above the document's
+       * own title. A line of small type sitting on top of an `h1` is the
+       * eyebrow `DESIGN.md` names as a generated-interface tell, and this one
+       * would have restated the heading underneath it.
+       *
+       * Slotted rather than passed as a prop, because it is the one thing in
+       * this rail that belongs to this route alone: a provider setup page has
+       * no version to state, and an optional `version` prop on the shared
+       * component would describe both pages by naming what one of them has. */}
       <p class="rail__version" slot="foot">
         <span class="rail__version-label">version</span>{' '}
         <code class="u-tabular">{current.version}</code>
       </p>
     </DocRail>
 
-    {
-      /* `Content` is the README, compiled. Everything the reader sees below is
-       * that file: this page contributes a measure, a heading rhythm and the
-       * code-block styling in `base.css`, and not one word. */
-    }
+    {/* `Content` is the README, compiled. Everything the reader sees below is
+     * that file: this page contributes a measure, a heading rhythm and the
+     * code-block styling in `base.css`, and not one word. */}
     <main class="doc">
       <Content />
     </main>
   </div>
 
   <footer class="foot">
-    <div class="foot__rule"><Sweep form="hairline" /></div>
+    <div class="foot__rule">
+      <Sweep form="hairline" />
+    </div>
     <p>
       <a href={referenceUrl}>All packages</a>
     </p>

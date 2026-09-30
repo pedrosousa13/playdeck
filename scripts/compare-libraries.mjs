@@ -1,0 +1,1358 @@
+#!/usr/bin/env node
+// Measures Playdeck against a named set of React video libraries and writes
+// docs/comparison/results.md -- the harness issue #543 asks for: one command,
+// numbers nobody typed, versions and a date checked in beside them.
+//
+// The maintainer ruling on #543 draws a hard line this file does not cross:
+// no claim about another library reaches apps/site's landing page, and this
+// script writes only to docs/comparison/, which the site's build now reads to
+// publish the comparison as a docs page at /guides/comparison/ (issue #637)
+// rather than on / itself. What it measures, and why, is written out at
+// length in docs/comparison/method.md -- this header covers how, not why.
+//
+// ---- what "gzipped bytes" means here --------------------------------------
+//
+// Every row is bundled from one entry file under tests/compare/entries/
+// through the same `vite build`, with React, ReactDOM and the JSX runtime
+// marked external for every one of them alike -- none of them is charged for
+// a dependency every one of them equally requires a consumer to already
+// have. `write: false` keeps the build in memory, the same way
+// readme-bytes.mjs's `minifiedGzipKilobytes` does, so this never touches disk
+// and never risks measuring a stale dist/ left over from a previous run.
+// Four rows are Playdeck, measuring the same package's primitives at four
+// different control compositions, from no control parts at all to a full
+// control bar -- see the `libraries` array below and
+// docs/comparison/method.md's "Equivalent composition per library" for which
+// of the four is the fair comparison for which other row.
+//
+// ---- the esbuild cross-check ------------------------------------------------
+//
+// Every row is also bundled a second time, independently, with `esbuild`
+// (`bundleEntryEsbuild`, normalised into this file's own `Chunk` shape by
+// `normalizeEsbuildOutputs`) -- the same entry, the same externals, the same
+// `reachableChunks` rule, a different bundler and a different minifier.
+// `results.md`'s "Gzipped (esbuild)" column is that second figure, printed
+// beside Vite's rather than instead of it: two independent tools agreeing on
+// a number is evidence the number belongs to the library being measured and
+// not to a quirk of one harness's own bundler, which is what
+// docs/comparison/method.md's "What is measured" argues at more length, and
+// is also where every row's actual Vite/esbuild delta is accounted for.
+//
+// A build without `build.lib` is used deliberately, and not the lib-mode
+// config every other measurement in this repo reaches for: lib mode exists to
+// produce one publishable file per format, and every library measured here
+// (Playdeck included) code-splits a real consumer's page across several files
+// on its own -- Playdeck's native provider loads through a dynamic
+// `import()`, and so do react-player's non-file providers and part of
+// Vidstack's default layout. An ordinary app build is what preserves that
+// split as separate Rollup chunks instead of flattening it into one file, and
+// `reachableChunks` below is what turns the split back into a single figure
+// without pretending the split does not exist.
+//
+// ---- what counts as "reachable" --------------------------------------------
+//
+// A build's `output` array (with `write: false`, kept in memory rather than
+// written) mixes chunks a browser is guaranteed to fetch with chunks a
+// dynamic `import()` only reaches under conditions this fixture may never
+// meet -- an alternate provider, a caption file, a menu nobody opened. Gzipping
+// every chunk regardless would answer "what does this library ship in total",
+// which is a real question and not this one: the axis here is "one MP4 URL
+// with default controls", so a chunk this fixture's fixed inputs cannot
+// reach must not be charged to it.
+//
+// `reachableChunks` keeps two kinds of chunk: the entry's own static import
+// closure -- what loads with no interaction and no dynamic import ever
+// resolving -- and whatever a library's own `requiredChunk` predicate names as
+// unavoidable for this fixture specifically, matched against the chunk's
+// `moduleIds` (the absolute paths of every source module Rollup folded into
+// it). Playdeck is the one library measured here whose provider is itself
+// behind a dynamic import that this fixture cannot avoid resolving: something
+// has to attach to the `<video>` element for the MP4 to play at all, and for
+// this fixture that is always `@playdeck/provider-native`. The other four
+// libraries need no such addition -- see each entry file's own header comment,
+// and docs/comparison/method.md's "Equivalent composition" section, for the
+// reachability call made for it and why.
+//
+// ---- how the total is added -------------------------------------------------
+//
+// Each reachable chunk is gzipped on its own and the byte counts are summed,
+// not concatenated-then-gzipped-once. A browser fetches and decompresses
+// separate chunks separately, so summing the separate gzip sizes is what a
+// network panel would show downloading; gzipping the concatenation would
+// under-count by however much cross-chunk repetition gzip's own dictionary
+// buys back, which is exactly what no browser ever gets to spend. This is the
+// same reason `bundle-budgets.mjs` and `readme-bytes.mjs` gzip one file at a
+// time and add the results rather than gzipping a concatenation of packages.
+
+import { build } from 'vite';
+import react from '@vitejs/plugin-react';
+import { gzipSync } from 'node:zlib';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { dirname, join, relative } from 'node:path';
+import { fileURLToPath, URL } from 'node:url';
+
+import { lineDiff } from './line-diff.mjs';
+
+const console = globalThis.console;
+const process = globalThis.process;
+
+const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+const fixtureRoot = join(repoRoot, 'tests/compare');
+const RESULTS_PATH = 'docs/comparison/results.md';
+
+// esbuild is a devDependency of tests/compare, not of the repository root
+// (deliberately -- see docs/comparison/method.md's "What is measured" for
+// why a second bundler lives there and not here), so it resolves from
+// tests/compare's own node_modules rather than from this file's. Resolved
+// through tests/compare's package.json rather than imported by bare
+// specifier for that reason: a bare `import 'esbuild'` from this file would
+// walk up from scripts/, past tests/compare, to this repository's own
+// node_modules, and fail to find it there.
+const esbuild = await import(
+  createRequire(join(fixtureRoot, 'package.json')).resolve('esbuild')
+);
+
+// Marked external for every library alike -- see the file header. `import()`
+// still resolves these names at runtime in a real page because the consumer's
+// own bundler provides them; Rollup here is told the same thing a real
+// consumer's bundler would already know.
+const REACT_EXTERNALS = [
+  'react',
+  'react-dom',
+  'react-dom/client',
+  'react/jsx-runtime'
+];
+
+/**
+ * One bundler-agnostic chunk. `imports` and `dynamicImports` both name other
+ * chunks by `fileName` (or an external specifier no chunk in the graph has,
+ * which every reader here drops rather than resolves): Vite's own `OutputChunk`
+ * already carries both under these names, so the Vite path uses it with one
+ * addition (`moduleRenderedExports`, next); `normalizeEsbuildOutputs` builds
+ * the esbuild equivalent from its metafile, splitting one `imports` array by
+ * `kind` into these same two.
+ *
+ * `moduleRenderedExports` -- keyed the same way `moduleIds` names modules, by
+ * absolute path -- is Vite-only and optional for exactly that reason: it is
+ * read from Rollup's own per-chunk `modules` map, whose `renderedExports`
+ * names which of a module's exports tree-shaking kept in this chunk, and
+ * esbuild's metafile records only `bytesInOutput` per input, nothing about
+ * which named exports reached the output (confirmed against a real metafile
+ * while building this file, 2026-09-09). It exists for one reason:
+ * `@playdeck/react` builds as a library to a single `dist/index.js`
+ * (`packages/react/vite.config.ts`'s `build.lib`), so every one of its source
+ * files lands in that one module -- `settings-menu.tsx`,
+ * `transport-controls.tsx` and `captions.tsx`, which hold the exports
+ * `PLAY_ONLY_FORBIDDEN_MODULES` names, among them. `moduleIds` alone
+ * therefore cannot say whether a composition reached `SettingsMenu` or
+ * `VolumeSlider`: that moduleId is present whenever any of the package's
+ * exports is used at all. `reachedForbiddenModule` below is the only reader.
+ * @typedef {{
+ *   fileName: string;
+ *   code: string;
+ *   isEntry: boolean;
+ *   imports: readonly string[];
+ *   dynamicImports: readonly string[];
+ *   moduleIds: readonly string[];
+ *   moduleRenderedExports?: Readonly<Record<string, readonly string[]>>;
+ * }} Chunk
+ */
+
+/**
+ * The name of the first entry in `forbidden` that `chunks` makes reachable,
+ * or `undefined` if none of them do. The module-level counterpart to
+ * `requiredChunk`'s reachability call above: where `requiredChunk` decides
+ * what a composition may not do *without*, this decides what a composition
+ * must not reach *at all*, and names the specific module rather than only
+ * moving a byte count -- see the play-only row's `forbiddenModules` below
+ * for what it is checked against and why.
+ * @param {readonly Chunk[]} chunks
+ * @param {readonly { name: string; reachedBy: (chunk: Chunk) => boolean }[]} forbidden
+ * @returns {string | undefined}
+ */
+export const reachedForbiddenModule = (chunks, forbidden) => {
+  for (const chunk of chunks) {
+    for (const entry of forbidden) {
+      if (entry.reachedBy(chunk)) return entry.name;
+    }
+  }
+  return undefined;
+};
+
+/** @param {Chunk} chunk @param {string} exportName @returns {boolean} */
+const reachesExport = (chunk, exportName) =>
+  Object.values(chunk.moduleRenderedExports ?? {}).some((exported) =>
+    exported.includes(exportName)
+  );
+
+/**
+ * What the "Playdeck (play-only)" row's composition -- core, the native
+ * provider, and one control part, `Player.PlayButton`
+ * (`tests/compare/entries/playdeck-play-only.tsx`) -- must not reach,
+ * checked by `measure` below against that fixture's own reachable Vite
+ * chunks. Read off `packages/react/src/index.tsx`'s runtime re-export list
+ * (`compare-libraries.test.mjs` checks this list against that file directly,
+ * so the two cannot drift apart silently):
+ *
+ * - "the menu primitives": `settings-menu.tsx`'s entire export list --
+ *   `SettingsMenu`, `SettingsMenuTrigger`, `SettingsMenuContent`,
+ *   `MenuItem`, `MenuRadioGroup`, `MenuRadioItem`.
+ * - "both sliders": `VolumeSlider` and `SeekSlider`, two of
+ *   `transport-controls.tsx`'s five exports -- not `PlayButton`,
+ *   `MuteButton` or `Time`, which this row (or the control-bar row) reaches
+ *   legitimately.
+ * - "captions rendering": `captions.tsx`'s entire export list -- `Captions`,
+ *   `CaptionsButton`, `CaptionsMenu`.
+ * - "quality selection": `quality.tsx`'s one export, `QualityMenu`.
+ * - "playback rate": `playback-rate.tsx`'s one export, `PlaybackRateMenu`.
+ * - "audio tracks": `audio-tracks.tsx`'s one export, `AudioTrackMenu`.
+ * - "every provider other than native": matched the same way `requiredChunk`
+ *   below matches `provider-native` itself, by the package's own directory
+ *   appearing in a reachable chunk's `moduleIds`. `requiredChunk` already
+ *   keeps a *dynamically* imported non-native provider out of `reachable`,
+ *   so this half only ever fires against a provider reached some other way
+ *   -- a static import, say, which `reachableChunks` admits into the
+ *   entry's closure unconditionally, before `requiredChunk` is ever asked.
+ * @type {readonly { name: string; reachedBy: (chunk: Chunk) => boolean }[]}
+ */
+export const PLAY_ONLY_FORBIDDEN_MODULES = [
+  ...[
+    'SettingsMenu',
+    'SettingsMenuTrigger',
+    'SettingsMenuContent',
+    'MenuItem',
+    'MenuRadioGroup',
+    'MenuRadioItem',
+    'VolumeSlider',
+    'SeekSlider',
+    'Captions',
+    'CaptionsButton',
+    'CaptionsMenu',
+    // Demonstrated red (docs/agents/demonstrated-red.md), recorded verbatim:
+    // temporarily importing `<Player.QualityMenu />` into
+    // tests/compare/entries/playdeck-play-only.tsx and running
+    // `node scripts/compare-libraries.mjs --check` produced:
+    //
+    //   Playdeck (play-only)'s reachable chunks reach SettingsMenu, which
+    //   this composition (core + primitives + native provider + one control
+    //   (PlayButton)) does not use.
+    //
+    // Reverting the import returned the check to
+    // "docs/comparison/results.md already matches a fresh run". Honest note:
+    // the failure attributes to `SettingsMenu`, not to this entry --
+    // QualityMenu is composed entirely of already-forbidden modules
+    // (SettingsMenu, MenuRadioGroup, MenuRadioItem), so the gate would have
+    // caught this violation with or without `'QualityMenu'` named here. This
+    // entry keeps the list's own stated convention -- every menu preset
+    // named explicitly, the way `CaptionsMenu` already is -- rather than
+    // being load-bearing on its own.
+    'QualityMenu',
+    // Demonstrated red (docs/agents/demonstrated-red.md), recorded verbatim:
+    // temporarily importing `<Player.PlaybackRateMenu />` into
+    // tests/compare/entries/playdeck-play-only.tsx and running
+    // `node scripts/compare-libraries.mjs --check` produced:
+    //
+    //   Playdeck (play-only)'s reachable chunks reach SettingsMenu, which
+    //   this composition (core + primitives + native provider + one control
+    //   (PlayButton)) does not use.
+    //
+    // Reverting the import returned the check to
+    // "docs/comparison/results.md already matches a fresh run". Honest note,
+    // the same one QualityMenu's own entry above carries: the failure
+    // attributes to `SettingsMenu`, not to this entry -- PlaybackRateMenu is
+    // composed entirely of already-forbidden modules (SettingsMenu,
+    // MenuRadioGroup, MenuRadioItem), so the gate would have caught this
+    // violation with or without `'PlaybackRateMenu'` named here. This entry
+    // keeps the list's own stated convention -- every menu preset named
+    // explicitly -- rather than being load-bearing on its own.
+    'PlaybackRateMenu',
+    // Demonstrated red (docs/agents/demonstrated-red.md), recorded verbatim:
+    // temporarily importing `<Player.ChaptersMenu />` into
+    // tests/compare/entries/playdeck-play-only.tsx and running
+    // `node scripts/compare-libraries.mjs --check` (after a fresh
+    // `@playdeck/react` build, which this check bundles from) produced:
+    //
+    //   Playdeck (play-only)'s reachable chunks reach SettingsMenu, which
+    //   this composition (core + primitives + native provider + one control
+    //   (PlayButton)) does not use.
+    //
+    // Reverting the import returned the check to
+    // "docs/comparison/results.md already matches a fresh run". Honest note,
+    // the same one QualityMenu's and PlaybackRateMenu's own entries above
+    // carry: the failure attributes to `SettingsMenu`, not to this entry --
+    // ChaptersMenu is composed entirely of already-forbidden modules
+    // (SettingsMenu, MenuRadioGroup, MenuRadioItem), so the gate would have
+    // caught this violation with or without `'ChaptersMenu'` named here.
+    // This entry keeps the list's own stated convention -- every menu
+    // preset named explicitly -- rather than being load-bearing on its own.
+    'ChaptersMenu',
+    // Demonstrated red (docs/agents/demonstrated-red.md), recorded verbatim:
+    // temporarily importing `<Player.AudioTrackMenu />` into
+    // tests/compare/entries/playdeck-play-only.tsx and running
+    // `node scripts/compare-libraries.mjs --check` (after a fresh
+    // `@playdeck/react` build) produced:
+    //
+    //   Playdeck (play-only)'s reachable chunks reach SettingsMenu, which
+    //   this composition (core + primitives + native provider + one control
+    //   (PlayButton)) does not use.
+    //
+    // Reverting the import returned the check to
+    // "docs/comparison/results.md already matches a fresh run". Honest note,
+    // the same one QualityMenu's, PlaybackRateMenu's and ChaptersMenu's own
+    // entries above carry: the failure attributes to `SettingsMenu`, not to
+    // this entry -- AudioTrackMenu is composed entirely of already-forbidden
+    // modules (SettingsMenu, MenuRadioGroup, MenuRadioItem), so the gate
+    // would have caught this violation with or without `'AudioTrackMenu'`
+    // named here. This entry keeps the list's own stated convention -- every
+    // menu preset named explicitly -- rather than being load-bearing on its
+    // own.
+    'AudioTrackMenu'
+  ].map((name) => ({
+    name,
+    reachedBy: (/** @type {Chunk} */ chunk) => reachesExport(chunk, name)
+  })),
+  ...[
+    'provider-youtube',
+    'provider-wistia',
+    'provider-hls',
+    'provider-vimeo'
+  ].map((dir) => ({
+    name: `@playdeck/${dir}`,
+    reachedBy: (/** @type {Chunk} */ chunk) =>
+      chunk.moduleIds.some((id) => id.includes(`/${dir}/`))
+  }))
+];
+
+/**
+ * One compared library. `composition` is prose, not a measurement, printed
+ * beside the figure so a reader knows what the number is the size of without
+ * opening the entry file; `requiredChunk` is the reachability call described
+ * in this file's header, made once here rather than re-argued at call sites.
+ *
+ * `ceilingKb` and `forbiddenModules` exist for the four Playdeck rows alone
+ * (#649) -- no other library's row carries either, which is deliberate and
+ * out of this issue's scope. `ceilingKb` is a committed upper bound on that
+ * row's measured Vite gzip figure, checked by `checkCeiling` below and
+ * raised only by editing the number here, with a reason, never by editing
+ * `docs/comparison/method.md`'s prose (see that document's "Date and how to
+ * re-run" section). `forbiddenModules`, present on the play-only row only,
+ * is `reachedForbiddenModule`'s second argument.
+ * @type {readonly {
+ *   name: string;
+ *   package: string;
+ *   entry: string;
+ *   composition: string;
+ *   requiredChunk: (chunk: Chunk) => boolean;
+ *   ceilingKb?: number;
+ *   forbiddenModules?: readonly { name: string; reachedBy: (chunk: Chunk) => boolean }[];
+ * }[]}
+ */
+export const libraries = [
+  {
+    name: 'Playdeck (no parts)',
+    package: '@playdeck/react',
+    entry: 'entries/playdeck-no-parts.tsx',
+    composition: 'core + native provider, no control parts',
+    requiredChunk: (chunk) =>
+      chunk.moduleIds.some((id) => id.includes('/provider-native/')),
+    // 22292 bytes measured 2026-09-24 -- 21.76953125 KB, 21.77 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 21.75 KB is #746's viewport re-sync backstop in `use-activation.ts`:
+    // the `resyncTimeout` ref, the `resyncViewportObserver` callback and the
+    // scheduling it adds to the ownership listener's `play` handler. That
+    // code sits in every composition here reaches regardless of which parts
+    // it renders, so all four Playdeck rows moved together (the "Playdeck"
+    // row below grew too, from 22.29 KB to 22.43 KB, without needing its own
+    // ceiling raised). The whole distance from the last committed figure is
+    // this issue's: that figure was 21.64 KB (22160 bytes), measured the
+    // same day (2026-09-24) before this change, per `results.md` on `main`.
+    //
+    // 22581 bytes measured 2026-09-28 -- 22.0517578125 KB, 22.05 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 22 KB is #797's `plainCueText` (`@playdeck/core`) replacing its chain
+    // of sequential `.replace` calls with one regex and a callback, which
+    // this composition's native provider reaches through its own cue-text
+    // passthrough. The whole distance from the last committed figure is
+    // this issue's: that figure was 22.00 KB (22526 bytes), measured the
+    // same day (2026-09-28) before this change, per `results.md` on `main`.
+    //
+    // Measures 22.19 KB (22724 bytes) after #802's fix leaving arrow keys to
+    // a widget outside the player that answers them itself -- up from
+    // 22.05 KB (22581 bytes) the same day (2026-09-28), per `results.md` on
+    // `main` -- which stays under this ceiling with no raise needed. The
+    // growth is `controls.tsx`'s own new role list and containment check,
+    // part of every composition here regardless of which parts it renders.
+    //
+    // 22804 bytes measured 2026-09-29 -- 22.26953125 KB, 22.27 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 22.25 KB is naming a supplied provider's own registration key in its
+    // load-failure message instead of "undefined": `use-activation.ts`'s
+    // `suppliedProviderLabel` and the `WeakMap` `provider-loaders.ts` adds to
+    // back it (`suppliedDetectRegistrationKeys`). Both sit in every
+    // composition this fixture builds regardless of provider, the same way
+    // `use-activation.ts`'s existing code already does. The whole distance
+    // from the last committed figure is this change's: that figure was
+    // 22.19 KB (22724 bytes), measured the same day (2026-09-29) before this
+    // change, per `results.md` on `main`.
+    ceilingKb: 22.5
+  },
+  {
+    name: 'Playdeck',
+    package: '@playdeck/react',
+    entry: 'entries/playdeck.tsx',
+    composition: 'core + primitives + native provider',
+    requiredChunk: (chunk) =>
+      chunk.moduleIds.some((id) => id.includes('/provider-native/')),
+    // 22825 bytes measured 2026-09-23 -- 22.2900390625 KB, 22.29 KB to two
+    // places, rounded up to the next 0.25 KB -- the same #754 change
+    // described on the "no parts" row above moved this row past its own
+    // 22.00 KB ceiling too, and the same #755 own-property lookup described
+    // there accounts for the few bytes past the previous 22798-byte figure.
+    // The whole distance from the last committed figure is this issue's:
+    // that figure was 21.96 KB, measured the same day (2026-09-23) before
+    // this change, per `results.md` on `main`.
+    //
+    // Still measures 22.43 KB after #746's viewport re-sync backstop
+    // (`use-activation.ts`) -- up from 22.29 KB the same day, per the "no
+    // parts" row's comment above -- which stays under this ceiling with no
+    // raise needed.
+    //
+    // 23064 bytes measured 2026-09-28 -- 22.5234375 KB, 22.52 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 22.5 KB is #797's `plainCueText` (`@playdeck/core`): the native
+    // provider's own cue-text passthrough grew into a call to it, which this
+    // composition's native provider reaches. The whole distance from the
+    // last committed figure is this issue's: that figure was 22.45 KB
+    // (22986 bytes), measured the same day (2026-09-28) before this change,
+    // per `results.md` on `main`.
+    //
+    // Measures 22.74 KB (23289 bytes) after #799's fix for a class-based or
+    // frozen supplied adapter losing its own methods on the queued-play
+    // path -- up from 22.70 KB (23240 bytes) the same day (2026-09-28), per
+    // `results.md` on `main` -- which stays under this ceiling with no
+    // raise needed. The growth is `use-activation.ts`'s own queued-play
+    // branch, part of every composition this fixture builds regardless of
+    // provider: the copy-free `Proxy` that replaces the old `{ ...adapter,
+    // load: ... }` reads every property through `Reflect.get` and binds
+    // each function to the real adapter, which this row's own bundle
+    // reaches the same way every other row here reaches the rest of
+    // `@playdeck/react`.
+    //
+    // 23327 bytes measured 2026-09-28 -- 22.7802734375 KB, 22.78 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 22.75 KB is #800's fix for a supplied registration's `detect` result
+    // claiming a built-in source type: `detectSourceWithProviders`'s
+    // string branch now copies `detect`'s own return through
+    // `copySuppliedSourceObject` before trusting anything about it -- the
+    // same copy the explicit-object path already ran, closing a getter
+    // that could answer one way to the check below and a different way to
+    // `loadProvider`'s later dispatch -- and checks the copy's own `type`
+    // against the reserved-name list, alongside the registration-key check
+    // already there. Both reach every composition this fixture builds
+    // regardless of provider. The whole distance from the last committed
+    // figure is this issue's: that figure was 22.74 KB (23289 bytes),
+    // measured the same day (2026-09-28) before this change, per
+    // `results.md` on `main`.
+    //
+    // Measures 22.84 KB (23393 bytes) after #802's fix leaving arrow keys to
+    // a widget outside the player that answers them itself, the same
+    // change described on the "no parts" row above -- up from 22.78 KB
+    // (23327 bytes) the same day (2026-09-28), per `results.md` on `main`
+    // -- which stays under this ceiling with no raise needed.
+    ceilingKb: 23
+  },
+  {
+    name: 'Playdeck (play-only)',
+    package: '@playdeck/react',
+    entry: 'entries/playdeck-play-only.tsx',
+    composition:
+      'core + primitives + native provider + one control (PlayButton)',
+    requiredChunk: (chunk) =>
+      chunk.moduleIds.some((id) => id.includes('/provider-native/')),
+    // 24066 bytes measured 2026-09-24 -- 23.501953125 KB, 23.50 KB to two
+    // places, rounded up to the next 0.25 KB (23.50 itself is not far
+    // enough: the row is 2 bytes past 23.5 KB exactly). What carried this
+    // row past 23.5 KB is #746's viewport re-sync backstop, the same change
+    // described on the "no parts" row above. The whole distance from the
+    // last committed figure is this issue's: that figure was 23.37 KB
+    // (23929 bytes), measured the same day (2026-09-24) before this change,
+    // per `results.md` on `main`.
+    //
+    // 24338 bytes measured 2026-09-28 -- 23.7675781250 KB, 23.77 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 23.75 KB is #797's `plainCueText` (`@playdeck/core`) growing to decode
+    // decimal and hexadecimal numeric character references, which this
+    // composition's native provider reaches through its own cue-text
+    // passthrough. The whole distance from the last committed figure is this
+    // issue's: that figure was 23.64 KB (24203 bytes), measured the same day
+    // (2026-09-28) before this change, per `results.md` on `main`.
+    //
+    // 24644 bytes measured 2026-09-28 -- 24.06640625 KB, 24.07 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 24 KB is #802's fix leaving arrow keys to a widget outside the player
+    // that answers them itself: `handleShortcut`'s new containment-gated
+    // check, the role list it closes against, the native radio/range check
+    // beside it, and the viewport-boundary lookup the containment check
+    // runs against, all reach every composition that renders
+    // `Player.Controls`, this one's `PlayButton` included. The whole
+    // distance from the last committed figure is this issue's: that figure
+    // was 23.90 KB (24471 bytes), measured the same day (2026-09-28) before
+    // this change, per `results.md` on `main`.
+    //
+    // 24858 bytes measured 2026-09-29 -- 24.271484375 KB, 24.28 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 24.25 KB is storing a literal `__proto__` key as an own data property
+    // in two places that build an object from a supplied kind's own input,
+    // rather than as the object's own prototype: `provider-loaders.ts`'s
+    // `copySuppliedSourceValue` (the supplied source copy) and
+    // `sanitizeSuppliedProviderOptions` (the supplied `providerOptions` bag),
+    // both switched from bracket assignment to `Object.defineProperty`.
+    // Every composition here reaches both through `use-activation.ts`'s own
+    // calls into `detectSourceWithProviders` and `loadProvider`, regardless
+    // of whether it renders a supplied provider. The whole distance from the
+    // last committed figure is this change's: that figure was 24.24 KB,
+    // measured the same day (2026-09-29) before this change, per
+    // `results.md` on `main`.
+    ceilingKb: 24.5,
+    forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
+  },
+  {
+    name: 'Playdeck (control bar)',
+    package: '@playdeck/react',
+    entry: 'entries/playdeck-control-bar.tsx',
+    composition:
+      "core + primitives + native provider + control bar (5 of Media Chrome's 7 controls)",
+    requiredChunk: (chunk) =>
+      chunk.moduleIds.some((id) => id.includes('/provider-native/')),
+    // 27187 bytes measured 2026-09-24 -- 26.5498046875 KB, 26.55 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 26.5 KB is #746's viewport re-sync backstop, the same change described
+    // on the "no parts" row above. The whole distance from the last
+    // committed figure is this issue's: that figure was 26.42 KB
+    // (27057 bytes), measured the same day (2026-09-24) before this change,
+    // per `results.md` on `main`.
+    //
+    // 27465 bytes measured 2026-09-28 -- 26.8212890625 KB, 26.82 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 26.75 KB is #797's `plainCueText` (`@playdeck/core`) growing to decode
+    // decimal and hexadecimal numeric character references, the same change
+    // described on the "play-only" row above. The whole distance from the
+    // last committed figure is this issue's: that figure was 26.70 KB
+    // (27341 bytes), measured the same day (2026-09-28) before this change,
+    // per `results.md` on `main`.
+    //
+    // 27771 bytes measured 2026-09-28 -- 27.1201171875 KB, 27.12 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 27 KB is #802's arrow-key exemption, the same change described on the
+    // "play-only" row above, which this composition's control bar reaches
+    // the same way. The whole distance from the last committed figure is
+    // this issue's: that figure was 26.96 KB (27612 bytes), measured the
+    // same day (2026-09-28) before this change, per `results.md` on `main`.
+    //
+    // 27914 bytes measured 2026-09-29 -- 27.259765625 KB, 27.26 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 27.25 KB is the global-mode boundary check added for `PageUp`/
+    // `PageDown`, alongside the arrow-key exemption above, which this
+    // composition's control bar reaches the same way. The whole distance
+    // from the last committed figure is this change's: that figure was
+    // 27.24 KB (27896 bytes), measured the same day (2026-09-29) before this
+    // change, per `results.md` on `main`.
+    ceilingKb: 27.5
+  },
+  {
+    name: 'react-player',
+    package: 'react-player',
+    entry: 'entries/react-player.tsx',
+    composition: 'default export, `controls`, html5 fallback player',
+    requiredChunk: () => false
+  },
+  {
+    name: 'Vidstack',
+    package: '@vidstack/react',
+    entry: 'entries/vidstack.tsx',
+    composition: 'MediaPlayer + MediaProvider + DefaultVideoLayout',
+    requiredChunk: () => false
+  },
+  {
+    name: 'Media Chrome',
+    package: 'media-chrome',
+    entry: 'entries/media-chrome.tsx',
+    composition: 'MediaController + a 7-button control bar',
+    requiredChunk: () => false
+  },
+  {
+    name: 'Video.js',
+    package: 'video.js',
+    entry: 'entries/video-js.tsx',
+    composition: 'videojs() with `controls: true`, hand-wrapped',
+    requiredChunk: () => false
+  },
+  {
+    name: 'Video.js 10 (beta)',
+    package: '@videojs/react',
+    entry: 'entries/videojs-react.tsx',
+    composition:
+      'VideoPlayer + VideoSkin + Video (`@videojs/react/video` preset)',
+    requiredChunk: () => false
+  }
+];
+
+/**
+ * The chunks a browser is guaranteed to fetch to run one library's fixture:
+ * the entry's own static import closure, plus the static closure of every
+ * dynamic-import target reachable from there whose own closure contains a
+ * chunk `isRequired` accepts. See this file's header for what "guaranteed"
+ * is standing in for.
+ *
+ * The second half is not "every chunk `isRequired` accepts" on its own,
+ * which is what an earlier version of this function did and which happened
+ * to hold only because Vite's chunker gave Playdeck's native provider one
+ * chunk that was both the dynamic-import target and the code. esbuild's
+ * chunker does not: it split the same provider into a tiny shim chunk that is
+ * the actual `import()` target (no module of its own, so `isRequired` never
+ * matches it) and a separate shared chunk holding the real code (which
+ * `isRequired` does match, but which nothing dynamically imports directly --
+ * only the shim does, and only the shim's own static import reaches it). A
+ * rule that added chunks by matching them in isolation would keep the code
+ * chunk and drop the shim that is the only thing standing between the entry
+ * and it, undercounting the figure by exactly the shim's weight. Walking
+ * dynamic-import targets and testing -- then keeping -- their whole static
+ * closure is what stays correct under either chunking shape.
+ *
+ * A candidate whose closure does not match `isRequired` contributes nothing
+ * and is not searched further: nothing downstream of a chunk this fixture
+ * never causes to load can load either, so its own dynamic imports (hls.js
+ * behind Playdeck's HLS adapter, say) are correctly left unreached without
+ * this function ever having to name them.
+ *
+ * `imports` and `dynamicImports` can each name an external specifier
+ * (`"react"`) alongside chunk file names -- `byFile` simply has no entry for
+ * those, and the walk drops them rather than needing to tell the two apart
+ * itself.
+ * @param {readonly Chunk[]} chunks
+ * @param {(chunk: Chunk) => boolean} isRequired
+ * @returns {Chunk[]}
+ */
+export const reachableChunks = (chunks, isRequired) => {
+  const entry = chunks.find((chunk) => chunk.isEntry);
+  if (!entry) {
+    throw new Error('The build produced no entry chunk.');
+  }
+  const byFile = new Map(chunks.map((chunk) => [chunk.fileName, chunk]));
+
+  /** @type {Map<string, Chunk>} */
+  const reachable = new Map();
+
+  /**
+   * The static closure of `fileName`, over chunks not already in
+   * `reachable` -- so a closure computed for one candidate never re-walks
+   * ground an earlier, accepted candidate already covered.
+   * @param {string} fileName
+   * @returns {Map<string, Chunk>}
+   */
+  const staticClosure = (fileName) => {
+    /** @type {Map<string, Chunk>} */
+    const closure = new Map();
+    /** @param {string} name */
+    const visit = (name) => {
+      if (closure.has(name) || reachable.has(name)) return;
+      const chunk = byFile.get(name);
+      if (!chunk) return;
+      closure.set(name, chunk);
+      for (const imported of chunk.imports) visit(imported);
+    };
+    visit(fileName);
+    return closure;
+  };
+
+  /**
+   * Whether loading `fileName` is what makes a chunk `isRequired` accepts
+   * load: judged on the chunk's own `moduleIds` first, and looked through
+   * only when it has none of its own -- a bundler's content-free re-export
+   * shim, whose identity for this purpose is whatever real chunk it
+   * statically wraps (esbuild splits Playdeck's native provider into exactly
+   * such a shim plus a separate shared chunk holding its real code; Vite
+   * does not, and gives the provider one chunk that is both).
+   *
+   * A chunk that DOES carry its own modules is judged on those alone and is
+   * never followed into what it imports here. That is load-bearing and not
+   * an optimisation: Playdeck's HLS adapter statically imports the native
+   * provider's own chunk to reuse a helper from it, and an earlier version
+   * of this function that tested a candidate's whole transitive closure
+   * against `isRequired` -- rather than the candidate's own modules first --
+   * accepted the HLS adapter on exactly that account, because the adapter it
+   * never chooses shared an edge with the provider it does. Two sibling
+   * dynamic imports sharing a static dependency is not enough on its own to
+   * make either one required; only a chunk's own modules, or an empty
+   * shim's one real target, say that.
+   * @param {string} fileName
+   * @param {Set<string>} [visited]
+   * @returns {boolean}
+   */
+  const isEffectivelyRequired = (fileName, visited = new Set()) => {
+    if (visited.has(fileName)) return false;
+    visited.add(fileName);
+    const chunk = byFile.get(fileName);
+    if (!chunk) return false;
+    if (chunk.moduleIds.length > 0) return isRequired(chunk);
+    return chunk.imports.some((imported) =>
+      isEffectivelyRequired(imported, visited)
+    );
+  };
+
+  for (const [name, chunk] of staticClosure(entry.fileName)) {
+    reachable.set(name, chunk);
+  }
+
+  /** @type {string[]} */
+  const frontier = [];
+  for (const chunk of reachable.values())
+    frontier.push(...chunk.dynamicImports);
+
+  const decided = new Set();
+  while (frontier.length > 0) {
+    const target = /** @type {string} */ (frontier.shift());
+    if (decided.has(target) || reachable.has(target)) continue;
+    decided.add(target);
+
+    if (!isEffectivelyRequired(target)) continue;
+
+    for (const [name, chunk] of staticClosure(target)) {
+      reachable.set(name, chunk);
+      frontier.push(...chunk.dynamicImports);
+    }
+  }
+
+  return [...reachable.values()];
+};
+
+/**
+ * The complement of `reachableChunks`: every chunk the same build produced
+ * that this fixture's fixed inputs cannot reach. This is what the results
+ * table's "Not counted" column measures, from the same build the "Gzipped"
+ * column comes from rather than a second one -- see
+ * `docs/comparison/method.md` for what each library's excluded chunks
+ * actually are, read from their `moduleIds` and code on the measurement
+ * date.
+ * @param {readonly Chunk[]} chunks
+ * @param {(chunk: Chunk) => boolean} isRequired
+ * @returns {Chunk[]}
+ */
+export const excludedChunks = (chunks, isRequired) => {
+  const kept = new Set(
+    reachableChunks(chunks, isRequired).map((chunk) => chunk.fileName)
+  );
+  return chunks.filter((chunk) => !kept.has(chunk.fileName));
+};
+
+/**
+ * The sum of each chunk's own gzip size -- see the file header for why this
+ * is a sum of separate gzips and not one gzip of the concatenation.
+ * @param {readonly Chunk[]} chunks
+ * @returns {number}
+ */
+export const gzipBytes = (chunks) =>
+  chunks.reduce((sum, chunk) => sum + gzipSync(chunk.code).length, 0);
+
+/**
+ * Copies a Rollup `OutputChunk` into this file's `Chunk` shape, adding
+ * `moduleRenderedExports` -- see the `Chunk` typedef above for what that
+ * field is and why only the Vite path ever sets it. Rollup's chunk already
+ * carries a `modules` map keyed the same way `moduleIds` is, each entry
+ * holding (among other things) `renderedExports`; this reads just that.
+ * @param {Omit<Chunk, 'moduleRenderedExports'> & { modules: Record<string, { renderedExports: readonly string[] }> }} item
+ * @returns {Chunk}
+ */
+const withModuleRenderedExports = (item) => ({
+  ...item,
+  moduleRenderedExports: Object.fromEntries(
+    Object.entries(item.modules).map(([id, mod]) => [id, mod.renderedExports])
+  )
+});
+
+/**
+ * @param {string} entryRelativePath Relative to tests/compare.
+ * @returns {Promise<Chunk[]>}
+ */
+const bundleEntryVite = async (entryRelativePath) => {
+  const result = await build({
+    configFile: false,
+    logLevel: 'silent',
+    root: fixtureRoot,
+    plugins: [react()],
+    build: {
+      write: false,
+      sourcemap: false,
+      emptyOutDir: false,
+      rollupOptions: {
+        input: join(fixtureRoot, entryRelativePath),
+        external: REACT_EXTERNALS
+      }
+    }
+  });
+  const bundles = Array.isArray(result) ? result : [result];
+  // Rollup's own `OutputChunk` already carries `fileName`, `code`, `isEntry`,
+  // `imports`, `dynamicImports` and `moduleIds` under exactly these names, so
+  // it is used as this file's `Chunk` with one addition layered on
+  // (`withModuleRenderedExports`, below) rather than reconstructed --
+  // unlike the esbuild path below, which builds a `Chunk` from nothing
+  // because esbuild's metafile does not already shape one this way.
+  const chunks = bundles.flatMap((bundle) =>
+    'output' in bundle
+      ? bundle.output.flatMap((item) =>
+          item.type === 'chunk' ? [withModuleRenderedExports(item)] : []
+        )
+      : []
+  );
+  if (chunks.length === 0) {
+    throw new Error(
+      `Building ${entryRelativePath} produced no chunk. Check that the entry still exists and still exports something a bundler cannot tree-shake away.`
+    );
+  }
+  return chunks;
+};
+
+/**
+ * @typedef {{ entryPoint?: string; imports: readonly { path: string; kind: string }[]; inputs: Record<string, unknown> }} EsbuildOutputMeta
+ */
+
+/**
+ * esbuild's metafile plus the code of each output it names, turned into this
+ * file's bundler-agnostic `Chunk` shape. Pure and independently testable,
+ * deliberately taking the metafile and a `fileName -> code` map rather than
+ * an esbuild `BuildResult` -- a test supplies a small fixture of both without
+ * invoking esbuild at all, the same way this file's Vite-shaped tests never
+ * call `vite build`.
+ *
+ * The only reasoning applied is splitting one esbuild `imports` array by
+ * `kind` into two: `'import-statement'` entries become `imports`,
+ * `'dynamic-import'` entries become `dynamicImports`. Everything downstream
+ * -- `reachableChunks`, `excludedChunks`, `gzipBytes` -- reads the result
+ * exactly as it reads a Vite chunk, which is the whole point of normalising
+ * here rather than teaching those functions a second shape.
+ *
+ * Non-JS outputs (esbuild can emit a `.css` bundle alongside the JS one) are
+ * dropped: neither bundler's byte figure counts CSS -- see
+ * `docs/comparison/method.md`'s "What is measured".
+ * @param {Record<string, EsbuildOutputMeta>} outputs `metafile.outputs`, keyed by output path.
+ * @param {Record<string, string>} codeByOutput Each of those same keys mapped to its bundled code.
+ * @param {string} entryOutput The key in `outputs` that is the entry chunk.
+ * @returns {Chunk[]}
+ */
+export const normalizeEsbuildOutputs = (outputs, codeByOutput, entryOutput) =>
+  Object.entries(outputs)
+    .filter(([fileName]) => fileName.endsWith('.js'))
+    .map(([fileName, meta]) => ({
+      fileName,
+      code: codeByOutput[fileName] ?? '',
+      isEntry: fileName === entryOutput,
+      imports: meta.imports
+        .filter((imported) => imported.kind === 'import-statement')
+        .map((imported) => imported.path),
+      dynamicImports: meta.imports
+        .filter((imported) => imported.kind === 'dynamic-import')
+        .map((imported) => imported.path),
+      moduleIds: Object.keys(meta.inputs)
+    }));
+
+/**
+ * @param {string} entryRelativePath Relative to tests/compare.
+ * @returns {Promise<Chunk[]>}
+ */
+const bundleEntryEsbuild = async (entryRelativePath) => {
+  const entryAbsolute = join(fixtureRoot, entryRelativePath);
+  const result = await esbuild.build({
+    entryPoints: [entryAbsolute],
+    bundle: true,
+    splitting: true,
+    format: 'esm',
+    minify: true,
+    write: false,
+    metafile: true,
+    outdir: 'out',
+    jsx: 'automatic',
+    absWorkingDir: fixtureRoot,
+    external: REACT_EXTERNALS,
+    logLevel: 'silent'
+  });
+
+  /** @type {Record<string, string>} */
+  const codeByOutput = {};
+  for (const file of result.outputFiles) {
+    if (!file.path.endsWith('.js')) continue;
+    codeByOutput[relative(fixtureRoot, file.path)] = file.text;
+  }
+
+  const entryInput = relative(fixtureRoot, entryAbsolute);
+  const entryOutput = Object.entries(result.metafile.outputs).find(
+    ([, meta]) => meta.entryPoint === entryInput
+  )?.[0];
+  if (entryOutput === undefined) {
+    throw new Error(
+      `Building ${entryRelativePath} with esbuild produced no output whose entryPoint is ${entryInput}.`
+    );
+  }
+
+  const chunks = normalizeEsbuildOutputs(
+    result.metafile.outputs,
+    codeByOutput,
+    entryOutput
+  );
+  if (chunks.length === 0) {
+    throw new Error(
+      `Building ${entryRelativePath} with esbuild produced no chunk.`
+    );
+  }
+  return chunks;
+};
+
+/**
+ * The version a library was measured at, read from its own installed
+ * `package.json` rather than typed here -- the same refusal
+ * `readme-bytes.mjs`'s `pinnedVersion` makes, for the same reason: a stale
+ * install must not bake a figure for one version under another's name.
+ * `tests/compare/package.json` pins every compared library to an exact
+ * version (no `^`), so equality is the whole test; Playdeck's own
+ * `workspace:*` pin names no version to check against; and reports the
+ * installed one as-is.
+ * @param {string} packageName
+ * @param {string | undefined} declared
+ * @param {string} installed
+ * @returns {string}
+ */
+export const pinnedVersion = (packageName, declared, installed) => {
+  if (declared === undefined) {
+    throw new Error(
+      `tests/compare/package.json no longer pins ${packageName}. Add it back, or drop the library from scripts/compare-libraries.mjs.`
+    );
+  }
+  if (declared.startsWith('workspace:')) return installed;
+  if (declared !== installed) {
+    throw new Error(
+      `${packageName} is installed at ${installed} but tests/compare/package.json pins ${declared}. Run \`pnpm install\` before measuring.`
+    );
+  }
+  return installed;
+};
+
+/** @param {number} bytes @returns {string} */
+export const kb = (bytes) => (bytes / 1024).toFixed(2);
+
+/**
+ * Throws when `bytes` -- one row's measured Vite gzip figure -- exceeds
+ * `ceilingKb`, the ceiling committed beside that row's entry in `libraries`.
+ * This is the rule #649 asks this file to enforce: a Playdeck row must not
+ * grow past its own committed ceiling, checked against the number recorded
+ * in this file's own data rather than anything typed into
+ * `docs/comparison/method.md`'s prose. Both figures are rendered through
+ * `kb`, the same conversion `results.md` itself uses, so the message and the
+ * table agree on what "20.75 KB" means.
+ * @param {string} name
+ * @param {number} bytes
+ * @param {number} ceilingKb
+ * @returns {void}
+ */
+export const checkCeiling = (name, bytes, ceilingKb) => {
+  const ceilingBytes = ceilingKb * 1024;
+  if (bytes <= ceilingBytes) return;
+  throw new Error(
+    `${name} measures ${kb(bytes)} KB, past its committed ceiling of ${kb(ceilingBytes)} KB. ` +
+      `Raise the ceiling in scripts/compare-libraries.mjs's \`libraries\` array with a stated reason if this growth is deliberate, or shrink the composition back under it.`
+  );
+};
+
+/**
+ * The "Not counted" cell for one row: how many chunks the build produced
+ * that `reachableChunks` did not count, and their combined gzip size. `"0"`
+ * on its own, not `"0 chunks, 0.00 KB"`, for the four libraries this fixture
+ * excludes nothing from -- a bare zero is the whole answer there, and
+ * spelling out a size for a set of zero chunks would read as a figure that
+ * was measured rather than a count that was.
+ * @param {number} count
+ * @param {number} bytes
+ * @returns {string}
+ */
+export const notCounted = (count, bytes) =>
+  count === 0
+    ? '0'
+    : `${count} chunk${count === 1 ? '' : 's'}, ${kb(bytes)} KB`;
+
+/**
+ * esbuild's figure relative to Vite's for one row: `(esbuild - Vite) / Vite`,
+ * signed and rounded to one decimal place. Generated so that the story
+ * `docs/comparison/method.md` tells about the two bundlers agreeing, or not,
+ * cites a number `pnpm compare:libraries:check` actually enforces rather
+ * than one typed into prose the check cannot see -- see that document's
+ * "Cross-checked with a second bundler" section, which names this column
+ * rather than restating its own figures.
+ * @param {number} viteBytes
+ * @param {number} esbuildBytes
+ * @returns {string}
+ */
+export const delta = (viteBytes, esbuildBytes) => {
+  const percent = ((esbuildBytes - viteBytes) / viteBytes) * 100;
+  return `${percent >= 0 ? '+' : ''}${percent.toFixed(1)}%`;
+};
+
+/**
+ * `bytes` is Vite's figure and `esbuildBytes` is esbuild's, over the same
+ * reachability rule applied to each bundler's own chunk graph -- see
+ * `docs/comparison/method.md`'s "What is measured" for why a second, wholly
+ * independent bundler is run over every row rather than trusted on Vite's
+ * say-so alone.
+ * @typedef {{
+ *   name: string;
+ *   version: string;
+ *   composition: string;
+ *   bytes: number;
+ *   esbuildBytes: number;
+ *   notCountedChunks: number;
+ *   notCountedBytes: number;
+ * }} Row
+ */
+
+/**
+ * The table, padded the way Prettier pads a markdown table -- see
+ * `readme-bytes.mjs`'s `renderTable` for why: emitting it any other way would
+ * leave `pnpm format:check` and this generator undoing each other's work
+ * forever.
+ * @param {readonly Row[]} rows
+ * @returns {string}
+ */
+export const renderTable = (rows) => {
+  const header = [
+    'Library',
+    'Version',
+    'Composition measured',
+    'Gzipped (Vite)',
+    'Gzipped (esbuild)',
+    'Delta',
+    'Not counted'
+  ];
+  const body = rows.map(
+    ({
+      name,
+      version,
+      composition,
+      bytes,
+      esbuildBytes,
+      notCountedChunks,
+      notCountedBytes
+    }) => [
+      name,
+      version,
+      composition,
+      `${kb(bytes)} KB`,
+      `${kb(esbuildBytes)} KB`,
+      delta(bytes, esbuildBytes),
+      notCounted(notCountedChunks, notCountedBytes)
+    ]
+  );
+  const widths = header.map((_, column) =>
+    Math.max(
+      header[column]?.length ?? 0,
+      ...body.map((cells) => cells[column]?.length ?? 0)
+    )
+  );
+  /** @param {readonly string[]} cells */
+  const line = (cells) =>
+    `| ${cells.map((cell, column) => cell.padEnd(widths[column] ?? 0)).join(' | ')} |`;
+
+  return [
+    line(header),
+    line(widths.map((width) => '-'.repeat(width))),
+    ...body.map(line)
+  ].join('\n');
+};
+
+/**
+ * The whole generated file. A date and a Node version the caller passes in
+ * rather than ones this function reads for itself, so the render stays pure
+ * and testable: the same inputs always produce the same document, which is
+ * what the determinism check relies on. `--check` additionally tolerates
+ * both of those two tokens differing on their own -- see `maskVolatile` and
+ * this script's `main` for why: a gate that fails on the calendar, or on
+ * which Node this happens to run under, is a gate nobody can keep green, and
+ * neither is what "re-running on unchanged inputs produces the same numbers"
+ * asks for. The Vite and esbuild versions are not masked: both are pinned
+ * inputs read from the lockfile, not facts about the machine running the
+ * check.
+ * @param {{ date: string; nodeVersion: string; viteVersion: string; esbuildVersion: string; rows: readonly Row[] }} data
+ * @returns {string}
+ */
+export const renderResultsDoc = ({
+  date,
+  nodeVersion,
+  viteVersion,
+  esbuildVersion,
+  rows
+}) =>
+  `<!--
+  Generated by \`pnpm compare:libraries\`. Do not edit by hand -- rerun the
+  command instead, and see docs/comparison/method.md for what each column
+  means, what is not counted, and why.
+-->
+
+# React video library comparison: measured figures
+
+Measured ${date} on Node ${nodeVersion}, Vite ${viteVersion}, esbuild
+${esbuildVersion}, from \`tests/compare\`'s pinned installs. React, ReactDOM
+and the JSX runtime are marked external for every library alike and excluded
+from every figure below. "Gzipped (Vite)" and "Gzipped (esbuild)" are each the
+sum of each reachable chunk's own gzip size from that bundler's own build, not
+one gzip of their concatenation -- see \`scripts/compare-libraries.mjs\`'s
+header for why, and its "What is measured" entry in \`docs/comparison/method.md\`
+for what the two bundlers agreeing, or not, is evidence of. "Delta" is
+esbuild's figure relative to Vite's, signed and rounded to one decimal.
+"Not counted" is the chunks the Vite build produced but this fixture's fixed
+inputs cannot reach, gzipped the same way -- see
+\`docs/comparison/method.md\` for what each library's excluded chunks are.
+
+${renderTable(rows)}
+
+Regenerate with \`pnpm compare:libraries\` -- run \`pnpm build\` first; a
+stale \`dist/\` changes Playdeck's rows and nothing else. The date above
+records when this file was last regenerated; \`pnpm compare:libraries:check\`
+does not police how old it is, only whether the figures, versions and
+compositions below still match a fresh run. Re-run the command above to
+bring the date current.
+`;
+
+/**
+ * A rendered document with its "Measured <date> on Node <version>" line's
+ * date and Node version both replaced by fixed placeholders, so two renders
+ * taken on different days, or produced by different Node installs, compare
+ * equal wherever every other line already does. Only \`--check\` reaches for
+ * this: the write path in \`main\` below still stamps the real date and the
+ * real \`process.version\` whenever it writes, and this is what keeps
+ * \`--check\` from failing on the two tokens that are expected to move
+ * between runs on otherwise unchanged inputs -- CI runs a different Node
+ * minor than a local checkout does, and both must read as the same document.
+ * The Vite version stays comparable: it is resolved from the lockfile this
+ * repository pins, not from the machine the check happens to run on.
+ * @param {string} doc
+ * @returns {string}
+ */
+export const maskVolatile = (doc) =>
+  doc.replace(
+    /Measured \d{4}-\d{2}-\d{2} on Node v\d+\.\d+\.\d+,/,
+    'Measured <date> on Node <node-version>,'
+  );
+
+/**
+ * Re-exported so this file's own public surface, and the tests that read
+ * it, are unchanged by the move to `line-diff.mjs`.
+ */
+export { lineDiff } from './line-diff.mjs';
+
+/** @param {string} path @returns {Promise<Record<string, unknown>>} */
+const readJson = async (path) =>
+  JSON.parse(await readFile(join(repoRoot, path), 'utf8'));
+
+/**
+ * @returns {Promise<{ date: string; nodeVersion: string; viteVersion: string; esbuildVersion: string; rows: Row[] }>}
+ */
+const measure = async () => {
+  const manifest = /** @type {{ devDependencies?: Record<string, string> }} */ (
+    await readJson('tests/compare/package.json')
+  );
+  const viteManifest = /** @type {{ version: string }} */ (
+    await readJson('node_modules/vite/package.json')
+  );
+  const esbuildInstalled = /** @type {{ version: string }} */ (
+    await readJson('tests/compare/node_modules/esbuild/package.json')
+  ).version;
+  const esbuildVersion = pinnedVersion(
+    'esbuild',
+    manifest.devDependencies?.esbuild,
+    esbuildInstalled
+  );
+
+  /** @type {Row[]} */
+  const rows = [];
+  for (const library of libraries) {
+    const chunks = await bundleEntryVite(library.entry);
+    const reachable = reachableChunks(chunks, library.requiredChunk);
+    const bytes = gzipBytes(reachable);
+    const excluded = excludedChunks(chunks, library.requiredChunk);
+
+    // Checked against Vite's own reachable chunks and nowhere else -- see
+    // the `Chunk` typedef above for why esbuild's metafile cannot answer
+    // this same question, which is why the play-only row is the only entry
+    // this ever runs for and why it runs before the esbuild build below
+    // rather than after it.
+    if (library.forbiddenModules) {
+      const offending = reachedForbiddenModule(
+        reachable,
+        library.forbiddenModules
+      );
+      if (offending !== undefined) {
+        throw new Error(
+          `${library.name}'s reachable chunks reach ${offending}, which this composition (${library.composition}) does not use.`
+        );
+      }
+    }
+
+    const esbuildChunks = await bundleEntryEsbuild(library.entry);
+    const esbuildBytes = gzipBytes(
+      reachableChunks(esbuildChunks, library.requiredChunk)
+    );
+
+    const installed = /** @type {{ version: string }} */ (
+      await readJson(
+        `tests/compare/node_modules/${library.package}/package.json`
+      )
+    ).version;
+    const version = pinnedVersion(
+      library.package,
+      manifest.devDependencies?.[library.package],
+      installed
+    );
+    rows.push({
+      name: library.name,
+      version,
+      composition: library.composition,
+      bytes,
+      esbuildBytes,
+      notCountedChunks: excluded.length,
+      notCountedBytes: gzipBytes(excluded)
+    });
+  }
+
+  return {
+    date: new Date().toISOString().slice(0, 10),
+    esbuildVersion,
+    nodeVersion: process.version,
+    viteVersion: viteManifest.version,
+    rows
+  };
+};
+
+/**
+ * The environment variables that exist for `compare-libraries.test.mjs`
+ * alone, and are never set by `pnpm compare:libraries` or by CI. Together
+ * they let a test exercise paths no unit test of a pure function can reach
+ * -- the CLI's own exit code and printed diff when the checked-in document
+ * is stale, or when a row breaches its committed ceiling -- in
+ * milliseconds and with no build:
+ *
+ *   PLAYDECK_COMPARE_DOC            read and write this file instead of the
+ *                                   checked-in `docs/comparison/results.md`.
+ *   PLAYDECK_COMPARE_STUB           skip the measurement entirely and render
+ *                                   a fixed row instead.
+ *   PLAYDECK_COMPARE_STUB_ROW_NAME  that fixed row's `name` (default
+ *                                   `'Stub'`). Naming it after one of the
+ *                                   four Playdeck rows, alongside the next
+ *                                   variable, is what lets a test drive a
+ *                                   real ceiling breach through `main`'s own
+ *                                   `libraries` lookup without a build.
+ *   PLAYDECK_COMPARE_STUB_ROW_BYTES that fixed row's `bytes` (default
+ *                                   `1024`).
+ *
+ * The alternative was a test that runs seven real `vite build`s and seven
+ * `esbuild` builds against a `packages/*\/dist` that the `static` CI job --
+ * the one that runs `pnpm test:audit-unit` -- never builds. That test would
+ * be minutes long where it ran at all, and would be measuring the bundlers
+ * rather than this file's exit path.
+ * @returns {{ docPath: string; stub: boolean }}
+ */
+const testSeam = () => ({
+  docPath: process.env.PLAYDECK_COMPARE_DOC ?? join(repoRoot, RESULTS_PATH),
+  stub: process.env.PLAYDECK_COMPARE_STUB !== undefined
+});
+
+/**
+ * What `measure` would return, with no bundler run at all. See `testSeam`.
+ * @returns {{ date: string; nodeVersion: string; viteVersion: string; esbuildVersion: string; rows: Row[] }}
+ */
+const stubMeasurement = () => ({
+  date: '2000-01-01',
+  nodeVersion: 'v0.0.0',
+  viteVersion: '0.0.0',
+  esbuildVersion: '0.0.0',
+  rows: [
+    {
+      name: process.env.PLAYDECK_COMPARE_STUB_ROW_NAME ?? 'Stub',
+      version: '0.0.0',
+      composition: 'a fixed row, measured by nothing',
+      bytes: Number(process.env.PLAYDECK_COMPARE_STUB_ROW_BYTES ?? 1024),
+      esbuildBytes: 2048,
+      notCountedChunks: 0,
+      notCountedBytes: 0
+    }
+  ]
+});
+
+const main = async () => {
+  const check = process.argv.includes('--check');
+  const { docPath, stub } = testSeam();
+  const data = stub ? stubMeasurement() : await measure();
+
+  // Applied here rather than left inside `measure` so it covers a stubbed
+  // row too (see `testSeam`'s `PLAYDECK_COMPARE_STUB_ROW_NAME` /
+  // `_BYTES`), and applied unconditionally rather than only under
+  // `--check`: writing `results.md` from a run that breached a ceiling
+  // would commit the breach, and a later `--check` comparing against that
+  // committed figure would find nothing stale to report.
+  for (const row of data.rows) {
+    const library = libraries.find((entry) => entry.name === row.name);
+    if (library?.ceilingKb !== undefined) {
+      checkCeiling(row.name, row.bytes, library.ceilingKb);
+    }
+  }
+
+  const after = renderResultsDoc(data);
+  const path = docPath;
+
+  let before = '';
+  try {
+    before = await readFile(path, 'utf8');
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      /** @type {NodeJS.ErrnoException} */ (error).code !== 'ENOENT'
+    ) {
+      throw error;
+    }
+  }
+
+  if (check) {
+    const maskedBefore = maskVolatile(before);
+    const maskedAfter = maskVolatile(after);
+    if (maskedBefore === maskedAfter) {
+      console.log(
+        `${RESULTS_PATH} already matches a fresh run (ignoring the measurement date and Node version).`
+      );
+      return;
+    }
+    // Printed before the error below, not folded into its message: a thrown
+    // Error's message is one line by convention elsewhere in this repo's
+    // gate scripts, and the diff can be many.
+    for (const line of lineDiff(maskedBefore, maskedAfter)) {
+      console.error(line);
+    }
+    throw new Error(
+      `${RESULTS_PATH} no longer matches a fresh measurement -- run \`pnpm compare:libraries\`.`
+    );
+  }
+
+  if (before === after) {
+    console.log(`${RESULTS_PATH} already matches a fresh run.`);
+    return;
+  }
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, after);
+  console.log(`Wrote ${RESULTS_PATH} from a fresh measurement.`);
+};
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  try {
+    await main();
+  } catch (error) {
+    console.error(
+      `\n${error instanceof Error ? error.message : String(error)}`
+    );
+    process.exit(1);
+  }
+}

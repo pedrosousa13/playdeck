@@ -17,6 +17,7 @@ import {
   type VimeoMountElement
 } from './adapter-values.js';
 import type { VimeoChromelessAvailability } from './chromeless-availability.js';
+import type { VimeoPosterAvailability } from './poster-availability.js';
 import type { VimeoChapters } from './chapters.js';
 import {
   isSeoMetadataSuppressed,
@@ -181,6 +182,10 @@ export type VimeoAttachmentDeps = {
     VimeoChromelessAvailability,
     'probe' | 'adopt' | 'cancel'
   >;
+  readonly posterAvailability: Pick<
+    VimeoPosterAvailability,
+    'probe' | 'adopt' | 'cancel' | 'url'
+  >;
   readonly playback: Pick<VimeoPlayback, 'adopt' | 'handlers'>;
   readonly presentation: Pick<VimeoPresentation, 'handlers'>;
   readonly qualityLevels: Pick<VimeoQualityLevels, 'adopt' | 'handlers'>;
@@ -221,6 +226,7 @@ export const createVimeoAttachment = (
     options,
     getCapabilities,
     chromeless,
+    posterAvailability,
     playback,
     presentation,
     qualityLevels,
@@ -275,6 +281,7 @@ export const createVimeoAttachment = (
     // — and an embed on its way out must stop talking to Vimeo, not merely
     // have its answer ignored.
     chromeless.cancel();
+    posterAvailability.cancel();
     const player = activePlayer;
     const iframe = activeIframe;
     activePlayer = undefined;
@@ -424,6 +431,7 @@ export const createVimeoAttachment = (
       // would never fire behind a blocked iframe (#69).
       emit({ commandsReady: true });
       const chromelessProbe = chromeless.probe();
+      const posterProbe = posterAvailability.probe();
       // A rejection here falls into this function's own catch, which tears
       // down and emits the error state, so the deadline needs no separate
       // reporting path.
@@ -445,6 +453,7 @@ export const createVimeoAttachment = (
         initialChapters,
         initialQualities,
         chromelessProbeResult,
+        posterProbeResult,
         initialWidth,
         initialHeight
       ] = await Promise.all([
@@ -463,6 +472,7 @@ export const createVimeoAttachment = (
         player.getChapters().catch((): ReadonlyArray<VimeoSdkChapter> => []),
         player.getQualities().catch((): ReadonlyArray<VimeoSdkQuality> => []),
         chromelessProbe,
+        posterProbe,
         // An embed that does not answer these leaves the size unknown, which
         // is a fallback the consumer already handles — never a reason to fail
         // the attach.
@@ -475,6 +485,7 @@ export const createVimeoAttachment = (
       const chapterPatch = chapters.adopt(initialChapters, initialDuration);
       const qualityPatch = qualityLevels.adopt(initialQualities);
       chromeless.adopt(chromelessProbeResult);
+      posterAvailability.adopt(posterProbeResult);
       // A probe that never reached Vimeo leaves `customControls` reporting
       // `unknown` in the ready patch below with nothing to say why, and the
       // reason is likelier to be the embedding page's own policy than
@@ -504,7 +515,8 @@ export const createVimeoAttachment = (
           ...textTrackPatch,
           ...chapterPatch,
           ...qualityPatch,
-          capabilities: getCapabilities()
+          capabilities: getCapabilities(),
+          providerPosterUrl: posterAvailability.url()
         },
         providerEvent('ready', undefined)
       );

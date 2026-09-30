@@ -2,16 +2,17 @@
 
 import { runInNewContext } from 'node:vm';
 import { expect, test, vi } from 'vitest';
-import type {
-  MediaDimensions,
-  PlayerError,
-  ProviderAdapter,
-  ProviderStateListener,
-  ProviderStatePatch
+import {
+  PlayerController,
+  type MediaDimensions,
+  type PlayerError,
+  type ProviderAdapter,
+  type ProviderStateListener,
+  type ProviderStatePatch
 } from '@playdeck/core';
 import { createSeekingVideo } from '@playdeck/test-support/seeking-video';
 import { createNativeProvider } from '../src/index';
-import { captureRethrows } from './fixtures/capture-rethrows';
+import { captureRethrows } from '@playdeck/test-support/capture-rethrows';
 
 type ContractAdapter = {
   provider: ProviderAdapter;
@@ -332,6 +333,49 @@ test('writes no initial position into a live seekable window', async () => {
   expect(media.currentTime).toBe(200);
 });
 
+test('seekToLiveEdge lands on the largest seekable end', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', {
+    configurable: true,
+    value: Number.POSITIVE_INFINITY
+  });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    // Two ranges, deliberately out of order: the target is the largest END
+    // across all of them, not the end of the first or the last.
+    value: createTimeRanges([
+      [300, 400],
+      [100, 200]
+    ])
+  });
+  const { writes } = trackPosition(media, 150);
+  const provider = createNativeProvider(media);
+  await provider.attach();
+
+  await expect(provider.seekToLiveEdge()).resolves.toEqual({ ok: true });
+
+  expect(writes).toEqual([400]);
+});
+
+test('seekToLiveEdge reports provider-error when there is no finite seekable end', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', {
+    configurable: true,
+    value: Number.POSITIVE_INFINITY
+  });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([])
+  });
+  const provider = createNativeProvider(media);
+  await provider.attach();
+
+  await expect(provider.seekToLiveEdge()).resolves.toEqual({
+    ok: false,
+    reason: 'provider-error'
+  });
+});
+
 // Collects the errors a provider publishes. The refusal below is emitted as a
 // bare `{ error }` patch — no `lifecycle`, which is what keeps it a notice —
 // so a test can assert on the errors alone without matching the rest of the
@@ -508,6 +552,41 @@ test('reports the refusal once per load rather than on every metadata event', as
   expect(errors).toHaveLength(2);
 });
 
+// #475: a `startTime` refused on one load must not go on describing a
+// `retry()` reload the offset actually reached. The refusal is decided fresh
+// per load -- see the test above -- and this is the other half of that: a
+// fresh decision that finds nothing to refuse has to withdraw the stale one,
+// or `PlayerState.error` keeps reporting a refusal that has already been
+// corrected.
+test('clears PlayerState.error once a retried reload satisfies a refused startTime', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 0 });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([])
+  });
+  vi.spyOn(media, 'load').mockImplementation(() => undefined);
+  const { rewind } = trackPosition(media, 0);
+  const provider = createNativeProvider(media, { startTime: 5 });
+  const controller = new PlayerController();
+  controller.setProvider(provider);
+
+  media.dispatchEvent(new Event('loadedmetadata'));
+  expect(controller.getState().error).toMatchObject({
+    category: 'configuration',
+    fatal: false
+  });
+
+  await controller.retry();
+  rewind();
+  // The reloaded source now covers the offset, so this load's write reaches
+  // it and refuses nothing.
+  Object.defineProperty(media, 'duration', { configurable: true, value: 20 });
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(controller.getState().error).toBeNull();
+});
+
 // #465. The three tests above decided the refusal by predicting where the
 // write would land, from the seekable window alone. These decide it from where
 // the playhead actually is afterwards, and the difference is a whole class of
@@ -538,6 +617,359 @@ test('reports a start position the element did not move to', async () => {
   expect(errors).toEqual([
     expect.objectContaining({ category: 'configuration', fatal: false })
   ]);
+});
+
+// Models the mechanism the poll below depends on: the setter answers the
+// value it was just given while the seek is in flight, and `media.seeking`
+// reads true for exactly that long -- both cleared together on a task
+// scheduled `resolveAfterMs` after the write, which is what lets a test place
+// the resolution before or after however many of the poll's own ticks it
+// wants. `resolveAfterMs` of `undefined` models a seek that never concludes:
+// `seeking` stays true forever, which is what a stalled seek looks like from
+// outside. `outcome` decides what `currentTime` is once a scheduled
+// resolution runs: the value just written (completion), or reverted to 0 (the
+// abort #418's own shape produces, against an empty `seekable`). A write that
+// lands while one is already in flight (a command run by a test, below)
+// updates `currentTime` but does not start a resolution of its own, because
+// the seek already running is the one the engine is deciding.
+const trackSeekingRace = (
+  media: HTMLVideoElement,
+  position: number,
+  resolveAfterMs: number | undefined,
+  outcome: (written: number) => number
+): { rewind: () => void; writes: number[] } => {
+  const writes: number[] = [];
+  let inFlight = false;
+  Object.defineProperty(media, 'currentTime', {
+    configurable: true,
+    get: () => position,
+    set: (value: number) => {
+      writes.push(value);
+      position = value;
+      if (inFlight) return;
+      inFlight = true;
+      if (resolveAfterMs === undefined) return;
+      setTimeout(() => {
+        inFlight = false;
+        position = outcome(value);
+      }, resolveAfterMs);
+    }
+  });
+  Object.defineProperty(media, 'seeking', {
+    configurable: true,
+    get: () => inFlight
+  });
+  return {
+    // Same reason `trackPosition`'s `rewind` exists: `media.load()` is a stub
+    // in this DOM, so a test that reloads has to put the playhead back at 0,
+    // and the seek in flight, itself. A real load aborts whatever seek was
+    // running the way an empty `seekable` does, which is why this also drops
+    // `inFlight` rather than leaving the reload waiting on the load it replaced.
+    rewind: () => {
+      position = 0;
+      inFlight = false;
+    },
+    writes
+  };
+};
+
+// Mirrors `playback.ts`'s own `SEEKING_POLL_INTERVAL_MS`, not imported
+// because it is a private implementation detail of the poll rather than part
+// of this package's surface (the same reason `native-start-time.spec.ts`
+// hardcodes its own copy of `SETTLED_POSITION_TOLERANCE_SECONDS`). Chosen so
+// a seek this repo's fakes resolve after `SEEK_RESOLVES_AFTER_MS` spans
+// several of the poll's own ticks, which is what lets a test below observe
+// the poll finding `seeking` still true more than once before it settles.
+const SEEKING_POLL_INTERVAL_MS = 50;
+const SEEK_RESOLVES_AFTER_MS = SEEKING_POLL_INTERVAL_MS * 3;
+
+// The shape CI measured on WebKit and the reason the synchronous check above
+// cannot be the only one: the setter answers the write it was just given, so
+// `playheadAfterMovingTo`'s same-tick read reports success, and only later --
+// once `media.seeking` clears -- does the abort show the engine never moved
+// the playhead. Fake timers drive the poll deterministically past several
+// ticks that still find `seeking` true before the one that finds it cleared.
+test('reports a start position WebKit abandoned after answering the write', async () => {
+  vi.useFakeTimers();
+  try {
+    const media = document.createElement('video');
+    Object.defineProperty(media, 'duration', {
+      configurable: true,
+      value: 10
+    });
+    Object.defineProperty(media, 'seekable', {
+      configurable: true,
+      value: createTimeRanges([])
+    });
+    trackSeekingRace(media, 0, SEEK_RESOLVES_AFTER_MS, () => 0);
+    const provider = createNativeProvider(media, { startTime: 5 });
+    const errors = trackErrors(provider);
+    await provider.attach();
+
+    media.dispatchEvent(new Event('loadedmetadata'));
+    expect(errors).toEqual([]);
+
+    // Several ticks land while the seek is still in flight, and none of them
+    // may publish early.
+    await vi.advanceTimersByTimeAsync(
+      SEEK_RESOLVES_AFTER_MS - SEEKING_POLL_INTERVAL_MS
+    );
+    expect(errors).toEqual([]);
+
+    // The tick after the abort is the one that reads the settled refusal.
+    await vi.advanceTimersByTimeAsync(SEEKING_POLL_INTERVAL_MS * 2);
+    expect(errors).toEqual([
+      expect.objectContaining({ category: 'configuration', fatal: false })
+    ]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// The same race with the opposite outcome: the engine's seek concludes rather
+// than aborts, so `currentTime` is still at the offset once `seeking` clears.
+// No notice, on either read.
+test('publishes no notice when a later read confirms a delayed start position', async () => {
+  vi.useFakeTimers();
+  try {
+    const media = document.createElement('video');
+    Object.defineProperty(media, 'duration', {
+      configurable: true,
+      value: 10
+    });
+    Object.defineProperty(media, 'seekable', {
+      configurable: true,
+      value: createTimeRanges([[0, 10]])
+    });
+    trackSeekingRace(media, 0, SEEK_RESOLVES_AFTER_MS, (written) => written);
+    const provider = createNativeProvider(media, { startTime: 5 });
+    const errors = trackErrors(provider);
+    await provider.attach();
+
+    media.dispatchEvent(new Event('loadedmetadata'));
+    await vi.advanceTimersByTimeAsync(
+      SEEK_RESOLVES_AFTER_MS + SEEKING_POLL_INTERVAL_MS * 2
+    );
+
+    expect(errors).toEqual([]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// Asymmetric on purpose: a playhead the deferred read finds ahead of the
+// target is playback that started, not a refusal, and only a refusal is
+// reported.
+test('publishes no notice when a later read finds the playhead ahead of the start position', async () => {
+  vi.useFakeTimers();
+  try {
+    const media = document.createElement('video');
+    Object.defineProperty(media, 'duration', {
+      configurable: true,
+      value: 10
+    });
+    Object.defineProperty(media, 'seekable', {
+      configurable: true,
+      value: createTimeRanges([[0, 10]])
+    });
+    trackSeekingRace(
+      media,
+      0,
+      SEEK_RESOLVES_AFTER_MS,
+      (written) => written + 1
+    );
+    const provider = createNativeProvider(media, { startTime: 5 });
+    const errors = trackErrors(provider);
+    await provider.attach();
+
+    media.dispatchEvent(new Event('loadedmetadata'));
+    await vi.advanceTimersByTimeAsync(
+      SEEK_RESOLVES_AFTER_MS + SEEKING_POLL_INTERVAL_MS * 2
+    );
+
+    expect(errors).toEqual([]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// The poll touches the element on every tick, so it has to check the provider
+// is still there to touch. Without the guard this would keep reading
+// `media.seeking` and `media.currentTime` after `destroy()` let go of the
+// element, and could still publish a refusal for a load nobody can see the
+// state of any more.
+test('publishes no notice from a deferred read after destroy', async () => {
+  vi.useFakeTimers();
+  try {
+    const media = document.createElement('video');
+    Object.defineProperty(media, 'duration', {
+      configurable: true,
+      value: 10
+    });
+    Object.defineProperty(media, 'seekable', {
+      configurable: true,
+      value: createTimeRanges([])
+    });
+    trackSeekingRace(media, 0, SEEK_RESOLVES_AFTER_MS, () => 0);
+    const provider = createNativeProvider(media, { startTime: 5 });
+    const errors = trackErrors(provider);
+    await provider.attach();
+
+    media.dispatchEvent(new Event('loadedmetadata'));
+    await provider.destroy();
+    await vi.advanceTimersByTimeAsync(
+      SEEK_RESOLVES_AFTER_MS + SEEKING_POLL_INTERVAL_MS * 2
+    );
+
+    expect(errors).toEqual([]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// A seek run before the poll settles means the playhead the deferred read
+// would see is no longer the one the initial write produced -- the player has
+// moved on, and the stale check must not publish a refusal for a position
+// nobody is asking about any more.
+test('publishes no notice when a seek runs before the deferred read', async () => {
+  vi.useFakeTimers();
+  try {
+    const media = document.createElement('video');
+    Object.defineProperty(media, 'duration', {
+      configurable: true,
+      value: 10
+    });
+    Object.defineProperty(media, 'seekable', {
+      configurable: true,
+      value: createTimeRanges([[0, 10]])
+    });
+    trackSeekingRace(media, 0, SEEK_RESOLVES_AFTER_MS, () => 0);
+    const provider = createNativeProvider(media, { startTime: 5 });
+    const errors = trackErrors(provider);
+    await provider.attach();
+
+    media.dispatchEvent(new Event('loadedmetadata'));
+    await provider.seekTo?.(8);
+    await vi.advanceTimersByTimeAsync(
+      SEEK_RESOLVES_AFTER_MS + SEEKING_POLL_INTERVAL_MS * 2
+    );
+
+    expect(errors).toEqual([]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// A retry reloads the source before the poll settles, the same shape as the
+// destroy and seek guards above but for the third way a load stops being the
+// one a deferred check was scheduled for. The reload gets a fresh decision of
+// its own -- via its own `loadedmetadata` and its own poll, not the stale
+// one -- so this also confirms that decision still happens, and correctly,
+// rather than the retry silencing initial positioning altogether.
+test('publishes no notice from a deferred read a retry ran before, and the reload gets its own decision', async () => {
+  vi.useFakeTimers();
+  try {
+    const media = document.createElement('video');
+    Object.defineProperty(media, 'duration', {
+      configurable: true,
+      value: 10
+    });
+    Object.defineProperty(media, 'seekable', {
+      configurable: true,
+      value: createTimeRanges([])
+    });
+    vi.spyOn(media, 'load').mockImplementation(() => undefined);
+    const { rewind, writes } = trackSeekingRace(
+      media,
+      0,
+      SEEK_RESOLVES_AFTER_MS,
+      () => 0
+    );
+    const provider = createNativeProvider(media, { startTime: 5 });
+    const errors = trackErrors(provider);
+    await provider.attach();
+
+    media.dispatchEvent(new Event('loadedmetadata'));
+    await provider.retry?.();
+    rewind();
+    await vi.advanceTimersByTimeAsync(
+      SEEK_RESOLVES_AFTER_MS + SEEKING_POLL_INTERVAL_MS * 2
+    );
+    expect(errors).toEqual([]);
+
+    media.dispatchEvent(new Event('loadedmetadata'));
+    await vi.advanceTimersByTimeAsync(
+      SEEK_RESOLVES_AFTER_MS + SEEKING_POLL_INTERVAL_MS * 2
+    );
+
+    expect(writes).toEqual([5, 5]);
+    expect(errors).toEqual([
+      expect.objectContaining({ category: 'configuration', fatal: false })
+    ]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// A seek that never settles is stalled media, not a refusal this provider has
+// decided on, and the consumer already sees the pending position on
+// `PlayerState.currentTime` -- so the deadline drops the check rather than
+// reporting one. `getTimerCount` after the deadline confirms the poll actually
+// stopped rather than merely declining to publish on every future tick.
+test('stops polling and publishes nothing once a seek never settles by the deadline', async () => {
+  vi.useFakeTimers();
+  try {
+    const media = document.createElement('video');
+    Object.defineProperty(media, 'duration', {
+      configurable: true,
+      value: 10
+    });
+    Object.defineProperty(media, 'seekable', {
+      configurable: true,
+      value: createTimeRanges([])
+    });
+    trackSeekingRace(media, 0, undefined, () => 0);
+    const provider = createNativeProvider(media, { startTime: 5 });
+    const errors = trackErrors(provider);
+    await provider.attach();
+
+    media.dispatchEvent(new Event('loadedmetadata'));
+    await vi.advanceTimersByTimeAsync(15_100);
+
+    expect(errors).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// The deferred confirmation is the second read of one decision, not a second
+// decision: a load that already reported the refusal must not report it
+// again once further polls arrive.
+test('reports a WebKit refusal exactly once even after the deferred read', async () => {
+  vi.useFakeTimers();
+  try {
+    const media = document.createElement('video');
+    Object.defineProperty(media, 'duration', {
+      configurable: true,
+      value: 10
+    });
+    Object.defineProperty(media, 'seekable', {
+      configurable: true,
+      value: createTimeRanges([])
+    });
+    trackSeekingRace(media, 0, SEEK_RESOLVES_AFTER_MS, () => 0);
+    const provider = createNativeProvider(media, { startTime: 5 });
+    const errors = trackErrors(provider);
+    await provider.attach();
+
+    media.dispatchEvent(new Event('loadedmetadata'));
+    await vi.advanceTimersByTimeAsync(15_100);
+
+    expect(errors).toHaveLength(1);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 // The same check catching a clamp rather than a refusal: the element takes the
@@ -743,6 +1175,47 @@ test('loops from the end boundary back to the configured start', async () => {
   expect(play).toHaveBeenCalledOnce();
 });
 
+// #673: unlike the `onEnded` path below, an `endTime`-boundary loop restart
+// never actually fires a `play` event on a real engine. Measured directly
+// against Playwright's chromium, a fixture looping every 0.4s of a 1s clip
+// against this exact boundary shape: `seeking -> seeked -> playing` on every
+// wrap, `video.paused` reading `false` throughout, across 5 wraps over 3
+// seconds -- no `play` and no `pause` event at all. So there is no `play`
+// event on this path for `restartingGeneration` to label, and no ownership
+// bug ever existed on it: `use-activation.ts`'s ownership tracker reacts
+// only to `play`, `pause` and `ended` controller events, none of which this
+// path's own restart ever raises, so whatever ownership already stood is
+// simply never touched by it.
+//
+// A mock cannot demonstrate the absence of a `play` event here: this suite
+// replaces `media.play` outright, so nothing could ever fire one through it
+// regardless of what the source does, and an assertion built on that would
+// be the exact shape `docs/agents/demonstrated-red.md` warns about -- true
+// whether or not the code is right. What a mock CAN check is the structural
+// fact the measurement above depends on: `restartFromBoundary` never calls
+// `media.pause()` before replaying in this branch (only the non-loop branch
+// does), which is why `media.paused` cannot be `true` when it calls
+// `media.play()` here, which is why HTML never has a `play` event to fire
+// for it. This is real, falsifiable coverage of that: it would fail the
+// moment a future change added a pause here.
+test('an endTime-boundary loop restart never pauses before replaying', async () => {
+  const media = document.createElement('video');
+  vi.spyOn(media, 'play').mockResolvedValue(undefined);
+  const pause = vi.spyOn(media, 'pause');
+  const provider = createNativeProvider(media, {
+    loop: true,
+    startTime: 2,
+    endTime: 5
+  });
+  await provider.attach();
+  media.currentTime = 5;
+
+  media.dispatchEvent(new Event('timeupdate'));
+  await Promise.resolve();
+
+  expect(pause).not.toHaveBeenCalled();
+});
+
 test('loops a native ended event back to the configured start', async () => {
   const media = document.createElement('video');
   const play = vi.spyOn(media, 'play').mockResolvedValue(undefined);
@@ -760,6 +1233,146 @@ test('loops a native ended event back to the configured start', async () => {
   expect(play).toHaveBeenCalledOnce();
   expect(patches).not.toContainEqual(
     expect.objectContaining({ playback: 'ended' })
+  );
+});
+
+// #673's other loop path -- `onEnded`'s restart, the one that DOES fire a
+// real `play` event: unlike `endTime`'s boundary above, the media has
+// genuinely paused at its natural end by the time this runs (a real
+// browser's own end-of-media handling, not a call this package makes), so
+// `restartFromBoundary`'s `media.play()` here transitions `paused` true to
+// false and HTML fires `play` for it. The mock dispatches the event itself
+// to stand in for that transition, which this suite cannot drive on a real
+// engine -- `e2e/activation.spec.ts`'s loop test is where that is measured
+// directly.
+test('labels the play event from a native-ended loop restart as the library, not the provider', async () => {
+  const media = document.createElement('video');
+  vi.spyOn(media, 'play').mockImplementation(() => {
+    media.dispatchEvent(new Event('play'));
+    return Promise.resolve();
+  });
+  const events: Array<{ type: string; origin: string }> = [];
+  const provider = createNativeProvider(media, { loop: true, startTime: 2 });
+  provider.subscribe((_patch, event) => {
+    if (event) events.push({ type: event.type, origin: event.origin });
+  });
+  await provider.attach();
+  events.length = 0;
+  media.currentTime = 8;
+
+  media.dispatchEvent(new Event('ended'));
+  await Promise.resolve();
+
+  expect(events).toContainEqual({ type: 'play', origin: 'system' });
+});
+
+// `restartingGeneration`'s own correctness under overlap, constructed
+// directly rather than reproduced naturally: two `restartFromBoundary` calls
+// can overlap in principle (`onTimeUpdate`'s boundary branch re-triggers on
+// every `timeupdate` while a declined seek leaves `currentTime` at or past
+// `endTime`), but measuring that path directly against a real engine found it
+// never fires a `play` event at all -- `media.paused` stays `false`
+// throughout, because this path never pauses before replaying, and HTML only
+// fires `play` where `paused` was true. So the overlap could not be driven to
+// a real mislabelled event through either loop path as actually wired; this
+// constructs the exact interleaving an unconditional-`finally` design gets
+// wrong, directly, by controlling when each call's `media.play()` promise
+// settles and when its `play` event fires independently -- something only
+// this mock can do, not a real element.
+//
+// The interleaving: restart A's `play()` promise settles -- and its `finally`
+// runs -- BEFORE restart B's own `play` event fires. A `finally` that cleared
+// unconditionally would erase B's still-pending generation right out from
+// under it; what has to hold is that A's settling touches only ITS OWN
+// generation (`restartingGeneration === generation`, checked before
+// clearing), leaving B's later-set generation alone for `onPlay` to read when
+// B's event actually arrives.
+test("a later restart's play event is not mislabelled by an earlier restart's settling promise", async () => {
+  const media = document.createElement('video');
+  const settlers: Array<() => void> = [];
+  vi.spyOn(media, 'play').mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        settlers.push(resolve);
+      })
+  );
+  const events: Array<{ type: string; origin: string }> = [];
+  const provider = createNativeProvider(media, { loop: true });
+  provider.subscribe((_patch, event) => {
+    if (event) events.push({ type: event.type, origin: event.origin });
+  });
+  await provider.attach();
+  events.length = 0;
+
+  // Restart A: sets the flag, calls `media.play()` (call A, held open).
+  media.dispatchEvent(new Event('ended'));
+  await Promise.resolve();
+  expect(settlers).toHaveLength(1);
+
+  // Restart B overlaps A: a second `ended` before A's `play()` has settled,
+  // setting the flag again and calling `media.play()` a second time (call B,
+  // also held open).
+  media.dispatchEvent(new Event('ended'));
+  await Promise.resolve();
+  expect(settlers).toHaveLength(2);
+
+  // Call A settles first, with no `play` event of its own -- the shape a
+  // real engine would produce if `paused` had already gone false by the
+  // time A ran (see the comment above). Under the old design this is what
+  // clears the flag early.
+  settlers[0]!();
+  await Promise.resolve();
+
+  // Only now does B's own `play` event fire -- the moment that has to read
+  // the flag correctly regardless of what A's already-settled promise did.
+  media.dispatchEvent(new Event('play'));
+  settlers[1]!();
+  await Promise.resolve();
+
+  expect(events).toContainEqual({ type: 'play', origin: 'system' });
+});
+
+// #673's second half of the same defect, found only by running the fix
+// against a real engine: a `loop`-less native element pauses itself and fires
+// a real `pause` event the instant it reaches its natural end -- before
+// `ended` reaches `onEnded` above and restarts it -- and that pause used to
+// publish a `'provider'`-origin `paused` patch of its own, clobbering
+// ownership before the loop's relabelled `play` event ever arrived.
+// `media.ended` is what `onPause` reads to tell this pause apart from a real
+// one: true only for the natural-end pause a loop is about to restart from.
+test('suppresses the native pause a natural-end loop restart produces on its way through', async () => {
+  const media = document.createElement('video');
+  vi.spyOn(media, 'play').mockResolvedValue(undefined);
+  Object.defineProperty(media, 'ended', { configurable: true, value: true });
+  const patches: Array<Record<string, unknown>> = [];
+  const provider = createNativeProvider(media, { loop: true });
+  provider.subscribe((patch) => patches.push(patch));
+  await provider.attach();
+  patches.length = 0;
+
+  media.dispatchEvent(new Event('pause'));
+
+  expect(patches).not.toContainEqual(
+    expect.objectContaining({ playback: 'paused' })
+  );
+});
+
+// The guard above must not overreach: a viewer pressing the native controls
+// mid-clip never reaches `media.ended`, so a looping player still has to be
+// pausable by hand.
+test('still reports a viewer pause mid-clip on a looping player', async () => {
+  const media = document.createElement('video');
+  vi.spyOn(media, 'play').mockResolvedValue(undefined);
+  const patches: Array<Record<string, unknown>> = [];
+  const provider = createNativeProvider(media, { loop: true });
+  provider.subscribe((patch) => patches.push(patch));
+  await provider.attach();
+  patches.length = 0;
+
+  media.dispatchEvent(new Event('pause'));
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({ playback: 'paused' })
   );
 });
 
@@ -1010,6 +1623,90 @@ test('reports quality selection as unavailable rather than pending forever', asy
     }
   });
   expect(provider.selectQuality).toBeUndefined();
+});
+
+// Red: with `sourceHasNoPoster` (adapter-values.ts) mutated to
+// `{ status: 'available' }`, this failed with `providerPoster:
+// { status: 'available' }` received where `{ status: 'unavailable', reason:
+// 'source' }` was expected. The same mutation also failed provider-hls's
+// equivalent test, since that adapter wraps this one.
+test('reports providerPoster as unavailable immediately -- a media element has no still of its own', async () => {
+  const media = document.createElement('video');
+  const patches: Array<Record<string, unknown>> = [];
+  const provider = createNativeProvider(media);
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+
+  expect(patches.at(-1)).toMatchObject({
+    capabilities: {
+      providerPoster: { status: 'unavailable', reason: 'source' }
+    }
+  });
+});
+
+test('reports liveEdge as unavailable for a finite, non-live source', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 60 });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([[0, 60]])
+  });
+  const patches: Array<Record<string, unknown>> = [];
+  const provider = createNativeProvider(media);
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+
+  expect(patches.at(-1)).toMatchObject({
+    capabilities: { liveEdge: { status: 'unavailable', reason: 'source' } }
+  });
+});
+
+test('reports liveEdge as available for a live source with a finite seekable end', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', {
+    configurable: true,
+    value: Number.POSITIVE_INFINITY
+  });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([[100, 200]])
+  });
+  const patches: Array<Record<string, unknown>> = [];
+  const provider = createNativeProvider(media);
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+
+  expect(patches.at(-1)).toMatchObject({
+    capabilities: { liveEdge: { status: 'available' } }
+  });
+});
+
+// A live source with nothing seekable at all -- `media.seekable` reporting no
+// ranges before the element has buffered anything -- has no seekable end to
+// treat as the edge, so this must not read as `available` on the strength of
+// liveness alone.
+test('reports liveEdge as unavailable for a live source with no seekable ranges', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', {
+    configurable: true,
+    value: Number.POSITIVE_INFINITY
+  });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    value: createTimeRanges([])
+  });
+  const patches: Array<Record<string, unknown>> = [];
+  const provider = createNativeProvider(media);
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+
+  expect(patches.at(-1)).toMatchObject({
+    capabilities: { liveEdge: { status: 'unavailable', reason: 'source' } }
+  });
 });
 
 const createTimeRanges = (

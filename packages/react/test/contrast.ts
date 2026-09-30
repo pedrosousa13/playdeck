@@ -38,6 +38,22 @@ export const parseColor = (value: string): Rgba => {
       blue: Number(rgb[3]) / 255,
       alpha: Number(rgb[4])
     };
+  // The legacy comma-separated form, `rgb(r, g, b)` or `rgba(r, g, b, a)` --
+  // the space-slash form above is what theme.css/docked.css write, but
+  // `captionCueBoxStyle`'s own default (captions.tsx) is a plain literal in
+  // the older syntax, never rewritten to match, and this module reads
+  // whatever a source actually contains rather than asking it to conform.
+  const rgbaLegacy =
+    /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/i.exec(
+      value
+    );
+  if (rgbaLegacy !== null)
+    return {
+      red: Number(rgbaLegacy[1]) / 255,
+      green: Number(rgbaLegacy[2]) / 255,
+      blue: Number(rgbaLegacy[3]) / 255,
+      alpha: rgbaLegacy[4] === undefined ? 1 : Number(rgbaLegacy[4])
+    };
   throw new Error(`cannot parse the colour \`${value}\``);
 };
 

@@ -1,5 +1,123 @@
 # @playdeck/provider-hls
 
+## 1.1.0
+
+### Minor Changes
+
+- dc71c32: Select an hls.js build through `Player.Root`
+
+  `createHlsProvider` has always taken `loadHls`, for pinning an hls.js version
+  or swapping in `hls.js/light`, but nothing a `Player.Root` consumer could pass
+  reached it — the option was reachable only by mounting the HLS adapter
+  directly (#579).
+
+  `HlsProviderOptions` gains `build`, `'full'` (the default) or `'light'`, a name
+  rather than the loader function itself. `@playdeck/react`'s
+  `PlayerProviderOptions` gains a matching `hls` bag:
+
+  ```tsx
+  <Player.Root
+    providerOptions={{ hls: { build: 'light' } }}
+    source={{ type: 'hls', src: '/master.m3u8' }}
+  >
+    {/* … */}
+  </Player.Root>
+  ```
+
+  `build` is a primitive by design, not a shorthand that happens to be one:
+  every value a provider option bag declares is compared with `Object.is`
+  (`providerBagEqual`), so a function passed inline — a new one on every render —
+  would tear the hls.js engine down and rebuild it, and lose the playback
+  position, on every render that passed it. `loadHls` itself stays exactly where
+  it was, for pinning a version or serving hls.js from somewhere else, and
+  reaching it still means mounting `createHlsProvider` directly.
+
+  `PlayerProviderOptions`'s bags are now guarded at the type level to reject a
+  function-valued option the same way — a bag typed through the new (internal)
+  `PrimitiveOptionBag` constraint fails to compile if a future option is a
+  function, rather than shipping the same hazard `build` was added to avoid.
+  `youtube`'s existing `loadIframeApi` predated the guard; #628 closes that gap
+  the same way, and its own changeset in this release describes it.
+
+### Patch Changes
+
+- f6c086c: Show React first in every provider README
+
+  `@playdeck/react` is the only renderer Playdeck ships, but every provider
+  README led with core-level construction code and left a React consumer to
+  translate it themselves. Each provider README now opens with a compiled
+  `Player.Root` example — YouTube and Vimeo reuse the fixtures already proven in
+  the provider setup guide, and native, HLS and Wistia each get a new one. The
+  neutral, core-level example moves under a new "Without React" heading, kept
+  verbatim, for the two cases where it is still the right tool: writing a
+  provider adapter, or hosting a player somewhere other than React.
+
+  `@playdeck/core`'s README states the same ordering: React is the default path
+  for building UI, and using core directly is a deliberate choice with its own
+  reasons, rather than the implicit default it read as before. Nothing about the
+  layering changed — core and the providers still know nothing about React.
+
+- e74dc58: Surface an unclaimed hls.js-path decode error instead of leaving playback stuck reporting "playing"
+
+  The embedded native adapter maps the media element's own `error` event to an
+  errored lifecycle with playback paused, but that patch was discarded outright
+  on the hls.js engine — hls.js owns error recovery and surfacing on the MSE
+  path, and hls.js triggers transient element errors of its own during normal
+  recovery, so publishing the raw event immediately would preempt its bounded
+  recovery table. What discarding it outright missed: hls.js does not listen
+  for the element's own `error` event at all, so an element error hls.js never
+  itself reports as a fatal `ERROR` was not owned by anything. `PlayerState.error`
+  stayed `null` and `playback` stayed `'playing'` on an element that could never
+  advance.
+
+  A raw element error on the hls.js path is now held, unpublished, for
+  `HLS_JS_ELEMENT_ERROR_TIMEOUT_MS` (3000ms, derived from hls.js 1.6.16's own
+  retry cadence — see the constant's comment in `packages/provider-hls/src/index.ts`)
+  rather than discarded. The hold is cancelled without publishing anything if,
+  before it expires, hls.js emits an `ERROR` event of its own (fatal or not) or
+  runs one of its own recovery entry points (both only ever happen from inside
+  that same listener), or if playback otherwise progresses. If none of that
+  happens, the player publishes the same errored/paused shape the embedded
+  native adapter already produces for a decode error — no new lifecycle value.
+
+- eb6232e: Stop a player parked on `endTime` from seeking over and over
+
+  A native player that reached its `endTime` corrected the playhead back onto the
+  boundary on every `timeupdate` it received there, and each correction is a
+  write to `currentTime` — a seek, which reports a `timeupdate` of its own at the
+  position it just landed on. That report is still on the boundary, so it asked
+  for the same correction again. Measured on 2026-09-02 in chromium, driving a
+  local 10 second MP4 from a standalone rig: 3,010 `seeking`, 3,024 `timeupdate`
+  and 3,009 `seeked` events in a three-second window at the boundary, with no sign
+  of settling.
+
+  The correction is now issued only where it has somewhere to move — the playhead
+  is neither on `endTime` nor still sitting where the last correction left it —
+  so a parked player is left alone and an overshoot is still pulled back,
+  including one that arrives after playback has already ended. The second half
+  matters because an element need not land on the value written: the seek
+  algorithm clamps into `seekable` and engines snap to a frame, so a playhead that
+  settles just past the boundary would otherwise keep asking to be corrected.
+
+  The position and the `ended` state were correct throughout; what was wrong was
+  the work and what the player said about itself. `PlayerState.seeking` was
+  raised by every one of those seeks and read `true` on a player that had
+  stopped, which is what a seek indicator or a scrubber disabled while seeking
+  was reading. It now returns to `false` and stays there.
+
+  The HLS provider composes the native adapter, so it inherits this.
+
+- Updated dependencies [1df041b]
+- Updated dependencies [f582807]
+- Updated dependencies [6b24591]
+- Updated dependencies [f6c086c]
+- Updated dependencies [7deed3e]
+- Updated dependencies [2902590]
+- Updated dependencies [7356cef]
+- Updated dependencies [eb6232e]
+  - @playdeck/provider-native@1.1.0
+  - @playdeck/core@1.1.0
+
 ## 1.0.0
 
 ### Major Changes

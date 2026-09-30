@@ -112,6 +112,22 @@ test('the thesis and both groups of switches are on the page', async ({
   await expect(page.locator('[data-bench-switch="skin"]')).toHaveCount(1);
 });
 
+test('the four feature cards are present, numbered in order', async ({
+  page
+}) => {
+  await page.goto(landing);
+  const cards = page.locator('[data-feature-card]');
+  await expect(cards).toHaveCount(4);
+  await expect(cards.nth(0)).toContainText('01');
+  await expect(cards.nth(0)).toContainText('Compose it');
+  await expect(cards.nth(1)).toContainText('02');
+  await expect(cards.nth(1)).toContainText('Style it');
+  await expect(cards.nth(2)).toContainText('03');
+  await expect(cards.nth(2)).toContainText('Ask what the provider can do');
+  await expect(cards.nth(3)).toContainText('04');
+  await expect(cards.nth(3)).toContainText('Recover from refused autoplay');
+});
+
 test('nothing on the page links to the workbench', async ({ page }) => {
   await page.goto(landing);
   // #534 records the decision that the workbench is not to be a public
@@ -261,46 +277,41 @@ test('the page does not go sideways at 320px', async ({ page }) => {
     .toBeLessThanOrEqual(0);
 });
 
-test(
-  'the player is dormant: no media request before the press @real',
-  { tag: '@real' },
-  async ({ page }) => {
-    // A foreign-origin listener rather than a media-extension filter: with no
-    // same-origin position left on the source switch, the default provider's
-    // first request is a cross-origin iframe document, not a file matching
-    // `.mp4`/`.webm`/`.m3u8`/etc. `site-quiet.spec.ts` defines the same
-    // `foreign` filter for the same reason; it is not imported from there
-    // because that file's is scoped to its own origin constant.
-    const requests: string[] = [];
-    page.on('request', (request) => requests.push(request.url()));
+test('the player is dormant: no media request before the press', async ({
+  page
+}) => {
+  // A media-request listener rather than a foreign-origin filter: the switch
+  // rests on `hls`, same-origin in `bench-sources.ts`, so the request a press
+  // produces is a manifest fetched from this site's own origin rather than a
+  // cross-origin iframe document. Matched on the manifest's extension because
+  // that is the one request this page's own static assets — its document, its
+  // island's JavaScript, its fonts, its poster — never produce, which is what
+  // keeps the assertion about the clip rather than about every request the
+  // page happens to make.
+  const requests: string[] = [];
+  page.on('request', (request) => requests.push(request.url()));
 
-    await page.goto(landing);
-    // The island is `client:only`, so its arrival is what makes the emptiness
-    // of the list below evidence rather than a listener attached before
-    // anything could have happened.
-    await expect(activationButton(page)).toBeVisible();
-    await page.waitForLoadState('networkidle');
+  await page.goto(landing);
+  // The island is `client:only`, so its arrival is what makes the emptiness
+  // of the list below evidence rather than a listener attached before
+  // anything could have happened.
+  await expect(activationButton(page)).toBeVisible();
+  await page.waitForLoadState('networkidle');
 
-    const origin = new URL(landing).origin;
-    const foreign = () =>
-      requests.filter(
-        (url) =>
-          !url.startsWith(`${origin}/`) &&
-          !url.startsWith('data:') &&
-          !url.startsWith('blob:')
-      );
+  const manifestRequests = () =>
+    requests.filter((url) => url.includes('.m3u8'));
 
-    // `loading="interaction"` holds the root dormant: no clip, no provider, no
-    // request. This is the page's most falsifiable claim and the reason the
-    // player may not be given a preloading directive.
-    expect(foreign()).toEqual([]);
+  // `loading="interaction"` holds the root dormant: no clip, no provider, no
+  // request. This is the page's most falsifiable claim and the reason the
+  // player may not be given a preloading directive.
+  expect(manifestRequests()).toEqual([]);
 
-    await activationButton(page).click();
+  await activationButton(page).click();
 
-    // And the press is what fetches it, which is the other half of the same
-    // claim — an empty list from a page that never loads anything would prove
-    // nothing. Pressing play now attaches a real hosted provider, which is
-    // what makes this test `@real`.
-    await expect.poll(() => foreign().length).toBeGreaterThan(0);
-  }
-);
+  // And the press is what fetches it, which is the other half of the same
+  // claim — an empty list from a page that never loads anything would prove
+  // nothing. This no longer needs `@real`: the request the press produces
+  // never leaves this origin, unlike the youtube.com/vimeo.com request the
+  // switch's default position produced before `hls` returned to it.
+  await expect.poll(() => manifestRequests().length).toBeGreaterThan(0);
+});

@@ -1,5 +1,11 @@
 # A measurement the library publishes is an output, not a token
 
+_Superseded in part by
+[ADR-0008](0008-the-token-table-lives-in-the-readme.md) on where the table
+this ADR calls "`Theme.mdx`'s table" now lives — it is
+`packages/react/README.md`'s. The direction argument below, and where a
+published measurement is documented instead (`Contract.mdx`), are unchanged._
+
 [ADR-0001](0001-structural-css-ships-inline.md) drew a three-entry boundary for
 structural CSS — inline on the
 primitive, a token with an inline `var()` default, or `theme.css` — and all

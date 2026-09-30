@@ -30,8 +30,8 @@ const dockedSource = () =>
 
 // ---- the stripper ----------------------------------------------------------
 //
-// What the theme's budget is now enforced against, so every case below is a way
-// the enforced number could be wrong. The two directions cost differently: a
+// What the theme's budget is measured against, so every case below is a way
+// the measured number could be wrong. The two directions cost differently: a
 // sequence wrongly read as a comment deletes rules the budget exists to
 // constrain, which is the silent one.
 
@@ -105,7 +105,8 @@ test('treats url only as its own token, not as the tail of an identifier', () =>
 test('ends an unterminated string at a carriage return, not only a newline', () => {
   // CSS ends a string at a newline, a carriage return or a form feed. Were the
   // scanner to run past one, the `/*` on the next line would open a comment
-  // that swallowed the rules after it and lowered the enforced number.
+  // that swallowed the rules after it and lowered the number the budget is
+  // measured against.
   assert.equal(
     stripCssComments('a::before { content: "oops\r/* c */\nb { top: 0 }'),
     'a::before { content: "oops\r\nb { top: 0 }'
@@ -116,9 +117,9 @@ test('ends an unterminated string at a carriage return, not only a newline', () 
   );
 });
 
-// ---- the two figures and which one is the ceiling --------------------------
+// ---- the two figures and which one the budget is on -----------------------
 
-test('the stylesheets are the only targets whose ceiling is on a subset', async () => {
+test('the stylesheets are the only targets whose reference figure is on a subset', async () => {
   assert.ok(themeTarget, 'the theme stylesheet is still a budget target');
   assert.ok(dockedTarget, 'the docked stylesheet is still a budget target');
   for (const target of [themeTarget, dockedTarget]) {
@@ -134,7 +135,7 @@ test('the stylesheets are the only targets whose ceiling is on a subset', async 
   }
 });
 
-test('reports the shipped size alongside the rules-only size it gates on', async () => {
+test('reports the shipped size alongside the rules-only size it is measured against', async () => {
   // Both figures, or the shipped one stops being observable -- which is the
   // whole reason the maintainer chose this shape over measuring rules alone.
   assert.ok(themeTarget);
@@ -149,7 +150,7 @@ test('reports the shipped size alongside the rules-only size it gates on', async
 test("reports docked.css's shipped size alongside its rules-only size", async () => {
   // The same two figures the theme reports, for the same reason: docked.css
   // also ships as authored, so its prose is bytes a consumer downloads and has
-  // to stay observable even though the ceiling is not on it.
+  // to stay observable even though the reference figure is not on it.
   assert.ok(dockedTarget);
   const { size, budgeted } = measureTarget(dockedTarget, await dockedSource());
   assert.equal(budgeted?.label, 'CSS rules');
@@ -160,7 +161,7 @@ test("reports docked.css's shipped size alongside its rules-only size", async ()
 });
 
 test('docked.css is inside its budget as it stands', async () => {
-  // The gate's own decision, run against the real file rather than a synthetic
+  // `overBudget`'s own decision, run against the real file rather than a synthetic
   // one: the budget is set from a measurement, so a budget set below the file
   // it was measured from would otherwise ship red.
   assert.ok(dockedTarget);
@@ -170,11 +171,11 @@ test('docked.css is inside its budget as it stands', async () => {
   );
 });
 
-// ---- the decision the gate makes -------------------------------------------
+// ---- what overBudget reports -----------------------------------------------
 //
-// `overBudget` is the line CI fails on, so these run it rather than a
-// re-statement of it: `check-bundle-budgets.mjs` calls it and only formats what
-// comes back.
+// `overBudget` is the line `check-bundle-budgets.mjs` reports on, so these run
+// it rather than a re-statement of it: that script calls it and only formats
+// what comes back.
 
 test('reports a target whose budgeted subset is over, whatever it ships', () => {
   assert.deepEqual(
@@ -212,7 +213,7 @@ test('does not report a target whose shipped size is over but whose subset is no
   );
 });
 
-test('gates a target without a subset on the whole file, and ignores a null budget', () => {
+test('checks a target without a subset against the whole file, and ignores a null budget', () => {
   assert.deepEqual(
     overBudget([
       { name: '@playdeck/core', budget: 10, size: 10.5, budgeted: null },
@@ -230,7 +231,7 @@ test('gates a target without a subset on the whole file, and ignores a null budg
 
 test('a substantial comment block does not push the theme over its budget', async () => {
   // The defect this whole change exists for: #415 added about 2 KB of prose and
-  // 0.07 KB of rules, and the gate failed it. Synthetic rather than a real edit
+  // 0.07 KB of rules, and it used to fail the build. Synthetic rather than a real edit
   // to the stylesheet, because the point is the decision, not the file.
   assert.ok(themeTarget);
   const prose = `/*\n${'A sentence of durable rationale that a reviewer asked for.\n'.repeat(200)}*/\n`;
@@ -243,8 +244,8 @@ test('a substantial comment block does not push the theme over its budget', asyn
 });
 
 test('a substantial rule block does push the theme over its budget', async () => {
-  // The other direction, and the reason the gate is worth keeping at all: the
-  // ceiling still has to fail on CSS the theme did not have before.
+  // The other direction, and why `overBudget` is still worth testing: it still
+  // has to flag CSS the theme did not have before.
   assert.ok(themeTarget);
   const added = Array.from(
     { length: 400 },

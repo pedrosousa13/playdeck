@@ -2,7 +2,7 @@
 
 import { expect, test } from 'vitest';
 import { PlayerController } from '@playdeck/core';
-import { captureRethrows } from './fixtures/capture-rethrows';
+import { captureRethrows } from '@playdeck/test-support/capture-rethrows';
 import { createFakeTrack } from '@playdeck/test-support/fake-text-tracks';
 import { latest, mountNative } from './fixtures/fake-text-tracks';
 
@@ -483,6 +483,33 @@ test('cuechange with an empty, whitespace-only, or missing cue text normalizes t
       { id: 'cue-whitespace', startTime: 1, endTime: 2, text: '' },
       { id: 'cue-missing', startTime: 2, endTime: 3, text: '' }
     ]
+  ]);
+});
+
+test('cuechange with WebVTT tags and character references decodes to plain text', async () => {
+  const { provider, tracks } = mountNative([
+    { kind: 'captions', label: 'English', language: 'en', id: 't1' }
+  ]);
+  await provider.attach();
+  await provider.selectTextTrack?.('t1');
+  const cueFrames: Array<readonly unknown[]> = [];
+  provider.subscribeCues?.((cues) => cueFrames.push(cues));
+  const track = tracks[0];
+
+  if (track) {
+    track.activeCues = [
+      {
+        id: 'cue-1',
+        startTime: 0,
+        endTime: 1,
+        text: '<v Bob><i>Look out</i> &amp; run'
+      }
+    ];
+  }
+  track?.dispatch('cuechange');
+
+  expect(cueFrames).toEqual([
+    [{ id: 'cue-1', startTime: 0, endTime: 1, text: 'Look out & run' }]
   ]);
 });
 

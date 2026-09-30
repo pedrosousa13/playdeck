@@ -41,12 +41,16 @@ export type NativePlaybackOptions = {
    * position where none was. The notice reports the refusal; it does not make
    * the offset apply.
    *
-   * On WebKit that is best-effort rather than a guarantee, measured in CI and
-   * tracked as #567. The refusal is detected by reading the playhead back in
-   * the same tick as the write, and WebKit sometimes clamps before that read
-   * and sometimes answers with the value it was just given -- so an offset it
-   * declines is reported on some loads and dropped in silence on others. Treat
-   * the notice as reliable on chromium and firefox, and as a race on WebKit.
+   * The refusal is detected by reading the playhead back, and on some engines
+   * that read has to wait. The first read is in the same tick as the write:
+   * where the engine clamps before the setter returns, that read already
+   * shows the refusal. Where it does not, the provider polls `media.seeking`
+   * -- which the HTML seek algorithm itself clears once a seek has finished,
+   * refusal or not -- and takes its deferred read on the first poll that
+   * finds it false. See the comment above `playheadAfterMovingTo` in
+   * `playback.ts` for the measurements this is built on and for why
+   * `media.seeking` is the instrument rather than a `seeked` listener or a
+   * fixed delay.
    *
    * DECLARED DIVERGENCE FROM THE EMBEDS, since #381. There the start is a
    * *floor* on every reported position: a playhead that arrives below it
@@ -120,6 +124,30 @@ const startTimeConfigurationNotice: PlayerError = {
 // wrong place and far below every refusal there is evidence of.
 const SETTLED_POSITION_TOLERANCE_SECONDS = 0.25;
 
+// How often `applyInitialPosition`'s deferred confirmation polls
+// `media.seeking` while it is still true.
+//
+// A `setTimeout`, not `requestAnimationFrame`: rAF is throttled or stopped
+// outright once a tab is backgrounded, and a startTime refusal is exactly as
+// real there as in a focused tab, so the poll cannot depend on the page being
+// visible to keep running.
+const SEEKING_POLL_INTERVAL_MS = 50;
+
+// How long the deferred confirmation waits for `media.seeking` to clear
+// before giving up on this load's check.
+//
+// Fifteen seconds, the same number this repo's embeds use for their own
+// "that is never coming" timeouts -- `PLAYER_READY_TIMEOUT_MS` in
+// provider-vimeo's and provider-youtube's `attachment.ts`,
+// `API_READY_TIMEOUT_MS` in provider-wistia's -- and chosen the same way: long
+// enough that nothing measured here has ever needed it, so reaching it means
+// the seek itself is stalled rather than merely slow. A stalled seek is a
+// different failure than a refused startTime, and the consumer already sees
+// the pending position on `PlayerState.currentTime`, so the deadline drops the
+// check without publishing anything: undecided, not a refusal that was never
+// established.
+const START_POSITION_SETTLE_TIMEOUT_MS = 15_000;
+
 export type NativePlaybackDeps = {
   readonly emit: EmitProviderState;
   // Lifecycle guard: a deferred loop replay must not touch the element after
@@ -137,6 +165,7 @@ export type NativePlayback = {
   readonly pause: () => Promise<CommandResult>;
   readonly seekTo: (time: number) => Promise<CommandResult>;
   readonly seekBy: (offset: number) => Promise<CommandResult>;
+  readonly seekToLiveEdge: () => Promise<CommandResult>;
   readonly mute: () => Promise<CommandResult>;
   readonly unmute: () => Promise<CommandResult>;
   readonly setVolume: (volume: number) => Promise<CommandResult>;
@@ -178,12 +207,82 @@ export const createNativePlayback = (
       : undefined;
   const loop = options.loop ?? false;
   let positioned = false;
+  // The disposer for whatever `startTime` notice `applyInitialPosition` most
+  // recently published, or `undefined` when nothing published by this seam
+  // currently stands. Held so a later load's decision -- the one `retry`
+  // resets `positioned` to get -- can withdraw a refusal that has since been
+  // corrected, which the notice would otherwise go on reporting for the rest
+  // of this provider's life (#475).
+  let withdrawStartTimeNotice: (() => void) | undefined;
   let boundaryEnded = false;
   let seekingFromEnded = false;
   // Where the last end-boundary correction actually left the playhead, which is
   // not always the value it wrote. See `onTimeUpdate`.
   let correctionLandedAt: number | undefined;
   let replayGeneration = 0;
+  // The generation of whichever `restartFromBoundary` call is currently
+  // waiting on its own `media.play()` to produce the `play` event it means to
+  // label `'system'` -- `undefined` when none is. Set from the LOCAL
+  // `generation` a restart already captured, not a bare flag, because two
+  // calls can overlap (#673: `onTimeUpdate`'s boundary branch re-triggers on
+  // every `timeupdate` while a declined seek leaves `currentTime` at or past
+  // `endTime`, so a second restart can start before an earlier one's
+  // `media.play()` has settled), and `play()`'s returned promise settles when
+  // playback actually begins, not when the `play` event fires -- an unbounded
+  // window an overlapping restart's own event can easily land inside.
+  //
+  // Two things follow from that, and both matter:
+  //
+  // - `onPlay` reads AND clears this, rather than each call's own `finally`
+  //   doing the clearing: an earlier restart's `media.play()` can settle
+  //   -- and run its `finally` -- before a LATER restart's own `play` event
+  //   has fired, and a `finally` that cleared unconditionally would erase a
+  //   generation that still describes an event yet to come.
+  // - Each call's `finally` only clears a generation that is still its own
+  //   (`restartingGeneration === generation`): an overlapping later restart
+  //   may already have overwritten this with its own (newer) generation by
+  //   the time an earlier one settles, and that earlier call's settling must
+  //   not erase a flag it no longer owns.
+  //
+  // `onPlay` also re-validates against the live `replayGeneration`, not only
+  // definedness: a value left over from a restart that a later, unrelated
+  // operation (`pause`, `retry`, a seek, an error -- everything else that
+  // bumps `replayGeneration`) has since superseded no longer describes
+  // whatever plays next, even where nothing explicitly cleared it.
+  //
+  // This does not, and does not need to, tell a restart's play apart from one
+  // an API caller issues through the controller: that call's own origin is
+  // decided by `player-controller.ts`'s pending-origin machinery, which
+  // overrides whatever this would have said (`confirmedPlaybackOrigin ??
+  // event.origin`, in `setProvider`'s subscribe callback). A viewer or API
+  // play can only reach a paused element by way of a real pause first, which
+  // already drops `playbackOwnership` to `'none'` in `use-activation.ts`
+  // regardless of this -- so the two directions of mislabelling are not
+  // symmetric, and only the one above needed fixing.
+  let restartingGeneration: number | undefined;
+  // A counter of its own rather than a reuse of `replayGeneration`: that one
+  // guards the boundary loop's deferred `play()`, and bumping it on every seek
+  // would also cancel a legitimate in-flight loop replay a seek happens to
+  // race with, which is not a change this fix is asking for. This one exists
+  // only so `applyInitialPosition`'s deferred confirmation can tell "this is
+  // not the load, or the playhead, it was scheduled for" apart from
+  // destruction, which `isDestroyed` already covers on its own.
+  let positionCheckGeneration = 0;
+  // The confirmation's own pending poll, tracked so `abandonPositionCheck` can
+  // cancel it outright rather than leave it to discover on its next tick that
+  // `positionCheckGeneration` has moved past it.
+  let pendingPositionCheck: ReturnType<typeof setTimeout> | undefined;
+
+  // Shared by every path that makes a scheduled confirmation stale: a retry
+  // reloading the source, a seek command moving the playhead, and destroy.
+  // Bumping the counter is what the poll itself checks for; cancelling the
+  // timer on top of that is what stops it running at all rather than running
+  // once more to find out it no longer applies.
+  const abandonPositionCheck = (): void => {
+    ++positionCheckGeneration;
+    clearTimeout(pendingPositionCheck);
+    pendingPositionCheck = undefined;
+  };
 
   const boundaryStart = (): number =>
     withinMediaBounds(media, startTime, startTime, endTime) ?? startTime;
@@ -210,41 +309,65 @@ export const createNativePlayback = (
   //
   // WebKit could not be run locally for any of this, and it degrades unsafely
   // rather than safely. An engine whose setter answers the value written before
-  // its own clamp makes `reached === target`, so a start that did not apply
-  // publishes no notice -- the silent drop #418 exists to prevent, on the
-  // engine #418 was measured on.
+  // its own clamp makes `reached === target` here, so a start that did not
+  // apply would publish no notice through this synchronous read alone -- the
+  // silent drop #418 exists to prevent, on the engine #418 was measured on.
+  // That is why `applyInitialPosition` does not stop at this read: where it
+  // reports success, a deferred read runs later and publishes the notice
+  // there instead if the playhead has not kept up.
   //
-  // That is no longer a hypothesis, and it is a race rather than a flat
-  // limitation. CI measured `e2e/native-start-time.spec.ts`'s
-  // origin-without-byte-ranges case on WebKit twice: the first run reported the
-  // playhead at 0 with no notice on the initial attempt and both retries; the
-  // second run passed the initial attempt and failed a retry. Chromium and
-  // firefox passed throughout. So WebKit sometimes clamps before the read and
-  // sometimes answers the written value, and only the latter drops in silence.
-  // Tracked as #567. The e2e case is skipped on WebKit rather than marked
-  // expected-to-fail, because an intermittent expected failure books the test
-  // flaky and turns the job green over a live defect.
+  // The failure this synchronous read alone misses is a race rather than a
+  // flat limitation, which is what makes a deferred read worth adding rather
+  // than a permanent WebKit exception. CI measured
+  // `e2e/native-start-time.spec.ts`'s origin-without-byte-ranges case on
+  // WebKit across two runs on 2026-09-01: the first reported the playhead at 0
+  // with no notice on the initial attempt and both retries; the second passed
+  // the initial attempt and failed a retry. Chromium and firefox passed
+  // throughout both runs. What the two runs establish is that this
+  // synchronous read alone sometimes misses on WebKit and sometimes does not.
+  //
+  // A single deferred read on a fixed delay is not what closes that gap, and
+  // this repo measured one failing rather than assumed it. CI's WebKit job ran
+  // the same case on 2026-09-06 with the deferred read scheduled on the very
+  // next macrotask after the synchronous one (`setTimeout(fn, 0)`), and two
+  // attempts of three still reported the playhead at 0 with no notice
+  // published, through a 5 second poll of the outcome. What that measured is
+  // that WebKit's own seek task -- the one that reads `seekable`, finds it
+  // empty, and aborts the seek -- is not reliably ordered ahead of a single
+  // deferred read at a fixed delay. It says nothing about how long that task
+  // takes; it says a guessed delay is not a sound instrument for waiting on it.
+  //
+  // The instrument that is not a guess is `media.seeking`. The HTML seek
+  // algorithm sets it true at the start of every seek and false again when the
+  // seek concludes -- on completion, and also on the abort this provider's
+  // refusal shape produces, where `seekable` has no ranges to land in. Both
+  // paths clear it, and the abort path is the one that fires no `seeked`,
+  // which is why `applyInitialPosition` polls this property instead of
+  // listening for that event. "The engine has finished deciding" is
+  // `media.seeking === false`, on every engine measured here, rather than a
+  // delay tuned to any one of them.
   //
   // The exposure is narrower than all of WebKit:
   // #418's own shape, a `duration` of 0 with an empty `seekable`, clamps the
   // target away from the requested offset and is reported by the
-  // `target !== startTime` branch in `applyInitialPosition` without the
-  // read-back being consulted at all. What is left uncovered is a WebKit load
-  // that publishes a duration reaching the offset and then does not move.
+  // `target !== startTime` branch in `applyInitialPosition` without either
+  // read being consulted at all. What the deferred read exists for is a
+  // WebKit load that publishes a duration reaching the offset and then does
+  // not move.
   //
-  // So the check costs one property read and nothing else. Waiting for `seeked`
-  // would be the wrong instrument even if it were cheaper: the seek this exists
-  // to catch is the one the element abandons, and an abandoned seek fires no
-  // `seeked` at all, so the listener would wait for an event that is not coming
-  // -- a deferred callback over an element the provider may already have been
-  // destroyed underneath.
-  //
-  // That argument stands, and #567 is not a request to reopen it. What WebKit
-  // needs is a *later read of the same property*, not a listener on an event
-  // that may never fire -- re-reading the playhead on a turn the engine has had
-  // a chance to clamp in, which keeps the "abandoned seek still answers"
-  // property this paragraph is defending. The two are easy to conflate because
-  // `seeked` is one way to pick that turn; it is the one way ruled out here.
+  // So this synchronous check costs one property read and nothing else, and a
+  // `seeked` listener would still be the wrong instrument for the deferred one
+  // even with `seeking` available to poll: the seek this whole mechanism
+  // exists to catch is the one the element abandons, and an abandoned seek
+  // fires no `seeked` at all, so a listener would wait for an event that is
+  // not coming. `media.seeking` is a property rather than an event, so
+  // `applyInitialPosition` polls it on a `setTimeout` -- not
+  // `requestAnimationFrame`, which is throttled or stopped outright in a
+  // backgrounded tab, and the refusal this exists to catch is exactly as real
+  // there as in a focused one -- and takes its one deferred read on the first
+  // poll that finds `seeking` false, bounded by a deadline neither engine here
+  // has been measured to need. See `applyInitialPosition` for both constants
+  // and for what the deadline does instead of publishing.
   const playheadAfterMovingTo = (target: number): number | undefined => {
     // A write asking for the position the element already holds is not a no-op
     // -- see `applyInitialPosition` -- and it is not a refusal either.
@@ -276,6 +399,7 @@ export const createNativePlayback = (
     emit({ currentTime: restartTime, buffering: false });
     void Promise.resolve().then(async () => {
       if (isDestroyed() || generation !== replayGeneration) return;
+      restartingGeneration = generation;
       try {
         await media.play();
       } catch (cause) {
@@ -288,6 +412,14 @@ export const createNativePlayback = (
           seeking: false,
           error: failure.error
         });
+      } finally {
+        // Only clear a generation this very call set -- see the comment
+        // above `restartingGeneration`. A rejected `play()` fires no `play`
+        // event to consume it in `onPlay`, so this is that path's own net;
+        // a successful one is ordinarily already consumed there well before
+        // this runs.
+        if (restartingGeneration === generation)
+          restartingGeneration = undefined;
       }
     });
   };
@@ -295,18 +427,44 @@ export const createNativePlayback = (
   const onPlay = (originalEvent: Event): void => {
     boundaryEnded = false;
     seekingFromEnded = false;
+    // Consume-once, and re-validated against the live generation rather than
+    // mere definedness -- see the comment above `restartingGeneration`. This
+    // is the one read that counts, and it clears the field immediately so a
+    // later, unrelated `play` is never mislabelled by a generation this event
+    // has already spent.
+    const origin =
+      restartingGeneration !== undefined &&
+      restartingGeneration === replayGeneration
+        ? 'system'
+        : undefined;
+    restartingGeneration = undefined;
     emit(
       {
         playback: 'playing',
         buffering: false,
         currentTime: media.currentTime
       },
-      providerEvent('play', originalEvent, undefined)
+      providerEvent('play', originalEvent, undefined, origin)
     );
   };
-  const onPlaying = (): void => emit({ playback: 'playing', buffering: false });
+  const onPlaying = (): void => {
+    emit({ playback: 'playing', buffering: false });
+  };
   const onPause = (originalEvent: Event): void => {
     if (boundaryEnded) return;
+    // A native `loop`-less element pauses itself, and fires this event, the
+    // moment it reaches its natural end -- before the `ended` event that
+    // reaches `onEnded` below and, when `loop` is configured, restarts it
+    // immediately (#673). `boundaryEnded` cannot guard this one: it is only
+    // ever set from the non-loop branch of `onEnded`, which has not run yet
+    // when this fires, so a looping player's every wrap published a transient
+    // `'provider'`-origin pause of its own -- indistinguishable from a viewer
+    // pressing pause, and enough on its own to read as a takeover before the
+    // loop's `play` event ever arrived. `media.ended` is what tells the two
+    // apart: true here only for the natural-end pause a loop is about to
+    // restart from, false for a real one -- a viewer's own pause, mid-clip,
+    // never reaches `media.ended`.
+    if (loop && media.ended) return;
     emit(
       { playback: 'paused' },
       providerEvent('pause', originalEvent, undefined)
@@ -323,7 +481,9 @@ export const createNativePlayback = (
       providerEvent('ended', originalEvent, undefined)
     );
   };
-  const onWaiting = (): void => emit({ buffering: true });
+  const onWaiting = (): void => {
+    emit({ buffering: true });
+  };
   const onSeeking = (originalEvent: Event): void => {
     if (boundaryEnded && beforeEffectiveEnd(media.currentTime)) {
       boundaryEnded = false;
@@ -417,6 +577,10 @@ export const createNativePlayback = (
 
   const seekToBounded = (target: number): Promise<CommandResult> =>
     runCommand(() => {
+      // A seek command means the playhead a deferred initial-position check
+      // would see is no longer the one the initial write produced -- see
+      // `abandonPositionCheck`.
+      abandonPositionCheck();
       if (boundaryEnded && beforeEffectiveEnd(target)) {
         boundaryEnded = false;
         seekingFromEnded = true;
@@ -461,6 +625,25 @@ export const createNativePlayback = (
         return Promise.resolve({ ok: false, reason: 'provider-error' });
       return seekToBounded(target);
     },
+    // The largest of the element's own seekable ends -- the only notion of a
+    // live edge a plain media element has, with no target latency of its own
+    // the way hls.js's `liveSyncPosition` is. `liveEdgeAvailability`
+    // (`index.ts`) has already checked this is finite before the controller
+    // ever reaches this method, but a defensive re-check keeps this method
+    // honest on its own rather than trusting a capability snapshot that may
+    // have moved.
+    seekToLiveEdge: () => {
+      let edge = Number.NEGATIVE_INFINITY;
+      for (let index = 0; index < media.seekable.length; index += 1) {
+        edge = Math.max(edge, media.seekable.end(index));
+      }
+      if (!Number.isFinite(edge))
+        return Promise.resolve({ ok: false, reason: 'provider-error' });
+      const target = withinMediaBounds(media, edge, startTime, endTime);
+      if (target === undefined)
+        return Promise.resolve({ ok: false, reason: 'provider-error' });
+      return seekToBounded(target);
+    },
     mute: () =>
       runCommand(() => {
         media.muted = true;
@@ -485,6 +668,10 @@ export const createNativePlayback = (
     },
     retry: () => {
       ++replayGeneration;
+      // Invalidates a pending initial-position check the same way: `positioned`
+      // below is about to be reset, so any check already scheduled against the
+      // load this replaces must not confirm or refuse against the reload.
+      abandonPositionCheck();
       return runCommand(() => {
         positioned = false;
         boundaryEnded = false;
@@ -543,6 +730,13 @@ export const createNativePlayback = (
       // `NativePlaybackOptions.startTime`).
       if (positioned) return;
       positioned = true;
+      // Withdraw whatever this seam published about the load `retry` just
+      // replaced, before deciding this one: a reload is a fresh decision (see
+      // the comment above), and a refusal about media that is no longer
+      // attached must not go on describing this load too. A no-op when
+      // nothing is held (#475).
+      withdrawStartTimeNotice?.();
+      withdrawStartTimeNotice = undefined;
       // Nothing to apply without a start offset. The media load algorithm has
       // already put the playhead at 0, and if metadata arrives after playback
       // has begun, writing 0 is not applying a start position — it is
@@ -592,11 +786,64 @@ export const createNativePlayback = (
         target !== startTime ||
         reached === undefined ||
         Math.abs(reached - target) > SETTLED_POSITION_TOLERANCE_SECONDS
-      )
-        emit({ error: startTimeConfigurationNotice });
+      ) {
+        withdrawStartTimeNotice = emit({ error: startTimeConfigurationNotice });
+        return;
+      }
+      // The synchronous read above reported success, which on WebKit is not
+      // the same thing as the engine having finished deciding -- see the
+      // comment above `playheadAfterMovingTo`. `media.seeking` is what the
+      // HTML seek algorithm itself uses to say that: true from the moment this
+      // seek started, and cleared again whether it completed or was aborted.
+      // So this polls `seeking` rather than guessing a delay for
+      // `currentTime`, and takes its one deferred read on the first poll that
+      // finds `seeking` false -- immediately, where the engine had already
+      // finished by the time the first poll runs (chromium and firefox, which
+      // is why they see one poll and no more), or however many polls later
+      // WebKit's own seek task needs.
+      //
+      // Asymmetric on purpose: a playhead the deferred read finds ABOVE the
+      // target is playback that started in the meantime, not a refusal, so
+      // only a playhead still short of it by more than the same tolerance
+      // counts. A write the engine actually refuses leaves the playhead at
+      // wherever this load's earlier position was -- 0, or an intermediate
+      // clamp -- which is below the target whenever a start above zero was
+      // configured, so "below" is what a refusal produces and "above" never
+      // is one.
+      const generation = ++positionCheckGeneration;
+      const deadline = Date.now() + START_POSITION_SETTLE_TIMEOUT_MS;
+      const poll = (): void => {
+        // Every reason this drops silently: a retry reloaded the source or a
+        // seek command ran, either of which calls `abandonPositionCheck` and
+        // both bumps `positionCheckGeneration` (mismatching `generation` here)
+        // and cancels this very timer; the provider was destroyed, likewise
+        // via `abandonPositionCheck` from `cancelPendingReplay`, and checked
+        // directly too since a destroyed element is not this poll's to read
+        // regardless of which path reached it; or the deadline above passed
+        // with the seek still unsettled, which is stalled media rather than a
+        // decided refusal -- see `START_POSITION_SETTLE_TIMEOUT_MS`.
+        if (isDestroyed() || generation !== positionCheckGeneration) return;
+        if (media.seeking && Date.now() < deadline) {
+          pendingPositionCheck = setTimeout(poll, SEEKING_POLL_INTERVAL_MS);
+          return;
+        }
+        pendingPositionCheck = undefined;
+        // Reaching the deadline still seeking is dropped here rather than
+        // reported: see `START_POSITION_SETTLE_TIMEOUT_MS` for why that is
+        // undecided rather than a refusal.
+        if (media.seeking) return;
+        if (target - media.currentTime > SETTLED_POSITION_TOLERANCE_SECONDS)
+          withdrawStartTimeNotice = emit({
+            error: startTimeConfigurationNotice
+          });
+      };
+      pendingPositionCheck = setTimeout(poll, SEEKING_POLL_INTERVAL_MS);
     },
     cancelPendingReplay: () => {
       ++replayGeneration;
+      // Destroy is the third path that makes a pending confirmation stale,
+      // alongside a retry and a seek command -- see `abandonPositionCheck`.
+      abandonPositionCheck();
     },
     handlers: {
       onPlay,

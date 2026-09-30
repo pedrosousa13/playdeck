@@ -24,7 +24,16 @@ const createProvider = (provider: ProviderAdapter['provider'] = 'native') => {
 
   return {
     provider: adapter,
-    emit: (...args: Parameters<ProviderStateListener>) => emit?.(...args)
+    // `ProviderStateListener` declares `void`, exactly so a fake this simple
+    // never has to fix up an unrelated return value — see the type's own
+    // comment. What this fake stands in for, a real `PlayerController`
+    // subscription, hands back a disposer for a notice-carrying patch at
+    // runtime regardless of the declared type, so a test reads it out through
+    // the same cast a real provider's `emit` would (`provider-native`'s
+    // `index.ts`, #475).
+    emit: (
+      ...args: Parameters<ProviderStateListener>
+    ): (() => void) | undefined => emit?.(...args) as (() => void) | undefined
   };
 };
 
@@ -479,7 +488,13 @@ const REFUSED_URL_MESSAGES: Record<RefusedUrlSurface, string> = {
   'textTracks src':
     'A textTracks src URL was rejected, so that text track was dropped.',
   'mediaSession artwork':
-    'A mediaSession artwork src URL was rejected, so that artwork entry was dropped.'
+    'A mediaSession artwork src URL was rejected, so that artwork entry was dropped.',
+  thumbnails:
+    'The thumbnails URL was rejected, so no seek-preview thumbnails were requested.',
+  'thumbnails cue image':
+    'A thumbnails cue image URL was rejected, so that cue was dropped.',
+  providerOptions:
+    'A providerOptions URL was rejected, so that option was dropped.'
 };
 
 // The prop the operator has to go and fix is in the message; the value that
@@ -743,4 +758,347 @@ test('holds the notice behind a standing non-fatal error until it clears', () =>
   fake.emit({ error: null });
 
   expect(controller.getState().error).toMatchObject(hostNotice);
+});
+
+// #475: a provider that re-decides a notice per load needs a way to say the
+// refusal it reported no longer holds, following `reportRefusedUrl`'s own
+// disposer precedent above. `emit` hands one back for every notice-carrying
+// patch, and calling it is the provider's own act -- nothing here does it on
+// the provider's behalf.
+test('lets a provider withdraw a configuration notice it published', () => {
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.setProvider(fake.provider);
+
+  const withdraw = fake.emit({ error: hostNotice });
+  expect(controller.getState().error).toMatchObject(hostNotice);
+
+  withdraw?.();
+
+  expect(controller.getState().error).toBeNull();
+});
+
+// The regression #475 exists to fix, reproduced at the mechanism `retry()`
+// itself uses: a null-error patch alone does not survive `#applyPatch`
+// refilling the slot from whatever the provider still holds -- only an
+// explicit withdrawal does.
+test('a null-error patch alone does not withdraw a held notice', () => {
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.setProvider(fake.provider);
+
+  fake.emit({ error: hostNotice });
+  fake.emit({ error: null });
+
+  expect(controller.getState().error).toMatchObject(hostNotice);
+});
+
+// The guard against over-correcting: a notice nothing has withdrawn survives
+// exactly the shape `retry()` produces -- a `lifecycle: 'loading'` patch with
+// `error: null` -- because withdrawal is the provider's own act and never a
+// side effect of another patch passing through. Vimeo's `suppressSeoMetadata`
+// notice is this shape: decided once at attach and never re-emitted, let alone
+// withdrawn.
+test('keeps a notice nothing has withdrawn through a retry-shaped patch', () => {
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.setProvider(fake.provider);
+
+  fake.emit({ error: privacyNotice });
+  fake.emit({
+    lifecycle: 'loading',
+    activation: 'loading-provider',
+    commandsReady: false,
+    error: null
+  });
+
+  expect(controller.getState().error).toMatchObject(privacyNotice);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' });
+
+  expect(controller.getState().error).toMatchObject(privacyNotice);
+});
+
+// Withdrawing a notice that is not the one published is inert: something else
+// already outranks it, or a later notice already displaced it, and neither
+// case is changed by this one leaving.
+//
+// The `typeof` assertion below is load-bearing, not a formality: a
+// notice-carrying patch always hands its listener a REAL disposer back, so
+// `withdrawCosmetic` calling it and finding nothing disturbed has to mean the
+// disposal was inert, never that there was no disposer to call. Without this,
+// the test would still pass against code with no withdrawal mechanism at all
+// -- `withdrawCosmetic` would be `undefined`, `withdrawCosmetic?.()` would be
+// a no-op, and "does not disturb what stands" would hold for a reason that has
+// nothing to do with what the test names (#475).
+test('withdrawing a notice that lost the slot does not disturb what stands', () => {
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.setProvider(fake.provider);
+
+  const withdrawCosmetic = fake.emit({ error: cosmeticNotice });
+  fake.emit({ error: privacyNotice });
+  expect(controller.getState().error).toMatchObject(privacyNotice);
+  expect(typeof withdrawCosmetic).toBe('function');
+
+  withdrawCosmetic?.();
+
+  expect(controller.getState().error).toMatchObject(privacyNotice);
+});
+
+// A disposer run twice must not resurrect a notice a later attach already
+// dropped with its provider -- the same idempotence `reportRefusedUrl`'s
+// disposer is guarded for, at the other place a notice can be withdrawn from.
+//
+// The `typeof` assertion below is load-bearing for the same reason as the
+// test above: without it, an absent withdrawal mechanism would also leave
+// `posterNotice` undisturbed, for having nothing to call rather than for
+// being correctly idempotent (#475).
+test('a withdrawal disposer run after the provider was swapped does nothing', () => {
+  const first = createProvider();
+  const second = createProvider('vimeo');
+  const controller = new PlayerController();
+  controller.setProvider(first.provider);
+
+  const withdraw = first.emit({ error: hostNotice });
+  expect(typeof withdraw).toBe('function');
+  controller.setProvider(second.provider);
+  second.emit({ error: posterNotice });
+
+  withdraw?.();
+
+  expect(controller.getState().error).toMatchObject(posterNotice);
+});
+
+// Everything below is #681, and all of it is asserted on the registry itself
+// rather than on `PlayerState.error`. That is not a preference: the read-time
+// fold picks one winner however many entries sit behind it, so while every
+// registration still stands the published slot reads exactly the same whether
+// a re-emitted notice registered once or five times -- for these assertions,
+// the shape `docs/agents/demonstrated-red.md` calls one that cannot fail. The
+// slot only diverges once a disposer withdraws one of the duplicates and the
+// others are left standing, which is the other route into this bug and the one
+// the `provider-vimeo` retry test takes; it reds through `PlayerState.error`
+// alone, and needs no seam. `#notices` is a true private field, so what this reaches
+// instead is the `Map` the controller builds it from: the field initializer
+// runs during construction and resolves `Map` off the global scope, so a
+// subclass installed there for the length of that one call hands back the very
+// object the controller then holds. The global is restored immediately, and
+// the registry is picked out of everything the constructor built by the shape
+// of its values -- a notice entry is the only one carrying a `notice` key.
+const controllerWithNoticeRegistry = (): {
+  readonly controller: PlayerController;
+  readonly noticeCount: () => number;
+} => {
+  const built: Array<Map<unknown, unknown>> = [];
+  // Declared before the global is reassigned, so `extends Map` binds the real
+  // one rather than this class itself.
+  class RecordingMap extends Map<unknown, unknown> {
+    constructor(entries?: ReadonlyArray<readonly [unknown, unknown]> | null) {
+      super(entries);
+      built.push(this);
+    }
+  }
+  const nativeMap = globalThis.Map;
+  globalThis.Map = RecordingMap as unknown as MapConstructor;
+  let controller: PlayerController;
+  try {
+    controller = new PlayerController();
+  } finally {
+    globalThis.Map = nativeMap;
+  }
+  // Which of the maps the constructor built is the registry, settled once here
+  // rather than at each read: one registration identifies it by the shape of
+  // the value it holds, and withdrawing that registration puts the controller
+  // back exactly as it was found -- so a later count of ZERO is readable too.
+  // The throw is the seam's own guard: if the registry ever stops being a
+  // `Map` built in the constructor, every count below has to fail loudly
+  // rather than quietly answer about the wrong object.
+  const probe = controller.reportRefusedUrl('poster src');
+  const registry = built.find((map) =>
+    [...map.values()].some(
+      (value) =>
+        typeof value === 'object' && value !== null && 'notice' in value
+    )
+  );
+  probe();
+  if (!registry) {
+    throw new Error('the notice registry was not one of the maps constructed');
+  }
+  return { controller, noticeCount: () => registry.size };
+};
+
+// The issue itself: a provider that re-decides a notice per load and never
+// withdraws it registered one entry per emit, held for the whole provider
+// lifetime. A re-emit is the same claim restated, so it replaces its
+// predecessor rather than sitting beside it (#681).
+test('registers one entry for a notice re-emitted without being withdrawn', () => {
+  const fake = createProvider();
+  const { controller, noticeCount } = controllerWithNoticeRegistry();
+  controller.setProvider(fake.provider);
+
+  fake.emit({ error: hostNotice });
+
+  expect(noticeCount()).toBe(1);
+
+  fake.emit({ error: hostNotice });
+  fake.emit({ error: hostNotice });
+
+  expect(noticeCount()).toBe(1);
+  expect(controller.getState().error).toMatchObject(hostNotice);
+});
+
+// A re-emit is not a new arrival and must not cost its notice the place the
+// tie rule reads it from. `#currentProviderNotice` folds in registration order
+// and a tie keeps whichever notice registered first (#368), so re-emitting the
+// incumbent -- what a provider re-deciding its notices per load does every
+// time -- has to leave it the incumbent. A replacement that dropped the entry
+// and added it back under the new token would move it behind the notice it had
+// been holding the slot against, and the next patch that resolves the slot
+// from scratch would hand that one the slot for no reason a viewer could see.
+test('leaves a re-emitted notice its place in the tie order', () => {
+  const fake = createProvider();
+  const controller = new PlayerController();
+  controller.setProvider(fake.provider);
+
+  fake.emit({ error: hostNotice });
+  fake.emit({ error: posterNotice });
+  fake.emit({ error: hostNotice });
+  fake.emit({ lifecycle: 'ready', activation: 'ready' });
+
+  expect(controller.getState().error).toMatchObject(hostNotice);
+});
+
+// The guard against matching too eagerly, and the one place getting this
+// wrong would turn a memory characteristic into a wrong answer: two notices
+// that differ at all are two notices, and both have to stand or the fold has
+// nothing to rank.
+test('registers an entry each for two genuinely different notices', () => {
+  const fake = createProvider();
+  const { controller, noticeCount } = controllerWithNoticeRegistry();
+  controller.setProvider(fake.provider);
+
+  fake.emit({ error: hostNotice });
+  fake.emit({ error: posterNotice });
+
+  expect(noticeCount()).toBe(2);
+  expect(controller.getState().error).toMatchObject(hostNotice);
+});
+
+// The sharpest version of the same guard: two notices identical in every field
+// but the one that decides the slot. Matching on the message alone -- the
+// field an operator reads -- would collapse these two into one and silently
+// drop the protective level, which is the masking #368 exists to remove.
+test('registers an entry each for two notices differing only in severity', () => {
+  const fake = createProvider();
+  const { controller, noticeCount } = controllerWithNoticeRegistry();
+  controller.setProvider(fake.provider);
+
+  fake.emit({ error: { ...privacyNotice, severity: 'presentational' } });
+  fake.emit({ error: privacyNotice });
+
+  expect(noticeCount()).toBe(2);
+  expect(controller.getState().error).toMatchObject({
+    severity: 'protective'
+  });
+});
+
+// The same guard one step past the declared shape. `freezeError` spreads the
+// notice it is handed, so an own property an adapter outside this repo hangs
+// on one survives onto the published `PlayerError` rather than being dropped:
+// two notices differing only there are genuinely different, and comparing the
+// declared fields alone would merge them. A notice carrying anything beyond
+// the declared shape therefore matches nothing, itself included -- registering
+// twice costs the memory #681 is about, where merging loses a distinction.
+test('registers an entry each for two notices differing only past the declared shape', () => {
+  const fake = createProvider();
+  const { controller, noticeCount } = controllerWithNoticeRegistry();
+  controller.setProvider(fake.provider);
+
+  fake.emit({
+    error: { ...privacyNotice, adapterTag: 'left' } as unknown as PlayerError
+  });
+  fake.emit({
+    error: { ...privacyNotice, adapterTag: 'right' } as unknown as PlayerError
+  });
+
+  expect(noticeCount()).toBe(2);
+});
+
+// The disposer contract across a replacement: one registration, one disposer,
+// and the superseded registration owns nothing any more. The `typeof`
+// assertions are load-bearing for the reason the #475 tests above give -- an
+// implementation handing back no disposer at all would otherwise satisfy the
+// first half of this by having nothing to call.
+test('leaves a re-emitted notice to the disposer of the emit that stands', () => {
+  const fake = createProvider();
+  const { controller, noticeCount } = controllerWithNoticeRegistry();
+  controller.setProvider(fake.provider);
+
+  const superseded = fake.emit({ error: hostNotice });
+  const standing = fake.emit({ error: hostNotice });
+  expect(typeof superseded).toBe('function');
+  expect(typeof standing).toBe('function');
+
+  superseded?.();
+
+  expect(noticeCount()).toBe(1);
+  expect(controller.getState().error).toMatchObject(hostNotice);
+
+  standing?.();
+
+  expect(noticeCount()).toBe(0);
+  expect(controller.getState().error).toBeNull();
+});
+
+// Where the replacement deliberately stops. Two reporters of one refused
+// surface register the very same shared `REFUSED_URL_NOTICES` value, so they
+// are indistinguishable by content -- but they are two independent claims
+// about two different values, not one claim restated, and the refusal stands
+// while either of them does. Collapsing them is the per-prop-boolean
+// withdrawal #330 exists to prevent: two `PosterImage`s under one root, one
+// poisoned and one not.
+//
+// The releases are in the order #330's own tests above do NOT cover, and that
+// is the point of this one. Every existing pair releases the FIRST reporter
+// first, which a registry that had replaced it survives -- the superseded
+// registration's disposer finds its token already gone and does nothing, so
+// the notice stays published and the assertion passes. Releasing the reporter
+// whose registration stands is what exposes the collapse.
+test('keeps a registration per reporter of one refused surface', () => {
+  const { controller, noticeCount } = controllerWithNoticeRegistry();
+
+  const first = controller.reportRefusedUrl('poster src');
+  const second = controller.reportRefusedUrl('poster src');
+
+  expect(noticeCount()).toBe(2);
+
+  second();
+
+  expect(noticeCount()).toBe(1);
+  expect(controller.getState().error?.message).toContain('poster src');
+
+  first();
+
+  expect(noticeCount()).toBe(0);
+  expect(controller.getState().error).toBeNull();
+});
+
+// The removal paths #475 built are unchanged by the replacement: a swap still
+// drops every provider entry from the registry, not just from the slot.
+test('drops every provider entry from the registry on a swap', () => {
+  const first = createProvider();
+  const second = createProvider('vimeo');
+  const { controller, noticeCount } = controllerWithNoticeRegistry();
+  controller.setProvider(first.provider);
+
+  first.emit({ error: hostNotice });
+  first.emit({ error: posterNotice });
+  first.emit({ error: hostNotice });
+
+  expect(noticeCount()).toBe(2);
+
+  controller.setProvider(second.provider);
+
+  expect(noticeCount()).toBe(0);
 });

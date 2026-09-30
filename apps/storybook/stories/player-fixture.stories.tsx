@@ -23,6 +23,11 @@ type PlayerFixtureProps = {
   readonly airplay?: 'demo';
   readonly sourceChange?: 'external';
   readonly captionRenderer?: Player.RootProps['captionRenderer'];
+  // Attaches a real `<track kind="chapters">` (`chapters.vtt`), so
+  // `e2e/chapters.spec.ts` has a native fixture to drive `Player.ChaptersMenu`
+  // against, in the same shape `captionRenderer` opts a fixture into a real
+  // `<track kind="captions">` above.
+  readonly chapters?: boolean;
   // The `[startTime, endTime]` window (#214), so a spec can drive a fixture
   // whose playback is confined to something other than the whole media.
   // `e2e/vimeo-url-time-param.spec.ts` needs one to have anything to defend.
@@ -35,7 +40,36 @@ type PlayerFixtureProps = {
   // Opts a Vimeo-sourced fixture into the SEO-metadata suppression (#215), so
   // e2e/vimeo-seo-metadata.spec.ts can drive both sides of the option.
   readonly vimeoSuppressSeoMetadata?: boolean;
+  // `Player.Root`'s own `poster` prop (#556), threaded straight through so a
+  // real-provider spec can opt a fixture into `'provider'` and read
+  // `capabilities.providerPoster`/`providerPosterUrl` off `playdeckHandle`.
+  // This fixture's own `Player.Poster` below always carries a `PosterImage`
+  // child, so a consumer poster still wins the render either way -- this arg
+  // only drives the resolution, not what is on screen.
+  readonly poster?: Player.RootProps['poster'];
+  // Threads `Player.Poster`'s own `showWhilePaused` prop through to this
+  // fixture, so `e2e/poster.spec.ts` can drive both sides of it: off (the
+  // default every consumer gets) and on (what a YouTube-backed position of
+  // the bench sets, to cover the chrome its embed draws over an idle iframe
+  // while paused).
+  readonly posterShowWhilePaused?: boolean;
+  // Wraps the fixture in a tall scroll page -- a spacer above, the player,
+  // a spacer below -- so `e2e/activation.spec.ts` can scroll it out of and
+  // back into view under `loading: 'viewport'` (#309). The spacers are sized
+  // in `SCROLL_SPACER_HEIGHT` below.
+  readonly scrollPage?: boolean;
+  // `Player.Root`'s own `loop` prop, threaded through so
+  // `e2e/activation.spec.ts` can drive a viewport-autoplayed fixture that
+  // wraps on its own, for #673's auto-pause-survives-the-loop coverage.
+  readonly loop?: boolean;
 };
+
+// Tall enough that the player starts fully outside the observer's root even
+// with `loadMargin`'s default `'200px 0px'` added to Playwright's default
+// 1280x720 iframe: 720 (viewport height) + 200 (margin) = 920 is the furthest
+// the player's top edge can sit and still be reported as intersecting, so
+// this clears it with headroom to spare in both directions.
+const SCROLL_SPACER_HEIGHT = '1400px';
 
 const PresentationControls = ({
   airplayDemo
@@ -222,13 +256,22 @@ const LiveControls = () => {
   );
 };
 
-const captionTextTracks: Player.MediaProps['textTracks'] = [
+const captionTextTracks: NonNullable<Player.MediaProps['textTracks']> = [
   {
     src: assetUrl('captions-en.vtt'),
     srcLang: 'en',
     label: 'English',
     kind: 'captions',
     default: true
+  }
+];
+
+const chaptersTextTracks: NonNullable<Player.MediaProps['textTracks']> = [
+  {
+    src: assetUrl('chapters.vtt'),
+    srcLang: 'en',
+    label: 'Chapters',
+    kind: 'chapters'
   }
 ];
 
@@ -243,10 +286,15 @@ const PlayerFixture = ({
   airplay,
   sourceChange: sourceChangeInput,
   captionRenderer,
+  chapters,
   startTime,
   endTime,
   vimeoCustomControls,
-  vimeoSuppressSeoMetadata
+  vimeoSuppressSeoMetadata,
+  poster,
+  posterShowWhilePaused,
+  scrollPage,
+  loop
 }: PlayerFixtureProps) => {
   const autoplay: Player.RootProps['autoplay'] = autoplayInput ?? false;
   const loading: Player.PlayerLoadingStrategy = loadingInput ?? 'viewport';
@@ -277,18 +325,29 @@ const PlayerFixture = ({
         // `selectTextTrack` can settle to `source`.
         sourceKey === 'hls-nosubs'
         ? { type: 'hls', src: assetUrl('hls/nosubs.m3u8'), engine: hlsEngine }
-        : sourceKey === 'live'
-          ? { type: 'hls', src: assetUrl('live/index.m3u8'), engine: hlsEngine }
-          : sourceKey === 'long'
-            ? assetUrl('tracer-10s.mp4')
-            : (vimeoSource ??
-              (sourceChange
-                ? 'https://provider.invalid/source-a.mp4'
-                : activationSource === 'external'
-                  ? 'https://provider.invalid/tracer.mp4'
-                  : activationSource === 'youtube'
-                    ? youtubeExampleUrl
-                    : assetUrl('tracer.mp4')));
+        : // Two `EXT-X-MEDIA:TYPE=AUDIO` renditions (#656) -- the only shape
+          // in which `selectAudioTrack` has more than one track to switch
+          // between; `hls/master.m3u8` above carries none.
+          // `e2e/audio-tracks.spec.ts` drives `Player.AudioTrackMenu`
+          // against this fixture.
+          sourceKey === 'hls-audio'
+          ? { type: 'hls', src: assetUrl('hls/audio.m3u8'), engine: hlsEngine }
+          : sourceKey === 'live'
+            ? {
+                type: 'hls',
+                src: assetUrl('live/index.m3u8'),
+                engine: hlsEngine
+              }
+            : sourceKey === 'long'
+              ? assetUrl('tracer-10s.mp4')
+              : (vimeoSource ??
+                (sourceChange
+                  ? 'https://provider.invalid/source-a.mp4'
+                  : activationSource === 'external'
+                    ? 'https://provider.invalid/tracer.mp4'
+                    : activationSource === 'youtube'
+                      ? youtubeExampleUrl
+                      : assetUrl('tracer.mp4')));
 
   const replacementSource = sourceChange
     ? 'https://provider.invalid/source-b.mp4'
@@ -297,9 +356,17 @@ const PlayerFixture = ({
   const [source, setSource] = useState(initialSource);
   // Only the captions fixture (a story arg sets `captionRenderer`) attaches a
   // real <track>; every other story keeps the plain <video> it had before.
-  const textTracks = captionRenderer ? captionTextTracks : undefined;
+  // The chapters fixture (`chapters` arg) attaches its own <track> alongside
+  // whichever caption track is already present, rather than replacing it.
+  const textTracks =
+    captionRenderer || chapters
+      ? [
+          ...(captionRenderer ? captionTextTracks : []),
+          ...(chapters ? chaptersTextTracks : [])
+        ]
+      : undefined;
 
-  return (
+  const fixture = (
     <>
       <Player.Root
         autoplay={autoplay}
@@ -307,6 +374,7 @@ const PlayerFixture = ({
         defaultMuted={defaultMuted}
         endTime={endTime}
         loading={loading}
+        loop={loop}
         mediaMetadata={{
           title: 'Playdeck tracer',
           artist: 'Playdeck',
@@ -318,6 +386,7 @@ const PlayerFixture = ({
             }
           ]
         }}
+        poster={poster}
         preload={preload}
         providerOptions={
           vimeoCustomControls || vimeoSuppressSeoMetadata
@@ -341,7 +410,7 @@ const PlayerFixture = ({
           data-testid="viewport"
           style={{ aspectRatio: '16 / 9', maxWidth: '48rem', width: '100%' }}
         >
-          <Player.Poster>
+          <Player.Poster showWhilePaused={posterShowWhilePaused}>
             <Player.PosterImage
               alt=""
               decoding="async"
@@ -359,9 +428,14 @@ const PlayerFixture = ({
           <Player.LoadingIndicator />
           <Player.Media textTracks={textTracks} />
           <Player.Captions />
+          <Player.LiveIndicator />
         </Player.Viewport>
         <Player.PlayButton />
         <Player.CaptionsButton />
+        <Player.QualityMenu />
+        <Player.PlaybackRateMenu />
+        <Player.ChaptersMenu />
+        <Player.AudioTrackMenu />
         {/*
           Mounted everywhere on purpose: "AirPlay" contains "Play", so a
           name-based Playwright lookup collides here (#73). It is a partial
@@ -380,6 +454,16 @@ const PlayerFixture = ({
           Switch to source B
         </button>
       ) : null}
+    </>
+  );
+
+  if (!scrollPage) return fixture;
+
+  return (
+    <>
+      <div style={{ height: SCROLL_SPACER_HEIGHT }} />
+      {fixture}
+      <div style={{ height: SCROLL_SPACER_HEIGHT }} />
     </>
   );
 };
@@ -404,7 +488,7 @@ const meta: Meta<PlayerFixtureProps> = {
     source: {
       control: 'text',
       description:
-        "'hls' | 'hls-nosubs' | 'live' | 'long' | 'vimeo' | 'vimeo-unlisted' | an https:// URL | undefined (defaults to the native tracer)."
+        "'hls' | 'hls-nosubs' | 'hls-audio' | 'live' | 'long' | 'vimeo' | 'vimeo-unlisted' | an https:// URL | undefined (defaults to the native tracer)."
     },
     engine: {
       control: 'radio',
@@ -440,7 +524,9 @@ const meta: Meta<PlayerFixtureProps> = {
       options: ['custom', 'native']
     },
     startTime: { control: 'number' },
-    endTime: { control: 'number' }
+    endTime: { control: 'number' },
+    posterShowWhilePaused: { control: 'boolean' },
+    scrollPage: { control: 'boolean' }
   },
   parameters: {
     docs: {
@@ -486,6 +572,14 @@ export const NativeMp4StartTime: Story = {
   args: { source: 'long', startTime: 5 }
 };
 
+// The ten-second clip, with `chapters.vtt` attached -- `e2e/chapters.spec.ts`
+// drives `Player.ChaptersMenu` against this fixture, and needs the longer
+// clip for the same reason `NativeMp4StartTime` above does: three chapters
+// with boundaries at 3s and 6s need a source that reaches past them.
+export const NativeChapters: Story = {
+  args: { source: 'long', chapters: true }
+};
+
 export const CaptionsCustom: Story = {
   args: { captionRenderer: 'custom' }
 };
@@ -509,6 +603,13 @@ export const HlsNative: Story = {
   args: { source: 'hls', engine: 'native' }
 };
 
+// Two alternate-audio renditions (#656) -- e2e/audio-tracks.spec.ts drives
+// Player.AudioTrackMenu against it, the way HlsHlsJs above does for
+// Player.QualityMenu.
+export const HlsAudioTracks: Story = {
+  args: { source: 'hls-audio', engine: 'hls.js' }
+};
+
 export const LiveHlsJs: Story = {
   args: { source: 'live', engine: 'hls.js' }
 };
@@ -525,6 +626,26 @@ export const LiveNative: Story = {
 
 export const AutoplayMuted: Story = {
   args: { autoplay: 'muted' }
+};
+
+// A tall scroll page around the player (#309), so `e2e/activation.spec.ts`
+// can scroll it out of and back into view under the default `loading:
+// 'viewport'` strategy: auto-pause on exit, resume on re-entry, and both
+// viewer-gesture overrides. Muted so a headless engine actually plays it, and
+// sourced from the local `long` tracer (10s, `assetUrl('tracer-10s.mp4')`)
+// rather than the 1s default -- the spec's several scroll-and-click steps
+// need the clip to outlast them, and still needs no network.
+export const ViewportAutoplayScrollMuted: Story = {
+  args: { source: 'long', autoplay: 'muted', scrollPage: true }
+};
+
+// #673: the same tall scroll page as above, but `loop: true` and sourced from
+// the 1s default tracer rather than the 10s `long` one -- short enough for
+// the player to wrap on its own, more than once, while a spec holds it in
+// view, so `e2e/activation.spec.ts` can prove auto-pause survives the wrap
+// rather than firing only for the first exit.
+export const ViewportAutoplayScrollLoopMuted: Story = {
+  args: { autoplay: 'muted', scrollPage: true, loop: true }
 };
 
 export const AutoplayAudible: Story = {
@@ -558,6 +679,17 @@ export const InteractionPreloadNoneExternalMuted: Story = {
 
 export const InteractionYoutube: Story = {
   args: { loading: 'interaction', activationSource: 'youtube' }
+};
+
+// poster="provider": e2e/youtube-real.spec.ts fetches the real
+// `providerPosterUrl` this resolves to and proves it is a loadable image
+// rather than the 404 `maxresdefault.jpg` would risk (#556).
+export const InteractionYoutubeProviderPoster: Story = {
+  args: {
+    loading: 'interaction',
+    activationSource: 'youtube',
+    poster: 'provider'
+  }
 };
 
 export const VimeoInteraction: Story = {
@@ -597,6 +729,18 @@ export const VimeoUnlistedInteraction: Story = {
 
 export const VimeoInteractionMuted: Story = {
   args: { source: 'vimeo', loading: 'interaction', defaultMuted: true }
+};
+
+// poster="provider": e2e/vimeo-smoke.spec.ts drives the opt-in poster oEmbed
+// probe against the real endpoint and fetches the thumbnail it resolves to
+// (#556).
+export const VimeoInteractionResolvePoster: Story = {
+  args: {
+    source: 'vimeo',
+    loading: 'interaction',
+    defaultMuted: true,
+    poster: 'provider'
+  }
 };
 
 export const VimeoFreePlan: Story = {

@@ -1,6 +1,7 @@
 import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
+import { assetUrl } from './asset-url';
 import { available, ready } from './support';
 
 const meta = {
@@ -83,4 +84,49 @@ export const WithCustomIcons: Story = {
     await expect(play.querySelector('svg')).not.toBeNull();
     await userEvent.click(play);
   }
+};
+
+/**
+ * `e2e/gestures-hit-test.spec.ts`'s fixture. `@playdeck/react/docked.css`,
+ * mounted through the toolbar's Theme global, with `Gestures` before
+ * `Controls` exactly as this file's own JSDoc instructs, and the bar
+ * positioned by the JSDoc's general rule: `position: relative`, which
+ * leaves the bar exactly where `docked.css` lays it out — below the
+ * picture, never overlaid (`docked.css`'s own header comment). `Viewport`
+ * carries only a `width`, no fixed height: `Media` and `Controls` are both
+ * plain, unstyled children, so `Viewport` grows to fit both rather than
+ * clipping the bar the way a fixed-height box would. Without the
+ * positioning rule this full-bleed layer still stretches to cover that
+ * whole (taller) box and swallows the bar's clicks even though it sits
+ * below the picture — which is what the e2e spec demonstrates by removing
+ * it.
+ *
+ * Real media (`tracer.mp4`), not the mock provider: the point is a real
+ * pointer click resolving against real layout, which the mock's synthetic
+ * `userEvent` interactions in `WithCustomIcons` above do not exercise the
+ * same way a Playwright `click()` does. `real-playback` opts out of
+ * `withMockPlayer`; `!test` keeps this off Storybook's own deterministic
+ * story-test run, the same pairing every other real-media fixture in this
+ * workbench carries (`stories/real-playback.stories.tsx`).
+ *
+ * Demonstrated red and green: see this commit's message.
+ */
+export const ClickableUnderDockedTheme: Story = {
+  tags: ['real-playback', '!test'],
+  globals: { theme: 'docked' },
+  render: () => (
+    <Player.Root loading="interaction" source={assetUrl('tracer.mp4')}>
+      <Player.Viewport style={{ width: 640 }}>
+        <style>
+          {'[data-playdeck-part="controls"] { position: relative; }'}
+        </style>
+        <Player.Media />
+        <Player.Gestures onToggleControls={() => {}} />
+        <Player.ActivationButton aria-label="Load and play" />
+        <Player.Controls aria-label="Video player controls">
+          <Player.MuteButton />
+        </Player.Controls>
+      </Player.Viewport>
+    </Player.Root>
+  )
 };

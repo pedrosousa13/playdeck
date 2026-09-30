@@ -14,18 +14,26 @@ import {
   type NativePlaybackOptions
 } from '@playdeck/provider-native';
 import {
+  hlsBuildLoaders,
   readMediaRanges,
   unsupportedSelection,
+  type HlsBuild,
   type HlsEngineSelection,
   type HlsModuleLoader
 } from './adapter-values.js';
 import { createHlsAttachment } from './attachment.js';
-import { createHlsErrorRecovery } from './error-recovery.js';
+import { createHlsAudioTracks } from './audio-tracks.js';
+import {
+  createHlsErrorRecovery,
+  HLS_JS_ELEMENT_ERROR_TIMEOUT_MS
+} from './error-recovery.js';
 import { createHlsPlayback } from './playback.js';
 import { createHlsQualityLevels } from './quality-levels.js';
 import { createHlsTextTracks } from './text-tracks.js';
 
 export type {
+  HlsAudioTrackLike,
+  HlsBuild,
   HlsConfigLike,
   HlsConstructorLike,
   HlsEngineSelection,
@@ -43,6 +51,20 @@ export type HlsEnvironment = {
 
 export type HlsProviderOptions = NativePlaybackOptions & {
   readonly loadHls?: HlsModuleLoader;
+  /**
+   * Which hls.js build to load, `'full'` (the default) or `'light'`, as a
+   * name rather than the loader function itself. This is the option
+   * `PlayerProviderOptions.hls` (`@playdeck/react`) exposes through
+   * `Player.Root`: `loadHls` cannot live in a provider option bag, whose
+   * values `providerBagEqual` compares with `Object.is`, so a function
+   * written inline would look different every render and tear the engine
+   * down. `build` is a primitive, so it compares safely and is the route
+   * `Player.Root` takes to `hls.js/light` -- see its README for what that
+   * build drops and saves.
+   *
+   * Ignored when `loadHls` is also given: an explicit loader always wins.
+   */
+  readonly build?: HlsBuild;
 };
 
 // The liveness derivation lives in `@playdeck/core`, so every adapter shares one
@@ -113,11 +135,6 @@ export const selectHlsEngine = (
   );
 };
 
-// hls.js publishes stricter generic event signatures than the minimal
-// structural surface this adapter consumes, so the dynamic module boundary
-// narrows through a cast instead of importing hls.js types eagerly.
-const defaultLoadHls: HlsModuleLoader = () => import('hls.js');
-
 // On the hls.js engine the native adapter stays attached for media-element
 // state, but hls.js is the sole caption owner: `Player.Media` cannot know the
 // engine at render time, so it renders sidecar `<track>` children for `hls`
@@ -130,6 +147,20 @@ const withoutCaptionState = (patch: ProviderStatePatch): ProviderStatePatch => {
   delete rest.textTracks;
   delete rest.selectedTextTrackId;
   delete rest.captionRendering;
+  return rest;
+};
+
+// The native adapter's own audio-track subsystem reads `media.audioTracks`,
+// the browser's own view of the element -- a different concern from hls.js's
+// manifest-level alternate-audio renditions on the hls.js engine, the same
+// collision `withoutCaptionState` above keeps out of `textTracks`.
+// (`selectAudioTrack` needs no stripping -- `decorateCapabilities` already
+// replaces it with the hls.js availability on this engine.)
+const withoutAudioTrackState = (
+  patch: ProviderStatePatch
+): ProviderStatePatch => {
+  const rest = { ...patch };
+  delete rest.audioTracks;
   return rest;
 };
 
@@ -149,7 +180,8 @@ export const createHlsProvider = (
   source: HlsSource,
   options: HlsProviderOptions = {}
 ): ProviderAdapter => {
-  const { loadHls = defaultLoadHls, ...nativeOptions } = options;
+  const { loadHls: explicitLoadHls, build, ...nativeOptions } = options;
+  const loadHls = explicitLoadHls ?? hlsBuildLoaders[build ?? 'full'];
   const selection = selectHlsEngine(
     source.engine ?? 'auto',
     detectHlsEnvironment(media)
@@ -161,6 +193,31 @@ export const createHlsProvider = (
   let hlsLiveHint: boolean | undefined;
   let liveState: PlayerLiveState = null;
   let liveSeekMeaningful = true;
+  // Whether the hls.js engine can currently report a live edge to seek to.
+  // Tracked the same way as `liveSeekMeaningful` -- a closure variable
+  // `decorateCapabilities` reads directly, kept in step by `syncLive` -- and
+  // deliberately not derived from `liveSeekMeaningful` alone: a manifest can
+  // report a `liveSyncPosition` before or after the window becomes wide
+  // enough to scrub, so the two can change independently and each needs its
+  // own trigger for a re-decoration (below).
+  let liveEdgeAvailable = false;
+  // The bounded hold for a raw element error on the hls.js path -- see
+  // `HLS_JS_ELEMENT_ERROR_TIMEOUT_MS`. Set only while one is pending, and
+  // cleared by whichever comes first: hls.js claiming the failure, the
+  // engine restarting or tearing down, playback actually progressing, or
+  // this timer expiring on its own.
+  let pendingElementErrorTimer: ReturnType<typeof setTimeout> | undefined;
+  // `media.currentTime` at the moment the hold above was armed, so a later
+  // patch can be told apart from real progress -- see where it is compared,
+  // below.
+  let pendingElementErrorAtTime: number | undefined;
+
+  const cancelPendingElementError = (): void => {
+    if (pendingElementErrorTimer === undefined) return;
+    clearTimeout(pendingElementErrorTimer);
+    pendingElementErrorTimer = undefined;
+    pendingElementErrorAtTime = undefined;
+  };
 
   const emit = (patch: ProviderStatePatch, event?: ProviderEvent): void => {
     if (attachment.isDestroyed()) return;
@@ -176,10 +233,33 @@ export const createHlsProvider = (
         engine === 'native'
           ? { status: 'unavailable', reason: 'provider' }
           : qualityLevels.selectQualityAvailability(),
+      // Same engine split as `selectQuality` above: the native engine has no
+      // selection surface at all, hls.js's has auto built in whenever it has
+      // one (see the comment on `selectQualityAutoAvailability`).
+      selectQualityAuto:
+        engine === 'native'
+          ? { status: 'unavailable', reason: 'provider' }
+          : qualityLevels.selectQualityAutoAvailability(),
       selectTextTrack:
         engine === 'hls.js'
           ? textTracks.selectTextTrackAvailability()
-          : capabilities.selectTextTrack
+          : capabilities.selectTextTrack,
+      selectAudioTrack:
+        engine === 'hls.js'
+          ? audioTracks.selectAudioTrackAvailability()
+          : capabilities.selectAudioTrack,
+      // The native engine's own answer passes through unchanged: it comes
+      // from the embedded native provider reading the same media element's
+      // `seekable`, which is exactly what a native HLS playback session is.
+      // hls.js has its own notion of the edge -- `liveSyncPosition`, behind
+      // the raw seekable end on purpose -- so its engine answers from
+      // `liveEdgeAvailable` instead.
+      liveEdge:
+        engine === 'hls.js'
+          ? liveEdgeAvailable
+            ? { status: 'available' }
+            : { status: 'unavailable', reason: 'source' }
+          : capabilities.liveEdge
     };
     return liveSeekMeaningful
       ? withQuality
@@ -194,6 +274,13 @@ export const createHlsProvider = (
       : {};
 
   const textTracks = createHlsTextTracks(media, {
+    emit,
+    isDestroyed: () => attachment.isDestroyed(),
+    getInstance: () => attachment.getInstance(),
+    capabilitiesPatch
+  });
+
+  const audioTracks = createHlsAudioTracks({
     emit,
     isDestroyed: () => attachment.isDestroyed(),
     getInstance: () => attachment.getInstance(),
@@ -237,10 +324,18 @@ export const createHlsProvider = (
   const syncLive = (patch: ProviderStatePatch): ProviderStatePatch => {
     const nextLive = computeLiveState();
     const meaningful = seekWindowMeaningful(nextLive);
+    const nextLiveEdgeAvailable =
+      engine === 'hls.js' &&
+      Boolean(nextLive?.isLive) &&
+      Number.isFinite(attachment.getInstance()?.liveSyncPosition) &&
+      meaningful;
     const liveChanged = !liveStateEqual(nextLive, liveState);
     const meaningfulChanged = meaningful !== liveSeekMeaningful;
+    const liveEdgeAvailableChanged =
+      nextLiveEdgeAvailable !== liveEdgeAvailable;
     liveState = nextLive;
     liveSeekMeaningful = meaningful;
+    liveEdgeAvailable = nextLiveEdgeAvailable;
     const liveField: ProviderStatePatch = liveChanged ? { live: nextLive } : {};
     const durationField: ProviderStatePatch = liveChanged
       ? {
@@ -255,7 +350,7 @@ export const createHlsProvider = (
         : {};
     const capabilitiesField: ProviderStatePatch = patch.capabilities
       ? { capabilities: decorateCapabilities(patch.capabilities) }
-      : meaningfulChanged && lastCapabilities
+      : (meaningfulChanged || liveEdgeAvailableChanged) && lastCapabilities
         ? { capabilities: decorateCapabilities(lastCapabilities) }
         : {};
     return { ...patch, ...liveField, ...durationField, ...capabilitiesField };
@@ -264,10 +359,12 @@ export const createHlsProvider = (
   const emitLiveUpdate = (): void => {
     const before = liveState;
     const beforeMeaningful = liveSeekMeaningful;
+    const beforeLiveEdgeAvailable = liveEdgeAvailable;
     const patch = syncLive({});
     if (
       liveStateEqual(before, liveState) &&
-      beforeMeaningful === liveSeekMeaningful
+      beforeMeaningful === liveSeekMeaningful &&
+      beforeLiveEdgeAvailable === liveEdgeAvailable
     ) {
       return;
     }
@@ -277,13 +374,55 @@ export const createHlsProvider = (
   const unsubscribeNative = native.subscribe((patch, event) => {
     if (attachment.isDestroyed()) return;
     if (engine === 'hls.js' && patch.lifecycle === 'error') {
-      // hls.js owns error recovery and surfacing on the MSE path; raw media
-      // element errors would preempt its bounded recovery table.
+      // hls.js owns error recovery and surfacing on the MSE path, so a raw
+      // element error is held rather than published outright -- publishing
+      // it immediately would preempt hls.js's own bounded recovery table,
+      // which triggers transient element errors of its own during normal
+      // recovery. But hls.js only ever reports what it decides is a fatal
+      // `ERROR` event; an element error it does not itself surface would
+      // otherwise vanish with nothing to say playback stalled. The timer
+      // below is what stands in for that: if hls.js hasn't claimed the
+      // failure (its own `ERROR` event, fatal or not, or a recovery entry
+      // point call -- both only ever happen from inside the `ERROR`
+      // listener in `attachment.ts`, so cancelling there covers both) or
+      // playback hasn't otherwise progressed by the time it expires,
+      // nothing on this path was ever going to surface it.
+      const { error } = patch;
+      if (error) {
+        cancelPendingElementError();
+        pendingElementErrorAtTime = media.currentTime;
+        pendingElementErrorTimer = setTimeout(() => {
+          pendingElementErrorTimer = undefined;
+          pendingElementErrorAtTime = undefined;
+          if (attachment.isDestroyed()) return;
+          surfaceFatal(error);
+        }, HLS_JS_ELEMENT_ERROR_TIMEOUT_MS);
+      }
       return;
+    }
+    if (
+      pendingElementErrorTimer !== undefined &&
+      patch.currentTime !== undefined &&
+      patch.currentTime !== pendingElementErrorAtTime
+    ) {
+      // A `timeupdate` fires on this same unmoved position too -- both
+      // `onTimeUpdate` and the attach/`canplay`/`loadedmetadata` snapshots in
+      // `provider-native` publish `currentTime` unconditionally, with no
+      // comparison against the last published value, and the HTML spec lets
+      // `timeupdate` keep firing while "potentially playing" even where the
+      // position never moves. That is the exact failure #636 describes: the
+      // element pinned at one position while `playback` keeps reading
+      // `'playing'`. So the signal the hold is waiting for is the position
+      // actually changing, not merely another patch mentioning one.
+      cancelPendingElementError();
     }
     if (patch.capabilities) lastCapabilities = patch.capabilities;
     const merged = syncLive(
-      withoutLiveState(engine === 'hls.js' ? withoutCaptionState(patch) : patch)
+      withoutLiveState(
+        engine === 'hls.js'
+          ? withoutAudioTrackState(withoutCaptionState(patch))
+          : patch
+      )
     );
     // A native patch whose only field was stripped leaves nothing to say —
     // unless it carried an event, which is state-independent.
@@ -322,9 +461,11 @@ export const createHlsProvider = (
     loadHls,
     native,
     textTracks,
+    audioTracks,
     qualityLevels,
     errorRecovery,
     surfaceFatal,
+    cancelPendingElementError,
     setLiveHint: (live) => {
       hlsLiveHint = live;
     },
@@ -341,9 +482,13 @@ export const createHlsProvider = (
       hlsLiveHint = undefined;
       liveState = null;
       liveSeekMeaningful = true;
+      liveEdgeAvailable = false;
       textTracks.reset();
+      audioTracks.reset();
     },
-    startHlsJs: attachment.startHlsJs
+    startHlsJs: attachment.startHlsJs,
+    getLiveSyncPosition: () =>
+      attachment.getInstance()?.liveSyncPosition ?? undefined
   });
 
   return {
@@ -359,6 +504,7 @@ export const createHlsProvider = (
     pause: playback.pause,
     seekTo: playback.seekTo,
     seekBy: playback.seekBy,
+    seekToLiveEdge: playback.seekToLiveEdge,
     mute: playback.mute,
     unmute: playback.unmute,
     setVolume: playback.setVolume,
@@ -368,6 +514,7 @@ export const createHlsProvider = (
     requestPictureInPicture: playback.requestPictureInPicture,
     exitPictureInPicture: playback.exitPictureInPicture,
     showAirPlayPicker: playback.showAirPlayPicker,
+    showRemotePlaybackPicker: playback.showRemotePlaybackPicker,
     // Ungated, unlike `subscribeCues` below: the intrinsic size is read off
     // the <video> element, which both engines play into and whose
     // `loadedmetadata`/`resize` listeners `native.attach()` installs on either
@@ -386,7 +533,8 @@ export const createHlsProvider = (
       ? {
           selectTextTrack: native.selectTextTrack,
           subscribeCues: native.subscribeCues,
-          setCaptionRenderer: native.setCaptionRenderer
+          setCaptionRenderer: native.setCaptionRenderer,
+          selectAudioTrack: native.selectAudioTrack
         }
       : {}),
     retry: playback.retry,
@@ -395,7 +543,8 @@ export const createHlsProvider = (
           selectQuality: qualityLevels.selectQuality,
           selectTextTrack: textTracks.selectTextTrack,
           subscribeCues: textTracks.subscribeCues,
-          setCaptionRenderer: textTracks.setCaptionRenderer
+          setCaptionRenderer: textTracks.setCaptionRenderer,
+          selectAudioTrack: audioTracks.selectAudioTrack
         }
       : {})
   };

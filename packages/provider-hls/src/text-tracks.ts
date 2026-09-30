@@ -7,7 +7,7 @@ import type {
   TextTrack,
   TextTrackKind
 } from '@playdeck/core';
-import { notifySafely, textTrackLabel } from '@playdeck/core';
+import { notifySafely, plainCueText, textTrackLabel } from '@playdeck/core';
 import type {
   EmitProviderState,
   HlsInstanceLike,
@@ -26,8 +26,12 @@ const hlsSubtitleTrackId = (
 const hlsSubtitleTrackKind = (track: HlsSubtitleTrackLike): TextTrackKind =>
   track.type === 'CLOSED-CAPTIONS' ? 'captions' : 'subtitles';
 
+// hls.js hands CUES_PARSED cues through with their WebVTT tags and entities
+// intact, so `plainCueText` (`@playdeck/core`) turns the payload into the
+// plain text `TextCue.text`'s own doc comment promises before it is
+// published.
 const normalizeHlsCue = (cue: HlsParsedCueLike): TextCue => {
-  const text = typeof cue.text === 'string' ? cue.text : '';
+  const text = typeof cue.text === 'string' ? plainCueText(cue.text) : '';
   return {
     id: cue.id ?? null,
     startTime: cue.startTime,

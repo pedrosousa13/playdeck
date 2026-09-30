@@ -61,11 +61,33 @@ type Row = {
  * the element being clipped. The seek slider needs the distinction: what is
  * sampled has to be the whole control, thumb included, so the clip is the
  * input — but the two surfaces the thumb is measured against are painted by
- * `seek-buffered`, a 4px bar that does NOT sit on the input's own centre line.
- * Measured on this story, as row offsets inside the input's box: the bar
- * occupies rows 22-25 on Blink and Gecko and rows 23-26 on WebKit, against an
- * input centre of row 22. Sampling the input's centre therefore reads the
- * engine's own track on WebKit and never the theme's bar at all.
+ * `seek-buffered`, a 6px bar (0.375rem; it was 0.25rem, 4px, before #613 grew
+ * the default). Re-measured on this story under pinned Playwright (1.61.1),
+ * 2026-09-08, as row offsets inside the input's box: the bar now occupies
+ * rows 19-24 on both Blink and Gecko, against an input centre of row 22 — so
+ * the bar covers the centre row on both engines.
+ *
+ * It did not always. When this comment was introduced, 2026-08-24, the
+ * figure was rows 22-25 on Blink and Gecko and rows 23-26 on WebKit: the bar
+ * still reached the centre row on the first two, but only just — row 22 was
+ * its top edge, and the bar's own centre sat 2px lower — while WebKit's
+ * missed the centre row altogether. Before #597 (fixing #541) a range input was
+ * inline-level, so `seek-slider` ran taller than the input by the line box's
+ * descender space while `seek-buffered` centres on that container — a gap
+ * between the two centres that was a function of the inherited font. #597
+ * put `display: block` on the input, collapsing container onto input and
+ * recentring the bar; #613 then grew the bar from 4px to 6px. The two
+ * changes compose into the asymmetry #692 traced: at the top edge, 2px up
+ * from recentring and 1px from growth net to 3px; at the bottom edge, 2px up
+ * and 1px back net to 1px.
+ *
+ * WebKit was not re-measured today — it cannot launch on the development
+ * machine, so CI's matrix is the only instrument for it — and still carries
+ * its 2026-08-24 figure of rows 23-26. The cause above is layout-level
+ * rather than an engine paint quirk, so WebKit very likely moved the same
+ * way, but that is unverified. On its recorded figure, sampling the input's
+ * centre therefore reads the engine's own track on WebKit and never the
+ * theme's bar at all.
  */
 const centreRow = async (
   page: Page,
@@ -223,30 +245,23 @@ test('the seek input sits on its own track under a different inherited font', as
  * renders the input alone, so what a screenshot shows beside the thumb is the
  * slider itself. The seek slider is the opposite case, below.
  *
- * The theme reveals this control rather than showing it: under
- * `(pointer: fine)` it rests at `opacity: 0` with `pointer-events: none`, and
- * comes back to `opacity: 1` on hover or focus-within of `MuteButton` or of
- * itself. Measured at rest on this story, both engines report
- * `opacity: '0'`, `pointer-events: 'none'`, and an `elementFromPoint` at the
- * slider's own centre that resolves to `viewport` — so a screenshot taken here
- * samples the story's ground through a fully transparent control, which is
- * exactly what it read: a darkest pixel of `rgb(11 14 19)`, the story's own
- * background, and a flat 1.00:1 either side of the thumb.
+ * The theme reveals this control rather than showing it, but only where it
+ * follows a `MuteButton`: the hidden rest state under `(pointer: fine)` is
+ * qualified by that adjacent-sibling relationship, and this story renders the
+ * slider alone, with no button beside it, so it now sits at `opacity: 1` from
+ * the start. Before that rule was scoped to the adjacent-sibling relationship,
+ * the rest state named every volume slider, this one included; `.focus()`
+ * below is kept from that version of the file rather than removed, because it
+ * lands on the same `:focus-within` branch of the reveal selector list that is
+ * already `1` here and so costs this measurement nothing.
  *
- * Focus, not hover, is what reveals it here. `pointer-events: none` takes the
- * element out of hit testing, so it cannot match `:hover` at all while at rest
- * — measured, a `mouse.move` onto its centre leaves all three of `opacity`,
- * `:hover` and the hit test unchanged on both engines. `focus()` needs no hit
- * target and lands on the `:focus-within` branch of the same selector list the
- * theme's spec writes down, which reads `opacity: '1'` and
- * `pointer-events: 'auto'` on both. That the standalone slider has no reachable
- * hover state is a property of the theme, not of this file.
- *
- * The reveal is a 150ms `opacity` transition, so the opacity is polled to 1
- * before anything is sampled rather than waited out on a timeout — the same
- * idiom `e2e/theme-idle.spec.ts` measures the bar's own fade with. The focus
- * ring this raises is `outline` at `outline-offset: 2px`, which paints outside
- * the border box `centreRow` clips to, so it reaches no sampled pixel.
+ * The `transition` declaration now lives only in the mute-button-qualified
+ * rest-state rule, so this standalone slider never gets it: `.focus()`'s
+ * effect is synchronous and the poll below waits on nothing. It is kept
+ * anyway, in the same idiom `e2e/theme-idle.spec.ts` uses to poll a fade that
+ * does apply there, because it costs this measurement nothing. The focus ring
+ * this raises is `outline` at `outline-offset: 2px`, which paints outside the
+ * border box `centreRow` clips to, so it reaches no sampled pixel.
  */
 const volumeRow = async (page: Page): Promise<Row> => {
   await page.goto(themedStory('player-volumeslider--half-volume'));
@@ -308,12 +323,15 @@ test('the volume thumb ring clears 3:1 against the surfaces beside it', async ({
   // colours for this slider, so that ratio is stated here and not pinned. It was
   // pinned, as `browserName === 'firefox'`, and the same literal one test down
   // is what failed on CI: how light a native track renders is a property of the
-  // engine build and the runner, not of this repo, and the WebKit that paints it
-  // near the story's own ground locally (1.07:1) painted it light enough on
-  // GitHub's runner to clear 3:1. Blink measured 1.87:1 over `rgb(59 59 59)`
-  // here. Neither figure is a regression from #414 and neither was ever passing;
-  // closing them for real means drawing the control by hand on all three
-  // engines, which is a decision #190 explicitly did not take.
+  // engine build and the runner, not of this repo. When this comment was
+  // introduced, 2026-08-23, the WebKit that paints it near the story's own
+  // ground locally was recorded at 1.07:1, light enough on GitHub's runner to
+  // clear 3:1; WebKit was not re-measured today and still carries that figure.
+  // Blink measured 1.87:1 over `rgb(59 59 59)` here, re-measured 2026-09-08
+  // under pinned Playwright (1.61.1) with the same result. Neither figure is a
+  // regression from #414 and neither was ever passing; closing them for real
+  // means drawing the control by hand on all three engines, which is a
+  // decision #190 explicitly did not take.
   expect(ratios['ring vs fill'], measured).toBeGreaterThanOrEqual(3);
   if (browserName === 'firefox')
     expect(ratios['ring vs unfilled track'], measured).toBeGreaterThanOrEqual(
@@ -327,7 +345,7 @@ test('the seek slider clears 3:1 on both sides of its thumb and across its loade
   await page.goto(themedStory('player-seekslider--with-buffered-ranges'));
   // Clipped on the input so the thumb is in frame, sampled on the row through
   // the middle of `seek-buffered` — see `centreRow`. Both surfaces the thumb is
-  // measured against live in that 4px bar and nowhere else, so it is the only
+  // measured against live in that 6px bar and nowhere else, so it is the only
   // row on which the question this test asks is even well posed.
   const row = await centreRow(
     page,
@@ -395,27 +413,31 @@ test('the seek slider clears 3:1 on both sides of its thumb and across its loade
   // right of that edge, so nothing above measures the played span against
   // anything. Sampled at 0.10, inside it and clear of the thumb at ~0.27..0.34:
   //
-  //     played span vs loaded range     1.69:1
-  //     played span vs unfilled track   2.28:1
+  //     played span vs loaded range     1.45:1
+  //     played span vs unfilled track   2.66:1
   //
-  // Both are below the 3:1 floor, and neither is new arithmetic: they are the
-  // same pair `theme.test.ts` has stated all along as `accent vs buffered` and
-  // `accent vs track`, 1.65:1 and 2.59:1 over the theme's own backdrop default.
-  // What #415 changed is whose pixel the fill is — this file's `seek-progress`
-  // rather than an engine's `accent-color` seen through a translucent bar — so
-  // the arithmetic and the screen now describe the same surface, and the three
-  // engines agree on it. Closing the gap means moving
-  // `--playdeck-color-accent`, which #415 puts out of scope, and 1.4.11 is
-  // already satisfied at the thumb by the ring rather than by the fill — see the
-  // long note in `theme.test.ts` for why no accent value clears both surfaces at
-  // once.
+  // Both are below the 3:1 floor. Until #594 neither was new arithmetic — the
+  // same pair `theme.test.ts` states as `accent vs buffered` and `accent vs
+  // track`, 1.65:1 and 2.59:1 over the theme's own backdrop default, because
+  // `seek-progress` was a flat `--playdeck-color-accent` fill and the sample
+  // point read that colour exactly. #594 gave it a left-to-right gradient
+  // instead, `--playdeck-color-accent` to the new `--playdeck-color-accent-tint`,
+  // so a pixel a third of the way across the played span (this sample sits at
+  // 0.10 of the full bar, the span itself runs 0..0.30) is already a blend
+  // toward the lighter tint rather than the accent on its own — which is what
+  // moves these two figures off `theme.test.ts`'s flat-fill arithmetic without
+  // either file disagreeing with what is actually on screen. Closing the gap
+  // means moving the gradient's colours, which is out of scope for two figures
+  // that were never required to clear 3:1, and 1.4.11 is already satisfied at
+  // the thumb by the ring rather than by the fill — see the long note in
+  // `theme.test.ts` for why no accent value clears both surfaces at once.
   //
   // Pinned rather than floored, because there is no floor here to assert: what
   // is worth catching is the figure moving without anyone saying so. Pinning is
   // safe here for the reason it was not in the volume test above — every pixel
   // in both pairs is painted from `theme.css`'s own tokens over this story's
   // ground, none of it is an engine's native track, and the three engines
-  // measured 1.6947 and 2.2805 alike.
+  // measured 1.4534 and 2.6591 alike.
   const played = row.at(0.1);
   const unmeasured = {
     'played span vs loaded range': contrast(played, row.at(0.7)),
@@ -429,8 +451,8 @@ test('the seek slider clears 3:1 on both sides of its thumb and across its loade
       ])
     )
   ).toEqual({
-    'played span vs loaded range': '1.69:1',
-    'played span vs unfilled track': '2.28:1'
+    'played span vs loaded range': '1.45:1',
+    'played span vs unfilled track': '2.66:1'
   });
 });
 
@@ -451,12 +473,13 @@ test('the seek slider clears 3:1 on both sides of its thumb and across its loade
  * opaque bar.
  *
  * Chromium and Firefox only. WebKit matches `(forced-colors: active)` under
- * Playwright's emulation but does not substitute the palette with it: measured
- * here, `--playdeck-color-accent` still reaches the screen as `rgb(62 166 255)`
- * and the story's ground stays `rgb(11 14 19)`. A pixel assertion there would be
- * measuring ordinary rendering under a forced-colors label. `e2e/theme.spec.ts`
- * keeps WebKit for its computed-style forced-colors tests, which that emulation
- * does support.
+ * Playwright's emulation but does not substitute the palette with it. Recorded
+ * when this comment was introduced, 2026-08-23, under pinned Playwright
+ * (1.61.1), not re-measured since: `--playdeck-color-accent` still reaches the
+ * screen as `rgb(62 166 255)` and the story's ground stays `rgb(11 14 19)`. A
+ * pixel assertion there would be measuring ordinary rendering under a
+ * forced-colors label. `e2e/theme.spec.ts` keeps WebKit for its
+ * computed-style forced-colors tests, which that emulation does support.
  */
 test.describe('forced colors', () => {
   test.beforeEach(async ({ page, browserName }) => {
@@ -474,13 +497,15 @@ test.describe('forced colors', () => {
     // what the unguarded Gecko rules destroyed: the fill and the track both
     // painted `rgb(255 255 255)`, one colour, 1.00:1, while the thumb reached
     // `rgb(240 240 240)` inside a `rgb(153 153 153)` border for 1.14:1 and
-    // 2.85:1 against the canvas.
+    // 2.85:1 against the canvas — recorded when this comment was introduced,
+    // 2026-08-23, before the guard existed; not re-measured since.
     //
-    // Left native the boundary is the platform's, and it is emphatic:
-    // `rgb(0 0 0)` against `rgb(233 233 237)` on Firefox for 17.34:1, and
-    // `rgb(55 0 110)` against `rgb(255 255 255)` on Chromium for 15.13:1. Both
-    // are the engine's numbers, not the theme's, which is why the floor is
-    // asserted rather than the colours.
+    // Left native the boundary is the platform's, and it is emphatic —
+    // re-measured 2026-09-08 on both Firefox and Chromium under pinned
+    // Playwright (1.61.1), unchanged: `rgb(0 0 0)` against `rgb(233 233 237)`
+    // on Firefox for 17.34:1, and `rgb(55 0 110)` against `rgb(255 255 255)`
+    // on Chromium for 15.13:1. Both are the engine's numbers, not the
+    // theme's, which is why the floor is asserted rather than the colours.
     expect(contrast(row.at(0.15), row.at(0.85))).toBeGreaterThanOrEqual(3);
   });
 

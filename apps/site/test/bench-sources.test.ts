@@ -1,26 +1,115 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { benchSources, readySources } from '../src/bench-sources';
+import {
+  benchSources,
+  readySources,
+  resolvePlayerSource,
+  defaultBenchSource,
+  POSTER_SIZES
+} from '../src/bench-sources';
 import type { PlayerProvider } from '@playdeck/core';
 
 // Written by hand, and typed against `PlayerProvider` rather than inferred as
 // `string[]`, so a member removed from that union turns this line itself into
-// a type error instead of silently passing a shorter list. `native` and `hls`
-// are not in it: the maintainer cannot serve video from this site, so the
-// switch is hosted providers only, and `bench-sources.ts`'s own
-// `HostedProvider` type is what enforces that this list stays exactly the
-// other three.
-const HOSTED_PROVIDERS: PlayerProvider[] = ['youtube', 'vimeo', 'wistia'];
+// a type error instead of silently passing a shorter list. `native` is the
+// one member left out: there is still no raw progressive file this project
+// ships for a plain `<video>` to point at, and `bench-sources.ts`'s own
+// `BenchProvider` type is what enforces that this list stays exactly the
+// other four.
+const BENCH_PROVIDERS: PlayerProvider[] = ['hls', 'youtube', 'vimeo', 'wistia'];
+
+// `POSTER_SIZES` hand-mirrors `.page`'s CSS in `index.astro` -- see that
+// constant's own comment in `bench-sources.ts` for the reasoning -- so a
+// hand-typed expectation here would go on passing the day either one drifts.
+// This reads `.page`'s rule and the token its inline padding names straight
+// out of the source files instead, so the expectation below is derived from
+// the same CSS the page actually ships rather than retyped from it.
+const here = dirname(fileURLToPath(import.meta.url));
+const pageSource = readFileSync(join(here, '../src/pages/index.astro'), 'utf8');
+const tokensSource = readFileSync(
+  join(here, '../src/styles/tokens.css'),
+  'utf8'
+);
+
+const pageRule = /\.page\s*\{([^}]*)\}/.exec(pageSource)?.[1];
+if (pageRule === undefined) {
+  throw new Error(
+    "bench-sources.test.ts: could not find index.astro's `.page` rule."
+  );
+}
+
+const ceiling = /max-inline-size:\s*([^;]+);/.exec(pageRule)?.[1]?.trim();
+if (ceiling === undefined) {
+  throw new Error('bench-sources.test.ts: `.page` has no `max-inline-size`.');
+}
+
+// The three-value `padding` shorthand's middle value is what applies to both
+// inline sides -- see `bench-sources.ts`'s own comment on `POSTER_SIZES` for
+// why that is the value this derivation doubles.
+const paddingValues = /padding:\s*([^;]+);/
+  .exec(pageRule)?.[1]
+  ?.trim()
+  .split(/\s+/);
+if (paddingValues?.length !== 3) {
+  throw new Error(
+    `bench-sources.test.ts: \`.page\`'s padding is not the three-value shorthand this derivation expects (got ${JSON.stringify(paddingValues)}).`
+  );
+}
+
+const inlinePaddingVar = /var\((--[\w-]+)\)/.exec(paddingValues[1])?.[1];
+if (inlinePaddingVar === undefined) {
+  throw new Error(
+    "bench-sources.test.ts: could not read `.page`'s inline padding token."
+  );
+}
+
+const inlinePaddingRem = Number(
+  new RegExp(`${inlinePaddingVar}:\\s*([\\d.]+)rem;`).exec(tokensSource)?.[1]
+);
+if (Number.isNaN(inlinePaddingRem)) {
+  throw new Error(
+    `bench-sources.test.ts: could not read ${inlinePaddingVar} from tokens.css.`
+  );
+}
+
+const inlinePaddingTotal = `${inlinePaddingRem * 2}rem`;
 
 describe('benchSources', () => {
-  it('has exactly one entry per hosted provider, and no extras', () => {
+  it('has exactly one entry per bench provider, and no extras', () => {
     expect(benchSources.map((entry) => entry.provider).sort()).toEqual(
-      [...HOSTED_PROVIDERS].sort()
+      [...BENCH_PROVIDERS].sort()
     );
   });
 
-  it('marks only youtube and vimeo ready today', () => {
+  it('marks hls, youtube and vimeo ready today', () => {
     expect(readySources.map((entry) => entry.provider).sort()).toEqual(
-      ['vimeo', 'youtube'].sort()
+      ['hls', 'vimeo', 'youtube'].sort()
+    );
+  });
+
+  it('lists hls first, which is what makes it the switch’s default', () => {
+    expect(benchSources[0]?.provider).toBe('hls');
+    expect(readySources[0]?.provider).toBe('hls');
+  });
+
+  // `Bench.astro` and `index.astro` both need the switch's resting position
+  // -- the no-JavaScript fallback and the document-head poster preload both
+  // name it (#611) -- through `defaultBenchSource`, the guarded helper both
+  // files actually call. Pinned against the literal `benchSources[0]`/
+  // `readySources[0]` already establish elsewhere, rather than against
+  // `readySources[0]` itself: `.find(ready)` and `.filter(ready)[0]` agree
+  // for any array, so comparing one to the other can never fail on its own
+  // -- only a real assertion against the switch's actual default exercises
+  // `defaultBenchSource`'s own implementation.
+  it("resolves defaultBenchSource() to hls, the switch's actual default", () => {
+    expect(defaultBenchSource().provider).toBe('hls');
+  });
+
+  it("derives POSTER_SIZES from index.astro's .page rule and tokens.css's inline-padding token", () => {
+    expect(POSTER_SIZES).toBe(
+      `(min-width: ${ceiling}) calc(${ceiling} - ${inlinePaddingTotal}), calc(100vw - ${inlinePaddingTotal})`
     );
   });
 
@@ -30,14 +119,16 @@ describe('benchSources', () => {
     }
   });
 
-  // Every ready source is a hosted provider now, so its URL is a real
-  // cross-origin address rather than a same-origin path under `base` -- the
-  // opposite of what this file asserted while `native` and `hls` were the
-  // ready entries.
-  it('resolves both ready entries to a cross-origin URL, not a same-origin path', () => {
-    for (const entry of readySources) {
-      const url = entry.source('/');
-      expect(url.startsWith('https://')).toBe(true);
+  // `hls` resolves to a same-origin path under `base`; `youtube` and `vimeo`
+  // are hosted providers and resolve to a real cross-origin address.
+  it('resolves hls to a same-origin path, and youtube/vimeo to a cross-origin URL', () => {
+    const hls = benchSources.find((entry) => entry.provider === 'hls');
+    expect(hls?.source('/')).toBe('/media/sprite-fright/master.m3u8');
+
+    for (const entry of readySources.filter(
+      (candidate) => candidate.provider !== 'hls'
+    )) {
+      expect(entry.source('/').startsWith('https://')).toBe(true);
     }
   });
 
@@ -53,12 +144,23 @@ describe('benchSources', () => {
     expect(vimeo?.source('/')).toBe('https://vimeo.com/640499893');
   });
 
-  // Both providers play the same film today, so every ready entry's poster is
-  // the same asset -- which is the point being pinned here, rather than a
-  // difference between them the way an earlier version of this file asserted.
-  it('gives every ready entry the same poster', () => {
-    const posters = readySources.map((entry) => entry.poster('/').src);
-    expect(new Set(posters).size).toBe(1);
+  // `youtube` and `vimeo` share the still cut from Wikimedia's mirror; `hls`
+  // carries its own, cut from the clip `scripts/media-sprite-fright.mjs`
+  // itself produces, at that script's own frame size rather than the other
+  // release's.
+  it('gives hls its own poster, distinct from the shared youtube/vimeo one', () => {
+    const hostedPosters = readySources
+      .filter((entry) => entry.provider !== 'hls')
+      .map((entry) => entry.poster('/').src);
+    expect(new Set(hostedPosters).size).toBe(1);
+
+    const hls = benchSources.find((entry) => entry.provider === 'hls');
+    expect(hls?.poster('/')).toEqual({
+      src: '/sprite-fright-hls-poster-960w.webp',
+      srcSet:
+        '/sprite-fright-hls-poster-960w.webp 960w, /sprite-fright-hls-poster-1920w.webp 1920w'
+    });
+    expect(hostedPosters).not.toContain(hls?.poster('/').src);
   });
 
   it("resolves the youtube entry's poster to the Sprite Fright still, at both widths", () => {
@@ -70,15 +172,25 @@ describe('benchSources', () => {
     });
   });
 
-  // The film's real pixel dimensions, not a rounded aspect ratio -- every
-  // entry's `width`/`height` should be exact integers a browser can compute
-  // `width / height` from without any decimal in between.
-  it('gives every entry the film’s exact intrinsic dimensions', () => {
+  // Every entry's own pixel dimensions, not a rounded aspect ratio -- and
+  // `hls`'s do not have to match the other entries', because it is cut from a
+  // different official release of the same film. Every entry's own pair
+  // still has to be exact integers a browser can compute `width / height`
+  // from without any decimal in between.
+  it('gives every entry its own exact intrinsic dimensions', () => {
     for (const entry of benchSources) {
-      expect(entry.width).toBe(2048);
-      expect(entry.height).toBe(858);
       expect(Number.isInteger(entry.width)).toBe(true);
       expect(Number.isInteger(entry.height)).toBe(true);
+    }
+
+    const hls = benchSources.find((entry) => entry.provider === 'hls');
+    expect(hls).toMatchObject({ width: 1920, height: 804 });
+
+    for (const entry of benchSources.filter(
+      (candidate) => candidate.provider !== 'hls'
+    )) {
+      expect(entry.width).toBe(2048);
+      expect(entry.height).toBe(858);
     }
   });
 
@@ -104,6 +216,29 @@ describe('benchSources', () => {
   it('gives every entry a start time', () => {
     for (const entry of benchSources) {
       expect(typeof entry.startTime).toBe('number');
+    }
+  });
+
+  // `resolvePlayerSource` is what `BenchIsland.tsx` and `Bench.astro` hand to
+  // `Player.Root`'s `source` prop and to `buildComposition`. `hls` pins its
+  // engine on an explicit source object -- this bench exists to demonstrate
+  // quality selection, and a browser whose `canPlayType` answers `'maybe'`
+  // for HLS would otherwise auto-detect onto the native decoder, where
+  // `selectQuality` is unavailable (`packages/provider-hls/src/index.ts`'s
+  // `selectHlsEngine`). Every other position stays the plain URL
+  // `entry.source` already resolves.
+  it('pins hls to the hls.js engine and leaves every other position a plain URL', () => {
+    for (const entry of benchSources) {
+      const resolved = resolvePlayerSource(entry, '/');
+      if (entry.provider === 'hls') {
+        expect(resolved).toEqual({
+          type: 'hls',
+          src: entry.source('/'),
+          engine: 'hls.js'
+        });
+      } else {
+        expect(resolved).toBe(entry.source('/'));
+      }
     }
   });
 });

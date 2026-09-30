@@ -1,6 +1,6 @@
 # Comments
 
-Which comment content belongs in source, and which belongs in the issue tracker.
+Which comment content belongs in source, and which belongs in the issue tracker — and how a citation into code should be written.
 
 **This is not a case for writing fewer comments.** The dense rationale in this
 repo is an asset and most of it ages perfectly — the header of `scripts/audit.mjs`
@@ -10,7 +10,7 @@ Nothing here asks for shorter comments, thinner comments, or fewer of them. It a
 for one distinction to be made deliberately as you write.
 
 The two kinds are not two kinds of comment. They are two kinds of sentence, and
-they mix freely inside one block — see the worked example at the end, where three
+they mix freely inside one block — see the worked example below, where three
 lines rotted inside a header that is otherwise entirely durable.
 
 ## Two kinds of content, and only one of them rots
@@ -159,8 +159,36 @@ It now reads:
 which says what the surrounding block needs a reader to know — that this half is
 inference, not measurement — and asserts nothing about any machine.
 
+## A citation names a symbol, not a line number
+
+**A citation names a symbol — a function, a variable, a quoted line of the code
+itself — and, where it helps a reader locate it, a file. Never a bare line number
+on its own.** A quoted symbol either agrees with the code beside it or it visibly
+does not, checkable by the next reader in seconds. A line number carries no such
+agreement to keep or break — it just stops being true, and nothing about reading
+it tells you so.
+
+The same rot reaches citations into code, and the mechanism is identical: a claim
+that looks precise and cannot be checked. `docs/third-party-requests.md` cited
+`path:line` throughout; #317 re-derived all 164 against the tree and corrected 69.
+Every one tabled while diagnosing them was still in range — not a broken link,
+pointing at real code that simply was not the code the citation described any
+more. A checker that resolves `path:line` and fails on a missing file or an
+out-of-range line would have caught none of those. The same investigation shows
+what a bare number costs even the person fixing it: one correction attributed a
+commit to "#303" on the strength of the commit subject alone, when the commit was
+the pull request and #221 was the issue it closed — a citation with nothing
+checkable in it produced a wrong correction as readily as it had produced the
+original drift.
+
+The range-input example that opens this document already follows the rule: it
+cites `e2e/rapid-slider-presses.spec.ts`, "inside `activateForVolume`, above the
+`focus()` call it justifies", with no line number at all.
+
 ## Not covered here
 
-Stale `file:line` citations in documentation are the same failure mechanised
-differently, and they are #317's, along with the evidence collected for them. This
-document is about prose that asserts a mechanism the evidence does not establish.
+Sweeping every existing citation for staleness is not this document's job, any more
+than finding one of the six time-bound claims above was. #317 corrected the ones in
+`docs/third-party-requests.md`; that was a one-off audit, not a standing rule, which is
+why the section above states one instead. This document is about prose that asserts a
+mechanism the evidence does not establish.

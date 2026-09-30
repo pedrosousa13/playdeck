@@ -174,6 +174,18 @@ test('adopts a matching script another consumer already injected', async () => {
   await expect(load).resolves.toBe(registered);
 });
 
+test('sets a strict-origin-when-cross-origin referrer policy on the script it injects by default, before appending it', () => {
+  // happy-dom logs a NotSupportedError for every external script it cannot
+  // fetch; silenced the same way `provider-youtube/test/loader.test.ts` does.
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  const load = loadWistiaPlayer();
+  load.catch(() => undefined);
+
+  expect(injectedScript()?.referrerPolicy).toBe(
+    'strict-origin-when-cross-origin'
+  );
+});
+
 // --- a load that cannot complete ---
 
 test('rejects and removes the script it injected when that script errors', async () => {

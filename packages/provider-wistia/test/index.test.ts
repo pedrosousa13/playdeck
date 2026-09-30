@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import {
   PlayerController,
   type MediaDimensions,
@@ -10,6 +10,7 @@ import {
   type ProviderStatePatch,
   type WistiaSource
 } from '@playdeck/core';
+import { captureRethrows } from '@playdeck/test-support/capture-rethrows';
 import {
   API_READY_TIMEOUT_MS,
   createWistiaProvider,
@@ -44,6 +45,7 @@ vi.mock('../src/loader', async (importOriginal) => ({
 afterEach(() => {
   sdkState.load = undefined;
   document.body.replaceChildren();
+  vi.unstubAllGlobals();
 });
 
 const source: WistiaSource = { type: 'wistia', mediaId: 'oifkgmxnkb' };
@@ -677,13 +679,89 @@ test('reports the whole capability record it can justify', async () => {
     setVolume: { status: 'available' },
     setPlaybackRate: { status: 'available' },
     selectQuality: { status: 'unavailable', reason: 'provider' },
+    selectQualityAuto: { status: 'unavailable', reason: 'provider' },
     selectTextTrack: { status: 'unavailable', reason: 'provider' },
+    selectAudioTrack: { status: 'unavailable', reason: 'provider' },
     chapters: { status: 'unavailable', reason: 'provider' },
+    liveEdge: { status: 'unavailable', reason: 'provider' },
     fullscreen: { status: 'available' },
     pictureInPicture: { status: 'unavailable', reason: 'provider' },
     airPlay: { status: 'unavailable', reason: 'provider' },
-    customControls: { status: 'available' }
+    remotePlayback: { status: 'unavailable', reason: 'provider' },
+    customControls: { status: 'available' },
+    providerPoster: { status: 'unknown', reason: 'provider-check' }
   });
+});
+
+// `PublicApi` has `time(seconds)` to seek and `duration()`, which
+// `liveFragment` (`attachment.ts`) already reuses as the moving live edge for
+// the at-edge tolerance -- because Wistia's `PublicApi` exposes no seekable
+// range at all, `duration()` is the closest thing to one, not a value this
+// adapter trusts as an actionable seek target. There is no dedicated live-edge
+// accessor and no seekable-range accessor to derive one from, so this reports
+// the same `outOfScope` verdict as the other surfaces `PublicApi` never grew.
+test('reports liveEdge as unavailable for the provider, with no seekToLiveEdge command', async () => {
+  const { patches, provider } = await setup({
+    fake: { mediaData: { mediaType: 'LiveStream' }, duration: 100 }
+  });
+
+  expect(readyPatch(patches).capabilities?.liveEdge).toEqual({
+    status: 'unavailable',
+    reason: 'provider'
+  });
+  expect(provider.seekToLiveEdge).toBeUndefined();
+});
+
+// --- provider-supplied poster (#556) ---
+
+test('sends no oEmbed request for a poster when resolvePoster was not requested', async () => {
+  const fetchMock = vi.fn(() => {
+    throw new Error('fetch should not have been called');
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  const { patches } = await setup();
+  expect(readyPatch(patches).capabilities).toMatchObject({
+    providerPoster: { status: 'unknown', reason: 'provider-check' }
+  });
+  expect(readyPatch(patches).providerPosterUrl).toBeNull();
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test('resolves its own poster from the oEmbed thumbnail once resolvePoster is requested', async () => {
+  const fetchMock = vi.fn(async () =>
+    Response.json({
+      thumbnail_url: 'https://embed.wistia.com/deliveries/example.jpg'
+    })
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  const { patches } = await setup({ options: { resolvePoster: true } });
+  const ready = readyPatch(patches);
+  expect(ready.capabilities).toMatchObject({
+    providerPoster: { status: 'available' }
+  });
+  expect(ready.providerPosterUrl).toBe(
+    'https://embed.wistia.com/deliveries/example.jpg'
+  );
+  expect(fetchMock).toHaveBeenCalledWith(
+    'https://fast.wistia.com/oembed?url=https%3A%2F%2Fhome.wistia.com%2Fmedias%2Foifkgmxnkb&format=json',
+    {
+      signal: expect.any(AbortSignal),
+      referrerPolicy: 'strict-origin-when-cross-origin'
+    }
+  );
+});
+
+test('reports providerPoster unavailable/source when the record carries no thumbnail', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => Response.json({}))
+  );
+  const { patches } = await setup({ options: { resolvePoster: true } });
+  const ready = readyPatch(patches);
+  expect(ready.capabilities).toMatchObject({
+    providerPoster: { status: 'unavailable', reason: 'source' }
+  });
+  expect(ready.providerPosterUrl).toBeNull();
 });
 
 test('publishes the media shape the handle measures', async () => {
@@ -1551,14 +1629,16 @@ test('recomputes the at-edge flag as the playhead moves', async () => {
   player.emit(WISTIA_EVENTS.timeUpdate);
   expect(livePatches(result.patches).at(-1)).toEqual({
     isLive: true,
-    atLiveEdge: true
+    atLiveEdge: true,
+    offsetFromEdge: 5
   });
 
   player.handle.currentTime = 80;
   player.emit(WISTIA_EVENTS.timeUpdate);
   expect(livePatches(result.patches).at(-1)).toEqual({
     isLive: true,
-    atLiveEdge: false
+    atLiveEdge: false,
+    offsetFromEdge: 20
   });
 });
 
@@ -1571,10 +1651,12 @@ test('publishes nothing for a live value equal to the last one', async () => {
   player.emit(WISTIA_EVENTS.timeUpdate);
   const published = livePatches(result.patches).length;
 
-  // Both still inside the tolerance, so the value is the one already published.
-  player.handle.currentTime = 96;
+  // Both still inside the tolerance, and both round to the same whole-second
+  // `offsetFromEdge` as the value already published (5), so the value is the
+  // one already published.
+  player.handle.currentTime = 95.2;
   player.emit(WISTIA_EVENTS.timeUpdate);
-  player.handle.currentTime = 97;
+  player.handle.currentTime = 95.4;
   player.emit(WISTIA_EVENTS.timeUpdate);
 
   expect(livePatches(result.patches)).toHaveLength(published);
@@ -1600,7 +1682,8 @@ test('recomputes the at-edge flag while the player is paused', async () => {
 
     expect(livePatches(result.patches).at(-1)).toEqual({
       isLive: true,
-      atLiveEdge: false
+      atLiveEdge: false,
+      offsetFromEdge: 100
     });
   } finally {
     vi.useRealTimers();
@@ -1615,9 +1698,10 @@ test('publishes nothing while paused for a live value equal to the last one', as
     });
     const published = livePatches(result.patches).length;
 
-    // The edge moves, but not far enough to leave the tolerance, so the value
-    // is the one already published and the interval has nothing to say.
-    element(result).handle.durationSeconds = 9;
+    // The edge moves, but not far enough to round to a different whole-second
+    // `offsetFromEdge`, so the value is the one already published and the
+    // interval has nothing to say.
+    element(result).handle.durationSeconds = 5.4;
     await vi.advanceTimersByTimeAsync(LIVE_EDGE_POLL_MS * 4);
 
     expect(livePatches(result.patches)).toHaveLength(published);
@@ -1661,14 +1745,16 @@ test('recomputes only while paused, and picks up again when playback stops', asy
     await vi.advanceTimersByTimeAsync(LIVE_EDGE_POLL_MS * 2);
     expect(livePatches(result.patches).at(-1)).toEqual({
       isLive: true,
-      atLiveEdge: true
+      atLiveEdge: true,
+      offsetFromEdge: 5
     });
 
     player.emit(WISTIA_EVENTS.pause);
     await vi.advanceTimersByTimeAsync(LIVE_EDGE_POLL_MS);
     expect(livePatches(result.patches).at(-1)).toEqual({
       isLive: true,
-      atLiveEdge: false
+      atLiveEdge: false,
+      offsetFromEdge: 100
     });
   } finally {
     vi.useRealTimers();
@@ -1915,24 +2001,6 @@ test('reports chapters as unavailable for the provider', async () => {
 // The deliberate throws below are rethrown on a fresh task so they still reach
 // uncaught-error handling; captured rather than run, which is what keeps them
 // from landing in the runner as an unhandled error.
-const captureRethrows = (): unknown[] => {
-  const errors: unknown[] = [];
-  const real = globalThis.queueMicrotask;
-  // Wrapped rather than replaced: the fixtures schedule microtasks of their
-  // own, and swallowing those would stall the very load these tests drive.
-  globalThis.queueMicrotask = (task: () => void) =>
-    real(() => {
-      try {
-        task();
-      } catch (error) {
-        errors.push(error);
-      }
-    });
-  onTestFinished(() => {
-    globalThis.queueMicrotask = real;
-  });
-  return errors;
-};
 
 // Subscribed ahead of the recorder, unlike `setup`, because the thrower has to
 // come first for the fan-out behind it to be the thing under test.

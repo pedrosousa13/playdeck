@@ -176,3 +176,84 @@
 .foot__rule {
   margin-block: var(--space-7) var(--space-4);
 }
+
+/*
+ * The comparison guide's feature table (#637 scope addition): a shape beside
+ * the status word `src/comparison-icons.mjs` already leaves in the cell,
+ * never instead of it. Scoped to `table.cmp-features`, the class that module
+ * adds to the one table it edits, so nothing here reaches the results table
+ * above it or a paragraph anywhere on this site.
+ */
+.doc table.cmp-features .cmp-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.doc table.cmp-features .cmp-status__icon {
+  inline-size: 1em;
+  block-size: 1em;
+  flex-shrink: 0;
+}
+
+/* Visible and small, not `display: none`: colour is never this table's only
+ * channel, so the word the source printed stays legible beside its icon. */
+.doc table.cmp-features .cmp-status__word {
+  font-family: var(--font-mono);
+  font-size: var(--text-fn);
+  letter-spacing: var(--tracking-fn);
+}
+
+/* One colour per row, inherited by the icon through `currentColor` and by the
+ * word through the cascade, so a status is stated once rather than twice.
+ * `partial` and `plugin` share `--color-unknown` on purpose — see
+ * `DESIGN.md`'s Palette section for why a fourth colour was not needed to
+ * tell the two apart. */
+.doc table.cmp-features .cmp-status[data-status='yes'] {
+  color: var(--color-available);
+}
+
+.doc table.cmp-features .cmp-status[data-status='partial'],
+.doc table.cmp-features .cmp-status[data-status='plugin'] {
+  color: var(--color-unknown);
+}
+
+.doc table.cmp-features .cmp-status[data-status='no'] {
+  color: var(--color-unavailable);
+}
+
+.doc table.cmp-features .cmp-status[data-status='n/a'] {
+  color: var(--color-ink-subtle);
+}
+
+/* A status and its footnote marker are one unit and must not break across two
+ * lines -- `.doc` sets `overflow-wrap: break-word` for a package name's sake,
+ * and without this override a narrow column takes that as licence to wrap
+ * between the status span and the `<sup>` that follows it. `white-space` is
+ * set on the cell rather than on `.cmp-status` alone, because the break this
+ * fixes sits at the boundary between the span and its sibling `<sup>`, outside
+ * anything scoped to the span could reach. The first column is excluded: it
+ * holds the axis names, which are prose and must keep wrapping, or the table
+ * grows past the measure and pushes the last library columns behind a scroll
+ * -- the opposite of reading at a glance. The table's own horizontal scroll
+ * (`.doc table` above) is what absorbs whatever width the six status columns
+ * still need. */
+.doc table.cmp-features td:not(:first-child) {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+/* The footnote marker is a citation, not the answer -- and at the same weight
+ * and colour as every other link on this site it competed with the status it
+ * sits beside for a reader's first glance. Muted and smaller here, and only
+ * here: `docs/comparison/features.md` is the only document this site renders
+ * that uses footnotes at all, and this selector still scopes to
+ * `table.cmp-features` rather than to `.doc sup a` so a footnote added to
+ * another document later is not muted by a rule written for this one. Still a
+ * real link -- colour and underline change, `:focus-visible` in `base.css`
+ * does not. */
+.doc table.cmp-features sup a {
+  color: var(--color-ink-subtle);
+  font-size: var(--text-fn);
+  text-decoration: none;
+}

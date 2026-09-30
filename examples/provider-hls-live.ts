@@ -12,6 +12,6 @@ export const live = deriveLiveState({
   liveEdge: 3594
 });
 
-// -> { isLive: true, atLiveEdge: true }. `null` means "not live, or not yet
-// known" — a control should not claim either until it is.
+// -> { isLive: true, atLiveEdge: true, offsetFromEdge: 0 }. `null` means "not
+// live, or not yet known" — a control should not claim either until it is.
 export const atEdge = live?.atLiveEdge ?? false;

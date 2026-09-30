@@ -21,7 +21,11 @@ const base: LiveDerivationInput = { ...untuned, atEdgeThreshold: 2 };
 
 describe('liveness', () => {
   test('reads an infinite duration as live when no hint is given', () => {
-    expect(deriveLiveState(base)).toEqual({ isLive: true, atLiveEdge: true });
+    expect(deriveLiveState(base)).toEqual({
+      isLive: true,
+      atLiveEdge: true,
+      offsetFromEdge: 0
+    });
   });
 
   test.each<[string, number]>([
@@ -34,7 +38,7 @@ describe('liveness', () => {
   test('lets a true hint decide over a finite duration', () => {
     expect(
       deriveLiveState({ ...base, duration: 600, isLiveHint: true })
-    ).toEqual({ isLive: true, atLiveEdge: true });
+    ).toEqual({ isLive: true, atLiveEdge: true, offsetFromEdge: 0 });
   });
 
   test('lets a false hint decide over an infinite duration', () => {
@@ -57,27 +61,29 @@ describe('edge distance', () => {
         ],
         currentTime: 599
       })
-    ).toEqual({ isLive: true, atLiveEdge: true });
+    ).toEqual({ isLive: true, atLiveEdge: true, offsetFromEdge: 1 });
   });
 
   test('prefers a known live edge over the seekable end', () => {
     // 594 is the target edge; 596 is past it but still inside the seek window.
     expect(
       deriveLiveState({ ...base, liveEdge: 594, currentTime: 590 })
-    ).toEqual({ isLive: true, atLiveEdge: false });
+    ).toEqual({ isLive: true, atLiveEdge: false, offsetFromEdge: 4 });
   });
 
   test('reports behind the edge when the current time trails it', () => {
     expect(deriveLiveState({ ...base, currentTime: 300 })).toEqual({
       isLive: true,
-      atLiveEdge: false
+      atLiveEdge: false,
+      offsetFromEdge: 300
     });
   });
 
   test('never reads a current time past the edge as behind it', () => {
     expect(deriveLiveState({ ...base, currentTime: 900 })).toEqual({
       isLive: true,
-      atLiveEdge: true
+      atLiveEdge: true,
+      offsetFromEdge: 0
     });
   });
 
@@ -87,7 +93,26 @@ describe('edge distance', () => {
   ])('assumes the edge when there is %s', (_label, overrides) => {
     expect(deriveLiveState({ ...base, ...overrides })).toEqual({
       isLive: true,
-      atLiveEdge: true
+      atLiveEdge: true,
+      offsetFromEdge: 0
+    });
+  });
+});
+
+describe('offset from edge', () => {
+  test('rounds a fractional distance to the nearest whole second', () => {
+    expect(deriveLiveState({ ...base, currentTime: 600 - 4.6 })).toMatchObject({
+      offsetFromEdge: 5
+    });
+    expect(deriveLiveState({ ...base, currentTime: 600 - 4.4 })).toMatchObject({
+      offsetFromEdge: 4
+    });
+  });
+
+  test('is 0 whenever atLiveEdge is true only because the playhead is past the edge', () => {
+    expect(deriveLiveState({ ...base, currentTime: 10_000 })).toMatchObject({
+      atLiveEdge: true,
+      offsetFromEdge: 0
     });
   });
 });
@@ -101,7 +126,8 @@ describe('at-edge threshold', () => {
     (behind, atLiveEdge) => {
       expect(deriveLiveState({ ...base, currentTime: 600 - behind })).toEqual({
         isLive: true,
-        atLiveEdge
+        atLiveEdge,
+        offsetFromEdge: Math.round(behind)
       });
     }
   );
@@ -119,11 +145,13 @@ describe('at-edge threshold', () => {
   test('an omitted threshold is the shared 10 seconds, not zero', () => {
     expect(deriveLiveState({ ...untuned, currentTime: 591 })).toEqual({
       isLive: true,
-      atLiveEdge: true
+      atLiveEdge: true,
+      offsetFromEdge: 9
     });
     expect(deriveLiveState({ ...untuned, currentTime: 589 })).toEqual({
       isLive: true,
-      atLiveEdge: false
+      atLiveEdge: false,
+      offsetFromEdge: 11
     });
   });
 });
@@ -134,7 +162,8 @@ describe('liveStateEqual', () => {
     ['same fields', true],
     ['one null', false],
     ['differing isLive', false],
-    ['differing atLiveEdge', false]
+    ['differing atLiveEdge', false],
+    ['differing offsetFromEdge', false]
   ])('answers %s with %s', (label, expected) => {
     const pairs: Record<
       string,
@@ -142,17 +171,21 @@ describe('liveStateEqual', () => {
     > = {
       'both null': [null, null],
       'same fields': [
-        { isLive: true, atLiveEdge: true },
-        { isLive: true, atLiveEdge: true }
+        { isLive: true, atLiveEdge: true, offsetFromEdge: 0 },
+        { isLive: true, atLiveEdge: true, offsetFromEdge: 0 }
       ],
-      'one null': [null, { isLive: true, atLiveEdge: true }],
+      'one null': [null, { isLive: true, atLiveEdge: true, offsetFromEdge: 0 }],
       'differing isLive': [
-        { isLive: true, atLiveEdge: true },
-        { isLive: false, atLiveEdge: true }
+        { isLive: true, atLiveEdge: true, offsetFromEdge: 0 },
+        { isLive: false, atLiveEdge: true, offsetFromEdge: 0 }
       ],
       'differing atLiveEdge': [
-        { isLive: true, atLiveEdge: true },
-        { isLive: true, atLiveEdge: false }
+        { isLive: true, atLiveEdge: true, offsetFromEdge: 0 },
+        { isLive: true, atLiveEdge: false, offsetFromEdge: 0 }
+      ],
+      'differing offsetFromEdge': [
+        { isLive: true, atLiveEdge: true, offsetFromEdge: 0 },
+        { isLive: true, atLiveEdge: true, offsetFromEdge: 5 }
       ]
     };
     const pair = pairs[label];

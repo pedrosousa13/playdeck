@@ -6,6 +6,7 @@ import {
   type Request
 } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
+import { playButton } from './locators';
 
 const providerOrigin = 'https://provider.invalid';
 const tracerUrl = `${providerOrigin}/tracer.mp4`;
@@ -257,4 +258,260 @@ test('interaction preload=none plays from the activation click', async ({
   const playTime = await readTimestamp(page, 'mediaPlayTime');
   await expectRequestsAfter(page, providerRequests, clickTime, [tracerUrl]);
   expect(playTime).toBeGreaterThanOrEqual(clickTime);
+});
+
+// #309: a `loading: 'viewport'` player pauses the playback it started when it
+// scrolls out of view, resumes it on re-entry, and never touches playback a
+// viewer started or stopped. `ViewportAutoplayScrollMuted`
+// (`player-fixture.stories.tsx`) is `AutoplayMuted` wrapped in a tall scroll
+// page -- a spacer above, the player, a spacer below -- so the player starts
+// fully outside the observer's root at Playwright's default 1280x720 iframe.
+const viewportScrollStory =
+  '/iframe.html?id=fixtures-playerfixture--viewport-autoplay-scroll-muted&viewMode=story';
+
+// See `mountedPlayButton` in `e2e/autoplay.spec.ts` for why this wait sits
+// ahead of any assertion rather than inside one: it releases at the earliest
+// moment the button can be observed, so as little of the player's own work as
+// possible is charged to the assertion that follows.
+const mountedPlayButton = async (page: Page): Promise<Locator> => {
+  const play = playButton(page);
+  await play.waitFor({ state: 'attached' });
+  return play;
+};
+
+const scrollPlayerIntoView = (page: Page): Promise<void> =>
+  page.getByTestId('viewport').scrollIntoViewIfNeeded();
+
+// The player sits between two spacers tall enough to clear `loadMargin`'s
+// default `'200px 0px'` root expansion (see `SCROLL_SPACER_HEIGHT` in
+// `player-fixture.stories.tsx`), so scrolling all the way to the top of the
+// document reliably takes it out of view again.
+const scrollPlayerOutOfView = (page: Page): Promise<void> =>
+  page.evaluate(() => window.scrollTo(0, 0));
+
+// Samples the play button's `data-state` across a real interval instead of
+// reading it once, so a pause or resume that lands a moment after the
+// assertion starts -- which a single read racing the observer's callback
+// could miss -- cannot pass unnoticed. The same technique
+// `e2e/theme-idle.spec.ts` uses for a "stays as it was" assertion.
+const assertPlaybackHolds = async (
+  page: Page,
+  state: 'playing' | 'paused'
+): Promise<void> => {
+  const play = playButton(page);
+  for (let sample = 0; sample < 4; sample++) {
+    await expect(play).toHaveAttribute('data-state', state);
+    await page.waitForTimeout(250);
+  }
+};
+
+// Demonstrated red (docs/agents/demonstrated-red.md). The two below assert a
+// crossing #309's fix has to newly produce, so they were run against
+// `packages/react/src/use-activation.ts` as it stood at 92f3e60~1 (before
+// #309): both failed on chromium and firefox, `data-state` stuck at
+// `"playing"` where the assertion asked for `"paused"` --
+//
+//   Error: expect(locator).toHaveAttribute(expected) failed
+//   Expected: "paused"
+//   Received: "playing"
+//     13 × locator resolved to <button ... data-state="playing" ...>
+//
+// (identical on both engines, for both "pauses when it scrolls out of view"
+// and "resumes when it scrolls back into view").
+//
+// The other two assert a value ("still playing", "still paused") that an
+// unfixed tree also produces, by never touching playback at all -- exactly
+// the trap the same doc names -- so the substitute mutation route applies:
+// the ownership guards in `use-activation.ts`'s observer callback were each
+// inverted (`=== 'autoplaying'` to `!== 'autoplaying'`, `=== 'auto-paused'`
+// to `!== 'auto-paused'`), which makes the guard act on exactly the playback
+// it must leave alone. Run against that mutation, both failed on chromium and
+// firefox:
+//
+//   1) "the viewer takes over from autoplay keeps playing when it scrolls out
+//      of view"
+//      Expected: "playing"
+//      Received: "paused"
+//
+//   2) "a viewer paused deliberately stays paused across a scroll out and
+//      back in"
+//      Expected: "paused"
+//      Received: "playing"
+//
+// All four pass again with the mutation reverted and the real fix restored.
+test('a viewport-autoplayed player pauses when it scrolls out of view', async ({
+  page
+}) => {
+  await page.goto(viewportScrollStory);
+  const play = await mountedPlayButton(page);
+
+  await scrollPlayerIntoView(page);
+  await expect(play).toHaveAttribute('data-state', 'playing');
+
+  await scrollPlayerOutOfView(page);
+  await expect(play).toHaveAttribute('data-state', 'paused');
+});
+
+test('a player auto-paused by leaving the viewport resumes when it scrolls back into view', async ({
+  page
+}) => {
+  await page.goto(viewportScrollStory);
+  const play = await mountedPlayButton(page);
+
+  await scrollPlayerIntoView(page);
+  await expect(play).toHaveAttribute('data-state', 'playing');
+  await scrollPlayerOutOfView(page);
+  await expect(play).toHaveAttribute('data-state', 'paused');
+
+  await scrollPlayerIntoView(page);
+  await expect(play).toHaveAttribute('data-state', 'playing');
+});
+
+// A single re-entry cannot observe this bug (#695), which is why it shipped.
+// The resume itself still happens: it is issued off `'auto-paused'`, which
+// #309's guard recognises correctly at that crossing. What goes wrong is what
+// the resume leaves behind, and `'none'` and `'auto-paused'` both read as
+// `"playing"` right then, so nothing is visible until the *next* exit -- where
+// a player whose ownership has fallen to `'none'` behaves exactly as designed
+// for a viewer-owned one (see 'a player the viewer takes over from autoplay
+// keeps playing when it scrolls out of view' below) and never auto-pauses
+// again.
+//
+// The mechanism, from the instrumented WebKit run rather than inferred: on an
+// engine that manages viewport playback of muted autoplaying video itself,
+// the engine resumes the media on its own and Playdeck issues no play at all.
+// Nothing registers a pending origin, so the `play` event resolves as
+// `'provider'` -- correctly, since nobody commanded it -- and the ownership
+// tracker in `use-activation.ts` used to read that as a viewer takeover.
+// Two earlier explanations were investigated and disproved, so neither should
+// be reached for again here: an eventless `playing` patch consuming the
+// origin (a real defect, fixed separately, which left this reproduction red),
+// and `configureAutoplay`'s autoplay-only delete (reached once at startup,
+// never during a crossing).
+//
+// This test is not demonstrated red on a local engine, and cannot be.
+// Chromium and firefox resume through Playdeck's own command, so the pending
+// origin is always registered there and this passes with or without the fix;
+// WebKit is the engine that exhibits it and does not launch on the
+// development machine. Its redness is CI's to establish. The rule itself is
+// pinned without a browser in packages/react/test/activation.test.tsx, which
+// is where the local red-green evidence for this fix lives.
+test('a player resumed by re-entering the viewport still auto-pauses on the next exit', async ({
+  page
+}) => {
+  await page.goto(viewportScrollStory);
+  const play = await mountedPlayButton(page);
+
+  await scrollPlayerIntoView(page);
+  await expect(play).toHaveAttribute('data-state', 'playing');
+  await scrollPlayerOutOfView(page);
+  await expect(play).toHaveAttribute('data-state', 'paused');
+
+  await scrollPlayerIntoView(page);
+  await expect(play).toHaveAttribute('data-state', 'playing');
+
+  await scrollPlayerOutOfView(page);
+  await expect(play).toHaveAttribute('data-state', 'paused');
+});
+
+test('a player the viewer takes over from autoplay keeps playing when it scrolls out of view', async ({
+  page
+}) => {
+  await page.goto(viewportScrollStory);
+  const play = await mountedPlayButton(page);
+
+  await scrollPlayerIntoView(page);
+  await expect(play).toHaveAttribute('data-state', 'playing');
+
+  // The viewer takes over: a pause and a play the viewer pressed, both
+  // carrying the `'user'` origin, leave `playbackOwnership` at `'none'` --
+  // the state a viewer's own play or pause always reads (#309) -- so the
+  // playback now running is unambiguously the viewer's, not the viewport's.
+  await play.click();
+  await expect(play).toHaveAttribute('data-state', 'paused');
+  await play.click();
+  await expect(play).toHaveAttribute('data-state', 'playing');
+
+  await scrollPlayerOutOfView(page);
+  await assertPlaybackHolds(page, 'playing');
+});
+
+test('a player a viewer paused deliberately stays paused across a scroll out and back in', async ({
+  page
+}) => {
+  await page.goto(viewportScrollStory);
+  const play = await mountedPlayButton(page);
+
+  await scrollPlayerIntoView(page);
+  await expect(play).toHaveAttribute('data-state', 'playing');
+
+  await play.click();
+  await expect(play).toHaveAttribute('data-state', 'paused');
+
+  await scrollPlayerOutOfView(page);
+  await assertPlaybackHolds(page, 'paused');
+
+  await scrollPlayerIntoView(page);
+  await assertPlaybackHolds(page, 'paused');
+});
+
+// #673: `ViewportAutoplayScrollLoopMuted` (`player-fixture.stories.tsx`) is
+// the same tall scroll page as `viewportScrollStory` above, but `loop: true`
+// on the 1s default tracer rather than `endTime`-less 10s `long` one -- short
+// enough to wrap on its own, more than once, while a spec holds it in view.
+const viewportScrollLoopStory =
+  '/iframe.html?id=fixtures-playerfixture--viewport-autoplay-scroll-loop-muted&viewMode=story';
+
+// Polls `PlayerState.currentTime` for a drop -- the playhead going backward
+// is what a loop restart looks like from outside, real playback advancing
+// forward the rest of the time -- rather than a fixed wait, so this cannot
+// race the clip's own ~1s length under load. `getState` off
+// `window.playdeckHandle`, the same instrument `e2e/buffered-real.spec.ts`
+// and others already read `currentTime` through.
+const waitForLoopWrap = async (page: Page): Promise<void> => {
+  let previous = await page.evaluate(
+    () => window.playdeckHandle?.getState().currentTime ?? 0
+  );
+  await expect
+    .poll(
+      async () => {
+        const current = await page.evaluate(
+          () => window.playdeckHandle?.getState().currentTime ?? 0
+        );
+        const wrapped = current < previous;
+        previous = current;
+        return wrapped;
+      },
+      { timeout: 5_000 }
+    )
+    .toBe(true);
+};
+
+// The bug's own shape: `restartFromBoundary` (`provider-native/src/playback.ts`)
+// used to play the media directly, so the loop's own `play` event carried the
+// `'provider'` origin and #309's ownership rule read it as a viewer taking
+// over -- correct on the first exit, and never auto-pausing again after the
+// player had looped even once. This crosses the viewport boundary twice
+// (`scrollPlayerOutOfView` at each half), with a loop wrap awaited in between
+// both, so a fix that only survived the first wrap would still fail the
+// second.
+test('a looping viewport-autoplayed player auto-pauses on every exit, even after it has wrapped', async ({
+  page
+}) => {
+  await page.goto(viewportScrollLoopStory);
+  const play = await mountedPlayButton(page);
+
+  await scrollPlayerIntoView(page);
+  await expect(play).toHaveAttribute('data-state', 'playing');
+  await waitForLoopWrap(page);
+
+  await scrollPlayerOutOfView(page);
+  await expect(play).toHaveAttribute('data-state', 'paused');
+
+  await scrollPlayerIntoView(page);
+  await expect(play).toHaveAttribute('data-state', 'playing');
+  await waitForLoopWrap(page);
+
+  await scrollPlayerOutOfView(page);
+  await expect(play).toHaveAttribute('data-state', 'paused');
 });

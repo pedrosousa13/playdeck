@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Playdeck no-build bundle fixture</title>
+    <link rel="stylesheet" href="/theme.css" />
+  </head>
+  <body>
+    <!--
+      No bundler touches this file or the script below: it is served exactly
+      as written, and the one import comes from a single `<script
+      type="module">` pointed at the package's `./browser` export -- the
+      artifact this fixture exists to prove. `React.createElement` stands in
+      for JSX, which needs a compiler this page does not have.
+    -->
+    <div id="root"></div>
+    <script type="module">
+      import {
+        createElement,
+        createRoot,
+        Root,
+        Viewport,
+        Media,
+        Controls,
+        PlayButton,
+        SeekSlider,
+        Time,
+        FullscreenButton
+      } from '/browser.js';
+
+      const player = createElement(
+        Root,
+        { source: '/tracer.mp4' },
+        createElement(
+          Viewport,
+          null,
+          createElement(Media, null),
+          createElement(
+            Controls,
+            null,
+            createElement(PlayButton, null),
+            createElement(SeekSlider, null),
+            createElement(Time, { type: 'current' }),
+            createElement(FullscreenButton, null)
+          )
+        )
+      );
+
+      createRoot(document.getElementById('root')).render(player);
+    </script>
+  </body>
+</html>

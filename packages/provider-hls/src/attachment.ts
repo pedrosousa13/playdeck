@@ -1,6 +1,9 @@
 import type { CommandResult, HlsSource, PlayerError } from '@playdeck/core';
 import type { NativeProviderAdapter } from '@playdeck/provider-native';
-import { hlsBuildSupportsSubtitles } from './adapter-values.js';
+import {
+  hlsBuildSupportsAudioTracks,
+  hlsBuildSupportsSubtitles
+} from './adapter-values.js';
 import type {
   EmitProviderState,
   HlsConstructorLike,
@@ -8,6 +11,7 @@ import type {
   HlsInstanceLike,
   HlsModuleLoader
 } from './adapter-values.js';
+import type { HlsAudioTracks } from './audio-tracks.js';
 import type { HlsErrorRecovery } from './error-recovery.js';
 import type { HlsQualityLevels } from './quality-levels.js';
 import type { HlsTextTracks } from './text-tracks.js';
@@ -17,6 +21,7 @@ export type HlsAttachmentDeps = {
   readonly loadHls: HlsModuleLoader;
   readonly native: Pick<NativeProviderAdapter, 'attach' | 'load' | 'destroy'>;
   readonly textTracks: Pick<HlsTextTracks, 'handlers' | 'destroy'>;
+  readonly audioTracks: Pick<HlsAudioTracks, 'handlers'>;
   readonly qualityLevels: Pick<
     HlsQualityLevels,
     'prepareForStart' | 'refresh' | 'onLevelSwitched'
@@ -25,6 +30,12 @@ export type HlsAttachmentDeps = {
   // Tears the engine down and publishes the fatal error state; owned by the
   // host because the error patch folds in cross-seam state.
   readonly surfaceFatal: (error: PlayerError) => void;
+  // Cancels the host's bounded hold on a raw media-element error that hls.js
+  // has not yet claimed. Called wherever this seam already knows hls.js has
+  // noticed the same failure (its own `ERROR` event) or the instance it was
+  // pending against is going away (engine restart or teardown), so a timer
+  // armed against one instance can never fire against, or outlive, another.
+  readonly cancelPendingElementError: () => void;
   // Records the authoritative hls.js liveness flag for the host's live
   // derivation.
   readonly setLiveHint: (live: boolean) => void;
@@ -63,9 +74,11 @@ export const createHlsAttachment = (
     loadHls,
     native,
     textTracks,
+    audioTracks,
     qualityLevels,
     errorRecovery,
     surfaceFatal,
+    cancelPendingElementError,
     setLiveHint,
     emitLiveUpdate,
     unsubscribeNative,
@@ -80,6 +93,7 @@ export const createHlsAttachment = (
   let generation = 0;
 
   const teardownEngine = (): void => {
+    cancelPendingElementError();
     const instance = hls;
     hls = undefined;
     media.removeEventListener('timeupdate', textTracks.handlers.onTimeUpdate);
@@ -147,23 +161,53 @@ export const createHlsAttachment = (
     // lets this engine's caption pipeline (`CUES_PARSED`, below) stay fully
     // self-contained; see the text-track seam's `setCaptionRenderer` for
     // what this costs.
-    const instance = new HlsRuntime({ renderTextTracksNatively: false });
+    //
+    // `preferManagedMediaSource: false` overrides hls.js's own default
+    // (`true`), which reaches for the `ManagedMediaSource` global over plain
+    // `MediaSource` wherever WebKit exposes both. Managed buffering is gated
+    // on the media element actually streaming -- hls.js only appends
+    // fragments between the `startstreaming`/`endstreaming` events the
+    // browser fires on it -- and that event pair has a documented history of
+    // not firing reliably on WebKit (video-dev/hls.js#7984, fixed for the
+    // seek case in 1.6.19/1.7.1; this package is on 1.6.16). Measured on this
+    // site's own bench, with this option already `false`: the ladder
+    // publishes and the segments append fine on Playwright's Linux WebKit,
+    // and `quality` stays `null` because the element then fails to decode
+    // the appended stream (`MEDIA_ERR_DECODE`, see
+    // `.out-of-scope/webkit-hls-decode.md`) -- a step past anything this
+    // option gates. Plain `MediaSource` carries no such gate, which is also
+    // what every other engine already uses (neither
+    // Chromium nor Firefox expose `ManagedMediaSource`), so this keeps every
+    // engine on the one well-exercised path rather than opting only WebKit
+    // into the newer, still-fragile one.
+    const instance = new HlsRuntime({
+      renderTextTracksNatively: false,
+      preferManagedMediaSource: false
+    });
     hls = instance;
     media.addEventListener('timeupdate', textTracks.handlers.onTimeUpdate);
-    instance.on(HlsRuntime.Events.ERROR, (_event, data) =>
-      errorRecovery.handleError(instance, HlsRuntime, data)
-    );
+    instance.on(HlsRuntime.Events.ERROR, (_event, data) => {
+      // hls.js noticing anything, fatal or not, is what a pending
+      // element-error hold is waiting to see -- `handleError` below is the
+      // only caller of the three recovery entry points that hold also
+      // watches for, and it only runs from here, so cancelling first covers
+      // both.
+      cancelPendingElementError();
+      errorRecovery.handleError(instance, HlsRuntime, data);
+    });
     instance.on(HlsRuntime.Events.LEVEL_SWITCHED, (_event, data) => {
       if (destroyed || hls !== instance) return;
       qualityLevels.onLevelSwitched(instance, data);
     });
     const buildSupportsSubtitles = hlsBuildSupportsSubtitles(HlsRuntime);
+    const buildSupportsAudioTracks = hlsBuildSupportsAudioTracks(HlsRuntime);
     instance.on(HlsRuntime.Events.MANIFEST_PARSED, (_event, data) => {
       if (destroyed || hls !== instance) return;
       // Text tracks before the ladder: the manifest's answer about subtitles is
       // final at this point, while the ladder is still being refreshed, so the
       // settled fact is published before the moving one.
       textTracks.handlers.onManifestParsed(data, buildSupportsSubtitles);
+      audioTracks.handlers.onManifestParsed(data, buildSupportsAudioTracks);
       qualityLevels.refresh(instance);
     });
     instance.on(HlsRuntime.Events.LEVELS_UPDATED, () => {
@@ -179,6 +223,14 @@ export const createHlsAttachment = (
     instance.on(HlsRuntime.Events.SUBTITLE_TRACKS_UPDATED, (_event, data) => {
       if (destroyed || hls !== instance) return;
       textTracks.handlers.onSubtitleTracksUpdated(instance, data);
+    });
+    instance.on(HlsRuntime.Events.AUDIO_TRACKS_UPDATED, (_event, data) => {
+      if (destroyed || hls !== instance) return;
+      audioTracks.handlers.onAudioTracksUpdated(instance, data);
+    });
+    instance.on(HlsRuntime.Events.AUDIO_TRACK_SWITCHING, () => {
+      if (destroyed || hls !== instance) return;
+      audioTracks.handlers.onAudioTrackSwitching(instance);
     });
     instance.on(HlsRuntime.Events.CUES_PARSED, (_event, data) => {
       if (destroyed || hls !== instance) return;

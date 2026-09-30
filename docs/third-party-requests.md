@@ -19,13 +19,13 @@ something from the shipped code, it says so rather than guessing.
 
 ## Per-provider origins
 
-| Provider                                   | `script-src`                                                                                                      | `frame-src`                                                                                     | `img-src`                                                                                                   | `connect-src`                                                                                                                                                                                                                                        | `media-src`                                                               |
-| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| **Native** (`@playdeck/provider-native`)   | —                                                                                                                 | —                                                                                               | —                                                                                                           | —                                                                                                                                                                                                                                                    | Your own media host — nothing Playdeck adds.                              |
-| **HLS** (`@playdeck/provider-hls`)         | —                                                                                                                 | —                                                                                               | —                                                                                                           | Your own manifest/segment host, when the hls.js engine fetches via MSE.                                                                                                                                                                              | Your own manifest/segment host, when the native engine plays it directly. |
-| **YouTube** (`@playdeck/provider-youtube`) | `www.youtube.com`                                                                                                 | `www.youtube-nocookie.com` (the default) or `www.youtube.com`, and nothing else; see note below | —                                                                                                           | —                                                                                                                                                                                                                                                    | —                                                                         |
-| **Vimeo** (`@playdeck/provider-vimeo`)     | —                                                                                                                 | `player.vimeo.com`                                                                              | —                                                                                                           | `vimeo.com` — two paths: Playdeck's `customControls` probe, opt-in through `Player.Root`; and the SDK's own document scan, which needs no option but only fires if your page carries `data-vimeo-id`/`data-vimeo-url` markup. See note below.        | —                                                                         |
-| **Wistia** (`@playdeck/provider-wistia`)   | `fast.wistia.net`, `fast.wistia.com`, `browser.sentry-cdn.com` (injected by Wistia's own element; see note below) | `fast.wistia.net` (legacy-embed fallback; see note below)                                       | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com` | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com`, `o4505518331658240.ingest.us.sentry.io`, `pipedream.wistia.com` — the last two are Wistia's error and metrics reporting; see note below | Same five hosts as `img-src`.                                             |
+| Provider                                   | `script-src`                                                                                                      | `frame-src`                                                                                     | `img-src`                                                                                                   | `connect-src`                                                                                                                                                                                                                                                                                                                    | `media-src`                                                               |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| **Native** (`@playdeck/provider-native`)   | —                                                                                                                 | —                                                                                               | —                                                                                                           | —                                                                                                                                                                                                                                                                                                                                | Your own media host — nothing Playdeck adds.                              |
+| **HLS** (`@playdeck/provider-hls`)         | —                                                                                                                 | —                                                                                               | —                                                                                                           | Your own manifest/segment host, when the hls.js engine fetches via MSE.                                                                                                                                                                                                                                                          | Your own manifest/segment host, when the native engine plays it directly. |
+| **YouTube** (`@playdeck/provider-youtube`) | `www.youtube.com`                                                                                                 | `www.youtube-nocookie.com` (the default) or `www.youtube.com`, and nothing else; see note below | `i.ytimg.com` — the resolved `poster="provider"` still, opt-in through `Player.Root`; see note below        | —                                                                                                                                                                                                                                                                                                                                | —                                                                         |
+| **Vimeo** (`@playdeck/provider-vimeo`)     | —                                                                                                                 | `player.vimeo.com`                                                                              | `i.vimeocdn.com` — the resolved `poster="provider"` still, opt-in through `Player.Root`; see note below     | `vimeo.com` — three paths: Playdeck's `customControls` probe and its `poster="provider"` probe, both opt-in through `Player.Root`; and the SDK's own document scan, which needs no option but only fires if your page carries `data-vimeo-id`/`data-vimeo-url` markup. See note below.                                           | —                                                                         |
+| **Wistia** (`@playdeck/provider-wistia`)   | `fast.wistia.net`, `fast.wistia.com`, `browser.sentry-cdn.com` (injected by Wistia's own element; see note below) | `fast.wistia.net` (legacy-embed fallback; see note below)                                       | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com` | `fast.wistia.net`, `fast.wistia.com`, `embed.wistia.com`, `embed-ssl.wistia.com`, `embed-fastly.wistia.com`, `o4505518331658240.ingest.us.sentry.io`, `pipedream.wistia.com` — the last two are Wistia's error and metrics reporting; `fast.wistia.com` doubles as the opt-in `poster="provider"` oEmbed request; see note below | Same five hosts as `img-src`.                                             |
 
 Notes, per row:
 
@@ -48,10 +48,10 @@ Notes, per row:
   `packages/provider-youtube/src/index.ts:88`, and is resolved at `:119-131`; the
   value reaches the iframe as the origin of the embed url the adapter builds,
   `packages/provider-youtube/src/attachment.ts:231`). A
-  `Player.Root` consumer **can** change `host`: `provider-loaders.ts` passes
-  `providerOptions?.youtube` straight to `createYouTubeProvider`, so every key
-  `YouTubeProviderOptions` declares — `host` and the `loadIframeApi` injection
-  hook among them — is reachable as
+  `Player.Root` consumer **can** change `host`: `provider-loaders.ts` folds
+  `providerOptions?.youtube` into what it hands `createYouTubeProvider`, and
+  `host` is the one key of `YouTubeProviderOptions` the `youtube` bag still
+  declares (as of #628; see the loader note below), so it is reachable as
   `providerOptions={{ youtube: { host: '…' } }}`. What that consumer can reach
   is bounded, as of SIDEPRO-216: `host` is matched on its parsed origin against
   `https://www.youtube.com` and `https://www.youtube-nocookie.com`, and any
@@ -69,6 +69,15 @@ Notes, per row:
   below for what that changes and what it does not. The player vars ride on
   that url rather than through the constructor, `enablejsapi=1` among them,
   because the API reads neither `videoId` nor `playerVars` on this path.
+
+- **YouTube**'s `poster="provider"` still is derived from the video id alone
+  (`youTubePosterUrl` in `provider-youtube/src/adapter-values.ts`) — no request
+  discovers it, only the `<img>` a `Player.Poster` with no children renders
+  fetches `i.ytimg.com/vi/<id>/hqdefault.jpg`, and only once `Player.Root`'s
+  `poster` prop is set to `'provider'`. `hqdefault.jpg`, never
+  `maxresdefault.jpg`: the larger file 404s silently on videos never uploaded
+  at a high enough resolution to have one, where `hqdefault.jpg` is generated
+  for every upload (#556).
 
 - **Vimeo**'s embed iframe is built from `player.vimeo.com`
   (`packages/provider-vimeo/src/attachment.ts:159`). The SDK
@@ -92,7 +101,7 @@ Notes, per row:
   `options.dnt === false ? '0' : '1'`) — and asks Vimeo not to track the
   session. It is a separate switch and has no effect on whether Playdeck's probe
   runs. `PlayerProviderOptions` carries a `vimeo` key
-  (`packages/react/src/provider-loaders.ts:55`), so `dnt`, `customControls` and
+  (`packages/react/src/provider-loaders.ts:103`), so `dnt`, `customControls` and
   `suppressSeoMetadata` are reachable through `Player.Root` as
   `providerOptions={{ vimeo: {...} }}`; `controls`, `loop`, `startTime` and
   `endTime` are omitted from that bag because `Root` owns them as its own props
@@ -335,6 +344,18 @@ Notes, per row:
   whether a Playdeck embed can reach that state at all has not been established
   here. So it is offered as a lever rather than pulled on a consumer's behalf.
 
+- **Vimeo**'s `poster="provider"` still is resolved from the same oEmbed
+  record the `customControls` probe above reads, not a second request:
+  `provider-vimeo/src/oembed-availability.ts`'s shared probe fires the one GET
+  either capability's opt-in asks for, and whichever of
+  `chromeless-availability.ts` and `poster-availability.ts` asks second joins
+  the request the other already started rather than sending its own (#556).
+  A page opting into only one of `customControls` or `poster="provider"`
+  still costs exactly one request, as it always has; a page opting into both
+  now also costs one, not two. The `<img>` a `Player.Poster` with no children
+  renders is what actually fetches the still, from `thumbnail_url` in the
+  oEmbed record, typically an `i.vimeocdn.com` url.
+
 - **Wistia**'s player bundle is fetched from
   `https://fast.wistia.com/player.js` (`packages/provider-wistia/src/loader.ts:158`,
   appended to `document.head` at `:181-187`), with no `integrity` and no
@@ -395,7 +416,7 @@ Notes, per row:
   `playerColor`, `swatch`, `poster`, `transparentLetterbox`) are reachable from
   `Player.Root` via `providerOptions={{ wistia: {...} }}`, as YouTube's and
   Vimeo's are through their own bags
-  (`packages/react/src/provider-loaders.ts:46-59`). Three of Wistia's options
+  (`packages/react/src/provider-loaders.ts:93-107`). Three of Wistia's options
   are omitted from that bag rather than reachable through it — `loop`
   (SIDEPRO-210) and `startTime` and `endTime` (#214) — because `Root`'s own
   props write them (ADR-0004). None of the three changes which origin is
@@ -455,7 +476,26 @@ Notes, per row:
   media-data, engine, legacy-iframe and asset fetches to whichever of the three
   that embed came from, so add the canary host if that describes your page.
 
-## What referrer each embed sends
+- **Wistia**'s `poster="provider"` still is resolved through its own oEmbed
+  request (`provider-wistia/src/poster-availability.ts`), opt-in the same way
+  the options above are, to `fast.wistia.com/oembed` — the same host `player.js`
+  is fetched from, so this adds no new `connect-src` origin, only a second
+  reason to reach one already there. The `<img>` a `Player.Poster` with no
+  children renders is what actually fetches the still, from `thumbnail_url` in
+  the oEmbed record; recorded examples put that on `embed-ssl.wistia.com`,
+  already in the table's `img-src` cell for the reasons above.
+
+The table above is per provider, and the thumbnails feature (`SeekSlider`'s
+`thumbnails` prop, `packages/react/src/thumbnails.tsx`) is not one — it is
+available under any provider and reaches a host none of those rows name.
+`connect-src` needs whatever host serves the WebVTT file a consumer points
+`thumbnails` at, and `img-src` needs whatever host serves the cue images that
+file names, which need not be the same host. Both are **your own host, not
+Playdeck's** — the same exclusion the Native row above makes for its media
+source — so there is no table row for it, only this paragraph. See "When each
+request happens" below for when it fires and what bounds it.
+
+## What referrer each request sends
 
 Three providers load a third-party iframe, and a frame's first request carries
 the embedding page's URL in its `Referer` header unless something narrows it.
@@ -465,10 +505,22 @@ it, and it only counts if it is on the element before the element is in the
 document: the header leaves with the first request, so an attribute written
 after that changes nothing.
 
-Frames are not the whole list. The Vimeo oEmbed probe is the library's only
-`fetch` — grepping every package's `src` for `fetch(` and `XMLHttpRequest`
-finds nothing else — and it carries the same header on the same terms a frame
-does, so it belongs here beside them.
+Frames are not the whole list, and `fetch(` is not the only thing worth
+grepping for. Widening that search to `createElement(`, `<img`, `<link`,
+`new Image`, `<script`, `<source` and `<track` across every package's `src`
+finds: three requests that are not a frame at all — Vimeo's oEmbed probe,
+Wistia's poster probe, and the thumbnails feature's own fetch of a
+consumer-named cue file; two rendered images beside the frames above — that
+same feature's cue `<img>`, and the still `Player.Poster` renders for a
+resolved `poster="provider"`; and two `<script>` elements the library injects
+to load a vendor's own player bundle — YouTube's `iframe_api` and Wistia's
+`player.js` (see "The SRI bargain" below for what else those two do and do not
+carry). Left out on purpose: the `<source>` and `<track>` elements
+`packages/react/src/viewport-media.tsx` renders carry whatever URL a consumer
+passes as their own source or captions — that's your own host, not Playdeck's,
+the same exclusion the per-provider table above already makes for Native. All
+of the rest carry a referrer on the same terms a frame does, so they belong
+here beside them.
 
 - **Vimeo** — `strict-origin-when-cross-origin`, set by Playdeck on the frame it
   builds (`packages/provider-vimeo/src/attachment.ts:411`), before the append at
@@ -542,23 +594,88 @@ does, so it belongs here beside them.
   document that mounts the player covers every frame it loads, Wistia's
   included. No Playdeck option exists for it and none is planned — the exposure is
   the vendor element's shadow root, not a gap in this provider's options.
+  `playdeck.video` itself is a page that mounts these providers — the bench on
+  `/` renders YouTube and Vimeo sources — and its own deployment sends exactly
+  that header, for every path: `apps/site/public/_headers` sets
+  `Referrer-Policy: strict-origin-when-cross-origin`.
+- **YouTube's API script** — `strict-origin-when-cross-origin`, set by Playdeck
+  on the `<script>` `packages/provider-youtube/src/loader.ts:179` builds for
+  `https://www.youtube.com/iframe_api`, before the append at `:180`. Matches
+  the Vimeo oEmbed decision (#334, ruled again for this element by #775): the
+  request leaves the moment the element enters the document, so the policy has
+  to be on it first, and without one it would follow whatever the embedding
+  page declares — the full URL, path and query included, to YouTube on a page
+  declaring something wider than the modern browser default.
+- **Wistia's player script** — the same policy, set the same way and for the
+  same reason: `packages/provider-wistia/src/loader.ts:189` sets
+  `referrerPolicy` on the `<script>` it builds for
+  `https://fast.wistia.com/player.js`, before the append at `:190` (#775).
+- **The poster still** — `strict-origin-when-cross-origin`, defaulted by
+  `PosterImage` (`packages/react/src/poster.tsx:223`) on every `<img>` it
+  renders, the automatic `poster="provider"` still included (#775). A consumer
+  who renders `Player.PosterImage` directly with their own `referrerPolicy`
+  still overrides it — the prop is destructured with this value as its default
+  rather than left to flow through unmodified, which is what lets a supplied
+  value win the way every other destructured default does. The automatic path
+  has no such override available: the resolved still reaches `PosterImage` as
+  a plain `{ src, srcSet, ... }` object with no `referrerPolicy` field, and
+  `Player.Poster`'s own props land on the `<div>` it wraps the image in, not on
+  the image itself, so the default is what that path always gets.
+- **Wistia's poster probe** — the same policy as Vimeo's oEmbed probe, and for
+  the same reason: `referrerPolicy: 'strict-origin-when-cross-origin'` on the
+  `fetch` init in `provider-wistia/src/poster-availability.ts`, matching the
+  decision #334 made for Vimeo's. A `fetch` given no `referrerPolicy` inherits
+  the document's, so without this the request would travel under whatever the
+  consuming page declares — the full URL, path and query included, to Wistia on
+  a page declaring something wider than the modern browser default. Opt-in only
+  — the probe fires solely on `resolvePoster === true` — and the declaration is
+  read off the init `fetch` was handed by
+  `packages/provider-wistia/test/poster-availability.test.ts`, rather than off
+  any restatement of it.
+- **The thumbnails fetch** — `no-referrer`, on the `fetch` init in
+  `packages/react/src/thumbnails.tsx`. Unlike the two oEmbed probes above, no
+  domain-restriction check anywhere reads this request's referrer, and the host
+  it asks is whatever URL a consumer names in the `thumbnails` prop — a sprite
+  host with no reason to learn what page embedded it at all, so the referrer is
+  dropped entirely rather than narrowed to the origin. Opt-in the same lazy way
+  the feature already is: nothing is fetched until a pointer or keyboard focus
+  arms it (see "When each request happens" below).
+- **The thumbnail cue image** — the same `no-referrer`, as the `referrerpolicy`
+  attribute on the `<img>` that same module renders for the previewed cue. The
+  same reasoning as the fetch above it: the image `src` is a sprite host a
+  cue names, allowlisted the same way the cue file's own url is, and nothing
+  reads its referrer back.
 
-One thing tempers all of them, and it is worth knowing before treating the two
-attributes and the probe's init as load-bearing: browsers have defaulted to
-`strict-origin-when-cross-origin` for some years (Chrome 85, Firefox 87), so on
-a page that declares no policy of its own all three match the default rather
-than narrow past it. They earn their place on a page that declares something
-wider — `unsafe-url` or `no-referrer-when-downgrade`, whether by header or by
+One thing tempers most of them, and it is worth knowing before treating any of
+this as load-bearing: browsers have defaulted to `strict-origin-when-cross-origin`
+for some years (Chrome 85, Firefox 87), so on a page that declares no policy of
+its own the entries set to that value — Vimeo's frame, Vimeo's oEmbed probe,
+YouTube's frame, Wistia's poster probe, YouTube's API script, Wistia's player
+script, and the poster still — match the default rather than narrow past it.
+They earn their place on a page that declares something wider —
+`unsafe-url` or `no-referrer-when-downgrade`, whether by header or by
 `<meta name="referrer">` — because a frame's own attribute overrides the
-document's policy, and a `fetch` init's `referrerPolicy` overrides it the same
-way, while Wistia's frame and the Vimeo SDK's own oEmbed request follow it.
-That default is read off the specification and the browsers' release notes, not
-verified here — and neither is the narrowing itself. What the tests check is
-that the **declaration** is made: `e2e/youtube-real.spec.ts` reads the
-`referrerpolicy` attribute off a real player's frame, and each provider's unit
-suite reads the key off the init `fetch` was handed. No test anywhere observes
-the `Referer` header that results. That declaring the policy narrows the header
-is the platform's behaviour, relied on here rather than measured here.
+document's policy, a `fetch` init's `referrerPolicy` overrides it the same way,
+and a script or image element's property does too, while Wistia's frame and
+the Vimeo SDK's own oEmbed request still follow it instead — neither has a
+referrer-policy knob at all (see the Wistia and Vimeo notes above), so both
+ride whatever the page declares, narrower default or not. The thumbnails fetch
+and its cue image are different again: `no-referrer` narrows past the default
+unconditionally, on every page, because it is stricter than anything a browser
+defaults to. That default is read off the specification and the browsers'
+release notes, not verified here — and neither is the narrowing itself. What
+the tests check is that the **declaration** is made, where one is:
+`e2e/youtube-real.spec.ts` reads the `referrerpolicy` attribute off a real
+player's frame, each fetch's own unit suite reads the key off the init it was
+handed, each script loader's own unit suite reads `referrerPolicy` off the
+injected element, `packages/react/test/index.test.tsx` and
+`packages/react/test/poster-provider.test.tsx` read the `referrerpolicy`
+attribute off the rendered poster `<img>`, and
+`packages/react/test/thumbnails.test.tsx` reads the `referrerpolicy` attribute
+off the rendered cue `<img>` directly. No test anywhere observes the `Referer`
+header that results, and nothing tests the two that declare nothing — there is
+no declaration there to read. That declaring a policy narrows the header is the
+platform's behaviour, relied on here rather than measured here.
 
 ## When each request happens
 
@@ -651,6 +768,33 @@ Mapped onto the origins above:
   sequence can start but not whether they happen. What decides that is Wistia's
   own visitor-tracking state, which is not a `Player.Root` prop and which no
   `loading` setting suppresses — see the per-provider note above.
+- **The thumbnails fetch** does not fire at attach at all, and no `loading`
+  setting decides whether it happens: nothing is fetched until a pointer moves
+  over the seek slider or its input holds keyboard focus, which arms
+  `useThumbnailCues` (`packages/react/src/thumbnails.tsx`) — so a consumer who
+  sets `thumbnails` but whose viewer never hovers or tabs to the control never
+  costs this request, whatever `loading` is set to, and a viewer who does can
+  trigger it long after — or well before — any provider's own attach-time
+  requests above have fired. Once armed it fetches the URL a consumer names in
+  the `thumbnails` prop, one request per resolved url, its wait for a response
+  bounded by `THUMBNAILS_FETCH_TIMEOUT_MS` (4 seconds) and the body read that
+  follows bounded separately by `THUMBNAILS_BODY_READ_TIMEOUT_MS` (20
+  seconds), plus a `THUMBNAILS_FETCH_BYTE_CAP` on the bytes it reads out of
+  the body (10,000,000) — all three declared in
+  `packages/react/src/thumbnails.tsx`, alongside `@playdeck/core/thumbnails`'s
+  own `THUMBNAIL_CUE_CAP` (100,000 cues, declared in
+  `packages/core/src/thumbnails.ts`), which bounds the parsed file regardless
+  of what the body contained. A fetch that fails — network error, a non-ok
+  response, or either deadline — is retried once `THUMBNAILS_RETRY_BACKOFF_MS`
+  (5 seconds) has passed, whether the pointer stayed over the slider (or the
+  input kept keyboard focus) the whole time or only arrives again afterward,
+  so a host that keeps failing is retried at most once per backoff rather
+  than on every pointer movement. `SeekSlider`
+  resolves that url, and `ThumbnailPreview` resolves each cue's own image url,
+  through the same `permittedUrl` scheme allowlist
+  (`packages/react/src/permitted-url.ts`) every other consumer-supplied url in
+  this package goes through — `http:`/`https:` only, no opinion on the host or
+  address behind them.
 - **The storybook wrapper's** oEmbed lookup is independent of `loading`
   entirely: `useVideoThumbnail` fires its `fetch` once at mount, whenever it is
   given a URL and no `placeholderImageSrc` — the cover has to be ready before
@@ -704,12 +848,12 @@ anything shaped to answer `typeof … === 'function'` with a function, because
 no structural test can. Once adopted, the object is memoised into the
 module-global `sharedLoad` (`:92`) and handed back unchanged to every later
 call on the page. That memo has exactly one clearer: the exported
-`resetYouTubeIframeApiLoader` (`:185-187`). `fail()`'s clearing (`:145-146`,
+`resetYouTubeIframeApiLoader` (`:191-193`). `fail()`'s clearing (`:145-146`,
 and even there conditional on `sharedLoad === load`) belongs to the fetch
 path's own promise executor, which a bare `Promise.resolve` adoption never
 enters, so nothing on that path ever runs against an adopted memo. And
 `resetYouTubeIframeApiLoader` is a test seam, not a runtime one: every call
-site is a test (`packages/provider-youtube/test/loader.test.ts:263`, `:281`)
+site is a test (`packages/provider-youtube/test/loader.test.ts:272`, `:290`)
 or this package's own example harness (`examples/provider-youtube.ts:24`),
 the README tables it as such ("for tests that need a clean load",
 `packages/provider-youtube/README.md:82`), and the changeset that introduced
@@ -752,27 +896,30 @@ those pages and Playdeck's own attach coexist.
 Both providers do offer a seam for replacing the load, and self-hosting the
 script is what either seam is for: the vendor's own engine, configuration and
 media-data requests still go to the vendor's CDN, so only `script-src` changes.
-But the two are not equally reachable, and the difference matters most to the
-consumer this project leads with — the one who installs `@playdeck/react` and never
-calls a provider factory:
+Both are construction-only now, and for the same reason:
 
-- **YouTube's is reachable through `Player.Root`.**
-  `YouTubeProviderOptions.loadIframeApi`
+- **YouTube's.** `YouTubeProviderOptions.loadIframeApi`
   (`packages/provider-youtube/src/index.ts:81`, defaulted to the built-in loader
-  at `:308`, called at `packages/provider-youtube/src/attachment.ts:220`) is a
-  provider option, and the `youtube` bag omits only `controls`, `endTime`,
-  `loop` and `startTime` (`packages/react/src/provider-loaders.ts:51-54`) — so
-  `providerOptions={{ youtube: { loadIframeApi } }}` reaches it.
-- **Wistia's is not.** `WistiaScriptInjector`
+  at `:308`, called at `packages/provider-youtube/src/attachment.ts:220`) was a
+  `Player.Root` option until #628 — the `youtube` bag admitted it alongside
+  `host`, and `providerOptions={{ youtube: { loadIframeApi: () => … } }}`
+  written inline was a fresh function every render, so the bag never compared
+  equal and the activation was retired on every render, the same hazard #579
+  had already closed for `hls`'s `loadHls`. `PlayerProviderOptions['youtube']`
+  (`packages/react/src/provider-loaders.ts`) now omits `loadIframeApi` beside
+  `controls`, `endTime`, `loop` and `startTime`, so reaching it means calling
+  `createYouTubeProvider` yourself and driving the load — the
+  direct-construction path this document describes at the YouTube row above.
+- **Wistia's.** `WistiaScriptInjector`
   (`packages/provider-wistia/src/loader.ts:166`) is a parameter of
   `loadWistiaPlayer`, not a key of `WistiaProviderOptions`, so no `wistia` bag
-  carries it. Reaching it means calling `createWistiaProvider` yourself and
-  driving the load, which is the direct-construction path this document
-  describes at the Wistia row above — not something `Player.Root` exposes.
+  ever carried it. Reaching it has always meant calling `createWistiaProvider`
+  yourself and driving the load, the same path YouTube's now takes — not
+  something `Player.Root` exposes.
 
-So for a `Player.Root` consumer today, `fast.wistia.com` in `script-src` is not
-negotiable, while `www.youtube.com` is. That asymmetry is a gap in this
-provider's options surface rather than a property of Wistia's CDN.
+So for a `Player.Root` consumer today, neither `fast.wistia.com` nor
+`www.youtube.com` in `script-src` is negotiable: both loads are pinned to
+their default CDN unless the caller constructs the provider directly.
 
 ## The Vimeo sandbox bargain
 
@@ -1206,13 +1353,38 @@ three reporting origins — the Sentry pair and `pipedream.wistia.com` — as
 optional: in the `0.7.12` bundle this document read, the visitor-tracking state
 that gates them defaults to enabled, and omitting them buys a silently failed
 error or metrics request rather than a video that visibly does not play.
-`vimeo.com` belongs in `connect-src` on two counts, and the second needs no
-caller to opt into anything: some caller in your app setting
-`customControls: true`, whether directly or through
-`providerOptions={{ vimeo: {...} }}`; and the Vimeo SDK's module-scope document
-scan, which fires for any element anywhere in your page carrying
-`data-vimeo-id` or `data-vimeo-url`. Leave it out only if neither describes
-your page. Vimeo's three white-label suffixes stay out of this union for the
-same reason the Wistia canary does — nothing in Playdeck reaches them; see the
-per-provider note. None of this needs `'unsafe-inline'` or `'unsafe-eval'` in
-`script-src` — every provider here is a script or iframe load, not inline code.
+`vimeo.com` belongs in `connect-src` on three counts, and only the last needs
+no caller to opt into anything: some caller in your app setting
+`customControls: true`; a source rendered with `Player.Root`'s
+`poster="provider"`; either directly or through
+`providerOptions={{ vimeo: {...} }}` for the first; and the Vimeo SDK's
+module-scope document scan, which fires for any element anywhere in your page
+carrying `data-vimeo-id` or `data-vimeo-url`. Leave it out only if none of the
+three describes your page. `poster="provider"` also needs `i.ytimg.com` and
+`i.vimeocdn.com` in `img-src` for a YouTube or Vimeo source respectively —
+Wistia's own still needs no new host there, since it resolves to one of the
+`embed*.wistia.com` hosts already in the union. Vimeo's three white-label
+suffixes stay out of this union for the same reason the Wistia canary does —
+nothing in Playdeck reaches them; see the per-provider note. None of this needs
+`'unsafe-inline'` or `'unsafe-eval'` in `script-src` — every provider here is a
+script or iframe load, not inline code.
+
+None of the above accounts for the `thumbnails` prop, because it has nothing to
+do with which provider is on the page: a page using it needs `connect-src` and
+`img-src` to carry whichever host or hosts serve the WebVTT file and its cue
+images — your own host, not Playdeck's, so there is no origin this document can
+name for you in advance. See the per-provider section's own note on it above.
+
+This table is what a consuming application's CSP should carry — it is not what
+`playdeck.video` itself carries. `apps/site/public/_headers` ships no
+`script-src` or `default-src` at all (the maintainer's ruling on #758: the
+cheap headers, no CSP). The site's own analytics script comes from
+`analytics.pedrosousa.me`, so a script-restricting policy here would have to
+trust that origin — and trusting it does nothing to stop a compromised
+analytics script from rewriting the page, which is the realistic threat on a
+documentation site with no accounts, sessions or user data to protect. A
+strict policy also risks breaking the bench's provider embeds on `/` in ways
+that would only surface after a deploy. What the site does send is
+`frame-ancestors 'self'`: the site frames nothing of its own that another
+origin needs to embed, so `'self'` costs nothing today and keeps any future
+page that frames another same-origin page working.

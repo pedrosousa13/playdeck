@@ -52,12 +52,10 @@ const contents = headings.filter(
 ---
 
 <Base title={`${current.title} — Playdeck guides`}>
-  {
-    /* The leaf only, no `Guides` ancestor: the site nav marks that section with
-     * `aria-current` already, so an ancestor repeating it would read as the
-     * same word twice rather than as two landmarks (#542 phase 2). The two
-     * other document routes pass their crumbs the same way. */
-  }
+  {/* The leaf only, no `Guides` ancestor: the site nav marks that section with
+   * `aria-current` already, so an ancestor repeating it would read as the
+   * same word twice rather than as two landmarks (#542 phase 2). The two
+   * other document routes pass their crumbs the same way. */}
   <SiteHeader crumbs={[{ label: current.title }]} />
 
   <div class="shell">
@@ -74,18 +72,18 @@ const contents = headings.filter(
       contents={contents}
     />
 
-    {
-      /* `Content` is the workbench document, compiled. Everything the reader
-       * sees below is that file: this page contributes a measure, a heading
-       * rhythm and the code-block styling in `base.css`, and not one word. */
-    }
+    {/* `Content` is the workbench document, compiled. Everything the reader
+     * sees below is that file: this page contributes a measure, a heading
+     * rhythm and the code-block styling in `base.css`, and not one word. */}
     <main class="doc">
       <Content />
     </main>
   </div>
 
   <footer class="foot">
-    <div class="foot__rule"><Sweep form="hairline" /></div>
+    <div class="foot__rule">
+      <Sweep form="hairline" />
+    </div>
     <p>
       <a href={guidesUrl}>All guides</a>
     </p>

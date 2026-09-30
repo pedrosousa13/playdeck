@@ -9,11 +9,58 @@ reimplementing it.
 pnpm add @playdeck/provider-hls
 ```
 
+This package has no React dependency of its own — the HLS engine and its
+native fallback are driven through a `PlayerController`, as in "Without React"
+below. Where you do pair it with `@playdeck/react`'s primitives, that
+package's peer range is React 19 only.
+
 `@playdeck/react` loads this for you when the source resolves to `hls` — an
 `.m3u8` path, or an explicit `{ type: 'hls' }` source; see
 [Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md#the-other-three-providers). hls.js
 is a dependency but is imported dynamically, so it only reaches the network when
 the hls.js engine is actually selected.
+
+<!-- example:provider-setup-hls -->
+
+```tsx
+import * as Player from '@playdeck/react';
+
+// An HLS source is an `.m3u8` URL in the `source` prop. `providerOptions.hls`
+// takes a `build` name, never the loader function `createHlsProvider` itself
+// accepts: a provider option bag is compared with `Object.is`, and a function
+// passed inline would never reach a stable identity across renders. `'light'`
+// is smaller and drops subtitles, alternate audio, CMCD, EME and Variable
+// Substitution — see `@playdeck/provider-hls`'s README for the size and
+// before choosing it over the default `'full'` build.
+export const HlsClip = () => (
+  <Player.Root
+    providerOptions={{ hls: { build: 'light' } }}
+    source="https://example.com/master.m3u8"
+  >
+    <Player.Viewport>
+      <Player.Media />
+      <Player.Controls>
+        <Player.PlayButton />
+        <Player.SeekSlider />
+        <Player.Time type="current" />
+        <Player.FullscreenButton />
+      </Player.Controls>
+      {/* A source `detectSource` refuses, or — when an engine is pinned
+          through an explicit `{ type: 'hls', src, engine }` source — one the
+          browser cannot provide, is reported here with an explained error
+          rather than a silent fallback. */}
+      <Player.ErrorDisplay />
+    </Player.Viewport>
+  </Player.Root>
+);
+```
+
+<!-- /example -->
+
+## Without React
+
+Reach for this package directly when you are writing a provider adapter, or
+hosting a player somewhere other than React.
 
 <!-- example:provider-hls -->
 
@@ -83,9 +130,9 @@ export const provider = createHlsProvider(videoElement, {
 | `deriveLiveState`      | The shared `isLive` / `atLiveEdge` derivation, re-exported from `@playdeck/core`. |
 
 Types: `HlsProviderOptions`, `HlsEnvironment`, `HlsEngineSelection`,
-`LiveDerivationInput`, `HlsModuleLoader`, and the structural shapes this adapter
-consumes from hls.js — `HlsConstructorLike`, `HlsInstanceLike`, `HlsConfigLike`,
-`HlsLevelLike`, `HlsSubtitleTrackLike`, `HlsParsedCueLike`.
+`LiveDerivationInput`, `HlsModuleLoader`, `HlsBuild`, and the structural shapes
+this adapter consumes from hls.js — `HlsConstructorLike`, `HlsInstanceLike`,
+`HlsConfigLike`, `HlsLevelLike`, `HlsSubtitleTrackLike`, `HlsParsedCueLike`.
 
 ## Supplying your own hls.js
 
@@ -126,6 +173,24 @@ createHlsProvider(videoElement, source, {
   loadHls: () => import('hls.js/light')
 });
 ```
+
+`build: 'light'` does the same thing as a name rather than a loader (#579),
+and it is the form `@playdeck/react` exposes through `Player.Root`:
+
+<!-- example:ignore the same call as provider-hls-loader, build in place of loadHls, alongside the Player.Root shape it stands in for -->
+
+```ts
+createHlsProvider(videoElement, source, { build: 'light' });
+
+// Reached through `Player.Root` the same way:
+// <Player.Root providerOptions={{ hls: { build: 'light' } }} source={source}>
+```
+
+`loadHls` stays the only way to pin an hls.js version or serve it from
+somewhere other than this package's own bundled dependency, and reaching it
+means mounting `createHlsProvider` directly the way this section's own example
+does: a provider option bag `Player.Root` fans into compares its values with
+`Object.is`, which a function passed inline can never do meaningfully twice.
 
 Subtitles are the half that reaches this adapter. The light build still parses a
 manifest's subtitle renditions and reports them once, and then never emits
@@ -176,9 +241,17 @@ full build otherwise: 53 KB is not worth a caption track your viewers needed.
   chooses and the capability is `unavailable` / `source`.
 - **Live** streams report `isLive` and `atLiveEdge` derived from the seekable
   window, not from a manifest tag.
+- **`liveEdge`** and `seekToLiveEdge` are `available` on the hls.js engine once
+  the source is live, hls.js's own `liveSyncPosition` is finite and the
+  seekable window is wide enough to scrub — `seekToLiveEdge()` lands there,
+  never on the raw seekable end. On the native engine the edge is that raw
+  seekable end, the only notion of it a plain media element has.
 - **Captions** on the hls.js engine come from hls.js, which is the sole owner:
   sidecar `<track>` children discovered by the native subsystem are dropped so
-  the two cannot both claim the state.
+  the two cannot both claim the state. hls.js's parsed cues can carry WebVTT
+  tags and character references, so cue markup reaches `TextCue.text` as
+  plain text — tags stripped, entities decoded. On the native HLS engine
+  captions come from the embedded native adapter, which decodes the same way.
 - **Chapters** are the native adapter's, on both engines. HLS carries no
   chapters concept of its own, and `EXT-X-DATERANGE` routes into the metadata
   track, so a `kind="chapters"` text track on the media element is the only
@@ -206,8 +279,8 @@ export const live = deriveLiveState({
   liveEdge: 3594
 });
 
-// -> { isLive: true, atLiveEdge: true }. `null` means "not live, or not yet
-// known" — a control should not claim either until it is.
+// -> { isLive: true, atLiveEdge: true, offsetFromEdge: 0 }. `null` means "not
+// live, or not yet known" — a control should not claim either until it is.
 export const atEdge = live?.atLiveEdge ?? false;
 ```
 

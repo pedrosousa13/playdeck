@@ -15,7 +15,7 @@
 // setting and which logs a `NotSupportedError` per frame rather than staying
 // quiet. Same intent, newer spelling.
 
-import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import {
   PlayerController,
   type ProviderEvent,
@@ -30,6 +30,7 @@ import {
   type YouTubePlayerOptions,
   type YouTubeProviderOptions
 } from '../src/index';
+import { captureRethrows } from '@playdeck/test-support/capture-rethrows';
 
 const playerStates = {
   UNSTARTED: -1,
@@ -540,6 +541,29 @@ test.each([
   }
 );
 
+// The iframe is what draws YouTube's own title bar on hover and its "More
+// videos" shelf on pause -- neither is reachable through a player var.
+// Chromeless mode keeps the pointer out of the iframe entirely so a
+// consumer's own click layer, not YouTube's, ever sees it hover; `controls:
+// true` leaves the pointer alone because there YouTube's chrome is the
+// consumer's chosen control surface.
+test.each([
+  ['unset', undefined, 'none'],
+  ['false', false, 'none'],
+  ['true', true, '']
+] as const)(
+  'sets the iframe pointer-events to the expected value when the controls option is %s',
+  async (_label, controls, expected) => {
+    const { fake, provider } = createAdapter('M7lc1UVf-VE', { controls });
+
+    await provider.attach();
+    await provider.load();
+
+    const harness = fake.players[0]!;
+    expect(harness.iframe.style.pointerEvents).toBe(expected);
+  }
+);
+
 // SIDEPRO-210. `loop: 1` on its own is a documented no-op for a single-video
 // embed -- YouTube loops a *playlist*, so the one video has to be named as its
 // own single-entry playlist for the loop var to mean anything. Setting one
@@ -589,6 +613,33 @@ test('reports policy-restricted custom controls before the player is ready', asy
   );
 });
 
+// Red: with `youTubePosterUrl` mutated to emit `maxresdefault.jpg` and
+// `fixedCapabilities.providerPoster` (adapter-values.ts) mutated to
+// `notReady`, this failed on `providerPosterUrl` ("...hqdefault.jpg" expected,
+// "...maxresdefault.jpg" received), and "maps player ready onto confirmed
+// state and honest capabilities" below failed on `providerPoster`
+// (`{ status: 'available' }` expected, `{ status: 'unknown', reason:
+// 'not-ready' }` received).
+test('resolves its own poster from the video id, before the player is ready', async () => {
+  const { patches, provider } = createAdapter('dQw4w9WgXcQ');
+
+  await provider.attach();
+
+  // `hqdefault.jpg`, not `maxresdefault.jpg`: the larger file 404s silently on
+  // videos that were never uploaded at a resolution high enough to have one,
+  // where `hqdefault.jpg` is generated for every upload. Free either way -- no
+  // request is made to learn this, so the capability is `available` from the
+  // first patch rather than passing through `unknown` first.
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      providerPosterUrl: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+      capabilities: expect.objectContaining({
+        providerPoster: { status: 'available' }
+      })
+    })
+  );
+});
+
 test('maps player ready onto confirmed state and honest capabilities', async () => {
   const { events, fake, patches, provider } = createAdapter();
   await provider.attach();
@@ -620,11 +671,14 @@ test('maps player ready onto confirmed state and honest capabilities', async () 
         setPlaybackRate: { status: 'available' },
         selectQuality: { status: 'unavailable', reason: 'provider' },
         selectTextTrack: { status: 'unavailable', reason: 'source' },
+        selectAudioTrack: { status: 'unavailable', reason: 'provider' },
         chapters: { status: 'unavailable', reason: 'provider' },
+        liveEdge: { status: 'unavailable', reason: 'provider' },
         fullscreen: { status: 'available' },
         pictureInPicture: { status: 'unavailable', reason: 'provider' },
         airPlay: { status: 'unavailable', reason: 'provider' },
-        customControls: { status: 'unavailable', reason: 'policy' }
+        customControls: { status: 'unavailable', reason: 'policy' },
+        providerPoster: { status: 'available' }
       })
     })
   );
@@ -1972,29 +2026,44 @@ test('reports chapters as unavailable for the provider without failing a command
   expect(await controller.seekTo(10)).toEqual({ ok: true });
 });
 
+// The IFrame Player API's whole surface for this is `getDuration()`,
+// `getCurrentTime()` and `getVideoLoadedFraction()` -- no seekable-range
+// accessor at all -- so there is no live edge this adapter could report,
+// before or after the player is ready.
+//
+// LIMITATION: what this test proves is that the adapter reports
+// `unavailable`/`provider` for the API surface it is given -- it drives the
+// fake IFrame Player this suite builds (see the file header), not a real
+// embed. It is NOT a runtime proof that a live YouTube stream behaves this
+// way in a browser, and must not be read as one. The surface reading was
+// accepted in place of a runtime drive by maintainer ruling on #180, which
+// records the attempts behind that decision.
+test('reports liveEdge as unavailable for the provider, before and after ready', async () => {
+  const controller = new PlayerController();
+  const { fake, provider } = createAdapter();
+  controller.setProvider(provider);
+  await provider.attach();
+  await provider.load();
+
+  expect(controller.getState().capabilities.liveEdge).toEqual({
+    status: 'unavailable',
+    reason: 'provider'
+  });
+
+  fake.players[0]!.fireReady();
+
+  expect(controller.getState().capabilities.liveEdge).toEqual({
+    status: 'unavailable',
+    reason: 'provider'
+  });
+  expect(provider.seekToLiveEdge).toBeUndefined();
+});
+
 // --- subscriber isolation (#233) ---
 
 // The deliberate throw below is rethrown on a fresh task so it still reaches
 // uncaught-error handling; captured rather than run, which is what keeps it
 // from landing in the runner as an unhandled error.
-const captureRethrows = (): unknown[] => {
-  const errors: unknown[] = [];
-  const real = globalThis.queueMicrotask;
-  // Wrapped rather than replaced: the fake player applies its command effects
-  // on a later microtask, and swallowing those would stall this suite.
-  globalThis.queueMicrotask = (task: () => void) =>
-    real(() => {
-      try {
-        task();
-      } catch (error) {
-        errors.push(error);
-      }
-    });
-  onTestFinished(() => {
-    globalThis.queueMicrotask = real;
-  });
-  return errors;
-};
 
 // #95, reached through the adapter's own fan-out rather than the controller's
 // (#233): a bare `Set.forEach` stops at the first throw, so every subscriber

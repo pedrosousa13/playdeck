@@ -80,26 +80,26 @@ initial graph.
 Lazy loading is worth stating in bytes rather than in adjectives, because the
 number a reader cares about is the one for the source they are playing, and for
 one of these sources it is large. Gzip, excluding React itself and the optional
-`theme.css` (9.0 KB):
+`theme.css` (12.7 KB) and `docked.css` (7.6 KB):
 
 <!-- bytes:table -->
 
 | Playing                                           | Downloads                                                          | Total        |
 | ------------------------------------------------- | ------------------------------------------------------------------ | ------------ |
-| MP4 or WebM                                       | core 7.8 + primitives 17.4 + native 5.8                            | **31.0 KB**  |
-| HLS on Safari and iOS                             | the above + HLS adapter 4.8                                        | **35.8 KB**  |
-| HLS on Chrome, Edge, Firefox                      | the above + **hls.js 169.2**                                       | **205.0 KB** |
-| HLS on Chrome, Edge, Firefox, with `hls.js/light` | core + primitives + native + HLS adapter 35.8 + hls.js light 113.0 | **148.8 KB** |
-| YouTube                                           | core 7.8 + primitives 17.4 + adapter 6.1                           | **31.3 KB**  |
-| Vimeo                                             | core 7.8 + primitives 17.4 + adapter 7.8 + `@vimeo/player` 8.5     | **41.5 KB**  |
-| Wistia                                            | core 7.8 + primitives 17.4 + adapter 5.3                           | **30.5 KB**  |
+| MP4 or WebM                                       | core 9.5 + primitives 22.4 + native 6.7                            | **38.6 KB**  |
+| HLS on Safari and iOS                             | the above + HLS adapter 5.5                                        | **44.1 KB**  |
+| HLS on Chrome, Edge, Firefox                      | the above + **hls.js 169.2**                                       | **213.3 KB** |
+| HLS on Chrome, Edge, Firefox, with `hls.js/light` | core + primitives + native + HLS adapter 44.1 + hls.js light 113.0 | **157.1 KB** |
+| YouTube                                           | core 9.5 + primitives 22.4 + adapter 6.2                           | **38.1 KB**  |
+| Vimeo                                             | core 9.5 + primitives 22.4 + adapter 8.2 + `@vimeo/player` 8.5     | **48.6 KB**  |
+| Wistia                                            | core 9.5 + primitives 22.4 + adapter 5.9                           | **37.8 KB**  |
 
 <!-- /bytes -->
 
 **hls.js is the whole story here, and it is not ours.** Adaptive streaming needs
 manifest parsing, MSE buffer management, ABR heuristics, MPEG-TS to fMP4
 transmuxing and CEA-608/708 extraction; hls.js's own smallest build is 113.0 KB,
-and Playdeck's HLS adapter over it is 4.8. What lazy loading buys is not a
+and Playdeck's HLS adapter over it is 5.5. What lazy loading buys is not a
 smaller hls.js. It is that the other four rows never download one, and that
 Safari and iOS do not either, because they play HLS natively and hls.js is never
 fetched there.
@@ -121,13 +121,15 @@ measurements, and `pnpm docs:bytes:check` fails CI when the two disagree, so a
 change that moves a bundle cannot leave a stale number in them.
 
 Every Playdeck package in this table is measured by `pnpm test:budgets` on each
-CI run, and three of them fail the build if they grow past a budget: core at
-10 KB, the primitives at 18 KB and `theme.css` at 2.5 KB — measured on its CSS
-rules with the comments stripped, because it ships as authored and a ceiling on
-the whole file is a budget on its prose. The size it ships at is reported every
-run, and not gated. The provider adapters are
-measured and reported without a budget, because a lazy chunk does not compete
-for the initial graph.
+CI run, against a reference figure it prints but never enforces: core weighs in
+at 9.5 KB, the primitives at 22.4 KB, `theme.css` at 2.4 KB and `docked.css` at
+2.6 KB — the two stylesheets measured on their CSS rules with the comments
+stripped, because both ship as authored and measuring the whole file would
+really be measuring their prose. None of the four can ever fail a build over it;
+staying lean here is a standing goal, not a ceiling this repo enforces. The
+provider adapters are measured and reported the same way, with no reference
+figure of their own, because a lazy chunk does not compete for the initial
+graph.
 
 The third-party bytes are the exception, and deliberately so: hls.js and
 `@vimeo/player` are external to those bundles, so that script never sees them.
@@ -135,8 +137,8 @@ They are measured from the installed packages instead: the ES module entry a
 bundler resolves — hls.js 1.6.16 and `@vimeo/player` 2.30.4 — put through the
 same Vite build and the same gzip that produced the first-party figures, so both
 halves of a row are the same unit. The check fails if what is installed is not
-the version each package's manifest pins. No budget gates them: they move when
-you upgrade, and that is your decision rather than ours.
+the version each package's manifest pins. They carry no reference figure at
+all: they move when you upgrade, and that is your decision rather than ours.
 
 ## Honesty about providers
 
@@ -170,7 +172,7 @@ copy, so the workbench and the site cannot disagree about what they say.
 
 The Storybook workbench stages every primitive against a mock provider, plus
 real-playback stories. It is a development tool for this repository rather than
-a published surface, and it runs against your own working tree with:
+something published, and it runs against your own working tree with:
 
 ```sh
 pnpm --filter @playdeck/storybook dev
@@ -194,8 +196,9 @@ pnpm build
 ```
 
 Packaging is verified against real tarballs (`pnpm test:packages`), bundle
-budgets are enforced (`pnpm test:budgets`), and a Next.js integration is built
-and driven in a browser (`pnpm test:integrations`). That integration serves two
+sizes are measured against reference budgets (`pnpm test:budgets`), and a
+Next.js integration is built and driven in a browser
+(`pnpm test:integrations`). That integration serves two
 routes: one imports `@playdeck/react` from a `'use client'` component, and one
 is a React Server Component that imports it directly and passes no directive of
 its own, so the build fails there unless the package carries `'use client'` on

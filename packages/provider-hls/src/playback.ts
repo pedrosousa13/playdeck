@@ -18,7 +18,8 @@ type HlsDelegatedCommand =
   | 'exitFullscreen'
   | 'requestPictureInPicture'
   | 'exitPictureInPicture'
-  | 'showAirPlayPicker';
+  | 'showAirPlayPicker'
+  | 'showRemotePlaybackPicker';
 
 export type HlsPlaybackDeps = {
   readonly isDestroyed: () => boolean;
@@ -26,18 +27,31 @@ export type HlsPlaybackDeps = {
   // what `retry` must do that a plain `load` must not.
   readonly resetEngineState: () => void;
   readonly startHlsJs: () => Promise<CommandResult>;
+  // Read only on the hls.js engine, where `seekToLiveEdge`'s target is hls.js's
+  // own live-edge position rather than the raw seekable end `native.seekTo`
+  // would otherwise be handed on the other two engines.
+  readonly getLiveSyncPosition: () => number | undefined;
 };
 
-// The playback-command seam: the delegated transport commands plus `retry`,
-// the one command whose meaning depends on the selected engine.
+// The playback-command seam: the delegated transport commands plus `retry` and
+// `seekToLiveEdge`, whose meaning depends on the selected engine.
 export type HlsPlayback = Pick<NativeProviderAdapter, HlsDelegatedCommand> & {
   readonly retry: () => Promise<CommandResult>;
+  readonly seekToLiveEdge: () => Promise<CommandResult>;
 };
 
 export const createHlsPlayback = (
-  native: Pick<NativeProviderAdapter, HlsDelegatedCommand | 'retry'>,
+  native: Pick<
+    NativeProviderAdapter,
+    HlsDelegatedCommand | 'retry' | 'seekToLiveEdge'
+  >,
   selection: HlsEngineSelection,
-  { isDestroyed, resetEngineState, startHlsJs }: HlsPlaybackDeps
+  {
+    isDestroyed,
+    resetEngineState,
+    startHlsJs,
+    getLiveSyncPosition
+  }: HlsPlaybackDeps
 ): HlsPlayback => {
   const engine = selection.engine;
   return {
@@ -54,6 +68,7 @@ export const createHlsPlayback = (
     requestPictureInPicture: native.requestPictureInPicture,
     exitPictureInPicture: native.exitPictureInPicture,
     showAirPlayPicker: native.showAirPlayPicker,
+    showRemotePlaybackPicker: native.showRemotePlaybackPicker,
     retry: async (): Promise<CommandResult> => {
       if (isDestroyed()) return { ok: false, reason: 'not-ready' };
       if (!engine) {
@@ -63,6 +78,17 @@ export const createHlsPlayback = (
       resetEngineState();
       // No engine teardown here: the engine start owns it (#85).
       return startHlsJs();
+    },
+    seekToLiveEdge: async (): Promise<CommandResult> => {
+      if (isDestroyed()) return { ok: false, reason: 'not-ready' };
+      if (!engine) {
+        return { ok: false, reason: 'unsupported', error: selection.error };
+      }
+      if (engine === 'native') return native.seekToLiveEdge();
+      const edge = getLiveSyncPosition();
+      if (!Number.isFinite(edge))
+        return { ok: false, reason: 'provider-error' };
+      return native.seekTo(edge as number);
     }
   };
 };

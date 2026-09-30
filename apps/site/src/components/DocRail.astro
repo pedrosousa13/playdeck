@@ -80,43 +80,37 @@ interface Props {
 const { label, group, contents } = Astro.props;
 ---
 
-{
-  /* One `nav` holding both lists rather than two landmarks, because they answer
-   * the same question at two scales: which document, and where in it. The
-   * headings inside it are the labels a screen reader lists them by. */
-}
-{
-  /* `data-pagefind-ignore`, for the reason the site header carries it: this
-   * rail is repeated on every document page, so indexed it would put the same
-   * navigation into the excerpt of every result and make a document's name
-   * match every other document. It sits here rather than on each caller, so a
-   * new route that renders a rail is excluded by having one rather than by
-   * remembering to say so. The headings themselves are still indexed where
-   * they belong — in the document beside this, which is where a result should
-   * land a reader. */
-}
+{/* One `nav` holding both lists rather than two landmarks, because they answer
+ * the same question at two scales: which document, and where in it. The
+ * headings inside it are the labels a screen reader lists them by. */}
+{/* `data-pagefind-ignore`, for the reason the site header carries it: this
+ * rail is repeated on every document page, so indexed it would put the same
+ * navigation into the excerpt of every result and make a document's name
+ * match every other document. It sits here rather than on each caller, so a
+ * new route that renders a rail is excluded by having one rather than by
+ * remembering to say so. The headings themselves are still indexed where
+ * they belong — in the document beside this, which is where a result should
+ * land a reader. */}
 <nav class="rail" aria-label={label} data-pagefind-ignore>
-  {
-    /* A disclosure, closed, which opens for real once there is a column to put
-     * it in.
-     *
-     * Stacked above the document on a phone, these two lists run to roughly the
-     * height of a phone screen several times over — a link per sibling
-     * document, an entry per heading — so a reader who followed a link on a
-     * narrow screen scrolled past the whole of the site's navigation before
-     * reaching the first word of the document they asked for. Moving the rail
-     * below the document was the other option and it is worse: the source order
-     * is what a screen reader and a keyboard follow, and it would have put the
-     * navigation somewhere neither of them meets it until after several hundred
-     * lines of prose.
-     *
-     * The disclosure itself is `RailDisclosure.tsx`, a shadcn `Collapsible`,
-     * and that file carries why it is one and what the swap from the platform's
-     * `<details>` cost. Everything below stays here: the two lists are rendered
-     * by Astro and handed to it as children, so they are in the served HTML
-     * whether or not React runs, and every rule that styles them in this file's
-     * stylesheet still reaches them. */
-  }
+  {/* A disclosure, closed, which opens for real once there is a column to put
+   * it in.
+   *
+   * Stacked above the document on a phone, these two lists run to roughly the
+   * height of a phone screen several times over — a link per sibling
+   * document, an entry per heading — so a reader who followed a link on a
+   * narrow screen scrolled past the whole of the site's navigation before
+   * reaching the first word of the document they asked for. Moving the rail
+   * below the document was the other option and it is worse: the source order
+   * is what a screen reader and a keyboard follow, and it would have put the
+   * navigation somewhere neither of them meets it until after several hundred
+   * lines of prose.
+   *
+   * The disclosure itself is `RailDisclosure.tsx`, a shadcn `Collapsible`,
+   * and that file carries why it is one and what the swap from the platform's
+   * `<details>` cost. Everything below stays here: the two lists are rendered
+   * by Astro and handed to it as children, so they are in the served HTML
+   * whether or not React runs, and every rule that styles them in this file's
+   * stylesheet still reaches them. */}
   <RailDisclosure client:load>
     <div class="rail__inner">
       <section class="rail__group" data-mono={group.mono ? '' : undefined}>
@@ -125,36 +119,34 @@ const { label, group, contents } = Astro.props;
           {group.note && <code class="rail__scope">{group.note}</code>}
         </h2>
         <ul class="rail__list">
-          {
-            group.items.map((item) => (
-              <li>
-                <a
-                  href={item.href}
-                  aria-current={item.current ? 'page' : undefined}
-                >
-                  {item.hiddenPrefix && (
-                    <span class="u-visually-hidden">{item.hiddenPrefix}</span>
-                  )}
-                  {item.label}
-                </a>
-              </li>
-            ))
-          }
+          {group.items.map((item) => (
+            <li>
+              <a
+                href={item.href}
+                aria-current={item.current ? 'page' : undefined}
+              >
+                {item.hiddenPrefix && (
+                  <span class="u-visually-hidden">{item.hiddenPrefix}</span>
+                )}
+                {item.label}
+              </a>
+            </li>
+          ))}
         </ul>
       </section>
 
       <Separator client:visible className="my-[var(--space-4)] bg-border" />
 
       <section class="rail__group">
-        <h2 class="rail__label"><span>On this page</span></h2>
+        <h2 class="rail__label">
+          <span>On this page</span>
+        </h2>
         <ul class="rail__list rail__list--toc">
-          {
-            contents.map((heading) => (
-              <li data-depth={heading.depth}>
-                <a href={`#${heading.slug}`}>{heading.text}</a>
-              </li>
-            ))
-          }
+          {contents.map((heading) => (
+            <li data-depth={heading.depth}>
+              <a href={`#${heading.slug}`}>{heading.text}</a>
+            </li>
+          ))}
         </ul>
       </section>
 

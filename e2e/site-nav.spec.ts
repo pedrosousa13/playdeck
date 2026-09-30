@@ -62,7 +62,7 @@ const destinations = [
   { label: 'Guides', path: 'guides/' },
   { label: 'Reference', path: 'reference/' },
   { label: 'Providers', path: 'providers/' },
-  { label: 'Archetypes', path: 'archetypes/' }
+  { label: 'Examples', path: 'examples/' }
 ] as const;
 
 /** The labels, in order, which is what the strip's links have to read. */
@@ -163,15 +163,58 @@ test('aria-current marks the section the reader is in, and only that one', async
     'Providers'
   ]);
 
-  await page.goto(`${SITE}/archetypes/`);
+  await page.goto(`${SITE}/examples/`);
   await expect(nav(page).locator('a[aria-current="page"]')).toHaveText([
-    'Archetypes'
+    'Examples'
   ]);
 
   // `/` is in none of the sections the strip names, so nothing in it claims
   // to be the page the reader is on.
   await page.goto(landing);
   await expect(nav(page).locator('a[aria-current="page"]')).toHaveCount(0);
+});
+
+test.describe('with no JavaScript', () => {
+  test.use({ javaScriptEnabled: false });
+
+  // `SiteNavSheet` is `client:only="react"`, so with scripting disabled it
+  // renders nothing: below 40rem the inline `<ul>` is CSS-hidden and there is
+  // no sheet to fall back on. #591 is the header having no navigation at all
+  // for a scriptless reader on a narrow viewport, Guides included — the one
+  // destination `/`'s own close does not carry.
+  test('every destination is reachable below 40rem with no script', async ({
+    page
+  }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.goto(landing);
+
+    const links = nav(page).getByRole('link');
+    await expect(links).toHaveText(labels);
+    for (const { label, path } of destinations) {
+      await expect(
+        nav(page).getByRole('link', { name: label, exact: true })
+      ).toHaveAttribute('href', `/${path}`);
+    }
+  });
+
+  // The companion case: at rest exactly one set of links is visible in the
+  // landmark at every width, with or without a script. Above 40rem that is
+  // still the inline list — the fallback list exists in the DOM but is
+  // `min-[40rem]:hidden`, so it must not double what the inline list shows.
+  test('the navigation is not doubled at 40rem and above with no script', async ({
+    page
+  }) => {
+    await page.setViewportSize({ width: 1024, height: 800 });
+    await page.goto(landing);
+
+    const links = nav(page).getByRole('link');
+    await expect(links).toHaveText(labels);
+    for (const { label, path } of destinations) {
+      await expect(
+        nav(page).getByRole('link', { name: label, exact: true })
+      ).toHaveAttribute('href', `/${path}`);
+    }
+  });
 });
 
 /**
@@ -195,7 +238,7 @@ const routes = [
   'reference/core/',
   'providers/',
   'providers/youtube/',
-  'archetypes/',
+  'examples/',
   'design/'
 ];
 

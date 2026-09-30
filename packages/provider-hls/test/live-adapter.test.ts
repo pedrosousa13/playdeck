@@ -100,7 +100,11 @@ test('derives live state from an infinite duration on the native engine, with a 
   await provider.load();
 
   const livePatch = patches.find((patch) => patch.live !== undefined);
-  expect(livePatch?.live).toEqual({ isLive: true, atLiveEdge: false });
+  expect(livePatch?.live).toEqual({
+    isLive: true,
+    atLiveEdge: false,
+    offsetFromEdge: 30
+  });
   // Never a false fixed duration on a live stream.
   expect(
     patches.every(
@@ -124,7 +128,11 @@ test('derives live state from the hls.js live flag and hides the finite media du
   currentFakeHls().emitLevelUpdated(true, 3593);
 
   const livePatch = lastWhere(patches, (patch) => patch.live !== undefined);
-  expect(livePatch?.live).toEqual({ isLive: true, atLiveEdge: true });
+  expect(livePatch?.live).toEqual({
+    isLive: true,
+    atLiveEdge: true,
+    offsetFromEdge: 3
+  });
   expect(livePatch?.duration ?? null).toBeNull();
 });
 
@@ -149,14 +157,16 @@ test('tracks behind-edge and catch-up transitions as the current time moves', as
   media.dispatchEvent(new Event('timeupdate'));
   expect(lastWhere(patches, (p) => p.live)?.live).toEqual({
     isLive: true,
-    atLiveEdge: false
+    atLiveEdge: false,
+    offsetFromEdge: 33
   });
 
   timeline.currentTime = 3592;
   media.dispatchEvent(new Event('timeupdate'));
   expect(lastWhere(patches, (p) => p.live)?.live).toEqual({
     isLive: true,
-    atLiveEdge: true
+    atLiveEdge: true,
+    offsetFromEdge: 1
   });
 });
 
@@ -186,6 +196,186 @@ test('marks seeking unavailable when the live window is too small, and restores 
 
   const widened = lastWhere(patches, (patch) => patch.capabilities);
   expect(widened?.capabilities?.seek).toEqual({ status: 'available' });
+});
+
+// --- liveEdge capability, hls.js engine ---
+
+test('reports liveEdge unavailable on the hls.js engine before liveSyncPosition is known', async () => {
+  const media = document.createElement('video');
+  const timeline: Timeline = {
+    duration: Number.POSITIVE_INFINITY,
+    currentTime: 30,
+    seekable: [[0, 60]]
+  };
+  bindTimeline(media, timeline);
+  const { patches, provider } = collect(media, stubMseOnlySupport);
+
+  await provider.attach();
+  await provider.load();
+
+  const capabilitiesPatch = lastWhere(patches, (patch) => patch.capabilities);
+  expect(capabilitiesPatch?.capabilities?.liveEdge).toEqual({
+    status: 'unavailable',
+    reason: 'source'
+  });
+});
+
+test('republishes liveEdge as available once liveSyncPosition becomes known, with the seek window already meaningful throughout', async () => {
+  const media = document.createElement('video');
+  const timeline: Timeline = {
+    duration: Number.POSITIVE_INFINITY,
+    currentTime: 30,
+    seekable: [[0, 60]]
+  };
+  bindTimeline(media, timeline);
+  const { patches, provider } = collect(media, stubMseOnlySupport);
+
+  await provider.attach();
+  await provider.load();
+  const before = lastWhere(patches, (patch) => patch.capabilities);
+  expect(before?.capabilities?.liveEdge).toEqual({
+    status: 'unavailable',
+    reason: 'source'
+  });
+  // The window is already wide enough to scrub before and after this event --
+  // `seekWindowMeaningful` does not change -- so a re-decoration triggered
+  // only off that flag would miss this and leave `liveEdge` stale.
+  currentFakeHls().emitLevelUpdated(true, 55);
+
+  const after = lastWhere(patches, (patch) => patch.capabilities);
+  expect(after).not.toBe(before);
+  expect(after?.capabilities?.liveEdge).toEqual({ status: 'available' });
+});
+
+test('reports liveEdge unavailable on the hls.js engine when the live window is too small to scrub, even with a known liveSyncPosition', async () => {
+  const media = document.createElement('video');
+  const timeline: Timeline = {
+    duration: Number.POSITIVE_INFINITY,
+    currentTime: 5,
+    seekable: [[5, 5.3]]
+  };
+  bindTimeline(media, timeline);
+  const { patches, provider } = collect(media, stubMseOnlySupport);
+
+  await provider.attach();
+  await provider.load();
+  currentFakeHls().emitLevelUpdated(true, 5.2);
+
+  const capabilitiesPatch = lastWhere(patches, (patch) => patch.capabilities);
+  expect(capabilitiesPatch?.capabilities?.liveEdge).toEqual({
+    status: 'unavailable',
+    reason: 'source'
+  });
+});
+
+test('reports liveEdge unavailable, reason source, for a non-live hls.js source', async () => {
+  const media = document.createElement('video');
+  const timeline: Timeline = {
+    duration: 120,
+    currentTime: 0,
+    seekable: [[0, 120]]
+  };
+  bindTimeline(media, timeline);
+  const { patches, provider } = collect(media, stubMseOnlySupport);
+
+  await provider.attach();
+  await provider.load();
+
+  const capabilitiesPatch = lastWhere(patches, (patch) => patch.capabilities);
+  expect(capabilitiesPatch?.capabilities?.liveEdge).toEqual({
+    status: 'unavailable',
+    reason: 'source'
+  });
+});
+
+// --- liveEdge capability, native engine ---
+
+// The native engine reports whatever the embedded native provider itself
+// decides -- `decorateCapabilities` overrides `liveEdge` on the hls.js engine
+// only -- so this is provider-hls answering exactly as
+// `@playdeck/provider-native` does on its own.
+test('reports liveEdge from the embedded native provider unchanged on the native engine', async () => {
+  const media = document.createElement('video');
+  const timeline: Timeline = {
+    duration: Number.POSITIVE_INFINITY,
+    currentTime: 0,
+    seekable: [[100, 200]]
+  };
+  bindTimeline(media, timeline);
+  const { patches, provider } = collect(media, stubNativeHlsSupport);
+
+  await provider.attach();
+  await provider.load();
+
+  const capabilitiesPatch = lastWhere(patches, (patch) => patch.capabilities);
+  expect(capabilitiesPatch?.capabilities?.liveEdge).toEqual({
+    status: 'available'
+  });
+});
+
+// --- seekToLiveEdge command ---
+
+// Like `bindTimeline`, but a real write actually moves the timeline and is
+// recorded, which is what `seekToLiveEdge`'s own tests need to see landed --
+// every other test in this file only cares that the derived `live` value is
+// correct and never writes back.
+const bindWritableTimeline = (
+  media: HTMLVideoElement,
+  timeline: Timeline
+): { writes: number[] } => {
+  const writes: number[] = [];
+  Object.defineProperty(media, 'duration', {
+    configurable: true,
+    get: () => timeline.duration
+  });
+  Object.defineProperty(media, 'currentTime', {
+    configurable: true,
+    get: () => timeline.currentTime,
+    set: (value: number) => {
+      writes.push(value);
+      timeline.currentTime = value;
+    }
+  });
+  Object.defineProperty(media, 'seekable', {
+    configurable: true,
+    get: () => makeTimeRanges(timeline.seekable)
+  });
+  return { writes };
+};
+
+test('seekToLiveEdge on the native engine lands on the largest seekable end', async () => {
+  const media = document.createElement('video');
+  const timeline: Timeline = {
+    duration: Number.POSITIVE_INFINITY,
+    currentTime: 0,
+    seekable: [[0, 30]]
+  };
+  const { writes } = bindWritableTimeline(media, timeline);
+  const { provider } = collect(media, stubNativeHlsSupport);
+
+  await provider.attach();
+  await provider.load();
+
+  await expect(provider.seekToLiveEdge?.()).resolves.toEqual({ ok: true });
+  expect(writes).toEqual([30]);
+});
+
+test('seekToLiveEdge on the hls.js engine lands on liveSyncPosition, not the raw seekable end', async () => {
+  const media = document.createElement('video');
+  const timeline: Timeline = {
+    duration: 3600,
+    currentTime: 3590,
+    seekable: [[3560, 3595]]
+  };
+  const { writes } = bindWritableTimeline(media, timeline);
+  const { provider } = collect(media, stubMseOnlySupport);
+
+  await provider.attach();
+  await provider.load();
+  currentFakeHls().emitLevelUpdated(true, 3593);
+
+  await expect(provider.seekToLiveEdge?.()).resolves.toEqual({ ok: true });
+  expect(writes).toEqual([3593]);
 });
 
 test('resolves a live stream to a non-live end state without crashing when the playlist ends', async () => {

@@ -1,12 +1,12 @@
 import {
   PlayerController,
   bindMediaSession,
-  detectSource,
   getMediaSessionCoordinator,
   type AutoplayMode,
   type MediaMetadataInput,
   type MediaSessionBinding,
   type MediaSessionLike,
+  type PlaybackState,
   type PlayerSource
 } from '@playdeck/core';
 import { INTERNAL_CONTROLLER } from './internal-controller.js';
@@ -14,13 +14,19 @@ import {
   collectPlayerActions,
   PlayerContext,
   PosterContext,
-  type PlayerHandle
+  type PlayerHandle,
+  type PosterState
 } from './player-context.js';
+import { DefaultPosterContext, type ResponsivePoster } from './poster.js';
+import { detectSourceWithProviders } from './provider-loaders.js';
 import {
   useActivation,
+  type ConsumerProviders,
   type PlayerMediaMount,
   type PlayerProviderOptions,
-  type ResolvedProviderOptions
+  type ResolvedProviderOptions,
+  type SuppliedProviderOptions,
+  type SuppliedSource
 } from './use-activation.js';
 import { sourceKey } from './viewport-media.js';
 import { createVolumeRequest } from './volume-request.js';
@@ -68,7 +74,7 @@ type SourceTransition = {
 // does not hold everywhere, while the mechanism behind each rule -- including
 // why a zero `startTime` is not written -- is owned by
 // `provider-native/src/playback.ts` and is not repeated here.
-export type RootProps = {
+export type RootProps<P extends ConsumerProviders = Record<string, never>> = {
   readonly autoplay?: AutoplayMode;
   readonly captionRenderer?: 'custom' | 'native';
   readonly children: ReactNode;
@@ -155,12 +161,90 @@ export type RootProps = {
    * forever.
    */
   readonly playThreshold?: number;
+  /**
+   * The still shown before the media has one of its own: a URL, a
+   * `ResponsivePoster`, or the literal `'provider'`, which asks the attached
+   * source's own provider for its still instead of one this prop names.
+   * Unset by default, which is no behavioural change from before this prop
+   * existed -- nothing is resolved and `Player.Poster` renders only what a
+   * consumer gives it as children, exactly as it always has.
+   *
+   * A `Player.Poster` with no children renders this as its default image
+   * once it resolves; children on that instance replace it. `'provider'`
+   * carries its own cost per source -- `capabilities.providerPoster` reports
+   * it, in the `Availability` vocabulary every other capability uses: free
+   * and immediate for YouTube, a Vimeo or Wistia round trip opted into only
+   * by this prop, and `unavailable`/`source` for native and HLS, which have
+   * no still of their own (#556).
+   */
+  readonly poster?: string | ResponsivePoster | 'provider';
   readonly preload?: import('./use-activation.js').PlayerPreload;
   // Compared by value, not by reference, so an inline literal is safe to
-  // pass: see `providerOptionsEqual` in `use-activation.ts`.
-  readonly providerOptions?: PlayerProviderOptions;
+  // pass: see `providerOptionsEqual` in `use-activation.ts`, which compares
+  // every key either bag carries -- a key named after a `providers` entry
+  // included -- so an inline `providerOptions={{ acme: { … } }}` is exactly
+  // as safe as `providerOptions={{ hls: { … } }}` is today.
+  readonly providerOptions?: PlayerProviderOptions & SuppliedProviderOptions<P>;
+  /**
+   * Source kinds beyond the five this package ships a loader for, keyed by
+   * the name the resolved source's own `type` carries. `detect` takes a URL
+   * string and turns it into this kind's own source object, or declines by
+   * returning `undefined`; `load` is a lazy factory -- calling it is what
+   * performs this kind's own dynamic import, mirroring the way
+   * `@playdeck/provider-hls` and the other four packages are only ever
+   * imported once a source of their kind actually needs one.
+   *
+   * `detectSource` tries the five built-in kinds first and only then walks
+   * `providers`' own entries, in the order they were given, using the first
+   * whose `detect` accepts the `source` string -- so a supplied kind can
+   * never intercept a URL a built-in host already claims. `hls`, `video`,
+   * `youtube`, `vimeo` and `wistia` are reserved names: a `providers` entry
+   * keyed by one of them is a compile error, not merely inert at runtime --
+   * `ConsumerProviders` (`provider-loaders.ts`), the bound `P` above is
+   * declared against, is what rejects it. Were that check somehow bypassed,
+   * such an entry would still be skipped outright at runtime, on both this
+   * string path and the explicit-object path below, before its `detect` is
+   * ever called or its entry is ever looked up -- not only inert once a
+   * resolved source of that `type` reaches this package's own built-in
+   * loader, which dispatches on `type` first regardless of which
+   * registration produced it.
+   *
+   * `source` also accepts an explicit object of a supplied kind directly --
+   * `PlayerSource<Extra>` (`@playdeck/core`) is what opens that up, for the
+   * type this generic parameter closes over -- resolved without ever calling
+   * `detect`: a registration's `detect` takes a URL string by contract, and an
+   * object handed in has already declared its own kind through its `type`
+   * field, so it goes straight to validation instead, the same way an
+   * explicit object of a built-in kind skips that kind's own host and path
+   * detection. Every string value anywhere inside it, nested included, still
+   * passes through the same `isPermittedSourceUrl` allowlist every built-in
+   * source's fields do (`provider-loaders.ts`'s `detectSourceWithProviders`
+   * and its `everyStringPermitted` helper) -- a forbidden scheme cannot reach
+   * a supplied provider's own factory by arriving as an object instead of a
+   * URL. Unlike the built-in `video` and `hls` kinds, a supplied kind's own
+   * values are never rewritten -- there is no known field of an arbitrary
+   * shape to normalise a protocol-relative `//host/...` value on, so it is
+   * carried through exactly as given.
+   *
+   * `controls`, `loop`, `startTime` and `endTime` reach a supplied kind not at
+   * all: `resolvedProviderOptions` (below) folds each into whichever of the
+   * `youtube`, `vimeo` and `wistia` bags the detected source belongs to, and a
+   * supplied kind has none of those three -- so the four props are silent
+   * no-ops on it, the divergence ADR-0004 asks be declared rather than left to
+   * be discovered. A registration that wants to answer one of them takes it
+   * as a key in its own `Options` bag instead, read off `providerOptions`'s
+   * own entry for this kind the way `youtube`, `vimeo` and `wistia` read
+   * theirs.
+   *
+   * Unset by default. There is no registry and no module-level state behind
+   * this prop -- `providers` is read where it is passed and nowhere else --
+   * so a `Root` that never sets it adds no import beyond what
+   * `scripts/compare-libraries.mjs`'s play-only row already measures, and its
+   * committed ceiling there is what checks that claim on every run.
+   */
+  readonly providers?: P;
   readonly ref?: Ref<PlayerHandle>;
-  readonly source: PlayerSource;
+  readonly source: PlayerSource<SuppliedSource<P>>;
   /**
    * Start playback at this offset in seconds. A value that is not finite, or
    * not above zero, is no start at all — zero asks for the start the media
@@ -202,7 +286,7 @@ const takeSuperseded = <Value,>(
   return matched;
 };
 
-export const Root = ({
+export const Root = <P extends ConsumerProviders = Record<string, never>>({
   autoplay = false,
   captionRenderer,
   children,
@@ -226,15 +310,45 @@ export const Root = ({
   // default may read a binding the same pattern has already introduced, and
   // that is the whole contract of this prop.
   playThreshold = loadThreshold,
+  poster,
   providerOptions,
+  providers,
   ref,
   source,
   startTime,
   preload = 'metadata',
   volume
-}: RootProps) => {
+}: RootProps<P>) => {
   const [controller] = useState(() => new PlayerController());
   const [hiddenTransition, setHiddenTransition] = useState<SourceTransition>();
+  // `hiddenTransition` also latches on a decoded frame with no confirmed play
+  // behind it at all (the `loadeddata` path below, `onLoadedData`) -- a native
+  // `<video>` that reached `HAVE_CURRENT_DATA` shows that frame on its own
+  // account, poster or no poster, so nothing needs covering back up were
+  // "paused" read off that latch alone. This second latch answers a narrower
+  // question, "has this source ever reached confirmed `playing`", set only
+  // from the one place that happens (the same subscription `posterPlayback`
+  // below is written from), and it is what tells a source merely sitting on
+  // its first ready frame apart from one that actually played and has since
+  // been paused.
+  const [confirmedPlayingTransition, setConfirmedPlayingTransition] =
+    useState<SourceTransition>();
+  // The live counterpart to both latches above: neither resets once set, so
+  // neither alone can tell a still-playing source from one sitting paused on
+  // it. Read fresh from the controller rather than assumed `'paused'`, and
+  // written from the same subscription the two latches are, so all three
+  // change in the same commit.
+  const [posterPlayback, setPosterPlayback] = useState<PlaybackState>(
+    () => controller.getState().playback
+  );
+  // The provider's own still, once one has resolved -- read fresh off the
+  // same subscription as `posterPlayback` above, and `null` exactly when
+  // `PlayerState.providerPosterUrl` is: before a source attaches, for a
+  // provider that never has one, or while a Vimeo or Wistia round trip is
+  // still in flight.
+  const [providerPosterUrl, setProviderPosterUrl] = useState<string | null>(
+    () => controller.getState().providerPosterUrl
+  );
   const currentMedia = useRef<PlayerMediaMount | null>(null);
   const providerSourceTransition = useRef<SourceTransition | undefined>(
     undefined
@@ -285,7 +399,10 @@ export const Root = ({
     undefined
   );
   const mediaMetadataSeed = useRef(mediaMetadata);
-  const detectedSource = useMemo(() => detectSource(source), [source]);
+  const detectedSource = useMemo(
+    () => detectSourceWithProviders(source, providers),
+    [source, providers]
+  );
   const sourceKeyForRender = sourceKey(detectedSource);
   const [sourceTransition, setSourceTransition] = useState<SourceTransition>(
     () => ({ key: sourceKeyForRender })
@@ -660,6 +777,11 @@ export const Root = ({
   // Wistia takes `loop` and the two boundaries: its `controls` fan-out is still
   // unbuilt, so the `wistia` bag keeps `controls` un-omitted and there is
   // nothing to fold.
+  //
+  // `resolvePoster` joins Vimeo's and Wistia's folds on the same terms as
+  // `customControls` before it (#556): it is `poster === 'provider'`, not a
+  // prop of its own, so a page that never touches `poster` folds `false` in
+  // and neither adapter's oEmbed probe ever fires.
   const resolvedProviderOptions = useMemo<ResolvedProviderOptions>(() => {
     const type =
       detectedSource.status === 'success'
@@ -680,17 +802,38 @@ export const Root = ({
     if (type === 'vimeo') {
       return {
         ...providerOptions,
-        vimeo: { ...providerOptions?.vimeo, controls, endTime, loop, startTime }
+        vimeo: {
+          ...providerOptions?.vimeo,
+          controls,
+          endTime,
+          loop,
+          resolvePoster: poster === 'provider',
+          startTime
+        }
       };
     }
     if (type === 'wistia') {
       return {
         ...providerOptions,
-        wistia: { ...providerOptions?.wistia, endTime, loop, startTime }
+        wistia: {
+          ...providerOptions?.wistia,
+          endTime,
+          loop,
+          resolvePoster: poster === 'provider',
+          startTime
+        }
       };
     }
     return providerOptions ?? {};
-  }, [controls, detectedSource, endTime, loop, providerOptions, startTime]);
+  }, [
+    controls,
+    detectedSource,
+    endTime,
+    loop,
+    poster,
+    providerOptions,
+    startTime
+  ]);
 
   const activation = useActivation({
     autoplay,
@@ -703,6 +846,7 @@ export const Root = ({
     prepareMedia,
     preload,
     providerOptions: resolvedProviderOptions,
+    providers,
     source: detectedSource
   });
 
@@ -778,7 +922,10 @@ export const Root = ({
     const unsubscribePoster = controller.subscribe((state) => {
       if (state.playback === 'playing' && providerSourceTransition.current) {
         setHiddenTransition(providerSourceTransition.current);
+        setConfirmedPlayingTransition(providerSourceTransition.current);
       }
+      setPosterPlayback(state.playback);
+      setProviderPosterUrl(state.providerPosterUrl);
     });
     return () => {
       unsubscribePoster();
@@ -799,6 +946,14 @@ export const Root = ({
     controller.setCaptionRenderer(captionRenderer ?? 'custom');
   }, [captionRenderer, controller]);
 
+  // The next three effects each guard their reconcile call the same way:
+  // no provider attached yet is not a mismatch for them to act on. An
+  // unattached prop change is left for `prepareMedia` to deliver instead --
+  // it reads these same live `controlledMuted`/`controlledVolume`/
+  // `controlledPlaybackRate` refs, direct to the media element for native
+  // or through its own ready-gated seed for an embed, and it runs
+  // immediately before `useActivation` calls `setProvider`. Issuing the
+  // command here as well would only reach `#refuseCommand`.
   useEffect(() => {
     if (muted === undefined) {
       pendingMuted.current = undefined;
@@ -814,7 +969,10 @@ export const Root = ({
       supersededMuted.current.push(pendingMuted.current);
       pendingMuted.current = undefined;
     }
-    if (controller.getState().muted !== muted) {
+    if (
+      controller.getState().provider !== null &&
+      controller.getState().muted !== muted
+    ) {
       reconcileMuted(muted);
     }
   }, [controller, muted, reconcileMuted]);
@@ -837,7 +995,12 @@ export const Root = ({
       supersededVolume.current.push(pendingVolume.current);
       pendingVolume.current = undefined;
     }
-    if (!Object.is(controller.getState().volume, volume)) {
+    // See the muted effect above: an unattached prop change is left to
+    // `prepareMedia`, not reconciled here.
+    if (
+      controller.getState().provider !== null &&
+      !Object.is(controller.getState().volume, volume)
+    ) {
       reconcileVolume(volume);
     }
   }, [controller, reconcileVolume, volume]);
@@ -860,7 +1023,12 @@ export const Root = ({
       supersededPlaybackRate.current.push(pendingPlaybackRate.current);
       pendingPlaybackRate.current = undefined;
     }
-    if (!Object.is(controller.getState().playbackRate, playbackRate)) {
+    // See the muted effect above: an unattached prop change is left to
+    // `prepareMedia`, not reconciled here.
+    if (
+      controller.getState().provider !== null &&
+      !Object.is(controller.getState().playbackRate, playbackRate)
+    ) {
       reconcilePlaybackRate(playbackRate);
     }
   }, [controller, playbackRate, reconcilePlaybackRate]);
@@ -929,13 +1097,47 @@ export const Root = ({
       volumeRequest
     ]
   );
-  const posterState =
-    hiddenTransition === sourceTransition ? 'hidden' : 'visible';
+  // `hiddenTransition === sourceTransition` is unchanged from before this
+  // state gained a third value: it answers "has the poster's job ended for
+  // this source" (a decoded frame, or confirmed playback, either latched
+  // forever), and where it says no the answer is `'visible'` exactly as it
+  // always was. Where it says yes, `confirmedPlayingTransition` -- latched
+  // only by confirmed `playing`, never by a decoded frame with no play behind
+  // it -- separates a source that actually played from one merely sitting
+  // ready, and `posterPlayback` supplies the live half neither latch can:
+  // whether a source that did play is playing now. Only a source that played
+  // and is not playing now reads `'paused'`; every other combination reads
+  // exactly as it did before this state had a third value.
+  const posterState: PosterState =
+    hiddenTransition !== sourceTransition
+      ? 'visible'
+      : confirmedPlayingTransition === sourceTransition &&
+          posterPlayback === 'paused'
+        ? 'paused'
+        : 'hidden';
+
+  // `undefined` both when `poster` was never set and when `'provider'` has
+  // not resolved yet -- `Player.Poster` treats the two alike, rendering no
+  // default image in either case. A literal or a `ResponsivePoster` needs no
+  // source to resolve against and is normalized whether or not one is
+  // attached yet.
+  const defaultPoster: ResponsivePoster | undefined =
+    poster === undefined
+      ? undefined
+      : poster === 'provider'
+        ? providerPosterUrl === null
+          ? undefined
+          : { src: providerPosterUrl }
+        : typeof poster === 'string'
+          ? { src: poster }
+          : poster;
 
   return (
     <PlayerContext.Provider value={value}>
       <PosterContext.Provider value={posterState}>
-        {children}
+        <DefaultPosterContext.Provider value={defaultPoster}>
+          {children}
+        </DefaultPosterContext.Provider>
       </PosterContext.Provider>
     </PlayerContext.Provider>
   );

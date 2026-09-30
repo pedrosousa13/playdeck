@@ -3,11 +3,13 @@ import {
   type Availability,
   type ProviderStatePatch
 } from '@playdeck/core';
+import * as Player from '@playdeck/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
 import {
   StreamingServicePlayer,
-  StreamingServiceSurface
+  StreamingServiceSurface,
+  type StreamingServicePlayerProps
 } from '../../../examples/archetype-streaming-service';
 import { assetUrl } from './asset-url';
 
@@ -38,6 +40,9 @@ const available: Availability = { status: 'available' };
  * the real clip cannot show: the native provider cannot switch renditions of a
  * progressive MP4, so against the Blender file the settings menu is correctly
  * absent altogether. Staging it here is how that menu is seen at all.
+ * `selectQualityAuto` is also staged available, modelling a provider whose
+ * Auto row is real (e.g. `@playdeck/provider-hls`); `QualityAutoUnavailable`
+ * below stages the split instead.
  *
  * `setPlaybackRate` is deliberately NOT staged. The archetype offers no rate
  * control — that is the course layout's — so dialing the capability on would
@@ -57,6 +62,7 @@ const watching: ProviderStatePatch = {
     seek: available,
     setVolume: available,
     selectQuality: available,
+    selectQualityAuto: available,
     selectTextTrack: available,
     fullscreen: available,
     pictureInPicture: available,
@@ -112,7 +118,7 @@ export const Composition: Story = {
       'Play',
       'Mute',
       'Disable captions',
-      'Settings',
+      'Quality',
       'Enter picture-in-picture',
       'AirPlay',
       'Enter fullscreen'
@@ -149,10 +155,8 @@ export const ViewingRatherThanStudying: Story = {
       canvas.queryByRole('group', { name: 'Playback speed' })
     ).toBeNull();
 
-    await userEvent.click(canvas.getByRole('button', { name: 'Settings' }));
-    await expect(
-      canvas.getByRole('group', { name: 'Quality' })
-    ).toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('button', { name: 'Quality' }));
+    await expect(canvas.getByRole('menu')).toBeInTheDocument();
     await expect(
       canvas.queryByRole('group', { name: 'Playback speed' })
     ).toBeNull();
@@ -186,7 +190,7 @@ export const CapabilitiesWithdrawn: Story = {
   },
   play: async ({ canvas }) => {
     for (const name of [
-      'Settings',
+      'Quality',
       'Enter picture-in-picture',
       'AirPlay',
       'Enter fullscreen'
@@ -201,6 +205,45 @@ export const CapabilitiesWithdrawn: Story = {
     await expect(
       canvas.getByRole('slider', { name: 'Seek' })
     ).toBeInTheDocument();
+  }
+};
+
+/**
+ * #554: the Auto row is gated on `selectQualityAuto` separately from
+ * `selectQuality`, because a provider can accept a rung while refusing
+ * `selectQuality(null)` (`@playdeck/provider-vimeo` is exactly that shape —
+ * see the comment on `PlayerCapabilities.selectQualityAuto`,
+ * `packages/core/src/types.ts`). This stages that split against the
+ * streaming archetype's own fixture and pins that Auto is absent while the
+ * real ladder still renders.
+ */
+export const QualityAutoUnavailable: Story = {
+  parameters: {
+    player: {
+      state: {
+        ...watching,
+        capabilities: {
+          ...createInitialPlayerState().capabilities,
+          seek: available,
+          setVolume: available,
+          selectQuality: available,
+          selectTextTrack: available,
+          fullscreen: available,
+          pictureInPicture: available,
+          airPlay: available,
+          selectQualityAuto: { status: 'unavailable', reason: 'provider' }
+        }
+      } satisfies ProviderStatePatch
+    }
+  },
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole('button', { name: 'Quality' }));
+    await expect(
+      canvas.getByRole('menuitemradio', { name: '1080p' })
+    ).toBeInTheDocument();
+    await expect(
+      canvas.queryByRole('menuitemradio', { name: /Auto/ })
+    ).toBeNull();
   }
 };
 
@@ -220,5 +263,53 @@ export const RealClip: StoryObj = {
       captionsSrc={assetUrl('archetype-captions.vtt')}
       resumeAt={18}
     />
+  )
+};
+
+/*
+ * The local clip this file resumes against, in place of the trailer `RealClip`
+ * fetches from Blender's own host. `tracer-10s.mp4` is served by this
+ * workbench itself, so mounting it makes no third-party request — which is
+ * what keeps this story out of `!test` below.
+ */
+const localMedia = {
+  source: {
+    type: 'video',
+    sources: [{ src: assetUrl('tracer-10s.mp4'), mimeType: 'video/mp4' }]
+  },
+  kicker: 'Local fixture',
+  title: 'Tracer clip',
+  blurb: 'A ten-second local clip used to exercise the resume affordance.',
+  credit: 'Playdeck test fixture.'
+} as const satisfies StreamingServicePlayerProps['media'];
+
+/**
+ * #551: the resume affordance mounted against a local clip, with its own
+ * `Player.Root` in place of `StreamingServicePlayer`'s so a ref reaches the
+ * handle `e2e/archetype-resume.spec.ts` reads. This renders exactly the tree
+ * `StreamingServicePlayer` renders — the same root props, the same surface,
+ * the same `media` and `resumeAt` — plus that ref.
+ *
+ * Tagged `real-playback` only, with no `!test`: the clip is local and
+ * same-origin, and `loading="interaction"` means nothing is fetched until the
+ * resume button is pressed, so the deterministic story run reaching this
+ * story costs it nothing.
+ */
+export const ResumeLocalClip: StoryObj = {
+  tags: ['real-playback'],
+  render: () => (
+    <Player.Root
+      loading="interaction"
+      ref={(handle) => {
+        window.playdeckHandle = handle ?? undefined;
+      }}
+      source={localMedia.source}
+    >
+      <StreamingServiceSurface
+        captionsSrc={assetUrl('archetype-captions.vtt')}
+        media={localMedia}
+        resumeAt={5}
+      />
+    </Player.Root>
   )
 };

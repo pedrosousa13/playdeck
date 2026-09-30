@@ -47,6 +47,16 @@ const CONTENT_TYPES = new Map(
     '.js': 'text/javascript; charset=utf-8',
     '.json': 'application/json; charset=utf-8',
     '.mp4': 'video/mp4',
+    // `scripts/media-sprite-fright.mjs`'s HLS ladder: the manifest and its
+    // MPEG-TS segments, the same pair the Worker's own asset serving resolves
+    // by extension in production. Without these two this server would answer
+    // `application/octet-stream` for both, which hls.js and Safari's native
+    // engine are lenient enough about to still play -- but a mismatch here
+    // would be this server disagreeing with what production actually serves,
+    // which is exactly the gap `scripts/serve-site.mjs`'s own header explains
+    // this file exists to close.
+    '.m3u8': 'application/vnd.apple.mpegurl',
+    '.ts': 'video/mp2t',
     '.svg': 'image/svg+xml',
     '.wasm': 'application/wasm',
     '.woff2': 'font/woff2',

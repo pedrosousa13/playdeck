@@ -7,6 +7,10 @@ Wistia's Aurora `<wistia-player>` element.
 pnpm add @playdeck/provider-wistia
 ```
 
+This package has no React dependency of its own — the Aurora
+`<wistia-player>` element is driven directly. Pair it with `@playdeck/react`
+for the primitives above, and note that package's peer range is React 19 only.
+
 `@playdeck/react` loads this for you when the source resolves to `wistia`, for
 the URL forms [Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md#the-other-three-providers)
 lists. The
@@ -23,6 +27,46 @@ hands over on `api-ready`.
 Because nothing is imported from Wistia's package, every type this adapter reads
 off Wistia's declarations is restated here and published as this package's own —
 see `WistiaPlayerApi` and `WistiaPlayerAttribute` below.
+
+<!-- example:provider-setup-wistia -->
+
+```tsx
+import * as Player from '@playdeck/react';
+
+// A Wistia source is a URL in the `source` prop, matched on `wistia.com` /
+// `wistia.net` and any of their subdomains. `detectSource` reads the media id
+// out of the `/medias/`, `/embed/medias/` and `/embed/iframe/` path forms.
+export const WistiaClip = () => (
+  <Player.Root
+    // For Wistia, `controls` is a key in `providerOptions.wistia` rather than
+    // a `Player.Root` prop. That bag also accepts `dnt`, `playerColor`,
+    // `swatch`, `poster` and `transparentLetterbox`, each a decision to make
+    // deliberately rather than inherit from an example.
+    providerOptions={{ wistia: { controls: false } }}
+    source="https://home.wistia.com/medias/oifkgmxnkb"
+  >
+    <Player.Viewport>
+      <Player.Media />
+      <Player.Controls>
+        <Player.PlayButton />
+        <Player.SeekSlider />
+        <Player.Time type="current" />
+        <Player.FullscreenButton />
+      </Player.Controls>
+      {/* A Wistia URL that is not one of the accepted forms is refused by
+          `detectSource`, and the refusal names the URL it turned down. */}
+      <Player.ErrorDisplay />
+    </Player.Viewport>
+  </Player.Root>
+);
+```
+
+<!-- /example -->
+
+## Without React
+
+Reach for this package directly when you are writing a provider adapter, or
+hosting a player somewhere other than React.
 
 <!-- example:provider-wistia -->
 
@@ -190,6 +234,13 @@ origins list and what a page's CSP has to allow.
   or the player a `retry()` replaces. Each tick goes through the same equality
   guard as every other recompute, so a paused player that has not moved relative
   to the edge publishes nothing at all.
+- **`liveEdge` is `unavailable` / `provider`.** `PublicApi` has no seekable-range
+  accessor and no dedicated live-edge member. `duration()` is what the at-edge
+  recompute above already reuses as the moving edge for its own tolerance
+  check, purely because it is the closest thing available — not because it is
+  an actionable seek target this adapter is prepared to land a viewer on. With
+  nothing to build a real one from, this reports the same verdict as every
+  other surface `PublicApi` never grew.
 - **`fullscreen` is `available`.** `PublicApi.requestFullscreen()` and
   `cancelFullscreen()` drive the player's own fullscreen element, and its
   `enter-fullscreen` / `cancel-fullscreen` events confirm the change.
@@ -219,6 +270,9 @@ origins list and what a page's CSP has to allow.
 - **`pictureInPicture` is `unavailable` / `provider`.** Wistia's `PublicApi`
   declares no picture-in-picture member at all.
 - **`airPlay` is `unavailable` / `provider`.** No command surface is wired.
+- **`remotePlayback` is `unavailable` / `provider`.** Playback runs inside
+  `<wistia-player>`, which carries no media element for the Remote Playback
+  API to expose.
 - **`customControls` is `available`.** Chromeless playback is a plain set of
   embed attributes, declared in Wistia's own `Attributes` type and gated by no
   account tier — unlike Vimeo, where it needs a paid plan.

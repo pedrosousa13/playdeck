@@ -55,6 +55,26 @@
  *                                  picture and the settings/captions menu's
  *                                  own border, since there is no scrim here
  *                                  to supply either edge)
+ *   --playdeck-color-accent-tint   #8fb0f0 light / #9dd0ff dark  (new; the
+ *                                  seek fill's gradient end. The dark value
+ *                                  is theme.css's own accent-tint default,
+ *                                  reused because docked's dark accent is
+ *                                  already the same colour as theme's)
+ *   --playdeck-control-pressed     rgb(0 0 0 / 0.1) light /
+ *                                  rgb(255 255 255 / 0.2) dark  (new; one
+ *                                  step past --playdeck-control-hover's own
+ *                                  0.06/0.12, the same "one darker" step
+ *                                  theme.css takes)
+ *   --playdeck-color-duration      #5c5c5c light / #a3a3a3 dark  (paints the
+ *                                  duration Time only, dimming it below the
+ *                                  current time's on-surface ink the same way
+ *                                  theme.css's own duration rule does; that
+ *                                  file declares the token with a single
+ *                                  `rgb(255 255 255 / 0.64)` default built for
+ *                                  its own dark scrim, so this pair is a
+ *                                  second default rather than an invention,
+ *                                  the same shape as --playdeck-color-accent-
+ *                                  tint and --playdeck-control-pressed above)
  *
  * Non-text contrast (WCAG 2.2 1.4.11's 3:1 floor for a UI component's own
  * boundary, the same rule `theme.css`'s `slider non-text contrast` describe in
@@ -185,6 +205,11 @@
     border-block-start: 1px solid var(--playdeck-color-hairline, #d9d9d6);
   }
 
+  /* `live` joins this shared box only -- shape, size and ink colour, so it
+   * reads as deliberate rather than unstyled -- and is left out of :hover
+   * and :active below, with its own cursor rule after them, because it is
+   * permanently `disabled` until seek-to-live-edge is built and those two
+   * fills would advertise a press that does nothing. */
   :where(
     [data-playdeck-part='play-button'],
     [data-playdeck-part='mute-button'],
@@ -192,7 +217,8 @@
     [data-playdeck-part='fullscreen-button'],
     [data-playdeck-part='pip-button'],
     [data-playdeck-part='airplay-button'],
-    [data-playdeck-part='settings-menu-trigger']
+    [data-playdeck-part='settings-menu-trigger'],
+    [data-playdeck-part='live']
   ) {
     display: inline-grid;
     place-items: center;
@@ -201,7 +227,7 @@
     block-size: var(--playdeck-control-size, 2.75rem);
     padding: 0;
     border: 0;
-    border-radius: var(--playdeck-radius, 0.375rem);
+    border-radius: var(--playdeck-radius, 0.625rem);
     color: var(--playdeck-color-on-surface, #1c1c1e);
     background-color: transparent;
     cursor: pointer;
@@ -217,6 +243,25 @@
     [data-playdeck-part='settings-menu-trigger']
   ):where(:hover) {
     background-color: var(--playdeck-control-hover, rgb(0 0 0 / 0.06));
+  }
+
+  :where(
+    [data-playdeck-part='play-button'],
+    [data-playdeck-part='mute-button'],
+    [data-playdeck-part='captions-button'],
+    [data-playdeck-part='fullscreen-button'],
+    [data-playdeck-part='pip-button'],
+    [data-playdeck-part='airplay-button'],
+    [data-playdeck-part='settings-menu-trigger']
+  ):where(:active) {
+    background-color: var(--playdeck-control-pressed, rgb(0 0 0 / 0.1));
+  }
+
+  /* `:where()` above carries zero specificity, so this later rule wins on
+   * source order alone and overrides the shared box's `cursor: pointer` --
+   * `live` never has anything to press. */
+  :where([data-playdeck-part='live']) {
+    cursor: default;
   }
 
   :where([data-playdeck-part]):where(:focus-visible) {
@@ -238,6 +283,12 @@
 
   :where([data-playdeck-part='time'][data-time-type='duration']) {
     margin-inline-end: auto;
+    /* Colour, not opacity: an `opacity` short of 1 here reads as mid-
+     * transition to `e2e/site-landing.spec.ts`'s `unsettled()` helper under
+     * `prefers-reduced-motion: reduce`, where nothing on the page is meant to
+     * still be animating. `theme.css`'s own duration rule carries the same
+     * reasoning at length. */
+    color: var(--playdeck-color-duration, #5c5c5c);
   }
 
   /* ---- sliders ----------------------------------------------------------- */
@@ -247,13 +298,18 @@
     min-inline-size: 4rem;
   }
 
+  :where([data-playdeck-part='seek-slider']:hover),
+  :where([data-playdeck-part='seek-slider']:focus-within) {
+    --playdeck-slider-thickness: 0.5rem;
+  }
+
   :where([data-playdeck-part='seek-buffered']) {
     position: absolute;
     inset-inline: 0;
     inset-block-start: 50%;
-    block-size: var(--playdeck-slider-thickness, 0.25rem);
+    block-size: var(--playdeck-slider-thickness, 0.375rem);
     translate: 0 -50%;
-    border-radius: calc(var(--playdeck-slider-thickness, 0.25rem) / 2);
+    border-radius: calc(var(--playdeck-slider-thickness, 0.375rem) / 2);
     background-color: var(--playdeck-color-track, #84847d);
     pointer-events: none;
   }
@@ -284,9 +340,22 @@
     cursor: pointer;
   }
 
+  /* The hidden rest state is scoped to the adjacent-sibling combinator, not
+   * the bare slider: `pointer-events: none` takes an element out of hit
+   * testing, so a slider with no mute button beside it could never match its
+   * own `:hover` branch and would be invisible and pointer-unreachable at once.
+   * `inline-size` stays on the bare selector below because a standalone
+   * slider still needs its width -- only the hidden/reveal behaviour is
+   * conditional on the sibling. See `theme.css`'s own copy of this rule for
+   * the rest of the rationale; it is not repeated here. */
   @media (pointer: fine) {
     :where([data-playdeck-part='volume-slider']) {
       inline-size: 5rem;
+    }
+
+    :where(
+      [data-playdeck-part='mute-button'] + [data-playdeck-part='volume-slider']
+    ) {
       opacity: 0;
       pointer-events: none;
       transition: opacity var(--playdeck-transition-duration, 150ms)
@@ -306,8 +375,17 @@
     }
   }
 
+  /* `pip-button` joins the volume slider here for the reason
+   * `theme.css`'s own copy of this rule records at length (#622): a coarse
+   * pointer means a touchscreen, and every platform that ships one already
+   * puts picture-in-picture in its own system chrome, so the in-bar
+   * affordance is the one control a phone loses nothing by dropping -- and
+   * dropping it is what lets row two fit one line at the sizes below. */
   @media (pointer: coarse) {
-    :where([data-playdeck-part='volume-slider']) {
+    :where(
+      [data-playdeck-part='volume-slider'],
+      [data-playdeck-part='pip-button']
+    ) {
       display: none;
     }
   }
@@ -328,8 +406,8 @@
       [data-playdeck-part='seek-slider-input'],
       [data-playdeck-part='volume-slider']
     )::-moz-range-track {
-      block-size: var(--playdeck-slider-thickness, 0.25rem);
-      border-radius: calc(var(--playdeck-slider-thickness, 0.25rem) / 2);
+      block-size: var(--playdeck-slider-thickness, 0.375rem);
+      border-radius: calc(var(--playdeck-slider-thickness, 0.375rem) / 2);
       background-color: var(--playdeck-color-track, #84847d);
     }
 
@@ -337,8 +415,8 @@
       [data-playdeck-part='seek-slider-input'],
       [data-playdeck-part='volume-slider']
     )::-moz-range-progress {
-      block-size: var(--playdeck-slider-thickness, 0.25rem);
-      border-radius: calc(var(--playdeck-slider-thickness, 0.25rem) / 2);
+      block-size: var(--playdeck-slider-thickness, 0.375rem);
+      border-radius: calc(var(--playdeck-slider-thickness, 0.375rem) / 2);
       background-color: var(--playdeck-color-accent, #2b52d6);
     }
 
@@ -347,8 +425,8 @@
       [data-playdeck-part='volume-slider']
     )::-moz-range-thumb {
       box-sizing: border-box;
-      inline-size: calc(var(--playdeck-slider-thickness, 0.25rem) * 4);
-      block-size: calc(var(--playdeck-slider-thickness, 0.25rem) * 4);
+      inline-size: calc(var(--playdeck-slider-thickness, 0.375rem) * 4);
+      block-size: calc(var(--playdeck-slider-thickness, 0.375rem) * 4);
       border: 2px solid var(--playdeck-color-thumb-ring, #000);
       border-radius: 50%;
       background-color: var(--playdeck-color-accent, #2b52d6);
@@ -362,18 +440,43 @@
     :where([data-playdeck-part='seek-progress']) {
       inset-block: 0;
       border-radius: inherit;
-      background-color: var(--playdeck-color-accent, #2b52d6);
+      background: linear-gradient(
+        to right,
+        var(--playdeck-color-accent, #2b52d6),
+        var(--playdeck-color-accent-tint, #8fb0f0)
+      );
     }
 
     :where([data-playdeck-part='seek-slider-input'])::-webkit-slider-thumb {
       appearance: none;
       box-sizing: border-box;
-      inline-size: calc(var(--playdeck-slider-thickness, 0.25rem) * 4);
-      block-size: calc(var(--playdeck-slider-thickness, 0.25rem) * 4);
+      inline-size: 0;
+      block-size: 0;
+      opacity: 1;
       outline: none;
       border: 2px solid var(--playdeck-color-thumb-ring, #000);
       border-radius: 50%;
       background-color: var(--playdeck-color-accent, #2b52d6);
+    }
+
+    :where([data-playdeck-part='seek-slider-input'])::-moz-range-thumb {
+      inline-size: 0;
+      block-size: 0;
+      opacity: 1;
+    }
+
+    :where(
+        [data-playdeck-part='seek-slider']:hover,
+        [data-playdeck-part='seek-slider']:focus-within
+      )
+      :where([data-playdeck-part='seek-slider-input'])::-moz-range-thumb,
+    :where(
+        [data-playdeck-part='seek-slider']:hover,
+        [data-playdeck-part='seek-slider']:focus-within
+      )
+      :where([data-playdeck-part='seek-slider-input'])::-webkit-slider-thumb {
+      inline-size: 1rem;
+      block-size: 1rem;
     }
 
     :where([data-playdeck-part='seek-slider-input'])::-moz-range-track,
@@ -407,10 +510,95 @@
         [data-playdeck-part='seek-slider-input'],
         [data-playdeck-part='volume-slider']
       )::-moz-range-thumb,
-      :where([data-playdeck-part='seek-progress']),
       :where([data-playdeck-part='seek-slider-input'])::-webkit-slider-thumb {
         background-color: var(--playdeck-color-accent, #3ea6ff);
       }
+
+      :where([data-playdeck-part='seek-progress']) {
+        background: linear-gradient(
+          to right,
+          var(--playdeck-color-accent, #3ea6ff),
+          var(--playdeck-color-accent-tint, #9dd0ff)
+        );
+      }
+    }
+  }
+
+  /* ---- thumbnail preview ---------------------------------------------------
+   * Same opt-in gate as theme.css's own copy of this rule -- this part mounts
+   * only once `thumbnails` resolves, so a player that never sets it never
+   * matches here either; see that file for why `opacity` gates the fade
+   * rather than fighting the inline `visibility` toggle.
+   *
+   * The hairline border is this file's own addition, not theme.css's: every
+   * other surface card here that borders itself (`activation`, the
+   * settings/captions menu) does so against the light default scheme the
+   * same way, where theme.css's dark scrim needs no edge of its own.
+   *
+   * `box-sizing: content-box`, the opposite of the border-box this file
+   * reaches for everywhere else a border meets a stated dimension
+   * (`activation` above, the range-thumb pseudo-elements): there the size is
+   * this file's own and border-box keeps the border from growing past it.
+   * Here `width`/`height` are the primitive's own inline pixels -- the sprite
+   * crop `overflow: hidden` cuts to -- so the border has to sit OUTSIDE that
+   * box instead. A consumer's `border-box` reset would otherwise pull it
+   * inward and clip ~1px off every edge of the image.
+   */
+  :where([data-playdeck-part='thumbnail']) {
+    box-sizing: content-box;
+    border: 1px solid var(--playdeck-color-hairline, #d9d9d6);
+    border-radius: var(--playdeck-radius-large, 0.5rem);
+    background-color: var(--playdeck-color-surface, #f4f4f2);
+    opacity: 0;
+    transition: opacity var(--playdeck-transition-duration, 150ms)
+      var(--playdeck-transition-easing, ease);
+  }
+
+  :where([data-playdeck-part='thumbnail'][data-state='visible']) {
+    opacity: 1;
+  }
+
+  /* ---- below 48rem --------------------------------------------------------
+   * This file docks at every width already, so nothing here moves the bar --
+   * only the row-two overflow (#622) that `theme.css`'s own copy of this
+   * query fixes, restated for this file because it shares no import with
+   * that one.
+   *
+   * This block used to also carry theme.css's own trim to the bar's own
+   * height, by lowering both touch-target floors below this query. That
+   * lowering shipped as a WCAG defect (#736): the floor tokens are read by
+   * the primitives as the `min-width`/`min-height` themselves, so setting
+   * them under 2.75rem (44px) was obeyed outright, and Playdeck commits to
+   * WCAG 2.2 SC 2.5.5 Target Size (Enhanced) for both. Neither floor moves
+   * here any more; see `theme.css`'s own copy of this query for why that
+   * costs no row, no wrap and no scroll.
+   */
+  @media (max-width: 48rem) {
+    :where([data-playdeck-part='controls']) {
+      gap: 0;
+      padding-top: var(--playdeck-space-1, 0.25rem);
+      padding-bottom: calc(
+        var(--playdeck-space-1, 0.25rem) +
+          var(--playdeck-safe-bottom, env(safe-area-inset-bottom, 0px))
+      );
+      padding-left: calc(
+        var(--playdeck-space-1, 0.25rem) +
+          var(--playdeck-safe-left, env(safe-area-inset-left, 0px))
+      );
+      padding-right: calc(
+        var(--playdeck-space-1, 0.25rem) +
+          var(--playdeck-safe-right, env(safe-area-inset-right, 0px))
+      );
+      /* Still shrinks the button box itself -- see theme.css's own comment
+       * on this token for the row-two arithmetic (#622) it resolves. Not
+       * `--playdeck-control-min-size`: that floor is a separate read, and
+       * leaving it unset here means every button still renders at the
+       * locked 44px (WCAG 2.2 SC 2.5.5) regardless of this smaller box. */
+      --playdeck-control-size: 2.5rem;
+    }
+
+    :where([data-playdeck-part='time']) {
+      padding-inline: var(--playdeck-space-1, 0.25rem);
     }
   }
 
@@ -419,10 +607,7 @@
     position: relative;
   }
 
-  :where(
-    [data-playdeck-part='settings-menu'],
-    [data-playdeck-part='captions-menu']
-  ) {
+  :where([data-playdeck-part='settings-menu']) {
     position: absolute;
     inset-block-end: calc(100% + var(--playdeck-space-1, 0.25rem));
     inset-inline-end: 0;
@@ -433,6 +618,39 @@
     color: var(--playdeck-color-on-surface, #1c1c1e);
     background-color: var(--playdeck-color-surface, #f4f4f2);
     box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 0.15);
+  }
+
+  /* ---- menu, phone (issue #594's follow-up) --------------------------------
+   * The same bottom sheet `theme.css` draws below 48rem, and for the same
+   * reason -- see that file's own comment for the popover-doesn't-fit
+   * argument, the containing-block requirement `inset: auto 0 0 0` leans on,
+   * and why the scrim is a `box-shadow` rather than a `::before`. Docked
+   * otherwise never draws a scrim (its bar is a flat surface, not one over a
+   * gradient), but the sheet is a modal affordance, not the bar's own
+   * surface, so it gets the same dimmed backdrop theme.css's sheet does.
+   */
+  @media (max-width: 48rem) {
+    :where([data-playdeck-part='settings-menu']) {
+      position: fixed;
+      inset: auto 0 0 0;
+      max-block-size: 70vh;
+      overflow-y: auto;
+      border-radius: var(--playdeck-radius-large, 0.5rem)
+        var(--playdeck-radius-large, 0.5rem) 0 0;
+      padding-block: var(--playdeck-space-2, 0.5rem);
+      padding-block-end: calc(
+        var(--playdeck-space-2, 0.5rem) +
+          var(--playdeck-safe-bottom, env(safe-area-inset-bottom, 0px))
+      );
+      box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.5);
+    }
+
+    :where(
+      [data-playdeck-part='menu-item'],
+      [data-playdeck-part='menu-radio-item']
+    ) {
+      min-block-size: 2.75rem;
+    }
   }
 
   :where(
@@ -476,12 +694,14 @@
 
   /* ---- reduced motion -----------------------------------------------------
    * No auto-hide here (docked.css never reads data-idle), so only the volume
-   * reveal fade and the activation opacity fade need collapsing.
+   * reveal fade, the activation opacity fade and the thumbnail preview fade
+   * need collapsing.
    */
   @media (prefers-reduced-motion: reduce) {
     :where(
       [data-playdeck-part='activation'],
-      [data-playdeck-part='volume-slider']
+      [data-playdeck-part='volume-slider'],
+      [data-playdeck-part='thumbnail']
     ) {
       transition-duration: 0.01ms;
     }
@@ -532,10 +752,7 @@
       outline: 2px solid highlight;
     }
 
-    :where(
-      [data-playdeck-part='settings-menu'],
-      [data-playdeck-part='captions-menu']
-    ) {
+    :where([data-playdeck-part='settings-menu']) {
       border: 1px solid canvastext;
       background-color: canvas;
     }
@@ -600,12 +817,21 @@
       color: var(--playdeck-color-on-surface, #ededed);
     }
 
+    :where([data-playdeck-part='time'][data-time-type='duration']) {
+      color: var(--playdeck-color-duration, #a3a3a3);
+    }
+
     :where([data-playdeck-part='seek-buffered']) {
       background-color: var(--playdeck-color-track, #6d6d70);
     }
 
     :where([data-playdeck-part='seek-buffered-range']) {
       background-color: var(--playdeck-color-buffered, #ededed);
+    }
+
+    :where([data-playdeck-part='thumbnail']) {
+      border-color: var(--playdeck-color-hairline, #2a2a2d);
+      background-color: var(--playdeck-color-surface, #141416);
     }
 
     :where(
@@ -615,10 +841,7 @@
       accent-color: var(--playdeck-color-accent, #3ea6ff);
     }
 
-    :where(
-      [data-playdeck-part='settings-menu'],
-      [data-playdeck-part='captions-menu']
-    ) {
+    :where([data-playdeck-part='settings-menu']) {
       border-color: var(--playdeck-color-hairline, #2a2a2d);
       color: var(--playdeck-color-on-surface, #ededed);
       background-color: var(--playdeck-color-surface, #141416);
@@ -636,6 +859,18 @@
       [data-playdeck-part='menu-radio-item']
     ):where(:hover) {
       background-color: var(--playdeck-control-hover, rgb(255 255 255 / 0.12));
+    }
+
+    :where(
+      [data-playdeck-part='play-button'],
+      [data-playdeck-part='mute-button'],
+      [data-playdeck-part='captions-button'],
+      [data-playdeck-part='fullscreen-button'],
+      [data-playdeck-part='pip-button'],
+      [data-playdeck-part='airplay-button'],
+      [data-playdeck-part='settings-menu-trigger']
+    ):where(:active) {
+      background-color: var(--playdeck-control-pressed, rgb(255 255 255 / 0.2));
     }
 
     :where([data-playdeck-part]):where(:focus-visible) {

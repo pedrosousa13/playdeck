@@ -4,14 +4,21 @@ Framework-neutral player state, commands, events and the provider contract that
 [Playdeck](https://github.com/pedrosousa13/playdeck) is built on. No DOM rendering, no
 React, no provider SDKs.
 
-Use it directly if you are wiring a player into something other than React, or
-writing a provider adapter. If you are building UI in React, use
-[`@playdeck/react`](https://github.com/pedrosousa13/playdeck/blob/main/packages/react/README.md),
-which owns a controller for you.
+If you are building UI in React, start with
+[`@playdeck/react`](https://github.com/pedrosousa13/playdeck/blob/main/packages/react/README.md)
+— it owns a controller for you and loads providers on demand, and it is the
+only renderer Playdeck ships. Use this package directly when you are writing a
+provider adapter, or hosting a player outside React: the same state, commands
+and provider contract, with nothing rendered for you.
 
 ```sh
 pnpm add @playdeck/core
 ```
+
+This package imports no React API and has no React dependency of any kind —
+the framework-free claim above holds at the manifest level too. If you do want
+the React primitives on top of it, `@playdeck/react`'s peer range is
+`>=19 <20`: React 19 only.
 
 ## What it gives you
 
@@ -88,27 +95,30 @@ out when a command will land; `activation` is not a substitute for either.
 
 ### Values
 
-| Export                       | What it is                                                                                                     |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `PlayerController`           | The controller: holds state, issues commands, emits events, owns a `ProviderAdapter`.                          |
-| `detectSource`               | Resolves a string or explicit source object into a `ResolvedPlayerSource`, or an explained failure.            |
-| `isPermittedSourceUrl`       | Whether the library will carry a source URL to a provider — the one such decision, which detection consults.   |
-| `resolveNetworkPath`         | Normalises a protocol-relative URL (`//host/...`) to `https:`; returns every other value unchanged.            |
-| `createInitialPlayerState`   | The state a controller starts from — useful for server rendering and for test fixtures.                        |
-| `isNotice`                   | Whether a published error is a notice — a rejected value reported while the player carried on — or a failure.  |
-| `getMediaSessionCoordinator` | The one coordinator for a given `MediaSession`, so several players arbitrate lock-screen ownership.            |
-| `bindMediaSession`           | Binds a controller's confirmed playback to a coordinator root, and routes its actions back.                    |
-| `textTrackLabel`             | The label a provider should publish for a track, given its own label and language.                             |
-| `notifySafely`               | Notifies one listener so that its throw neither abandons the emit nor escapes into the caller.                 |
-| `createTimeBoundary`         | The sanitised `[startTime, endTime]` window a provider enforces, and every question it answers.                |
-| `deriveLiveState`            | The `isLive` / `atLiveEdge` derivation every adapter publishes `live` from.                                    |
-| `liveStateEqual`             | Whether two live states say the same thing — what an adapter checks before publishing a change.                |
-| `deriveChapters`             | The published `Chapter` collection, given what a provider reports and the media duration — end times included. |
-| `chaptersEqual`              | Whether two chapter collections say the same thing — what an adapter checks before publishing a change.        |
-| `isYouTubeVideoId`           | Whether a value is a well-formed YouTube video id — what `createYouTubeProvider` validates a direct call with. |
-| `isVimeoVideoId`             | Whether a value is a well-formed Vimeo video id — what `createVimeoProvider` validates a direct call with.     |
-| `isVimeoHash`                | Whether a value is a well-formed Vimeo privacy hash — what `createVimeoProvider` validates a direct call with. |
-| `isWistiaMediaId`            | Whether a value is a well-formed Wistia media id — what `createWistiaProvider` validates a direct call with.   |
+| Export                       | What it is                                                                                                          |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `PlayerController`           | The controller: holds state, issues commands, emits events, owns a `ProviderAdapter`.                               |
+| `detectSource`               | Resolves a string or explicit source object into a `ResolvedPlayerSource`, or an explained failure.                 |
+| `isPermittedSourceUrl`       | Whether the library will carry a source URL to a provider — the one such decision, which detection consults.        |
+| `resolveNetworkPath`         | Normalises a protocol-relative URL (`//host/...`) to `https:`; returns every other value unchanged.                 |
+| `createInitialPlayerState`   | The state a controller starts from — useful for server rendering and for test fixtures.                             |
+| `isNotice`                   | Whether a published error is a notice — a rejected value reported while the player carried on — or a failure.       |
+| `getMediaSessionCoordinator` | The one coordinator for a given `MediaSession`, so several players arbitrate lock-screen ownership.                 |
+| `bindMediaSession`           | Binds a controller's confirmed playback to a coordinator root, and routes its actions back.                         |
+| `textTrackLabel`             | The label a provider should publish for a track, given its own label and language.                                  |
+| `plainCueText`               | The plain text a provider should publish for a cue, given its raw WebVTT payload — tags stripped, entities decoded. |
+| `notifySafely`               | Notifies one listener so that its throw neither abandons the emit nor escapes into the caller.                      |
+| `createTimeBoundary`         | The sanitised `[startTime, endTime]` window a provider enforces, and every question it answers.                     |
+| `deriveLiveState`            | The `isLive` / `atLiveEdge` / `offsetFromEdge` derivation every adapter publishes `live` from.                      |
+| `liveStateEqual`             | Whether two live states say the same thing — what an adapter checks before publishing a change.                     |
+| `deriveChapters`             | The published `Chapter` collection, given what a provider reports and the media duration — end times included.      |
+| `chaptersEqual`              | Whether two chapter collections say the same thing — what an adapter checks before publishing a change.             |
+| `isYouTubeVideoId`           | Whether a value is a well-formed YouTube video id — what `createYouTubeProvider` validates a direct call with.      |
+| `isVimeoVideoId`             | Whether a value is a well-formed Vimeo video id — what `createVimeoProvider` validates a direct call with.          |
+| `isVimeoHash`                | Whether a value is a well-formed Vimeo privacy hash — what `createVimeoProvider` validates a direct call with.      |
+| `isWistiaMediaId`            | Whether a value is a well-formed Wistia media id — what `createWistiaProvider` validates a direct call with.        |
+| `parseThumbnailCues`         | Parses a seek-preview WebVTT file into its ordered, sprite-region-resolved cues.                                    |
+| `thumbnailCueAt`             | The cue covering a given time, matched half-open, or `null`.                                                        |
 
 ### Types
 
@@ -118,7 +128,7 @@ State and contract: `PlayerState`, `PlayerCapabilities`, `Availability`,
 `TextTrackReadiness`, `TextCue`, `CaptionRendering`, `Chapter`, `ChapterInput`,
 `PlayerLiveState`, `PlayerError`, `PlayerErrorCategory`, `PlayerErrorSeverity`,
 `RefusedPlay`, `PlayerCommand`, `RefusedCommand`, `RefusedUrlSurface`,
-`PreProviderActivation`.
+`PreProviderActivation`, `ThumbnailCue`, `ThumbnailRegion`.
 
 Events: `PlayerEvent`, `PlayerEventType`, `PlayerEventDetailMap`,
 `PlayerEventFor`, `PlayerEventOrigin`.
@@ -276,6 +286,7 @@ as the bundled one does.
 import {
   createInitialPlayerState,
   isNotice,
+  plainCueText,
   textTrackLabel,
   type PlayerState
 } from '@playdeck/core';
@@ -302,6 +313,11 @@ export const rendersAsFailure = (state: PlayerState): boolean =>
 // and its language. Falls back to the language's own name, then to 'Unknown'.
 export const labelled = textTrackLabel('', 'pt-BR'); // 'português (Brasil)'
 export const named = textTrackLabel('Commentary', 'en'); // 'Commentary'
+
+// The plain text a caption overlay should render for a cue: WebVTT tag spans
+// removed, its character references decoded. Every provider runs its own cue
+// payload through this before publishing it as `TextCue.text`.
+export const cue = plainCueText('<v Bob><i>Look out</i> &amp; run'); // 'Look out & run'
 ```
 
 <!-- /example -->
@@ -613,9 +629,14 @@ export const live = deriveLiveState({
   currentTime: 3594
 });
 
-// -> { isLive: true, atLiveEdge: true }. `null` means "not live, or not yet
-// known" — a control should not claim either until it is.
+// -> { isLive: true, atLiveEdge: true, offsetFromEdge: 6 }. `null` means "not
+// live, or not yet known" — a control should not claim either until it is.
 export const atEdge = live?.atLiveEdge ?? false;
+
+// Whole seconds, `0` at or ahead of the edge — the resolution `Time` renders
+// at, and why `liveStateEqual` compares it: an unrounded float would differ
+// on essentially every `timeupdate` and republish `live` many times a second.
+export const behindBy = live?.offsetFromEdge ?? 0;
 
 // Omitting `atEdgeThreshold` uses the shared tolerance every adapter uses.
 // Pass one only to answer a different question than the players do.
@@ -636,6 +657,21 @@ export const changed = !liveStateEqual(live, tight);
 Providers that cannot determine liveness leave `live` as `null`. That is not
 "this is on-demand" — it is "nobody has said", and a control should render
 neither claim until one arrives.
+
+## Live edge
+
+`capabilities.liveEdge` says whether the active provider can report a live
+edge to seek to at all, told apart the same way `capabilities.chapters` is:
+`unavailable` with `provider` means the provider has no such surface for any
+source, and `unavailable` with `source` means this particular source is not
+live. `PlayerController.seekToLiveEdge()` is the command it gates: it refuses
+with `not-ready` — the same `RefusedCommand` shape every pre-attach refusal
+uses — whenever there is no provider, `capabilities.liveEdge` is not
+`available`, or the attached adapter implements no `seekToLiveEdge` at all.
+Where the provider can answer, it lands on the provider's own notion of the
+edge: `@playdeck/provider-hls`'s hls.js engine seeks to hls.js's own
+`liveSyncPosition`, deliberately behind the raw seekable end, rather than a
+position this library would compute itself.
 
 ## Chapters
 
@@ -680,6 +716,94 @@ export const closed = !chaptersEqual(
   chapters,
   deriveChapters([{ id: 'ch1', title: 'Introduction', startTime: 0 }], null)
 );
+```
+
+<!-- /example -->
+
+## Thumbnail preview
+
+`parseThumbnailCues` reads the seek-preview flavour of WebVTT Vidstack, Media
+Chrome and Video.js all read the same way: each cue's payload is an image URL,
+optionally carrying a `#xywh=` (or `#xywh=pixel:...`) sprite-region fragment.
+A recognised fragment is resolved to a `ThumbnailRegion` in sprite pixels and
+stripped from the published `url`; an unrecognised one — including
+`#xywh=percent:...`, since nothing here knows the sprite's natural size to
+turn a percentage into pixels — is left on the URL, with `region: null`. A
+file that does not start `WEBVTT`, or a block this parser does not recognise
+as a cue, contributes no cue rather than throwing.
+
+`parseThumbnailCues` takes a second argument, `baseUrl`: each cue's `url` is
+resolved against it the same way a browser resolves a relative URL found
+inside any other fetched document — against that document's own final
+address, not the page that requested it. This is what lets a sprite
+generator's ordinary relative image paths (`sprite-0.jpg`, or even
+`//other-host/sprite-0.jpg`) resolve against the thumbnails file itself
+rather than 404ing against the page. A caller that fetched the VTT file
+itself should pass the response's own final address, not the URL it
+requested the file with — those differ across a redirect, and it is the
+response's address a browser resolves a fetched document's own relative URLs
+against. Omit `baseUrl` and every cue's `url` publishes exactly as the file
+wrote it, relative forms included.
+
+A cue's `url` is left unresolved rather than dropping the cue whenever
+resolution cannot answer for it cleanly: `baseUrl` was omitted; `baseUrl` is
+not itself a valid absolute URL; `baseUrl` uses a non-hierarchical scheme
+such as `data:` or `blob:`, which has no path a relative reference can
+resolve against; or the cue's own URL contains a raw tab, newline or other
+C0 control character. That last case exists because the URL parser removes
+such characters while resolving, so resolving first and checking the result
+after would let a cue's raw string smuggle a character the allowlist's own
+whitespace rule is designed to catch — `parseThumbnailCues` leaves that URL
+exactly as written instead, so the allowlist's verdict on it is unchanged.
+
+`thumbnailCueAt` finds the cue covering a given time, matched half-open —
+`[startTime, endTime)` — so a boundary belongs to the cue it starts, not the
+one it ends. Playdeck publishes the parser and draws none of it itself:
+`@playdeck/react`'s `SeekSlider` is the one consumer, loading and parsing a
+`thumbnails` URL lazily and rendering the active cue's region as its
+`thumbnail` part.
+
+Both functions, and both types, are also reachable at
+`@playdeck/core/thumbnails` — a second entry point carrying the parser and
+nothing else. Import them from there when the code that uses them is loaded on
+demand: a bundler decides which chunk a module belongs in from which entry
+points reach it, so a parser that shares a module with the rest of core is
+emitted wherever the rest of core is. `SeekSlider` imports it from that
+subpath for exactly that reason, which is what lets a control bar that sets no
+`thumbnails` prop download none of the preview. `@playdeck/core` itself keeps
+exporting all four, so an import that does not care changes nothing.
+
+<!-- example:core-thumbnails -->
+
+```ts
+import { parseThumbnailCues, thumbnailCueAt } from '@playdeck/core';
+
+// The seek-preview flavour of WebVTT Vidstack, Media Chrome and Video.js all
+// read: each cue's payload is an image URL, optionally carrying a `#xywh=`
+// sprite-region fragment.
+const vtt = [
+  'WEBVTT',
+  '',
+  '00:00:00.000 --> 00:00:05.000',
+  'sprite.jpg#xywh=0,0,160,90',
+  '',
+  '00:00:05.000 --> 00:00:10.000',
+  'sprite.jpg#xywh=160,0,160,90'
+].join('\n');
+
+export const cues = parseThumbnailCues(vtt);
+
+// -> { x: 0, y: 0, width: 160, height: 90 } — the fragment resolved to sprite
+// pixels, not left as a CSS background-position, and stripped from `url`.
+export const firstRegion = cues[0]?.region;
+
+// Cues are matched half-open, `[startTime, endTime)`: 3 lands on the first
+// tile, and 5 — the boundary between the two — already lands on the second.
+export const atThree = thumbnailCueAt(cues, 3);
+export const atFive = thumbnailCueAt(cues, 5);
+
+// A time past every cue matches nothing.
+export const none = thumbnailCueAt(cues, 99); // null
 ```
 
 <!-- /example -->

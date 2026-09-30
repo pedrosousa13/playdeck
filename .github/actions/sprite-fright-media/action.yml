@@ -1,0 +1,37 @@
+name: Ensure Sprite Fright media
+description: >-
+  Makes `ffmpeg` and a warm build cache available to any job that builds
+  `apps/site`, whose `build` script runs `scripts/media-sprite-fright.mjs`
+  before `astro build`.
+
+runs:
+  using: composite
+  steps:
+    # `apps/site/package.json`'s `build` runs
+    # `scripts/media-sprite-fright.mjs` before `astro build`, which needs
+    # `ffmpeg` on the runner. GitHub's own `ubuntu-latest` image ships it,
+    # so this is a fast no-op check most runs rather than a real install --
+    # left in defensively for the day the image drops it.
+    - shell: bash
+      run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+
+    # Caches the clip itself -- the ladder under
+    # `apps/site/public/media/sprite-fright/` and its two posters -- rather
+    # than the downloaded source film, so a cache hit skips both the
+    # download and the encode. Keyed on the source film's own address
+    # (`SOURCE_URL` in the script) and the script's hash, so a change to
+    # either -- a different source, a different clip window, a different
+    # ladder -- invalidates the cache instead of shipping a stale one. The
+    # script's own idempotency check (`outputsExist`) is what makes a cache
+    # hit actually skip the work below: the site's `build` script runs the
+    # script unconditionally, and the script itself is what decides there is
+    # nothing left to do -- which is also what keeps `ffmpeg` off the
+    # critical path on a cache hit, since the check above only has to
+    # succeed, never run a transcode.
+    - uses: actions/cache@v6
+      with:
+        path: |
+          apps/site/public/media/sprite-fright
+          apps/site/public/sprite-fright-hls-poster-960w.webp
+          apps/site/public/sprite-fright-hls-poster-1920w.webp
+        key: sprite-fright-media-a69d68a5-a0e0-4a80-9d66-49f093c97aaf-804-${{ hashFiles('scripts/media-sprite-fright.mjs') }}

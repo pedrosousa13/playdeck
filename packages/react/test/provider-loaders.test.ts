@@ -1,12 +1,36 @@
 // @vitest-environment happy-dom
 
 import { expect, expectTypeOf, test, vi } from 'vitest';
-import type { ResolvedPlayerSource } from '@playdeck/core';
+import {
+  detectSource,
+  type PlayerState,
+  type ProviderAdapter,
+  type ResolvedPlayerSource
+} from '@playdeck/core';
+import { captureRethrows } from '@playdeck/test-support/capture-rethrows';
+import type { HlsProviderOptions } from '@playdeck/provider-hls';
 import type { VimeoProviderOptions } from '@playdeck/provider-vimeo';
 import type { WistiaProviderOptions } from '@playdeck/provider-wistia';
 import type { YouTubeProviderOptions } from '@playdeck/provider-youtube';
-import type { PlayerProviderOptions } from '../src/provider-loaders';
-import { loadProvider } from '../src/provider-loaders';
+import type {
+  PlayerProviderOptions,
+  PlayerProviders,
+  PrimitiveOptionBag,
+  ProviderAdapterFactory,
+  ProviderRegistration,
+  SuppliedProviderOptions,
+  SuppliedSource
+} from '../src/provider-loaders';
+import {
+  detectSourceWithProviders,
+  loadProvider,
+  suppliedProviderRegistrationKeyFor
+} from '../src/provider-loaders';
+import type { RootProps } from '../src/root';
+
+vi.mock('@playdeck/provider-hls', () => ({
+  createHlsProvider: vi.fn(() => ({ provider: 'hls' }))
+}));
 
 vi.mock('@playdeck/provider-native', () => ({
   createNativeProvider: vi.fn(() => ({ provider: 'native' }))
@@ -40,25 +64,78 @@ test('the per-provider option bags are the shape the CSP document describes', ()
   // Gaining or losing a provider key changes which rows of that document's
   // origins table are reachable through `Player.Root` at all.
   expectTypeOf<keyof PlayerProviderOptions>().toEqualTypeOf<
-    'vimeo' | 'wistia' | 'youtube'
+    'hls' | 'vimeo' | 'wistia' | 'youtube'
   >();
 
+  // Red, for `resolvePoster` joining the two omission lists below: with both
+  // `Omit`s in `PlayerProviderOptions` (provider-loaders.ts) reverted to leave
+  // `resolvePoster` un-omitted, `pnpm typecheck` failed here with TS2344 (the
+  // actual union `'controls' | 'endTime' | 'loop' | 'resolvePoster' |
+  // 'startTime'` did not satisfy the expected literal-mismatch constraint)
+  // and on the `wistia` assertion further down, the same way.
+  //
   // Vimeo's omissions are load-bearing for the document twice over: what stays
   // is what a `Player.Root` consumer can set, and `customControls` staying is
   // why `vimeo.com` belongs in `connect-src`.
   expectTypeOf<
     KeysRootOwns<PlayerProviderOptions['vimeo'], VimeoProviderOptions>
-  >().toEqualTypeOf<'controls' | 'endTime' | 'loop' | 'startTime'>();
+  >().toEqualTypeOf<
+    'controls' | 'endTime' | 'loop' | 'resolvePoster' | 'startTime'
+  >();
 
+  // `youtube` keeps `loadIframeApi` too, as of #628, for the same reason `hls`
+  // keeps `loadHls` just below: a function cannot satisfy `PrimitiveOptionBag`,
+  // so `host` is the only key of its own `Root` folds in, and reaching
+  // `loadIframeApi` itself still means mounting `createYouTubeProvider`
+  // directly.
   expectTypeOf<
     KeysRootOwns<PlayerProviderOptions['youtube'], YouTubeProviderOptions>
-  >().toEqualTypeOf<'controls' | 'endTime' | 'loop' | 'startTime'>();
+  >().toEqualTypeOf<
+    'controls' | 'endTime' | 'loadIframeApi' | 'loop' | 'startTime'
+  >();
 
   // Wistia keeps `controls`: it has the concept but no fold writes it, so the
   // bag key is still the only way to reach it (ADR-0004's Consequences).
   expectTypeOf<
     KeysRootOwns<PlayerProviderOptions['wistia'], WistiaProviderOptions>
-  >().toEqualTypeOf<'endTime' | 'loop' | 'startTime'>();
+  >().toEqualTypeOf<'endTime' | 'loop' | 'resolvePoster' | 'startTime'>();
+
+  // `hls` keeps `loadHls`: a function cannot satisfy `PrimitiveOptionBag`
+  // (below), so `build` -- the primitive `loadHls` stands in for -- is the
+  // only key `Root` folds in, and reaching `loadHls` itself still means
+  // mounting `createHlsProvider` directly (#579).
+  expectTypeOf<
+    KeysRootOwns<PlayerProviderOptions['hls'], HlsProviderOptions>
+  >().toEqualTypeOf<'endTime' | 'loadHls' | 'loop' | 'startTime'>();
+});
+
+// The constraint itself, not merely a bag that happens not to declare a
+// function-valued key: `providerBagEqual` (`use-activation.ts`) compares bag
+// values with `Object.is`, so a bag typed through this can never again carry
+// one, whichever provider adds it next.
+test('PrimitiveOptionBag rejects a function-valued key at the type level', () => {
+  expectTypeOf<
+    // @ts-expect-error a bag whose value is a function cannot satisfy
+    // `PrimitiveOptionBag` -- this is the guard #579 adds so the next
+    // function-valued option (like `loadHls` almost was) fails to compile
+    // instead of quietly retiring an activation on every render.
+    PrimitiveOptionBag<{ loadHls: () => Promise<unknown> }>
+  >().toEqualTypeOf<{ loadHls: () => Promise<unknown> }>();
+});
+
+// Not just the constraint in the abstract: the real `youtube` bag itself
+// (#628) has to reject the one function-valued key it used to declare, the
+// same way `PlayerProviderOptions['hls']` already cannot compile `loadHls`
+// into its own bag above.
+test('the youtube bag rejects a function-valued loadIframeApi at the type level', () => {
+  const youtubeBag: PlayerProviderOptions['youtube'] = {
+    // @ts-expect-error `loadIframeApi` is a function; #628 removed it from
+    // this bag so it can no longer compile here -- it stays reachable only on
+    // `YouTubeProviderOptions` itself, `hls`'s `loadHls` precedent applied to
+    // the provider #579 left aside.
+    loadIframeApi: () => Promise.resolve({} as never)
+  };
+  void youtubeBag;
 });
 
 test('dispatches vimeo sources to the vimeo adapter with the mount and source', async () => {
@@ -129,6 +206,57 @@ test('rejects wistia sources without a media mount', async () => {
   ).rejects.toThrow('The Wistia provider requires a media mount.');
 });
 
+test('dispatches hls sources to the hls adapter with the mount, source and native options', async () => {
+  const { createHlsProvider } = await import('@playdeck/provider-hls');
+  const media = document.createElement('video');
+  const source = { type: 'hls', src: '/master.m3u8' } as const;
+  const hlsNativeOptions = { endTime: 30, loop: true, startTime: 5 };
+
+  await expect(
+    loadProvider({ media, nativeOptions: hlsNativeOptions, source })
+  ).resolves.toMatchObject({ provider: 'hls' });
+  // No `hls` bag: the merge still runs, so `createHlsProvider` gets exactly
+  // the native options and nothing an absent `build` would have added.
+  expect(createHlsProvider).toHaveBeenCalledWith(
+    media,
+    source,
+    hlsNativeOptions
+  );
+});
+
+// #579: `build` is the primitive `PlayerProviderOptions.hls` carries through
+// `Player.Root`, merged alongside the native options `createHlsProvider`
+// already took -- not a second call, and not a replacement for them.
+test('forwards the hls build option to the hls adapter alongside native options', async () => {
+  const { createHlsProvider } = await import('@playdeck/provider-hls');
+  const media = document.createElement('video');
+  const source = { type: 'hls', src: '/master.m3u8' } as const;
+  const hlsNativeOptions = { endTime: 30, loop: true, startTime: 5 };
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions: hlsNativeOptions,
+      providerOptions: { hls: { build: 'light' } },
+      source
+    })
+  ).resolves.toMatchObject({ provider: 'hls' });
+  expect(createHlsProvider).toHaveBeenCalledWith(media, source, {
+    ...hlsNativeOptions,
+    build: 'light'
+  });
+});
+
+test('rejects hls sources without a media mount', async () => {
+  await expect(
+    loadProvider({
+      media: null,
+      nativeOptions,
+      source: { type: 'hls', src: '/master.m3u8' }
+    })
+  ).rejects.toThrow('The HLS provider requires a media mount.');
+});
+
 test('requires a video element for native sources', async () => {
   await expect(
     loadProvider({
@@ -150,4 +278,1617 @@ test('reports source types without an installed adapter', async () => {
       source: { type: 'unknown-provider' } as unknown as ResolvedPlayerSource
     })
   ).rejects.toThrow('No provider adapter is installed for unknown-provider.');
+});
+
+// `providers`: `Player.Root`'s seam for a source kind beyond the five above.
+// The tests below drive `detectSourceWithProviders` and `loadProvider`
+// directly -- the two functions `root.tsx` and `use-activation.ts` call, so a
+// claim proven here is a claim proven about exactly what a consumer's
+// `providers` prop reaches.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md's fallback: the feature
+// is additive, so a substitute mutation stands in for reverting it). Each
+// mutation below was applied alone to `provider-loaders.ts`, run with
+// `pnpm vitest run packages/react/test/provider-loaders.test.ts`, and
+// reverted afterwards:
+// - `detectSourceWithProviders` short-circuited to `return builtin;` before
+//   ever consulting `providers` failed 7: "walks supplied providers in
+//   declaration order, stopping at the first whose detect accepts the URL",
+//   "declines a URL no built-in kind and no supplied provider recognises",
+//   "refuses a detect return carrying a forbidden scheme nested inside it,
+//   and continues to a later registration", "still resolves a detect return
+//   that carries no forbidden scheme, unchanged", "resolves an explicit
+//   object of a registered supplied kind without ever calling its detect",
+//   "does not refuse a plain non-URL string field on an explicit
+//   supplied-kind object", "an explicit object of a registered supplied kind
+//   detects and dispatches to that registration through loadProvider".
+// - `everyStringPermitted` (`provider-loaders.ts`) made to always return
+//   `true` failed 2: "refuses a detect return carrying a forbidden scheme
+//   nested inside it, and continues to a later registration", "refuses an
+//   explicit supplied-kind object carrying a forbidden scheme nested inside
+//   it".
+// - The `RESERVED_PROVIDER_NAMES` skip dropped from both
+//   `detectSourceWithProviders` paths, and `loadProvider`'s own `providers`
+//   lookup moved ahead of its five built-in branches, failed 3: "never calls
+//   detect for a registration keyed by a reserved built-in name", "does not
+//   resolve an explicit object whose type is a reserved built-in name
+//   through the supplied path", "never lets a providers entry keyed by a
+//   built-in name intercept the built-in dispatch".
+// - The reserved-type check on the copy's own `kind` in the string branch,
+//   replaced with a bare `true` (the copy step and `everyStringPermitted`
+//   left in place), failed 1: "declines a detect return whose type names a
+//   reserved built-in kind, and continues to a later registration" -- the
+//   dishonest registration's own resolved source won outright and the
+//   later, honest registration was never reached.
+// - The copy step itself dropped from the string branch (`detected` checked
+//   and returned directly, the way `source` was before this fix), failed 2:
+//   "does not let a detect result's type getter answer safely for the
+//   reserved-name check and differently once loadProvider reads it again"
+//   -- `createHlsProvider` was called once, with the dishonest object, and
+//   the `acme` registration's own factory was never reached -- and
+//   "declines a detect return carrying a bigint field rather than
+//   resolving a source that would crash JSON.stringify" -- `result.status`
+//   was `'success'` rather than `'failure'`.
+// - `SuppliedSource` (below) collapsed to `never` for every key, dropping
+//   its derivation of a registration's own `Source`, made `pnpm typecheck`
+//   report TS2344 at "a supplied kind types its own source shape and its own
+//   providerOptions key without weakening the five built-in kinds"'s own
+//   `expectTypeOf<SuppliedSource<AcmeProviders>>().toEqualTypeOf<AcmeSource>()`
+//   line, and cascaded into a real TS2322 on that same test's
+//   `suppliedSource` assignment and on `supplied-provider.test.tsx`'s own use
+//   of the type.
+type AcmeSource = { readonly type: 'acme'; readonly videoId: string };
+type AcmeOptions = { readonly quality?: 'sd' | 'hd' };
+
+test('tries the five built-in kinds before any supplied provider, even one whose detect would also match', () => {
+  const detect = vi.fn();
+  const result = detectSourceWithProviders(
+    'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    { acme: { detect, load: vi.fn() } }
+  );
+  expect(result).toEqual({
+    status: 'success',
+    input: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    source: { type: 'youtube', videoId: 'dQw4w9WgXcQ' }
+  });
+  expect(detect).not.toHaveBeenCalled();
+});
+
+test('walks supplied providers in declaration order, stopping at the first whose detect accepts the URL', () => {
+  const url = 'https://example.com/media/42';
+  const first = vi.fn(() => undefined);
+  const second = vi.fn(() => ({ type: 'second', id: '42' }) as const);
+  const third = vi.fn(() => ({ type: 'third', id: '42' }) as const);
+
+  const result = detectSourceWithProviders(url, {
+    first: { detect: first, load: vi.fn() },
+    second: { detect: second, load: vi.fn() },
+    third: { detect: third, load: vi.fn() }
+  });
+
+  expect(first).toHaveBeenCalledWith(url);
+  expect(second).toHaveBeenCalledWith(url);
+  expect(third).not.toHaveBeenCalled();
+  expect(result).toMatchObject({
+    status: 'success',
+    source: { type: 'second', id: '42' }
+  });
+});
+
+test('declines a URL no built-in kind and no supplied provider recognises', () => {
+  const detect = vi.fn(() => undefined);
+  const result = detectSourceWithProviders('https://example.com/nothing-here', {
+    acme: { detect, load: vi.fn() }
+  });
+  expect(detect).toHaveBeenCalledWith('https://example.com/nothing-here');
+  expect(result.status).toBe('failure');
+});
+
+// The security-sensitive guarantee: a scheme the shared allowlist refuses
+// never reaches a supplied provider's own `detect`, the same gate core's own
+// `detectSource` applies ahead of every one of its five built-in hosts.
+test('never hands a forbidden-scheme URL to a supplied detect', () => {
+  const detect = vi.fn();
+  const result = detectSourceWithProviders('javascript:alert(1)', {
+    acme: { detect, load: vi.fn() }
+  });
+  expect(detect).not.toHaveBeenCalled();
+  expect(result.status).toBe('failure');
+});
+
+// The bypass this closes: a `detect` return is exactly as arbitrary a shape as
+// an explicit source object is, so it is exactly as capable of hiding a
+// forbidden scheme a level or more down, and the fix applies the same
+// `everyStringPermitted` walk to it. A registration whose `detect` fails that
+// walk is treated as a decline, not a reason to fail detection outright, so a
+// later registration that would have matched honestly still gets its turn --
+// both halves are asserted below.
+test('refuses a detect return carrying a forbidden scheme nested inside it, and continues to a later registration', () => {
+  const dishonest = vi.fn(() => ({
+    type: 'acme',
+    config: { url: 'javascript:alert(1)' }
+  }));
+  const honest = vi.fn(() => ({ type: 'other', id: '1' }) as const);
+
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    acme: { detect: dishonest, load: vi.fn() },
+    other: { detect: honest, load: vi.fn() }
+  });
+
+  expect(dishonest).toHaveBeenCalledWith('https://example.com/media/1');
+  expect(honest).toHaveBeenCalledWith('https://example.com/media/1');
+  expect(result).toMatchObject({
+    status: 'success',
+    source: { type: 'other', id: '1' }
+  });
+});
+
+test('still resolves a detect return that carries no forbidden scheme, unchanged', () => {
+  const detect = vi.fn(() => ({ type: 'acme', videoId: 'abc123' }) as const);
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    acme: { detect, load: vi.fn() }
+  });
+  expect(result).toEqual({
+    status: 'success',
+    input: 'https://example.com/media/1',
+    source: { type: 'acme', videoId: 'abc123' }
+  });
+});
+
+// A throw is exactly as arbitrary a failure mode as any other provider-authored
+// bug, and `loadProvider`'s own dispatch is already contained at its call site
+// (`use-activation.ts`'s `.catch` wraps `loadProvider(...)`) -- `detect` gets
+// the same treatment: a throw means the same as `detect` returning
+// `undefined`, so the loop below keeps walking the remaining registrations
+// rather than letting the throw escape `detectSourceWithProviders` (#753).
+test('treats a detect that throws as a decline and continues to the next registration', async () => {
+  const rethrows = captureRethrows();
+  const url = 'https://example.com/media/42';
+  const boom = new Error('detect blew up');
+  const thrower = vi.fn(() => {
+    throw boom;
+  });
+  const honest = vi.fn(() => ({ type: 'other', id: '42' }) as const);
+
+  const result = detectSourceWithProviders(url, {
+    acme: { detect: thrower, load: vi.fn() },
+    other: { detect: honest, load: vi.fn() }
+  });
+
+  expect(thrower).toHaveBeenCalledWith(url);
+  expect(honest).toHaveBeenCalledWith(url);
+  expect(result).toMatchObject({
+    status: 'success',
+    source: { type: 'other', id: '42' }
+  });
+
+  // Not silently lost: reported the same way a throwing subscriber already is
+  // elsewhere in this codebase (`notifySafely`, `@playdeck/core`) -- on a
+  // fresh task, so an adapter author can still see their own bug.
+  await Promise.resolve();
+  expect(rethrows).toEqual([boom]);
+});
+
+// The only-registration case: with nothing left to try, the outcome must be
+// identical to no supplied provider matching at all, and the throw must not
+// reach the caller synchronously.
+test('treats a detect that throws as a decline when it is the only registration, matching the no-match result', () => {
+  captureRethrows();
+  const url = 'https://example.com/media/1';
+  const thrower = vi.fn(() => {
+    throw new Error('detect blew up');
+  });
+
+  let result: ReturnType<typeof detectSourceWithProviders>;
+  expect(() => {
+    result = detectSourceWithProviders(url, {
+      acme: { detect: thrower, load: vi.fn() }
+    });
+  }).not.toThrow();
+
+  expect(thrower).toHaveBeenCalledWith(url);
+  expect(result!).toEqual(
+    detectSourceWithProviders(url, {
+      acme: { detect: () => undefined, load: vi.fn() }
+    })
+  );
+});
+
+// Provider-authored shapes are arbitrary by design, which is the premise the
+// recursive walk above rests on -- a cycle is reachable input, not a
+// hypothetical, so `everyStringPermitted` must decline it the same way it
+// declines a forbidden scheme, rather than recursing until the stack
+// overflows.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): run with the cycle
+// guard reverted, this test throws inside `everyStringPermitted` itself --
+// `RangeError: Maximum call stack size exceeded` -- rather than reaching any
+// `expect` below.
+test('declines a detect return that carries a cyclic reference rather than overflowing the stack', () => {
+  const cyclic: { type: string; self?: unknown } = { type: 'acme' };
+  cyclic.self = cyclic;
+  const detect = vi.fn(() => cyclic);
+
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    acme: { detect, load: vi.fn() }
+  });
+
+  expect(detect).toHaveBeenCalledWith('https://example.com/media/1');
+  expect(result.status).toBe('failure');
+});
+
+// A diamond -- the same object referenced from two sibling branches -- has no
+// cycle anywhere: neither branch is the other's ancestor, so walking one
+// after the other is finite and ordinary. `everyStringPermitted`'s guard must
+// tell that apart from a genuine cycle, declining only an object that is its
+// own ancestor on the current path.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): run against the guard
+// as committed (a `WeakSet` that is never emptied as the recursion unwinds),
+// this test fails -- `result.status` is `'failure'`, not `'success'` -- because
+// the second sibling to reach `shared` finds it already in `seen` from the
+// first and declines it, exactly as a true cycle would.
+test('accepts a detect return whose nested object is shared by two sibling branches', () => {
+  const shared = { videoId: 'abc123' };
+  const diamond = { type: 'acme', a: shared, b: shared };
+  const detect = vi.fn(() => diamond);
+
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    acme: { detect, load: vi.fn() }
+  });
+
+  expect(detect).toHaveBeenCalledWith('https://example.com/media/1');
+  expect(result).toEqual({
+    status: 'success',
+    input: 'https://example.com/media/1',
+    source: diamond
+  });
+});
+
+// The string/`detect` half of the reserved-name guarantee: a registration
+// keyed by one of the five built-in names never even has its `detect` called,
+// on any URL, whatever it would have returned -- the object-path half of the
+// same guarantee is proven separately below, against an explicit source
+// object.
+test('never calls detect for a registration keyed by a reserved built-in name', () => {
+  const hlsDetect = vi.fn(
+    () => ({ type: 'hls', src: 'https://evil.test/x.m3u8' }) as const
+  );
+  const youtubeDetect = vi.fn();
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    hls: { detect: hlsDetect, load: vi.fn() },
+    youtube: { detect: youtubeDetect, load: vi.fn() }
+  });
+  expect(hlsDetect).not.toHaveBeenCalled();
+  expect(youtubeDetect).not.toHaveBeenCalled();
+  expect(result.status).toBe('failure');
+});
+
+// The other half of the same guarantee: a registration keyed honestly (not
+// one of the five names above) can still have its own `detect` claim a
+// built-in kind through the shape it returns, rather than through its key.
+// Treated exactly like a decline, so the loop keeps walking the remaining
+// registrations -- the same fall-through the forbidden-scheme test above
+// proves for a nested URL, applied here to the `type` field itself.
+test('declines a detect return whose type names a reserved built-in kind, and continues to a later registration', () => {
+  const dishonest = vi.fn(
+    () =>
+      ({
+        type: 'hls',
+        src: 'https://evil.test/injected.m3u8',
+        engine: 'bogus'
+      }) as const
+  );
+  const honest = vi.fn(() => ({ type: 'other', id: '1' }) as const);
+
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    acme: { detect: dishonest, load: vi.fn() },
+    other: { detect: honest, load: vi.fn() }
+  });
+
+  expect(dishonest).toHaveBeenCalledWith('https://example.com/media/1');
+  expect(honest).toHaveBeenCalledWith('https://example.com/media/1');
+  expect(result).toMatchObject({
+    status: 'success',
+    source: { type: 'other', id: '1' }
+  });
+});
+
+// The bypass the fix above closes: `source` used to be the caller's own
+// live `detect` return, read once by `everyStringPermitted`'s enumeration
+// and once by the reserved-type check, then handed on unchanged. A `type`
+// getter that answers safely for exactly those two reads and a built-in
+// kind's own name on every read after slips both checks and is still live
+// when `loadProvider` reads `.type` again to dispatch -- proven end to end
+// below, through the same `createHlsProvider` mock the dispatch tests above
+// use.
+//
+// Demonstrated red, run with
+// `pnpm vitest run packages/react/test/provider-loaders.test.ts -t "does
+// not let a detect result's type getter"` against the commit that added
+// the reserved-type check but read `source.type` directly rather than
+// through a copy: `createHlsProvider` was called once, with `[<video />,
+// { type: 'hls', src: 'https://evil.test/injected.m3u8', engine: 'bogus'
+// }, {}]`, and the `acme` registration's own factory was never reached.
+test("does not let a detect result's type getter answer safely for the reserved-name check and differently once loadProvider reads it again", async () => {
+  const { createHlsProvider } = await import('@playdeck/provider-hls');
+  // Shared with every other test in this file through the module-level
+  // `vi.mock` above -- cleared here so an earlier test's own calls cannot
+  // hide a real call this one makes.
+  vi.mocked(createHlsProvider).mockClear();
+  const media = document.createElement('video');
+  let reads = 0;
+  const dishonest = vi.fn(() => ({
+    get type() {
+      reads += 1;
+      return reads <= 2 ? 'acme' : 'hls';
+    },
+    src: 'https://evil.test/injected.m3u8',
+    engine: 'bogus'
+  }));
+  const adapter = { provider: 'acme' } as unknown as ProviderAdapter;
+  const factory = vi.fn(() => adapter);
+  const acme = {
+    detect: dishonest,
+    load: vi.fn(() => Promise.resolve(factory))
+  };
+
+  const detected = detectSourceWithProviders('https://example.com/media/1', {
+    acme
+  });
+  if (detected.status !== 'success') {
+    throw new Error(`expected success, got ${detected.status}`);
+  }
+
+  await loadProvider({
+    media,
+    nativeOptions: {},
+    providers: { acme },
+    source: detected.source
+  });
+
+  expect(createHlsProvider).not.toHaveBeenCalled();
+  expect(factory).toHaveBeenCalledWith(media, detected.source, undefined);
+});
+
+// #808's second half ("copy detect results"), satisfied here alongside
+// #800: the copy step above refuses any shape it cannot fully account for,
+// a `bigint` field included, the same way `copySuppliedSourceObject`
+// already refuses one on the explicit-object path. Before this, a `detect`
+// return carrying one resolved successfully and would have gone on to
+// crash `sourceKey`'s `JSON.stringify` (`use-activation.ts`) the first time
+// render reached it, rather than being declined here where the source it
+// came from is still known.
+//
+// Demonstrated red, run with the same command against main (591b836,
+// before this fix, `packages/react/src/provider-loaders.ts` swapped back
+// to that commit's copy): `result.status` was `'success'` rather than
+// `'failure'`, and `JSON.stringify(result.source)` -- what
+// `use-activation.ts`'s `sourceKey` would have done next -- throws
+// `TypeError: Do not know how to serialize a BigInt` for exactly this
+// shape, confirmed separately with `node -e`.
+test('declines a detect return carrying a bigint field rather than resolving a source that would crash JSON.stringify', () => {
+  const detect = vi.fn(
+    () => ({ type: 'acme', big: 10n }) as unknown as { type: string }
+  );
+
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    acme: { detect, load: vi.fn() }
+  });
+
+  expect(result.status).toBe('failure');
+});
+
+// Naming a supplied provider by its registration key in a load-failure
+// message: a `detect` that returns a truthy value with no `type` still
+// resolves here --
+// the checks above gate the reserved-name list and the shared URL allowlist,
+// neither of which requires `type` to be present -- so `loadProvider`'s own
+// dispatch (`ownEntry(providers, source.type)`) finds nothing to route to
+// and rejects, and `PROVIDER_LABELS[type]` (`use-activation.ts`) has only
+// `undefined` to read. `suppliedProviderRegistrationKeyFor` is what still
+// knows which registration's own `detect` produced the object, recorded
+// against this exact resolved source at the one place that still has that
+// information.
+//
+// Demonstrated red: `suppliedProviderRegistrationKeyFor` does not exist on
+// main at all -- run against `provider-loaders.ts` reverted to main,
+// `TypeError: suppliedProviderRegistrationKeyFor is not a function` at this
+// test's own call to it.
+test('records which registration a detect result carrying no type came from', () => {
+  const detect = vi.fn(() => ({ videoId: '1' }) as unknown as { type: string });
+
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    acme: { detect, load: vi.fn() }
+  });
+
+  expect(result.status).toBe('success');
+  expect(
+    result.status === 'success'
+      ? suppliedProviderRegistrationKeyFor(result.source)
+      : undefined
+  ).toBe('acme');
+});
+
+// The common, well-behaved case needs no record at all: `type` is already a
+// usable string, and it already routes to this exact registration
+// (`ownEntry(providers, kind)`, the same lookup `loadProvider` itself makes)
+// -- so `type` already is the registration's own key by the time this
+// returns. Nothing here tags the copy, which is what keeps the tagging
+// mechanism itself minimal -- added only where `type` genuinely carries
+// nothing to route or label by.
+//
+// Demonstrated red for the same reason the test above is red: run against
+// `provider-loaders.ts` reverted to main, `TypeError:
+// suppliedProviderRegistrationKeyFor is not a function` at this test's own
+// call to it -- the function this test calls does not exist there either.
+test('does not record a registration key for a detect result whose type already resolved', () => {
+  const result = detectSourceWithProviders('https://example.com/media/1', {
+    acme: { detect: () => ({ type: 'acme', videoId: '1' }), load: vi.fn() }
+  });
+
+  expect(result.status).toBe('success');
+  expect(
+    result.status === 'success'
+      ? suppliedProviderRegistrationKeyFor(result.source)
+      : undefined
+  ).toBeUndefined();
+});
+
+test('behaves exactly like detectSource when no providers are supplied', () => {
+  expect(
+    detectSourceWithProviders('https://example.com/nothing', undefined)
+  ).toEqual(detectSource('https://example.com/nothing'));
+});
+
+// The tests below drive the explicit-object path `detectSourceWithProviders`
+// added: a source handed in as an object of a registered supplied kind,
+// rather than a URL string for a registration's own `detect` to turn into
+// one. `detect` above always declines (`vi.fn(() => undefined)`), which is
+// what proves resolution here does not go through it at all.
+test('resolves an explicit object of a registered supplied kind without ever calling its detect', () => {
+  const detect = vi.fn(() => undefined);
+  const source = { type: 'acme', videoId: '1' };
+  const result = detectSourceWithProviders(source, {
+    acme: { detect, load: vi.fn() }
+  });
+  expect(detect).not.toHaveBeenCalled();
+  expect(result).toEqual({ status: 'success', input: source, source });
+});
+
+// The bypass case this whole seam exists to close: a shallow, top-level-only
+// check would see no string named directly on the object and let this
+// through. `config.url` is two levels deep, under a key this package has no
+// schema for -- there is no "known field" to check instead for a supplied
+// kind, which is exactly why every string, at every depth, has to clear the
+// allowlist.
+test('refuses an explicit supplied-kind object carrying a forbidden scheme nested inside it', () => {
+  const detect = vi.fn();
+  const result = detectSourceWithProviders(
+    { type: 'acme', config: { url: 'javascript:alert(1)' } },
+    { acme: { detect, load: vi.fn() } }
+  );
+  expect(detect).not.toHaveBeenCalled();
+  expect(result.status).toBe('failure');
+});
+
+test('does not refuse a plain non-URL string field on an explicit supplied-kind object', () => {
+  // `videoId` names no scheme at all, so `isPermittedSourceUrl` passes it
+  // through untouched -- the same rule that lets a bare YouTube id resolve.
+  const result = detectSourceWithProviders(
+    { type: 'acme', videoId: 'abc123' },
+    { acme: { detect: vi.fn(), load: vi.fn() } }
+  );
+  expect(result).toMatchObject({ status: 'success' });
+});
+
+// The object-path half of the reserved-name guarantee: `{ type: 'hls' }` with
+// no `src` field fails core's own `sourceFromExplicitObject` (`hls` requires
+// one), so this falls through to the supplied path exactly as an object of an
+// unregistered kind would. Even with a registration actually keyed `hls`, that
+// object is never resolved through it -- without the reserved-name skip,
+// `everyStringPermitted` would have passed this object trivially (its only
+// string, `'hls'`, names no scheme) and returned it as a resolved `hls`
+// source missing the `src` field core's own validation exists to require.
+test('does not resolve an explicit object whose type is a reserved built-in name through the supplied path', () => {
+  const detect = vi.fn();
+  const result = detectSourceWithProviders(
+    { type: 'hls' },
+    { hls: { detect, load: vi.fn() } }
+  );
+  expect(detect).not.toHaveBeenCalled();
+  expect(result.status).toBe('failure');
+});
+
+test('refuses an explicit object whose type matches no registered provider', () => {
+  const result = detectSourceWithProviders(
+    { type: 'unregistered', id: '1' },
+    { acme: { detect: vi.fn(), load: vi.fn() } }
+  );
+  expect(result.status).toBe('failure');
+});
+
+// #755: the explicit-object branch used to index `providers[kind]` directly,
+// so with `providers` set to anything -- `{}` included -- a `type` naming an
+// inherited `Object.prototype` member (`toString`, `constructor`, `valueOf`,
+// `hasOwnProperty`) resolved that member instead of a real registration, and
+// every one of those is truthy. `__proto__` is the sharpest case: read
+// through a bracket-style index, it resolves `Object.prototype`'s own
+// `__proto__` accessor, which answers `{}`'s prototype itself -- a plain
+// object, and so truthy too. `ownEntry`'s `Object.hasOwn` check is what makes
+// every one of these five read exactly like a name nothing registered at
+// all -- the same `invalid-source` failure a plain unregistered name
+// produces, asserted on both here rather than comparing the two results
+// against each other, since each carries back its own `input` and so is
+// never itself deep-equal to the other's.
+//
+// Red: reverting `ownEntry(providers, kind)` to the bare `providers[kind]`
+// this replaced failed all five at the `inherited` assertion -- each came
+// back `status: 'success'` (`source` a copy of the caller's own object)
+// instead of the `status: 'failure', reason: 'invalid-source'` expected.
+test.each([
+  'toString',
+  'constructor',
+  'valueOf',
+  'hasOwnProperty',
+  '__proto__'
+])('treats an inherited %s as an unregistered provider name', (key) => {
+  const unregistered = detectSourceWithProviders(
+    { type: 'unregistered-name', id: '1' },
+    {}
+  );
+  expect(unregistered).toMatchObject({
+    status: 'failure',
+    reason: 'invalid-source'
+  });
+
+  const inherited = detectSourceWithProviders({ type: key, id: '1' }, {});
+  expect(inherited).toMatchObject({
+    status: 'failure',
+    reason: 'invalid-source'
+  });
+});
+
+test('still resolves an explicit object of a built-in kind through core, unaffected by a registered providers map', () => {
+  const detect = vi.fn();
+  const builtinSource = { type: 'youtube', videoId: 'dQw4w9WgXcQ' };
+  const result = detectSourceWithProviders(builtinSource, {
+    acme: { detect, load: vi.fn() }
+  });
+  expect(detect).not.toHaveBeenCalled();
+  expect(result).toEqual(detectSource(builtinSource));
+});
+
+test('an explicit object of a registered supplied kind detects and dispatches to that registration through loadProvider', async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(async () => adapter);
+  const load = vi.fn(async () => factory);
+  const detect = vi.fn();
+  const media = document.createElement('div');
+  const explicitSource = { type: 'acme', videoId: '1' };
+
+  const detected = detectSourceWithProviders(explicitSource, {
+    acme: { detect, load }
+  });
+  expect(detected).toMatchObject({ status: 'success', source: explicitSource });
+  expect(detect).not.toHaveBeenCalled();
+  if (detected.status !== 'success') throw new Error('expected a success');
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providers: { acme: { detect, load } },
+      source: detected.source
+    })
+  ).resolves.toBe(adapter);
+  expect(load).toHaveBeenCalledOnce();
+  expect(factory).toHaveBeenCalledWith(media, explicitSource, undefined);
+});
+
+// #754: the explicit-object branch above used to hand `input` on unchanged --
+// `source: input as ResolvedPlayerSource` -- so the object `everyStringPermitted`
+// had just cleared was the very same object a getter could mutate before, and
+// the very same object the factory received. The fix copies `input` into a
+// plain structure this package controls before any validation runs, and this
+// is the one assertion every other test below rests on: the object the
+// factory receives is not the caller's own.
+test("does not hand the caller's own explicit source object on to the factory", async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  let receivedSource: unknown;
+  const factory = vi.fn(async (_media: unknown, source: unknown) => {
+    receivedSource = source;
+    return adapter;
+  });
+  const load = vi.fn(async () => factory);
+  const explicitSource = { type: 'acme', videoId: '1' };
+
+  const detected = detectSourceWithProviders(explicitSource, {
+    acme: { detect: vi.fn(), load }
+  });
+  if (detected.status !== 'success') throw new Error('expected a success');
+  expect(detected.source).not.toBe(explicitSource);
+  expect(detected.source).toEqual(explicitSource);
+
+  await loadProvider({
+    media: document.createElement('div'),
+    nativeOptions,
+    providers: { acme: { detect: vi.fn(), load } },
+    source: detected.source
+  });
+  expect(receivedSource).not.toBe(explicitSource);
+  expect(receivedSource).toEqual(explicitSource);
+});
+
+// Demonstrated red (docs/agents/demonstrated-red.md): against the unfixed
+// code (the explicit-object branch returning `input` unchanged),
+// `detectSourceWithProviders(source, ...)` still recurses `everyStringPermitted`
+// over `deep` -- 20,000 plain objects, well past what any JS engine's default
+// stack allows -- and threw `RangeError: Maximum call stack size exceeded`
+// rather than reaching either `expect` below, run with
+// `pnpm vitest run packages/react/test/provider-loaders.test.ts`.
+test('refuses a 20,000-deep acyclic explicit source object as invalid-source rather than overflowing the stack', () => {
+  let deep: Record<string, unknown> = { leaf: true };
+  for (let i = 0; i < 20_000; i++) {
+    deep = { nested: deep };
+  }
+  const source = { type: 'acme', deep };
+
+  let result: ReturnType<typeof detectSourceWithProviders>;
+  expect(() => {
+    result = detectSourceWithProviders(source, {
+      acme: { detect: vi.fn(), load: vi.fn() }
+    });
+  }).not.toThrow();
+  expect(result!.status).toBe('failure');
+  if (result!.status === 'failure')
+    expect(result!.reason).toBe('invalid-source');
+});
+
+// Demonstrated red: against the unfixed code, `everyStringPermitted` reads
+// `url` through `Object.values` for its own check, then the caller reads the
+// same live getter again through `detected.source.url` and again through
+// `factory.mock.calls[0][1].url` -- three reads of a getter written to answer
+// differently after the first. Run with
+// `pnpm vitest run packages/react/test/provider-loaders.test.ts -t "reads a getter"`,
+// `detected.source.url` read back `'javascript:alert(1)'` (the second read)
+// even though the walk that gated it saw only the first, permitted read.
+test('reads a getter exactly once, so a value that changes on a second read never reaches the factory', async () => {
+  let reads = 0;
+  const source = {
+    type: 'acme',
+    get url() {
+      reads += 1;
+      return reads === 1 ? 'https://ok.test/a' : 'javascript:alert(1)';
+    }
+  };
+
+  const detected = detectSourceWithProviders(source, {
+    acme: { detect: vi.fn(), load: vi.fn() }
+  });
+  if (detected.status !== 'success') throw new Error('expected a success');
+  expect((detected.source as unknown as { url: string }).url).toBe(
+    'https://ok.test/a'
+  );
+
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(async () => adapter);
+  const load = vi.fn(async () => factory);
+  await loadProvider({
+    media: document.createElement('div'),
+    nativeOptions,
+    providers: { acme: { detect: vi.fn(), load } },
+    source: detected.source
+  });
+
+  expect(factory).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({ url: 'https://ok.test/a' }),
+    undefined
+  );
+  expect(reads).toBe(1);
+});
+
+// #754's defect 3: a string `Object.values` never reaches -- inside a `Map`
+// or a `Set`, or filed under a symbol key -- was never checked by
+// `everyStringPermitted` at all. The fix does not teach the walk to reach
+// those shapes; it refuses the whole source rather than admit a shape it
+// cannot fully account for. A `bigint` is refused for the same reason
+// `sourceKey`'s `JSON.stringify` cannot serialise it (defect 4). A class
+// instance is not named as its own bullet in the issue's acceptance criteria,
+// but is the same "not a plain object" shape as the other three and is
+// included here for the same reason.
+test('refuses a source object carrying a Map, a Set, a symbol-keyed value, a bigint or a class instance, each as invalid-source with no throw', () => {
+  class Config {
+    url = 'https://ok.test';
+  }
+  const cases: readonly (() => Record<string, unknown>)[] = [
+    () => ({ type: 'acme', config: new Map([['a', 'b']]) }),
+    () => ({ type: 'acme', config: new Set(['a']) }),
+    () => ({ type: 'acme', [Symbol('secret')]: 'javascript:alert(1)' }),
+    () => ({ type: 'acme', count: 1n }),
+    () => ({ type: 'acme', config: new Config() })
+  ];
+
+  for (const build of cases) {
+    const source = build();
+    let result: ReturnType<typeof detectSourceWithProviders>;
+    expect(() => {
+      result = detectSourceWithProviders(source, {
+        acme: { detect: vi.fn(), load: vi.fn() }
+      });
+    }).not.toThrow();
+    expect(result!.status).toBe('failure');
+    if (result!.status === 'failure') {
+      expect(result!.reason).toBe('invalid-source');
+    }
+  }
+});
+
+// #754 review: "never a throw" did not yet hold for a value whose own shape
+// makes *reading* it throw, rather than merely making the read value
+// invalid. An ordinary data property can declare a throwing getter; a
+// `Proxy` can make any of the four operations `copySuppliedSourceValue`
+// performs -- `value[key]`, `Object.keys`, `Object.getOwnPropertySymbols`,
+// `Object.getPrototypeOf` -- throw from its own trap. None of that
+// function's earlier checks can rule either shape out first, so the fix is
+// the single `try`/`catch` `copySuppliedSourceObject` wraps around the whole
+// recursive copy, converting any throw into the same `invalid-source`
+// refusal a `Map` or a `bigint` already gets. Deliberately not a `try`/`catch`
+// around each individual read: retrying after catching one would read the
+// offending value a second time, exactly the getter hazard this package's
+// own single-read rule exists to close.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): against the unfixed
+// code (`copySuppliedSourceObject` calling `copySuppliedSourceValue` with no
+// `try`/`catch` around it), each case below threw synchronously out of
+// `detectSourceWithProviders` itself, caught only by this test's own
+// `expect(...).not.toThrow()` -- "Error: getter blew up" for the first,
+// "Error: getPrototypeOf blew up" for the second, "Error: ownKeys blew up"
+// for the third. All three pass once the `try`/`catch` was restored.
+test('refuses a source object with a throwing getter, or a Proxy whose getPrototypeOf or ownKeys trap throws, each with no throw', () => {
+  const throwingGetter: Record<string, unknown> = { type: 'acme' };
+  Object.defineProperty(throwingGetter, 'url', {
+    enumerable: true,
+    get(): never {
+      throw new Error('getter blew up');
+    }
+  });
+
+  const throwingGetPrototypeOf = new Proxy(
+    { type: 'acme' },
+    {
+      getPrototypeOf(): never {
+        throw new Error('getPrototypeOf blew up');
+      }
+    }
+  );
+
+  const throwingOwnKeys = new Proxy(
+    { type: 'acme' },
+    {
+      ownKeys(): never {
+        throw new Error('ownKeys blew up');
+      }
+    }
+  );
+
+  for (const source of [
+    throwingGetter,
+    throwingGetPrototypeOf,
+    throwingOwnKeys
+  ]) {
+    let result: ReturnType<typeof detectSourceWithProviders>;
+    expect(() => {
+      result = detectSourceWithProviders(source, {
+        acme: { detect: vi.fn(), load: vi.fn() }
+      });
+    }).not.toThrow();
+    expect(result!.status).toBe('failure');
+  }
+});
+
+// #754's defect 4: `sourceKey` (`use-activation.ts`) calls
+// `JSON.stringify(source.source)` during render, which invokes a `toJSON`
+// method were one to reach it. The copy refuses a `toJSON` property the same
+// way it refuses any other function value, before `sourceKey` is ever
+// reached -- confirmed end to end, through `Player.Root` itself, in
+// `supplied-provider.test.tsx`.
+test('refuses a source object whose own toJSON would throw, as invalid-source, before it can reach sourceKey', () => {
+  const source = {
+    type: 'acme',
+    toJSON() {
+      throw new Error('toJSON blew up');
+    }
+  };
+
+  let result: ReturnType<typeof detectSourceWithProviders>;
+  expect(() => {
+    result = detectSourceWithProviders(source, {
+      acme: { detect: vi.fn(), load: vi.fn() }
+    });
+  }).not.toThrow();
+  expect(result!.status).toBe('failure');
+});
+
+// A non-finite number is not one of the admitted primitives ("finite
+// numbers", the issue's own wording) -- `JSON.stringify` already turns `NaN`
+// and `Infinity` into `null`, silently changing what a consumer wrote, which
+// is the same kind of silent corruption the copy exists to refuse rather than
+// launder.
+test('refuses a source object carrying NaN or Infinity as invalid-source', () => {
+  for (const notFinite of [Number.NaN, Number.POSITIVE_INFINITY]) {
+    const result = detectSourceWithProviders(
+      { type: 'acme', n: notFinite },
+      { acme: { detect: vi.fn(), load: vi.fn() } }
+    );
+    expect(result.status).toBe('failure');
+  }
+});
+
+// A non-enumerable own string-keyed property is dropped from the copy rather
+// than refusing the whole source: `Object.keys` below already excludes it, so
+// the copy never carries it, and neither the allowlist walk nor the factory
+// ever sees it -- closing #754's defect 3 for this case by omission rather
+// than by inspection. Proven by a forbidden scheme hidden behind one: were it
+// walked at all, it would refuse the source, so its presence here having no
+// effect on the outcome is what shows it was never read.
+test('drops a non-enumerable own property from the copy instead of refusing the whole source', () => {
+  const source: Record<string, unknown> = { type: 'acme', videoId: '1' };
+  Object.defineProperty(source, 'hidden', {
+    value: 'javascript:alert(1)',
+    enumerable: false
+  });
+
+  const result = detectSourceWithProviders(source, {
+    acme: { detect: vi.fn(), load: vi.fn() }
+  });
+  expect(result).toMatchObject({ status: 'success' });
+  if (result.status !== 'success') throw new Error('expected a success');
+  expect(result.source).not.toHaveProperty('hidden');
+});
+
+// The explicit-object path's own counterpart to the detect-return path's
+// cycle and diamond tests above: this path had no cycle or sharing guard of
+// its own before #754 (`everyStringPermitted`'s `WeakSet` guard ran here too,
+// but over the caller's own live object), so the same two shapes are proven
+// against it. `copySuppliedSourceObject` tells a cycle apart from a diamond
+// the same way `everyStringPermitted` does -- an `ancestors` set of whatever
+// is still on the current recursion path, so a value reached through its own
+// descendant is refused outright. A diamond is not a cycle -- neither branch
+// is the other's ancestor -- and is copied independently for each branch
+// rather than reusing one shared copy: unlike the caller's own object, the
+// copy's shared identity is not preserved, which is what keeps a later walk
+// over it (`sourceKey`'s `JSON.stringify`) from re-discovering whatever a
+// diamond's sharing would otherwise let it reconstruct exponentially. See
+// `copySuppliedSourceValue`'s own doc comment for why, and
+// `MAX_SUPPLIED_SOURCE_NODES` for what actually bounds a diamond's total
+// cost instead.
+test('declines an explicit source object with a cyclic reference rather than overflowing the stack', () => {
+  const cyclic: { type: string; self?: unknown } = { type: 'acme' };
+  cyclic.self = cyclic;
+
+  let result: ReturnType<typeof detectSourceWithProviders>;
+  expect(() => {
+    result = detectSourceWithProviders(cyclic, {
+      acme: { detect: vi.fn(), load: vi.fn() }
+    });
+  }).not.toThrow();
+  expect(result!.status).toBe('failure');
+});
+
+test('accepts an explicit source object whose nested object is shared by two sibling branches, as two independent copies', () => {
+  const shared = { videoId: 'abc123' };
+  const diamond = { type: 'acme', a: shared, b: shared };
+
+  const result = detectSourceWithProviders(diamond, {
+    acme: { detect: vi.fn(), load: vi.fn() }
+  });
+  expect(result).toEqual({
+    status: 'success',
+    input: diamond,
+    source: diamond
+  });
+  if (result.status !== 'success') throw new Error('expected a success');
+  expect(result.source).not.toBe(diamond);
+  const source = result.source as unknown as { a: unknown; b: unknown };
+  // Not memoised into one shared copy: `a` and `b` are two separate objects,
+  // each `toEqual` the caller's own `shared`, neither `toBe` it or the other.
+  expect(source.a).not.toBe(shared);
+  expect(source.a).toEqual(shared);
+  expect(source.a).not.toBe(source.b);
+  expect(source.a).toEqual(source.b);
+});
+
+// A recursive copy that tells a cycle apart from a diamond by depth alone is
+// exponential rather than merely deep, because nothing stops it walking the
+// same shared object twice -- and memoising a diamond into one shared copy,
+// rather than fixing that, only moves the same exponential cost one call
+// downstream: `sourceKey`'s `JSON.stringify` does not deduplicate a shared
+// reference either, so it would still expand a memoised diamond's sharing
+// back out during every render (proven end to end, through `Player.Root`
+// itself, in `supplied-provider.test.tsx`). `MAX_SUPPLIED_SOURCE_NODES` is
+// what actually closes this: a shared budget every value the copy visits
+// counts against, so the copy's own total size -- and so every later walk
+// over it -- is bounded regardless of how much the source shares. The two
+// shapes below prove `ancestors` and that budget are both load-bearing, not
+// the depth cap alone -- each is given a short per-test timeout so a
+// regression here reports as a failed run instead of hanging the suite, and
+// each finishes in single-digit milliseconds once fixed.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): with `ancestors` and
+// the node budget reverted out of `copySuppliedSourceValue` (leaving only the
+// depth cap, `provider-loaders.ts` as committed in f116111), run with
+// `pnpm vitest run packages/react/test/provider-loaders.test.ts -t "sibling
+// branches sharing a self-cyclic|diamond chain 24 levels"`:
+//
+// "declines a source object with two sibling branches sharing a self-cyclic
+// reference" passed regardless, in under a second. Checked directly rather
+// than assumed: a direct self-reference means the same object recurs down
+// whichever key `Object.keys` tries first (`a`, here), which keeps failing
+// once past `MAX_SUPPLIED_SOURCE_DEPTH` -- so the very first key this loop
+// tries never succeeds, the object's own copy short-circuits on it every
+// time, and `b` is never reached at any level. That is not a guard against
+// the regression, only this one shape's own shallow, two-key symmetry
+// happening not to trigger it -- kept as a test regardless, since it is the
+// cheapest possible proof that a genuine cycle is refused, and the second
+// test below is what actually exercises the node budget.
+//
+// "declines a diamond chain 24 levels deep with two references per level,
+// promptly rather than after exponential blowup" failed: `Error: Test timed
+// out in 2000ms.`, reported only once the call actually returned, 16839ms in
+// -- vitest does not preempt a synchronous, CPU-bound test at its timeout, it
+// only compares the elapsed time once control comes back. 24 levels stays
+// inside the depth cap, so nothing fails early and both `l` and `r` are
+// walked at every level; with no bound on the copy's total size, walking `r`
+// redid the identical work `l` already did, and `2**24` such calls is what
+// took 16.8s. Both tests pass in single-digit milliseconds with `ancestors`
+// and the node budget restored -- the second now refusing the chain, rather
+// than hanging trying to accept it.
+test('declines a source object with two sibling branches sharing a self-cyclic reference', () => {
+  const cyclic: { type: string; a?: unknown; b?: unknown } = {
+    type: 'acme'
+  };
+  cyclic.a = cyclic;
+  cyclic.b = cyclic;
+
+  let result: ReturnType<typeof detectSourceWithProviders>;
+  expect(() => {
+    result = detectSourceWithProviders(cyclic, {
+      acme: { detect: vi.fn(), load: vi.fn() }
+    });
+  }).not.toThrow();
+  expect(result!.status).toBe('failure');
+}, 2000);
+
+test('declines a diamond chain 24 levels deep with two references per level, promptly rather than after exponential blowup', () => {
+  // 24 levels, not `MAX_SUPPLIED_SOURCE_DEPTH` (32) or beyond: this chain
+  // must stay inside the depth cap, so nothing fails for depth and this is a
+  // clean exercise of `MAX_SUPPLIED_SOURCE_NODES` alone. Without memoising a
+  // diamond's shared object, the total node count doubles at every level --
+  // `2**24`, tens of millions -- so the shared budget (10,000) is spent
+  // within the first dozen or so levels, refusing the whole source long
+  // before the walk could reach the chain's own base case.
+  let next: Record<string, unknown> = { leaf: true };
+  for (let level = 0; level < 24; level++) {
+    next = { l: next, r: next };
+  }
+  const source = { type: 'acme', chain: next };
+
+  let result: ReturnType<typeof detectSourceWithProviders>;
+  expect(() => {
+    result = detectSourceWithProviders(source, {
+      acme: { detect: vi.fn(), load: vi.fn() }
+    });
+  }).not.toThrow();
+  expect(result!.status).toBe('failure');
+}, 2000);
+
+// A key literally named `__proto__` is a real own key on the input when it
+// comes from `JSON.parse`, as this test builds it. A copy built with a bare
+// `copied[key] = value` runs that assignment through `Object.prototype`'s
+// own `__proto__` setter instead of storing it, replacing `copied`'s own
+// prototype with the value rather than adding a field.
+// `copySuppliedSourceValue`'s `Object.defineProperty` call calls
+// `[[DefineOwnProperty]]` directly and never consults an inherited accessor,
+// so `__proto__` is stored as an ordinary own data property, and the copy's
+// own prototype stays `Object.prototype`.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): with the
+// `defineProperty` call reverted to `copied[key] = keyResult.value`,
+// `Object.keys(config)` was `[]`, `Object.getPrototypeOf(config)` was the
+// `{secret: 'payload'}` object rather than `Object.prototype`, and
+// `JSON.stringify(config)` was `'{}'`, run with `pnpm vitest run
+// packages/react/test/provider-loaders.test.ts -t "own literal __proto__
+// key rather than replacing"`.
+test("a copied field carries an own literal __proto__ key rather than replacing the copy's own prototype", () => {
+  const input = JSON.parse(
+    '{"type":"acme","videoId":"1","config":{"__proto__":{"secret":"payload"}}}'
+  ) as Record<string, unknown>;
+
+  const result = detectSourceWithProviders(input, {
+    acme: { detect: vi.fn(), load: vi.fn() }
+  });
+  expect(result.status).toBe('success');
+  if (result.status !== 'success') throw new Error('expected a success');
+
+  const config = (result.source as unknown as { config: object }).config;
+  expect(Object.keys(config)).toEqual(['__proto__']);
+  expect(Object.getPrototypeOf(config)).toBe(Object.prototype);
+  expect(JSON.stringify(config)).toBe('{"__proto__":{"secret":"payload"}}');
+});
+
+// A caller building `source` from `JSON.parse` of external data can hand in
+// a whole object keyed by a literal `__proto__`, whose own value carries
+// `type` and the other fields. A copy built with a bare `copied[key] =
+// value` leaves `copy.type` reading `'acme'` through the prototype chain the
+// corrupted copy acquires -- the copy carries no own `type` key, but nothing
+// stands between it and a `type` field the value itself supplied -- so
+// `detectSourceWithProviders` would resolve this as an ordinary `acme`
+// source with zero own keys, a type spoofed entirely through a prototype no
+// field of the input actually declared. `copySuppliedSourceValue`'s
+// `defineProperty` copy stores no top-level `type` here at all -- the
+// input's only own key is `__proto__`, and that is where `type` is copied to
+// as well -- so this is refused for naming no genuine `type` field, the same
+// as any other object that never declared one.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): with the copy's object
+// branch reverted to `copied[key] = keyResult.value`, this resolved `status:
+// 'success'`, with `Object.keys(result.source)` empty and `(result.source as
+// Record<string, unknown>).type === 'acme'`, run with the same command as
+// above with `-t "does not resolve a source object whose only key is a
+// literal __proto__"`.
+test('does not resolve a source object whose only key is a literal __proto__ by reading type through a hijacked prototype', () => {
+  const input = JSON.parse(
+    '{"__proto__":{"type":"acme","src":"https://ok.test/a.mp4"}}'
+  ) as Record<string, unknown>;
+
+  const result = detectSourceWithProviders(input, {
+    acme: { detect: vi.fn(), load: vi.fn() }
+  });
+  expect(result.status).toBe('failure');
+});
+
+// Guard: `isPermittedSourceUrl` runs on each string during the copy, inside
+// the recursive call that produces `keyResult` -- ahead of the assignment
+// line this fix touches (`copySuppliedSourceValue`'s own doc comment). A
+// `javascript:` scheme nested under a literal `__proto__` key is refused
+// either side of the `defineProperty` change: that change only decides how
+// an *admitted* value is stored, never which values are admitted. Confirmed
+// directly: this test also passes unmodified against `provider-loaders.ts`
+// with the `defineProperty` call reverted to `copied[key] =
+// keyResult.value`.
+test('refuses a javascript: URL nested under a literal __proto__ key, the same as a normally keyed one', () => {
+  const input = JSON.parse(
+    '{"type":"acme","videoId":"1","config":{"__proto__":"javascript:alert(1)"}}'
+  ) as Record<string, unknown>;
+
+  const result = detectSourceWithProviders(input, {
+    acme: { detect: vi.fn(), load: vi.fn() }
+  });
+  expect(result.status).toBe('failure');
+});
+
+// Guard: a supplied source with no `__proto__` key anywhere copies to the
+// same own keys, prototype and serialisation either side of the
+// `defineProperty` change -- `copied[key] = value` and
+// `Object.defineProperty(copied, key, {...})` store an ordinary key
+// identically. Confirmed directly: this test also passes unmodified against
+// `provider-loaders.ts` with the `defineProperty` call reverted to
+// `copied[key] = keyResult.value`.
+test('copies an ordinary source object with no __proto__ key to a plain object with matching own keys and serialisation', () => {
+  const input = { type: 'acme', videoId: '1', config: { secret: 'payload' } };
+
+  const result = detectSourceWithProviders(input, {
+    acme: { detect: vi.fn(), load: vi.fn() }
+  });
+  expect(result.status).toBe('success');
+  if (result.status !== 'success') throw new Error('expected a success');
+
+  expect(Object.keys(result.source)).toEqual(['type', 'videoId', 'config']);
+  expect(Object.getPrototypeOf(result.source)).toBe(Object.prototype);
+  expect(JSON.stringify(result.source)).toBe(JSON.stringify(input));
+});
+
+test('dispatches a supplied kind to its own registration, with the mount, source and its own option bag', async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(async () => adapter);
+  const load = vi.fn(async () => factory);
+  const media = document.createElement('div');
+  const source: AcmeSource = { type: 'acme', videoId: '1' };
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providerOptions: { acme: { quality: 'hd' } } as never,
+      providers: { acme: { detect: vi.fn(), load } },
+      source
+    })
+  ).resolves.toBe(adapter);
+  expect(load).toHaveBeenCalledOnce();
+  expect(factory).toHaveBeenCalledWith(media, source, { quality: 'hd' });
+});
+
+// #755: the third call site `ownEntry` gates -- `loadProvider`'s own
+// `providerOptions[source.type]` read, the same defect as `providers[kind]`
+// and `providers[source.type]` above. `Object.create` puts a same-shaped
+// `acme` bag on `providerOptions`'s own prototype rather than on
+// `providerOptions` itself, so `Object.hasOwn(providerOptions, 'acme')`
+// reads false and the factory must receive `undefined` rather than the
+// inherited bag -- never the bag's own values, sanitised or not.
+//
+// Red: reverting that one `ownEntry` call to the bare
+// `providerOptions[source.type]` this replaced handed the inherited bag to
+// `sanitizeSuppliedProviderOptions`, and `factory` was called with
+// `{ src: 'https://x.test/a' }` instead of `undefined`.
+test("passes undefined options to the factory when a supplied kind's own providerOptions bag is only inherited", async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(async () => adapter);
+  const load = vi.fn(async () => factory);
+  const media = document.createElement('div');
+  const source: AcmeSource = { type: 'acme', videoId: '1' };
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providerOptions: Object.create({
+        acme: { src: 'https://x.test/a' }
+      }) as never,
+      providers: { acme: { detect: vi.fn(), load } },
+      source
+    })
+  ).resolves.toBe(adapter);
+  expect(factory).toHaveBeenCalledWith(media, source, undefined);
+});
+
+// #752: `loadProvider`'s supplied-kind branch used to hand
+// `providerOptions[source.type]` straight to the factory, so a `javascript:`
+// or `data:` value written there reached provider-authored code with no gate
+// at all -- unlike the resolved source itself, which `everyStringPermitted`
+// already walks. The fix runs the same shared allowlist
+// (`isPermittedSourceUrl`) over every string in the bag before the factory is
+// called, omitting whatever it refuses exactly as an absent option would be,
+// and reports the refusal through `reportRefusedUrl` the same way every other
+// refused prop is, under the `providerOptions` surface.
+test("omits a refused javascript: option from a supplied kind's own bag before calling the factory, and reports the refusal", async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(async () => adapter);
+  const load = vi.fn(async () => factory);
+  const media = document.createElement('div');
+  const source: AcmeSource = { type: 'acme', videoId: '1' };
+  const reportRefusedUrl = vi.fn(() => vi.fn());
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providerOptions: { acme: { src: 'javascript:alert(1)' } } as never,
+      providers: { acme: { detect: vi.fn(), load } },
+      reportRefusedUrl,
+      source
+    })
+  ).resolves.toBe(adapter);
+
+  expect(factory).toHaveBeenCalledWith(media, source, {});
+  expect(reportRefusedUrl).toHaveBeenCalledWith('providerOptions');
+});
+
+// The `data:` counterpart, alongside a `file:` sibling -- a second scheme the
+// allowlist refuses, distinct from the `javascript:` and `data:` cases above
+// -- a permitted `https:` value under `src` itself, and two non-string
+// options. Proves in one bag that only the two refused strings are dropped,
+// the permitted `src` and the non-string options arrive unchanged, and one
+// bag with two refusals still reports once.
+test('omits refused data: and file: options while keeping a permitted https: src and non-string options unchanged', async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(async () => adapter);
+  const load = vi.fn(async () => factory);
+  const media = document.createElement('div');
+  const source: AcmeSource = { type: 'acme', videoId: '1' };
+  const reportRefusedUrl = vi.fn(() => vi.fn());
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providerOptions: {
+        acme: {
+          src: 'https://good.example/clip.mp4',
+          poster: 'data:text/html,<script>alert(1)</script>',
+          thumbnail: 'file:///etc/passwd',
+          muted: true,
+          volume: 5
+        }
+      } as never,
+      providers: { acme: { detect: vi.fn(), load } },
+      reportRefusedUrl,
+      source
+    })
+  ).resolves.toBe(adapter);
+
+  expect(factory).toHaveBeenCalledWith(media, source, {
+    src: 'https://good.example/clip.mp4',
+    muted: true,
+    volume: 5
+  });
+  expect(reportRefusedUrl).toHaveBeenCalledWith('providerOptions');
+});
+
+// The other direction: a bag with nothing to refuse -- including a plain,
+// non-URL string, `quality: 'hd'` -- never calls `reportRefusedUrl` and passes
+// every value through exactly as `dispatches a supplied kind to its own
+// registration` already proved, before this fix existed.
+test("never calls reportRefusedUrl when a supplied kind's own bag has nothing to refuse", async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(async () => adapter);
+  const load = vi.fn(async () => factory);
+  const media = document.createElement('div');
+  const source: AcmeSource = { type: 'acme', videoId: '1' };
+  const reportRefusedUrl = vi.fn(() => vi.fn());
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providerOptions: { acme: { quality: 'hd' } } as never,
+      providers: { acme: { detect: vi.fn(), load } },
+      reportRefusedUrl,
+      source
+    })
+  ).resolves.toBe(adapter);
+
+  expect(factory).toHaveBeenCalledWith(media, source, { quality: 'hd' });
+  expect(reportRefusedUrl).not.toHaveBeenCalled();
+});
+
+// `reportRefusedUrl` is optional -- `loadProvider` is called directly in
+// tests above with no such field, and a real caller with no controller to
+// report to (the same reason `useRefusedUrlReport`'s own `controller`
+// parameter is optional) must not crash either. Never a throw, per the
+// allowlist's own rule (`CONTEXT.md`'s "Shared allowlist" entry).
+test('omits a refused option without throwing when no reportRefusedUrl is supplied', async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(async () => adapter);
+  const load = vi.fn(async () => factory);
+  const media = document.createElement('div');
+  const source: AcmeSource = { type: 'acme', videoId: '1' };
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providerOptions: { acme: { src: 'javascript:alert(1)' } } as never,
+      providers: { acme: { detect: vi.fn(), load } },
+      source
+    })
+  ).resolves.toBe(adapter);
+
+  expect(factory).toHaveBeenCalledWith(media, source, {});
+});
+
+// Traced first: `sanitizeSuppliedProviderOptions`'s only type check is the
+// `typeof value === 'string'` branch above -- a non-string `value` (an
+// object, for one) never reaches it and falls straight through to the write
+// below. `PrimitiveOptionBag` (above) guards this only at compile time; a
+// caller building `providerOptions` from `JSON.parse` of external data
+// reaches this loop with whatever `JSON.parse` produced, the same threat
+// model as an explicit `source` object (`copySuppliedSourceValue`'s own doc
+// comment). A key literally named `__proto__` is a real own key on such
+// input, so an object-valued `__proto__` field reaches the write unfiltered
+// -- this is not a guard.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): with the write
+// reverted to `sanitized[key] = value`, `factory` was called with an options
+// object with zero own keys whose own prototype was `{ polluted: true }` --
+// `Object.keys(options)` was `[]` and `options.polluted` read `true` through
+// the hijacked prototype -- run with `pnpm vitest run
+// packages/react/test/provider-loaders.test.ts -t "an object-valued literal
+// __proto__ key"`.
+test("stores an object-valued literal __proto__ key in a supplied kind's own providerOptions bag as an own key, never as the bag's prototype", async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(
+    async (
+      mount: unknown,
+      source: unknown,
+      options?: Record<string, unknown>
+    ) => {
+      void mount;
+      void source;
+      void options;
+      return adapter;
+    }
+  );
+  const load = vi.fn(async () => factory);
+  const media = document.createElement('div');
+  const source: AcmeSource = { type: 'acme', videoId: '1' };
+  const bag = JSON.parse('{"__proto__":{"polluted":true}}');
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providerOptions: { acme: bag } as never,
+      providers: { acme: { detect: vi.fn(), load } },
+      source
+    })
+  ).resolves.toBe(adapter);
+
+  expect(factory).toHaveBeenCalledOnce();
+  const options = factory.mock.calls[0]![2] as Record<string, unknown>;
+  expect(Object.keys(options)).toEqual(['__proto__']);
+  expect(Object.getPrototypeOf(options)).toBe(Object.prototype);
+  expect(options.polluted).toBeUndefined();
+  expect(options['__proto__']).toEqual({ polluted: true });
+});
+
+// Traced the same way: for a `value` that is a string but names no URL
+// scheme, `isPermittedSourceUrl` permits it and the value reaches the same
+// write. `Object.prototype`'s own `__proto__` setter is a no-op for a value
+// that is neither an object nor `null` -- its own algorithm returns before
+// ever reaching `[[SetPrototypeOf]]` -- so `sanitized[key] = value` neither
+// stores the field nor reports it refused: the field simply vanishes, with
+// no signal either way.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md): with the write
+// reverted to `sanitized[key] = value`, `factory` was called with `{
+// quality: 'hd' }` -- the `__proto__` field vanished entirely, dropped
+// rather than stored or refused -- run with the same command as above with
+// `-t "a primitive-valued literal __proto__ key"`.
+test("stores a primitive-valued literal __proto__ key in a supplied kind's own providerOptions bag as an own key, the same as any other key", async () => {
+  const adapter = { provider: 'native' } as unknown as ProviderAdapter;
+  const factory = vi.fn(
+    async (
+      mount: unknown,
+      source: unknown,
+      options?: Record<string, unknown>
+    ) => {
+      void mount;
+      void source;
+      void options;
+      return adapter;
+    }
+  );
+  const load = vi.fn(async () => factory);
+  const media = document.createElement('div');
+  const source: AcmeSource = { type: 'acme', videoId: '1' };
+  const bag = JSON.parse('{"quality":"hd","__proto__":"loud"}');
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providerOptions: { acme: bag } as never,
+      providers: { acme: { detect: vi.fn(), load } },
+      source
+    })
+  ).resolves.toBe(adapter);
+
+  expect(factory).toHaveBeenCalledOnce();
+  const options = factory.mock.calls[0]![2] as Record<string, unknown>;
+  expect(Object.keys(options)).toEqual(['quality', '__proto__']);
+  expect(options.quality).toBe('hd');
+  expect(options['__proto__']).toBe('loud');
+  expect(Object.getPrototypeOf(options)).toBe(Object.prototype);
+});
+
+test('reports a supplied kind with no matching registration the same way as an unrecognised type', async () => {
+  await expect(
+    loadProvider({
+      media: null,
+      nativeOptions,
+      providers: { other: { detect: vi.fn(), load: vi.fn() } },
+      source: { type: 'acme' } as unknown as ResolvedPlayerSource
+    })
+  ).rejects.toThrow('No provider adapter is installed for acme.');
+});
+
+// #755: `loadProvider`'s dispatch used to index `providers[source.type]`
+// directly, the same defect as the detection-side test above. `proto` builds
+// a registration keyed by each inherited member's own name -- using a
+// computed key (`{ [key]: … }`), never the object-literal `__proto__: …`
+// form, which would set `proto`'s own prototype instead of giving it an own
+// property actually named `__proto__` -- and puts it on `providers`'s
+// prototype rather than on `providers` itself, so `Object.hasOwn(providers,
+// key)` reads false for every one of these while a bare index would still
+// resolve `proto`'s entry through the chain. `inheritedLoad` proves the
+// prototype-member registration is never reached at all, not merely that its
+// result is discarded.
+//
+// Red: reverting `ownEntry(providers, source.type)` to
+// `providers?.[source.type]` failed all five, at `expect(inheritedLoad
+// ).not.toHaveBeenCalled()` -- "expected "vi.fn()" to not be called at all,
+// but actually been called 1 times" -- for every key including `__proto__`,
+// proving the prototype-member registration's own `load` really was invoked
+// before falling through to a rejection.
+test.each([
+  'toString',
+  'constructor',
+  'valueOf',
+  'hasOwnProperty',
+  '__proto__'
+])('loadProvider never calls into an inherited %s member', async (key) => {
+  const inheritedLoad = vi.fn();
+  const proto = { [key]: { detect: vi.fn(), load: inheritedLoad } };
+  const providers = Object.create(proto) as PlayerProviders;
+
+  let error: unknown;
+  try {
+    await loadProvider({
+      media: null,
+      nativeOptions,
+      providers,
+      source: { type: key } as unknown as ResolvedPlayerSource
+    });
+  } catch (caught) {
+    error = caught;
+  }
+
+  expect(inheritedLoad).not.toHaveBeenCalled();
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).toBe(
+    `No provider adapter is installed for ${key}.`
+  );
+});
+
+// One half of the inertness `provider-loaders.ts`'s own comment on
+// `RESERVED_PROVIDER_NAMES` now describes in full: a `providers` entry keyed by
+// a reserved, built-in name never has its `load` run, because the five
+// built-in branches in `loadProvider` dispatch on `source.type` before its own
+// `providers` lookup ever does. The other half -- that such a registration
+// never has its `detect` called either -- is proven separately above, by
+// `detectSourceWithProviders` never invoking it (`never calls detect for a
+// registration keyed by a reserved built-in name`); the two together are what
+// make a reserved-keyed registration inert rather than only its `load` half.
+test('never lets a providers entry keyed by a built-in name intercept the built-in dispatch', async () => {
+  const { createHlsProvider } = await import('@playdeck/provider-hls');
+  const media = document.createElement('video');
+  const source = { type: 'hls', src: '/master.m3u8' } as const;
+  const suppliedLoad = vi.fn();
+
+  await expect(
+    loadProvider({
+      media,
+      nativeOptions,
+      providers: { hls: { detect: vi.fn(), load: suppliedLoad } },
+      source
+    })
+  ).resolves.toMatchObject({ provider: 'hls' });
+  expect(createHlsProvider).toHaveBeenCalled();
+  expect(suppliedLoad).not.toHaveBeenCalled();
+});
+
+test('a supplied kind types its own source shape and its own providerOptions key without weakening the five built-in kinds', () => {
+  type AcmeProviders = {
+    readonly acme: ProviderRegistration<AcmeSource, AcmeOptions>;
+  };
+
+  expectTypeOf<SuppliedSource<AcmeProviders>>().toEqualTypeOf<AcmeSource>();
+  expectTypeOf<SuppliedProviderOptions<AcmeProviders>>().toEqualTypeOf<{
+    readonly acme?: AcmeOptions;
+  }>();
+
+  // `RootProps<AcmeProviders>['source']` accepts the supplied kind's own
+  // shape directly, alongside every built-in form.
+  const suppliedSource: RootProps<AcmeProviders>['source'] = {
+    type: 'acme',
+    videoId: '1'
+  };
+  const builtInSource: RootProps<AcmeProviders>['source'] = {
+    type: 'youtube',
+    videoId: '1'
+  };
+  const stringSource: RootProps<AcmeProviders>['source'] =
+    'https://example.com';
+  void suppliedSource;
+  void builtInSource;
+  void stringSource;
+
+  const options: RootProps<AcmeProviders>['providerOptions'] = {
+    acme: { quality: 'hd' },
+    hls: { build: 'light' }
+  };
+  void options;
+});
+
+// `PlayerProvider`'s own generic parameter (`@playdeck/core`'s `types.ts`)
+// mirrors `PlayerSource`'s: `Extra` defaults to `never`, which a union
+// absorbs without contributing a member, so `PlayerState.provider` -- typed
+// off the bare, non-generic `PlayerProvider` -- stays exactly the five-member
+// union it always was for a `Root` that never sets `providers`. Equality,
+// not assignability, for `root-props.test.ts`'s own reason: assignability
+// alone would still pass a `PlayerState.provider` that had quietly widened to
+// `string`.
+//
+// Demonstrated red: with `PlayerProvider`'s `Extra` default changed from
+// `never` to `string` (`packages/core/src/types.ts`), `pnpm typecheck`
+// reported TS2344 here -- "Type 'string' is not assignable to type
+// '"native" | "hls" | "youtube" | "vimeo" | "wistia" | null'" -- reverted
+// afterwards.
+test('a consumer who never sets providers still narrows PlayerState.provider over exactly the five built-in kinds', () => {
+  expectTypeOf<PlayerState['provider']>().toEqualTypeOf<
+    'native' | 'hls' | 'youtube' | 'vimeo' | 'wistia' | null
+  >();
+});
+
+// The other half of `PlayerProvider`'s own widening: a supplied kind's
+// factory (`ProviderAdapterFactory`) can report its own identity on the
+// `ProviderAdapter` it builds directly, with no cast --
+// `examples/provider-setup-file-adapter.tsx`'s `createExampleFileAdapter` is
+// exactly this, typed here against a minimal stand-in rather than the real
+// file so this claim is proven independently of it.
+//
+// Demonstrated red: with `ProviderAdapterFactory`'s return type
+// (`provider-loaders.ts`) reverted to the bare `ProviderAdapter` it was
+// before this change, `pnpm typecheck` reported TS2322 at this test's own
+// `provider: 'acme'` line -- "Type '"acme"' is not assignable to type
+// '"native" | "hls" | "youtube" | "vimeo" | "wistia"'" -- reverted
+// afterwards.
+test('a supplied kind reports its own identity on ProviderAdapter without a cast', () => {
+  const factory: ProviderAdapterFactory<AcmeSource, AcmeOptions> = () => ({
+    provider: 'acme',
+    attach: () => undefined,
+    load: () => undefined,
+    destroy: () => undefined,
+    subscribe: () => () => undefined
+  });
+  void factory;
+});
+
+test('a supplied kind cannot report a provider identity other than its own kind or a built-in one', () => {
+  const factory: ProviderAdapterFactory<AcmeSource, AcmeOptions> = () => ({
+    // @ts-expect-error `mystery` is neither `AcmeSource['type']` ('acme') nor
+    // one of the five built-in `PlayerProvider` members `ProviderAdapter`'s
+    // `Extra` parameter admits alongside it.
+    provider: 'mystery',
+    attach: () => undefined,
+    load: () => undefined,
+    destroy: () => undefined,
+    subscribe: () => () => undefined
+  });
+  void factory;
+});
+
+test('rejects a source object whose type matches no registered kind at the type level', () => {
+  type AcmeProviders = {
+    readonly acme: ProviderRegistration<AcmeSource, AcmeOptions>;
+  };
+  // @ts-expect-error `mystery` names neither a built-in kind nor an entry of
+  // `AcmeProviders`.
+  const invalid: RootProps<AcmeProviders>['source'] = { type: 'mystery' };
+  void invalid;
+});
+
+// The other half of "without weakening the built-in kinds' typing": a
+// `RootProps` given no type argument -- every consumer who never sets
+// `providers`, `root-props.test.ts`'s own subject -- accepts none of a
+// supplied kind's shapes at all. `RootProps['source']` resolves here to
+// `PlayerSource<SuppliedProviderSource>`, not `PlayerSource<never>`, so what
+// actually refuses the literal below is the excess-property check against
+// `SuppliedProviderSource`'s own exact shape (`videoId` is not one of its
+// fields) -- confirmed by widening `SuppliedProviderSource`
+// (`provider-loaders.ts`) to `{ readonly type: string; readonly [key:
+// string]: unknown }`: `pnpm typecheck` then reported `TS2578: Unused
+// '@ts-expect-error' directive` at this test's own line below, reverted
+// afterwards.
+test('accepts no supplied-kind source at all when providers is never opted into', () => {
+  // @ts-expect-error `AcmeSource` is not a member of the non-generic
+  // `PlayerSource` union `RootProps['source']` defaults to.
+  const invalid: RootProps['source'] = { type: 'acme', videoId: '1' };
+  void invalid;
+});
+
+test('a registration keyed by a built-in source kind is a compile error, not a silently inert runtime no-op', () => {
+  type ReservedProviders = {
+    readonly hls: ProviderRegistration<AcmeSource, AcmeOptions>;
+  };
+  // @ts-expect-error `hls` is one of the five built-in kinds `ConsumerProviders`
+  // reserves (`provider-loaders.ts`), the bound `RootProps`'s own type
+  // parameter is declared against -- a registration keyed by one used to
+  // typecheck here, resolve nothing at runtime (`loadProvider` dispatches on
+  // `source.type` before ever consulting `providers`), and report nothing.
+  type Invalid = RootProps<ReservedProviders>;
+  const check: Invalid | undefined = undefined;
+  void check;
 });

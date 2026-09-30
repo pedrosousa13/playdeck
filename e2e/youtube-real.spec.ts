@@ -48,3 +48,30 @@ test(
     await expect(activationButton).toBeHidden();
   }
 );
+
+// #556's own trap: `maxresdefault.jpg` 404s silently on a video that was
+// never uploaded at a resolution high enough to have one, and this repo's
+// fixture video is exactly that case. So the assertion that matters is not
+// that a URL was computed -- any test can assert that against the same
+// formula the resolver uses -- it is that the real CDN answers the resolved
+// URL with an actual image, which only a request against `i.ytimg.com` can
+// prove.
+test(
+  "youtube's resolved poster is a real, loadable image rather than a 404 @real",
+  { tag: '@real' },
+  async ({ page }) => {
+    test.setTimeout(30_000);
+
+    await page.goto(
+      '/iframe.html?id=fixtures-playerfixture--interaction-youtube-provider-poster&viewMode=story'
+    );
+    const state = await page.evaluate(() => window.playdeckHandle?.getState());
+    expect(state?.capabilities.providerPoster).toEqual({ status: 'available' });
+    const providerPosterUrl = state?.providerPosterUrl;
+    expect(providerPosterUrl).toMatch(/^https:\/\/i\.ytimg\.com\/vi\/.+\.jpg$/);
+
+    const response = await page.request.get(providerPosterUrl!);
+    expect(response.ok()).toBe(true);
+    expect(response.headers()['content-type']).toMatch(/^image\//);
+  }
+);

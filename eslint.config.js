@@ -31,11 +31,28 @@ export default tseslint.config(
       // files a session writes are linted as project source and fail that
       // session's own gate (#410).
       '.scratch/**',
+      // Gitignored, same reason as `.scratch/**` above: flat config does not
+      // read .gitignore, so a developer with a sibling git worktree checked
+      // out here lints that worktree's files too, and a violation on
+      // whatever branch it holds fails a run that named no file of theirs
+      // (#607).
+      '.worktrees/**',
+      // The sibling path agent worktrees land in, and not covered by the
+      // entry above: a flat-config glob does not match across the `.claude/`
+      // prefix, so `.worktrees/**` reaches neither this directory nor
+      // anything under it (#679). Leaving it unlisted does more than slow the
+      // run down -- a worktree on disk is a second candidate tsconfig root,
+      // and typescript-eslint then refuses to parse the repo's own source as
+      // well as the worktree's, so the gate fails on files nobody touched.
+      '.claude/worktrees/**',
       '.superpowers/**',
       'docs/superpowers/plans/**',
       // MPEG-TS media segments share the .ts extension with TypeScript.
       'apps/storybook/public/hls/**',
-      'apps/site/public/hls/**'
+      // scripts/media-sprite-fright.mjs's generated output -- gitignored, not
+      // gated: the same MPEG-TS collision as the entry above, on the clip
+      // that entry's own directory played before #519 removed it.
+      'apps/site/public/media/**'
     ]
   },
   js.configs.recommended,

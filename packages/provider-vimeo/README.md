@@ -7,11 +7,55 @@ The Vimeo provider for [Playdeck](https://github.com/pedrosousa13/playdeck), ove
 pnpm add @playdeck/provider-vimeo
 ```
 
+This package has no React dependency of its own, only the `@vimeo/player`
+SDK. The primitives above come from `@playdeck/react`, whose peer range is
+React 19 only.
+
 `@playdeck/react` loads this for you when the source resolves to `vimeo`. The SDK
 is bundled as a dependency and imported dynamically — nothing is fetched from a
 Vimeo CDN. [Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md#vimeo) lists the URL
 forms that resolve to it, the ones that do not, and the options reachable
 through `Player.Root`.
+
+<!-- example:provider-setup-vimeo -->
+
+```tsx
+import * as Player from '@playdeck/react';
+
+// A Vimeo source is a URL in the `source` prop, the same as every other
+// provider. `?h=` carries the privacy hash of an unlisted video, which
+// `detectSource` keeps and hands to the embed.
+export const VimeoClip = () => (
+  <Player.Root
+    controls={false}
+    // No `providerOptions`: `dnt` is already on by default, and
+    // `suppressSeoMetadata` silences the SDK handshake for every Vimeo embed on
+    // the page, not just this one. That blast radius is a decision to make
+    // deliberately, not to inherit from an example.
+    source="https://vimeo.com/76979871?h=8272103f6e"
+  >
+    <Player.Viewport>
+      <Player.Media />
+      <Player.Controls>
+        <Player.PlayButton />
+        <Player.SeekSlider />
+        <Player.Time type="current" />
+        <Player.FullscreenButton />
+      </Player.Controls>
+      {/* Vimeo has more URL forms than Playdeck reads. A form it does not read
+          is refused by `detectSource`, and the refusal names the URL. */}
+      <Player.ErrorDisplay />
+    </Player.Viewport>
+  </Player.Root>
+);
+```
+
+<!-- /example -->
+
+## Without React
+
+Reach for this package directly when you are writing a provider adapter, or
+hosting a player somewhere other than React.
 
 <!-- example:provider-vimeo -->
 
@@ -135,6 +179,11 @@ SDK you have installed, not as a contract Playdeck controls.
   all rather than a guess — the field is absent from every patch, not present
   holding `null`. Pinned by "pins the liveness gap" in `test/index.test.ts`
   (#187).
+- **`liveEdge` is `unavailable` / `provider`.** `@vimeo/player@2.30.4` has no
+  live concept anywhere to build one on. This adapter's own `seekable` is
+  synthesised as `[{ start: 0, end: duration }]` (`src/playback.ts`), never
+  sourced from the SDK's own `getSeekable()`, which only underlines that
+  nothing here reads a real seekable window in the first place.
 - **The `[startTime, endTime]` window is this adapter's to enforce.** Vimeo
   carries a start as a `#t=` fragment on the embed url, which only keeps the
   embed from loading at zero — the seek this adapter issues when the player is

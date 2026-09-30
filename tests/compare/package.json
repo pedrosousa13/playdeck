@@ -1,0 +1,23 @@
+{
+  "name": "@playdeck/compare-libraries",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Private fixture pinning React video libraries for scripts/compare-libraries.mjs's byte comparison. Never published.",
+  "type": "module",
+  "devDependencies": {
+    "@playdeck/react": "workspace:*",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-player": "3.4.0",
+    "@vidstack/react": "1.15.6",
+    "media-chrome": "4.19.2",
+    "video.js": "8.24.0",
+    "@videojs/react": "10.0.0-beta.32",
+    "@videojs/core": "10.0.0-beta.32",
+    "@videojs/media": "10.0.0-beta.32",
+    "@videojs/spf": "10.0.0-beta.32",
+    "@videojs/store": "10.0.0-beta.32",
+    "@videojs/utils": "10.0.0-beta.32",
+    "esbuild": "0.28.1"
+  }
+}

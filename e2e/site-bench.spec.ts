@@ -1,5 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
-import { activationButton } from './locators';
+import {
+  activationButton,
+  controls,
+  media,
+  settingsMenu,
+  settingsTrigger
+} from './locators';
+import { HIGHLIGHT_MS } from '../apps/site/src/components/highlight-ms';
 
 /**
  * The bench on `/`: the switches, and the composition they build.
@@ -35,34 +42,61 @@ const composition = (page: Page) => page.locator('[data-bench-composition]');
 const position = (page: Page, group: 'source' | 'skin', value: string) =>
   page.locator(`[data-bench-switch="${group}"] [data-value="${value}"]`);
 
-/** The library's one opt-in stylesheet, as a consumer would import it. */
+/** One field's `<dd>` in the live stats readout, found by its `<dt>`'s exact
+ * text -- `BenchStats.tsx` pairs the two inside one wrapper `<div>`. */
+const statValue = (page: Page, label: string) =>
+  page
+    .locator('[data-bench-stats] > div')
+    .filter({ has: page.locator('dt', { hasText: new RegExp(`^${label}$`) }) })
+    .locator('dd');
+
+// Measured 2026-09-05 on CI run 33949679832 (Playwright's Linux WebKit,
+// hls.js 1.6.16, `preferManagedMediaSource: false`): right after hls.js
+// appends the first H.264 segments to the video `SourceBuffer` it created for
+// the 804p rung, the element itself throws `MEDIA_ERR_DECODE` ("Failed to
+// send data for decoding"), so `readyState` never passes 1 and hls.js's
+// `checkFragmentChanged` tick -- which requires exactly that -- never fires
+// `LEVEL_SWITCHED`. See `.out-of-scope/webkit-hls-decode.md` (#632).
+const skipWithoutWebKitHlsDecode =
+  'Playwright\'s Linux WebKit throws MEDIA_ERR_DECODE ("Failed to send data for decoding") on the element right after hls.js appends the first H.264 segments, so readyState never passes 1 and hls.js never fires LEVEL_SWITCHED -- measured 2026-09-05 on CI run 33949679832 (.out-of-scope/webkit-hls-decode.md, #632).';
+
+/** The library's two authored stylesheets, as a consumer would import them. */
 const THEME_IMPORT = "import '@playdeck/react/theme.css';";
+const DOCKED_IMPORT = "import '@playdeck/react/docked.css';";
 
 /**
- * The lines of the JSX block, from `<Player.Root` to its close.
+ * The composition from `<Player.Root` to the end, with the preamble cut off.
  *
- * The thesis paragraph says "the same six lines drive all five", so the count
- * is a number the page states in prose and the panel has to keep true. The
- * preamble above it — the theme import, the `const source` line — is not part
- * of it: those are lines a consumer writes above the composition, which is
- * exactly what lets the block below read identically whichever provider is
- * switched on.
+ * Found by index rather than by slicing a fixed number of leading lines: the
+ * preamble is a consumer's own lines above the composition -- the stylesheet
+ * import, the `const source` line -- and how many there are is not this
+ * helper's business. That is what lets the tree below read byte-identical
+ * whichever provider is switched on, which is the property the source-switch
+ * test below checks by comparing this before and after a press. `youtube` is
+ * the one position that would break that (`<Player.Poster showWhilePaused>`
+ * in `bench-composition.ts`), but the source-switch test never presses it.
  */
-const jsxBlock = (printed: string) => {
-  const lines = printed.split('\n');
-  const open = lines.findIndex((line) => line.startsWith('<Player.Root'));
-  const close = lines.findIndex((line) => line.startsWith('</Player.Root>'));
-  if (open === -1 || close <= open) {
-    throw new Error(`No <Player.Root> block in the composition:\n${printed}`);
+const tree = (printedText: string) => {
+  const open = printedText.indexOf('<Player.Root');
+  if (open === -1) {
+    throw new Error(
+      `No <Player.Root> block in the composition:\n${printedText}`
+    );
   }
-  return lines.slice(open, close + 1);
+  return printedText.slice(open);
 };
 
 const printed = (page: Page) => composition(page).innerText();
 
-/** The `const source` line of the preamble, which is what a source press moves. */
+/**
+ * The `const source` line of the preamble, which is what a source press
+ * moves. A quoted URL for every position but `hls`, whose own source pins
+ * `engine: 'hls.js'` and so prints as an object instead
+ * (`bench-composition.ts`'s `printSourceValue`) -- the alternation covers
+ * both shapes.
+ */
 const sourceLine = (printedText: string) => {
-  const match = /^const source = '[^']*';$/m.exec(printedText);
+  const match = /^const source = (?:'[^']*'|\{[^}]*\});$/m.exec(printedText);
   if (match === null) {
     throw new Error(`No source line in the composition:\n${printedText}`);
   }
@@ -79,47 +113,1044 @@ test('the composition is visible at rest', async ({ page }) => {
   await expect(activationButton(page)).toBeVisible();
 });
 
-test('the composition tracks both switches', async ({ page }) => {
+test('the composition panel is highlighted', async ({ page }) => {
+  await page.goto(landing);
+  await expect(
+    composition(page).locator('span[style*="--shiki"]').first()
+  ).toBeVisible();
+});
+
+test('the seek slider composes first, so the control bar keeps its two-row split', async ({
+  page
+}) => {
+  // `theme.css`'s control-surface rule wraps the composed children into two
+  // rows only because the seek slider is the first of them: its 100% basis is
+  // the first thing `flex-wrap` has to place, so it takes row one and
+  // everything after it falls to row two. A consumer who reorders the
+  // children loses the split -- which is exactly what happened here (#593):
+  // the bar rendered as three rows because the seek slider composed third.
+  await page.goto(landing);
+  await expect(page.locator('[data-bench-switch="source"]')).toBeVisible();
+
+  await activationButton(page).click();
+  // The bar is `hidden` until the press has produced a real player -- the
+  // default source is `hls`, so this is a real request to this site's own
+  // origin for the manifest and its first segment, same as
+  // `activateAndMeasure` below. The default 5s budget is tight enough for
+  // that request to occasionally miss it under CI's slower, shared runner,
+  // so this waits on the same 20s `activateAndMeasure` already uses for the
+  // identical wait.
+  await expect(controls(page)).toBeVisible({ timeout: 20_000 });
+
+  const firstChildPart = await controls(page).evaluate((element) =>
+    element.firstElementChild?.getAttribute('data-playdeck-part')
+  );
+  expect(firstChildPart).toBe('seek-slider');
+});
+
+test('the composition prints the full control tree, and tracks the source switch', async ({
+  page
+}) => {
   await page.goto(landing);
   await expect(composition(page)).toBeVisible();
 
-  // The page rests on `theme`, so the import is printed on arrival. That is a
-  // deliberate reversal: `none` is the honest position but an unstyled player
-  // is what a reader meets before pressing anything, and it reads as a broken
-  // embed rather than as an argument.
+  // The page rests on a skin that ships a stylesheet, so the import is printed
+  // on arrival rather than after a press.
   const atRest = await printed(page);
   expect(atRest).toContain(THEME_IMPORT);
-  expect(jsxBlock(atRest)).toHaveLength(6);
 
-  // The customisability argument, made by moving a real import rather than by
-  // describing one: `none` takes the one stylesheet the library publishes back
-  // out of the document as well as out of the printed composition.
-  await position(page, 'skin', 'none').click();
-  await expect(composition(page)).not.toContainText(THEME_IMPORT);
+  // Content rather than a line count: the panel prints the whole bar the
+  // island mounts, and both sides map over the one `BENCH_CONTROLS` tuple, so
+  // what this pins is that every name in that tuple reaches the page. The
+  // settings-menu lines pin `<QualityAndRateMenu />` inside
+  // `Player.SettingsMenuContent` -- the same tree `BenchIsland.tsx` mounts,
+  // per `bench-composition.ts`'s own `CONTROL_LINES.settingsMenu` -- rather
+  // than that component's own children, since the panel prints what mounts
+  // and nothing else.
+  for (const name of [
+    '<Player.SeekSlider />',
+    '<Player.PlayButton />',
+    '<Player.MuteButton />',
+    '<Player.VolumeSlider />',
+    '<Player.Time type="current" />',
+    '<Player.Time type="duration" />',
+    '<Player.CaptionsButton />',
+    '<Player.SettingsMenu>',
+    '<Player.SettingsMenuTrigger aria-label="Settings" />',
+    '<Player.SettingsMenuContent>',
+    '<QualityAndRateMenu />',
+    '<Player.PipButton />',
+    '<Player.FullscreenButton />'
+  ]) {
+    expect(atRest).toContain(name);
+  }
 
-  await position(page, 'skin', 'theme').click();
-  await expect(composition(page)).toContainText(THEME_IMPORT);
+  // Document order, checked as a position comparison rather than as an index
+  // into a hand-sliced array, so it does not depend on how many lines precede
+  // the tree. The seek slider opens the bar in `BENCH_CONTROLS`, and the
+  // printer and `BenchIsland` both map over that tuple, so the printed order
+  // is the mounted order or one of them has drifted.
+  expect(atRest.indexOf('<Player.SeekSlider />')).toBeLessThan(
+    atRest.indexOf('<Player.PlayButton />')
+  );
 
-  // And the source moves the line above the block rather than a prop inside
-  // it. The library detects a provider from the URL, so `source={source}` is
-  // the whole of `Player.Root`'s configuration whichever position is pressed —
-  // which is the claim the six-line count below is a check on. `vimeo` rather
-  // than `hls`: the switch offers hosted providers only now, and selecting a
-  // position moves the printed line without pressing play, so no network is
-  // needed here.
+  // The source switch moves the line above the block, not a prop inside it:
+  // the library detects a provider from the URL, so `source={source}` is the
+  // whole of `Player.Root`'s configuration whichever position is pressed.
+  // `vimeo` rather than the resting `hls`: selecting a position moves the
+  // printed line without pressing play, so no network is needed here whatever
+  // position is chosen -- `vimeo` just guarantees a change from whichever
+  // position the page happened to rest on.
   const before = await printed(page);
   await position(page, 'source', 'vimeo').click();
   await expect
     .poll(async () => sourceLine(await printed(page)))
     .not.toBe(sourceLine(before));
 
-  const after = await printed(page);
-  expect(jsxBlock(after)).toEqual(jsxBlock(before));
-  expect(jsxBlock(after)).toHaveLength(6);
+  // And nothing else inside the block moved with it. This is the assertion
+  // that catches the page and the player disagreeing: byte-identical trees
+  // across a provider change is the claim the panel is making. `youtube` is
+  // the one position whose `<Player.Poster>` carries `showWhilePaused`
+  // (`bench-composition.ts`), but neither the resting `hls` position nor the
+  // `vimeo` position pressed here is it, so no exception is reachable from
+  // this pair and the trees stay byte-identical as they always did.
+  expect(tree(await printed(page))).toBe(tree(before));
+});
 
-  // Six lines in every combination the two switches reach, not just the two
-  // above. Nothing either of them does may grow the block.
+/**
+ * `BenchIsland.tsx`'s `HlsExplainer`: what HLS is, printed only while the
+ * `hls` position is selected -- the other three positions are named by host,
+ * not by protocol, and carry no word that needs unpacking the same way. No
+ * press needed for either half: switching the source switch moves the
+ * printed composition without pressing play (see the source-switch test
+ * above), so this reaches `vimeo` with no third-party network to guard.
+ */
+test('the HLS explainer is visible at rest and gone once vimeo is selected', async ({
+  page
+}) => {
+  await page.goto(landing);
+  const explainer = page.locator('[data-bench-explainer]');
+  await expect(explainer).toBeVisible();
+
+  await position(page, 'source', 'vimeo').click();
+  await expect(explainer).toBeHidden();
+});
+
+test('the skin group offers theme and docked, in that order, and no third position', async ({
+  page
+}) => {
+  await page.goto(landing);
+  const skinButtons = page.locator('[data-bench-switch="skin"] [data-value]');
+  await expect(skinButtons).toHaveCount(2);
+  await expect(skinButtons.nth(0)).toHaveAttribute('data-value', 'theme');
+  await expect(skinButtons.nth(1)).toHaveAttribute('data-value', 'docked');
+});
+
+/**
+ * The maintainer's reversal on 2026-09-04: the skin fieldset used to be
+ * `hidden` below 48rem because `docked` was the resting position there and a
+ * switch with no visible effect on a fine pointer was worse than no switch.
+ * Now that `theme` rests at every width (the idle fade makes the floating bar
+ * a sound phone layout on its own), the switch is reachable everywhere --
+ * see `theme.css`'s own "below 48rem" comment for the fuller account.
+ */
+test('the skin fieldset is visible below 48rem', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto(landing);
+  await expect(page.locator('[data-bench-switch="source"]')).toBeVisible();
+  await expect(page.locator('[data-bench-switch="skin"]')).toBeVisible();
+});
+
+test('docked.css is a real <link>, in the document, when pressed, and theme.css is gone', async ({
+  page
+}) => {
+  await page.goto(landing);
+  await expect(composition(page)).toBeVisible();
+
+  const stylesheetHrefs = () =>
+    page.evaluate(() =>
+      Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map(
+        (link) => (link as HTMLLinkElement).href
+      )
+    );
+
+  // At rest, at every width, the resting skin is `theme`.
+  await expect
+    .poll(async () =>
+      (await stylesheetHrefs()).some((href) => href.includes('theme'))
+    )
+    .toBe(true);
+
+  await position(page, 'skin', 'docked').click();
+
+  // The switch is a swap, never a stack: `docked.css` arrives and `theme.css`
+  // leaves in the same commit, so both are never on the document at once.
+  await expect
+    .poll(async () => {
+      const hrefs = await stylesheetHrefs();
+      return {
+        docked: hrefs.some((href) => href.includes('docked')),
+        theme: hrefs.some((href) => href.includes('theme'))
+      };
+    })
+    .toEqual({ docked: true, theme: false });
+});
+
+// `CompositionPanel.tsx` clears the highlight `HIGHLIGHT_MS` after it is set,
+// and that timer restarts on every re-render of the panel by design (a second
+// flip cancels the pending clear and schedules a new one). This assertion is
+// checking that the highlight clears, not how fast, so its budget is a
+// multiple of the timer with real headroom over it -- a hand-picked literal a
+// few hundred ms over `HIGHLIGHT_MS` was tight enough to fail chromium and
+// firefox in CI on a commit that changed neither the panel nor the timer
+// (#744).
+const CHANGED_LINE_CLEAR_BUDGET_MS = HIGHLIGHT_MS * 5;
+
+test('a skin flip highlights the changed composition line, and the highlight clears', async ({
+  page
+}) => {
+  await page.goto(landing);
+  await expect(composition(page)).toBeVisible();
+
+  await position(page, 'skin', 'docked').click();
+
+  await expect
+    .poll(() => composition(page).locator('[data-changed]').count())
+    .toBeGreaterThan(0);
+
+  await expect
+    .poll(() => composition(page).locator('[data-changed]').count(), {
+      timeout: CHANGED_LINE_CLEAR_BUDGET_MS
+    })
+    .toBe(0);
+});
+
+/**
+ * The composition's preamble, the lines above `<Player.Root`. Point 6 of the
+ * spec depends on every combination printing exactly four: an import, a blank
+ * line, the `const source` line, a blank line -- never zero, now that `none`
+ * is gone and every remaining position ships a stylesheet.
+ */
+const preambleLines = (printedText: string) => {
+  const lines = printedText.split('\n');
+  const open = lines.findIndex((line) => line.startsWith('<Player.Root'));
+  return lines.slice(0, open);
+};
+
+test('the preamble is always four lines, in every combination', async ({
+  page
+}) => {
+  await page.goto(landing);
+  for (const [skinToken, importLine] of [
+    ['theme', THEME_IMPORT],
+    ['docked', DOCKED_IMPORT]
+  ] as const) {
+    await position(page, 'skin', skinToken).click();
+    for (const sourceToken of ['hls', 'youtube', 'vimeo']) {
+      await position(page, 'source', sourceToken).click();
+      await expect
+        .poll(async () => preambleLines(await printed(page)))
+        .toHaveLength(4);
+      const lines = preambleLines(await printed(page));
+      expect(lines[0]).toBe(importLine);
+      expect(lines[1]).toBe('');
+      expect(lines[3]).toBe('');
+    }
+  }
+});
+
+/**
+ * The maintainer's ruling on #594, pinned at rest: this is the structural half
+ * of that ruling, not a replacement for the two bounding-box tests below it.
+ * Those two prove the *rendered* result -- a real player's pixels, measured
+ * after an activation press -- while this one proves the *structure* the
+ * ruling is actually about: the viewport's own CSS grid, readable with the
+ * player dormant, no activation, no network beyond loading the page. Neither
+ * test is redundant with the other -- this one is the cheaper of the two and
+ * needs no activation to run; the other two are the proof that the structure
+ * this one checks produces the layout the ruling promises, at the cost of a
+ * real player attaching first. Losing either leaves a gap: drop this one and
+ * the exact regression #594 fixed (an unlayered rule quietly defeating
+ * `docked.css`) is guarded only by a slower pair; drop the other pair and
+ * nothing ever checks that the grid shape actually renders where the ruling
+ * says it should.
+ *
+ * The controls element exists in the DOM at rest in both skins and at both
+ * widths below (the island renders it hidden/empty before activation), so its
+ * own `grid-area` is readable without activation -- confirmed by measurement,
+ * not assumed.
+ */
+const gridShape = (page: Page) =>
+  page.evaluate(() => {
+    const vp = document.querySelector('[data-playdeck-part="viewport"]');
+    const ctrl = document.querySelector('[data-playdeck-part="controls"]');
+    if (vp === null) {
+      throw new Error('No viewport part in the document.');
+    }
+    return {
+      areas: getComputedStyle(vp).gridTemplateAreas,
+      controlsArea: ctrl === null ? null : getComputedStyle(ctrl).gridArea
+    };
+  });
+
+test("at 1440px, the resting theme keeps controls in the picture's own row, and docked gives them one of their own", async ({
+  page
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(landing);
+  // Waited on first, so hydration has actually happened before the next
+  // assertion: the island is `client:only`, and a grid read taken before it
+  // mounts would pass against the page's pre-hydration markup rather than
+  // against `Bench.astro`'s rule.
+  await expect(page.locator('[data-bench-switch="source"]')).toBeVisible();
+
+  const themed = await gridShape(page);
+  expect(themed.areas).toBe('"stack"');
+  expect(themed.controlsArea).toBe('stack');
+
+  await position(page, 'skin', 'docked').click();
+  const docked = await gridShape(page);
+  expect(docked.areas).toBe('"stack" "controls"');
+  expect(docked.controlsArea).toBe('controls');
+});
+
+/**
+ * Regression test for the defect where `Bench.astro` set
+ * `--playdeck-overlay-scrim` unconditionally on `.bench__stage`, so `theme`
+ * painted the bar with the same flat surface colour `docked` uses instead of
+ * `theme.css`'s own gradient default -- the bar still shared the picture's
+ * own grid cell (caught by the test above), but with no gradient it read as
+ * an opaque strip rather than a scrim. Structure alone does not catch that:
+ * this checks the paint.
+ *
+ * Read at rest, no activation, for the same reason `gridShape` above is: the
+ * controls part exists in the DOM before a press, only `hidden` (which
+ * resolves to `display: none`), and `display: none` does not stop a
+ * `getComputedStyle` read of an element's own other properties -- `position`
+ * and `background-image` cascade and compute the same whether or not the box
+ * is painted.
+ */
+const controlsPaint = (page: Page) =>
+  page.evaluate(() => {
+    const ctrl = document.querySelector('[data-playdeck-part="controls"]');
+    if (ctrl === null) {
+      throw new Error('No controls part in the document.');
+    }
+    const style = getComputedStyle(ctrl);
+    return { position: style.position, backgroundImage: style.backgroundImage };
+  });
+
+test('at 1440px, the resting theme paints the controls part with the scrim gradient, not a flat surface', async ({
+  page
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(landing);
+  await expect(page.locator('[data-bench-switch="source"]')).toBeVisible();
+
+  // Positioned off the normal flow and sharing the picture's own grid cell --
+  // `gridShape`'s `'stack'` read above already pins the cell it shares --
+  // rather than sitting `static` in a row of its own the way `docked` does.
+  const themed = await controlsPaint(page);
+  expect(themed.position).not.toBe('static');
+  expect(themed.backgroundImage).toContain('gradient');
+});
+
+/**
+ * The maintainer's reversal on 2026-09-04: `docked` is no longer the resting
+ * position below 48rem, so the shape a narrow reader actually rests on is now
+ * the same one the 1440px test above pins for `theme` -- controls sharing the
+ * picture's own grid cell, not a row of their own. `docked` is still reachable
+ * below 48rem: the switch is visible there now (see the fieldset-visibility
+ * test above), and pressing it still docks, which this file's "below 48rem,
+ * the resting theme bar overlays the picture, and docked still docks it
+ * there" test covers by pressing it explicitly.
+ */
+test('below 48rem, the resting theme keeps controls in the picture, and the skin switch is reachable', async ({
+  page
+}) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto(landing);
+  await expect(page.locator('[data-bench-switch="source"]')).toBeVisible();
+  await expect(page.locator('[data-bench-switch="skin"]')).toBeVisible();
+
+  const themed = await gridShape(page);
+  expect(themed.areas).toBe('"stack"');
+  expect(themed.controlsArea).toBe('stack');
+});
+
+/**
+ * `docked.css` draws the bar's top border from `--playdeck-color-hairline`
+ * (`border-block-start`, read here as the physical `border-top-color`
+ * Chromium reports), and `.bench__stage` is supposed to map that token to
+ * `--stage-hairline` so the line is always the stage's own dark line rather
+ * than whichever literal `docked.css` falls back to on its own. `--stage-*`
+ * never moves with `prefers-color-scheme`, so both schemes must agree.
+ */
+test('under docked, the bar’s top hairline is the stage’s own dark line in both colour schemes', async ({
+  page
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(landing);
+  await expect(page.locator('[data-bench-switch="source"]')).toBeVisible();
+  await position(page, 'skin', 'docked').click();
+
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    const borderTop = await controls(page).evaluate(
+      (el) => getComputedStyle(el).borderTopColor
+    );
+    expect(borderTop).toBe('rgb(38, 38, 46)');
+  }
+});
+
+/**
+ * The maintainer's own ruling on #594: the second theme has to differ in
+ * *layout*, not only in colour, or two themes that only repaint the same box
+ * read as a palette picker rather than as an argument that the markup is a
+ * consumer's own. `docked` docks -- the bar takes a row of its own below the
+ * picture -- and `theme` keeps floating over it exactly as before.
+ *
+ * Not `@real`: the bar is `hidden` until the activation press has produced a
+ * real player (`ControlBar` in `BenchIsland.tsx` hides it under `!ready`), so
+ * proving its position needs a real one -- but neither test below selects a
+ * source, so both press play on whatever the switch rests on, which is `hls`
+ * since `bench-sources.ts` lists it first. That request never leaves this
+ * origin, unlike the youtube.com/vimeo.com request a real player needed here
+ * before `hls` returned, so there is no third-party network for `@real` to be
+ * guarding these two against any more.
+ *
+ * Measured against `[data-playdeck-part="media"]` rather than the outer
+ * frame: the picture is the box either skin's own claim is about, and
+ * `media`'s own box is what the non-stretching assertion below needs too.
+ *
+ * Both skins are reachable at every width now (2026-09-04): the skin fieldset
+ * is visible below 48rem too, so the narrow test below presses `docked`
+ * explicitly rather than relying on it being the resting position -- `theme`
+ * is what a narrow reader actually rests on, and that is the case the ruling
+ * itself names as the one most worth getting right.
+ */
+/**
+ * The picture's own box, read only once it has stopped moving.
+ *
+ * `hls` is a real local decode now, not an iframe embed: `controls` becomes
+ * visible the moment activation reaches `ready` (`ControlBar`'s own gate),
+ * which is earlier than the moment the `<video>` element's real intrinsic
+ * dimensions have settled the media box into its final size -- measured, not
+ * assumed, after this test started failing by a few pixels on one assertion
+ * and a double-digit number of them on another between otherwise identical
+ * runs, always on this test and never elsewhere. Polling for two identical
+ * reads in a row is what a settled box actually means; a fixed extra delay
+ * would only have been a guess at how long that settling takes.
+ *
+ * That polling loop assumes the box it starts reading is already sized off
+ * the clip's own dimensions, which is not true on a slow WebKit run (#746):
+ * before metadata loads, a `<video>` reports the browser's own placeholder
+ * intrinsic size, 300x150, and two placeholder reads in a row are just as
+ * "stable" as two settled ones -- `Received: 2` against an expected ~2.39 is
+ * exactly that placeholder's ratio. The wait this function makes for
+ * `videoWidth` below, ahead of the loop, is what keeps a stable-but-wrong
+ * read like that one from ever reaching it.
+ */
+const stableBoundingBox = async (
+  locator: ReturnType<typeof media>
+): Promise<{ x: number; y: number; width: number; height: number }> => {
+  // Only for a `<video>`: both of this helper's callers (`activateAndMeasure`,
+  // below) always land on `hls`, the switch's default position and the only
+  // one neither test in this file ever moves it away from
+  // (`bench-sources.ts`), which renders a real `<video>` rather than a
+  // provider iframe -- `youtube` and `vimeo` mount an iframe with no
+  // `videoWidth` of its own, so this checks the element's own type rather
+  // than assuming every caller measures the same kind of source.
+  await expect
+    .poll(
+      () =>
+        locator.evaluate(
+          (el) => !(el instanceof HTMLVideoElement) || el.videoWidth > 0
+        ),
+      { timeout: 5_000 }
+    )
+    .toBe(true);
+  let previous: Awaited<ReturnType<typeof locator.boundingBox>> = null;
+  await expect
+    .poll(
+      async () => {
+        const current = await locator.boundingBox();
+        const stable =
+          current !== null &&
+          previous !== null &&
+          current.x === previous.x &&
+          current.y === previous.y &&
+          current.width === previous.width &&
+          current.height === previous.height;
+        previous = current;
+        return stable;
+      },
+      { timeout: 5_000 }
+    )
+    .toBe(true);
+  if (previous === null) {
+    throw new Error('Could not measure the picture.');
+  }
+  return previous;
+};
+
+const activateAndMeasure = async (page: Page) => {
+  await activationButton(page).click();
+  await expect(controls(page)).toBeVisible({ timeout: 20_000 });
+  const mediaBox = await stableBoundingBox(media(page));
+  const controlsBox = await controls(page).boundingBox();
+  if (controlsBox === null) {
+    throw new Error('Could not measure the bar.');
+  }
+  // Held on the bar before reading it: theme's own auto-hide must not catch
+  // this read mid-fade.
+  await page.mouse.move(
+    controlsBox.x + controlsBox.width / 2,
+    controlsBox.y + controlsBox.height / 2
+  );
+  return { controlsBox, mediaBox };
+};
+
+/**
+ * Every ready entry in `bench-sources.ts` is close to 2.39:1 -- `youtube` and
+ * `vimeo` at 2048x858 (2.3869), `hls` at its own clip's 1920x804 (2.3881) --
+ * cut from two different official releases of the same film rather than
+ * sharing one frame size. The one-decimal tolerance here is what lets this
+ * assertion hold for either without pinning it to whichever position the
+ * page happens to rest on.
+ */
+const expectNotStretched = (mediaBox: { width: number; height: number }) => {
+  expect(mediaBox.width / mediaBox.height).toBeCloseTo(2048 / 858, 1);
+};
+
+/**
+ * Below 48rem (2026-09-04): `Bench.astro`'s own "Letterboxed to 16:9" rule
+ * forces the stage to 16:9 regardless of the source's own ratio, so the
+ * picture's box disagrees with `expectNotStretched` above on purpose at this
+ * width -- that is the ruling, not a regression of it. `Media` still renders
+ * with `objectFit: 'contain'` (`viewport-media.tsx`), so the picture itself
+ * is still not stretched or cropped; what changed is the shape of the box
+ * it is contained in. Compared in pixels rather than as a ratio, the same
+ * way the new letterbox test below does, so both read the same tolerance.
+ */
+const expectLetterboxedTo169 = (box: { width: number; height: number }) => {
+  expect(Math.abs(box.height - (box.width * 9) / 16)).toBeLessThanOrEqual(1);
+};
+
+test('at 1440px, the themed bar overlays the picture and the docked bar sits below it', async ({
+  page
+}) => {
+  test.slow();
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  await page.goto(landing);
+  await expect(activationButton(page)).toBeVisible();
   await position(page, 'skin', 'theme').click();
-  await expect(composition(page)).toContainText(THEME_IMPORT);
-  expect(jsxBlock(await printed(page))).toHaveLength(6);
+  const themed = await activateAndMeasure(page);
+  // Over the picture: the bar's own box sits inside the picture's vertical
+  // span rather than under it.
+  expect(themed.controlsBox.y).toBeGreaterThanOrEqual(themed.mediaBox.y - 1);
+  expect(themed.controlsBox.y + themed.controlsBox.height).toBeLessThanOrEqual(
+    themed.mediaBox.y + themed.mediaBox.height + 1
+  );
+  expectNotStretched(themed.mediaBox);
+
+  await page.goto(landing);
+  await expect(activationButton(page)).toBeVisible();
+  await position(page, 'skin', 'docked').click();
+  const docked = await activateAndMeasure(page);
+  // Below the picture: the bar starts at or after the picture's own bottom
+  // edge, never inside it -- the assertion this ruling exists to add.
+  expect(docked.controlsBox.y).toBeGreaterThanOrEqual(
+    docked.mediaBox.y + docked.mediaBox.height - 1
+  );
+  expectNotStretched(docked.mediaBox);
+});
+
+test('below 48rem, the resting theme bar overlays the picture, and docked still docks it there', async ({
+  page
+}) => {
+  test.slow();
+  await page.setViewportSize({ width: 375, height: 800 });
+
+  await page.goto(landing);
+  await expect(activationButton(page)).toBeVisible();
+  await expect(page.locator('[data-bench-switch="skin"]')).toBeVisible();
+  const themed = await activateAndMeasure(page);
+  expect(themed.controlsBox.y).toBeGreaterThanOrEqual(themed.mediaBox.y - 1);
+  expect(themed.controlsBox.y + themed.controlsBox.height).toBeLessThanOrEqual(
+    themed.mediaBox.y + themed.mediaBox.height + 1
+  );
+  expectLetterboxedTo169(themed.mediaBox);
+
+  await page.goto(landing);
+  await expect(activationButton(page)).toBeVisible();
+  await position(page, 'skin', 'docked').click();
+  const docked = await activateAndMeasure(page);
+  expect(docked.controlsBox.y).toBeGreaterThanOrEqual(
+    docked.mediaBox.y + docked.mediaBox.height - 1
+  );
+  expectLetterboxedTo169(docked.mediaBox);
+});
+
+/**
+ * The letterbox ruling itself (2026-09-04): a stage shaped to Sprite
+ * Fright's own 2.39:1 is short enough at 375px wide that the floating bar --
+ * about 100px before the trim below -- covers most of it while visible.
+ * `Bench.astro`'s own "Letterboxed to 16:9" rule gives the bench the shape a
+ * real youtube.com or vimeo.com embed already keeps at every width, and
+ * `theme.css`'s own "below 48rem" query trims the bar to fit inside what
+ * letterboxing gives back. Both are proven here: the shape holds with no
+ * player mounted yet -- `#bench-stage` is static markup at rest, sized from
+ * `Bench.astro`'s own CSS alone -- and the bar's own height holds once a
+ * real player has replaced it.
+ *
+ * The bar's own ceiling moved from 76px to 100px in #736: that block used to
+ * also lower both touch-target floors to shrink the bar further, which was a
+ * WCAG defect (Playdeck commits to 44px, SC 2.5.5). With neither floor
+ * lowered any more, a locked-44px seek row plus a locked-44px button row plus
+ * this block's own trimmed padding (4px top, 4px bottom, no safe-area inset
+ * at this viewport) measures 96px -- still one seek row and one button row,
+ * not the third row #622 exists to prevent, so 100px is headroom on the
+ * measured figure rather than a second density budget. Red at the old 76
+ * threshold with both floors already fixed: this test measured the same
+ * 96px and failed `toBeLessThanOrEqual(76)`; green once raised to 100.
+ *
+ * 375x812 rather than the 375x800 the rest of this file's narrow tests use:
+ * the maintainer's own measurements for this ruling were taken at 812, a
+ * true iPhone viewport height, and the extra 12px changes nothing this test
+ * checks.
+ */
+test('below 48rem, the stage letterboxes to 16:9 and the bar fits under 100px', async ({
+  page
+}) => {
+  test.slow();
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(landing);
+  await expect(activationButton(page)).toBeVisible();
+
+  const stageBox = await page.locator('#bench-stage').boundingBox();
+  if (stageBox === null) {
+    throw new Error('Could not measure the stage.');
+  }
+  expect(
+    Math.abs(stageBox.height - (stageBox.width * 9) / 16)
+  ).toBeLessThanOrEqual(1);
+
+  await activationButton(page).click();
+  await expect(controls(page)).toBeVisible({ timeout: 20_000 });
+  const controlsBox = await controls(page).boundingBox();
+  if (controlsBox === null) {
+    throw new Error('Could not measure the bar.');
+  }
+  // Held on the bar before reading it: theme's own auto-hide must not catch
+  // this read mid-fade.
+  await page.mouse.move(
+    controlsBox.x + controlsBox.width / 2,
+    controlsBox.y + controlsBox.height / 2
+  );
+  expect(controlsBox.height).toBeLessThanOrEqual(100);
+});
+
+/**
+ * The live stats readout (`BenchStats.tsx`), on the default HLS position:
+ * "Ladder" carries the whole three-rung count `scripts/media-sprite-fright.mjs`
+ * encodes. The 20s budget matches `activateAndMeasure`'s own -- this is the
+ * same manifest-plus-first-segment request, read from a different part of
+ * the page.
+ *
+ * No `canPlayType` override here any more: `bench-sources.ts`'s own source
+ * for this position pins `engine: 'hls.js'` (`resolvePlayerSource`), so the
+ * bench reaches the hls.js engine on whichever browser is running it -- the
+ * mechanism this page actually ships, not a test-only stand-in for it.
+ * `packages/provider-hls` would otherwise auto-detect between hls.js and the
+ * browser's own HLS decoder (`provider-hls/src/index.ts`'s `nativeHls`
+ * check), and current Chromium answers "maybe" to that probe and would get
+ * routed onto the native decoder -- under which `selectQuality` is correctly
+ * `unavailable`, the same as it is for a plain progressive file, because that
+ * decoder publishes no ladder to this library. That auto-detection is exactly
+ * what the pinned engine bypasses. The ladder this test pins is the one
+ * hls.js publishes, the same reason `e2e/hls.spec.ts`'s own `hls-hls-js`
+ * fixture forces it for its story. Runs on every browser: hls.js parses the
+ * manifest and publishes the ladder before it ever tries to decode a
+ * segment, so this holds regardless of `skipWithoutWebKitHlsDecode` below.
+ */
+test('after a press, the live stats readout reports the three-rung ladder', async ({
+  page
+}) => {
+  await page.goto(landing);
+  await activationButton(page).click();
+  await expect(controls(page)).toBeVisible({ timeout: 20_000 });
+
+  await expect(statValue(page, 'Ladder')).toContainText('3', {
+    timeout: 20_000
+  });
+});
+
+/**
+ * The live stats readout (`BenchStats.tsx`), on the default HLS position: a
+ * real rendition is playing, so "Playing" carries a real height. Same setup
+ * as the ladder test above -- see there for why no `canPlayType` override is
+ * needed and why the engine is pinned to hls.js.
+ *
+ * Skipped on WebKit: unlike the ladder, which hls.js publishes straight from
+ * the manifest, a rendition only shows up here once the engine has decoded
+ * and started playing a segment, and that is exactly the step Playwright's
+ * Linux WebKit cannot get past. See `skipWithoutWebKitHlsDecode`.
+ */
+test('after a press, the live stats readout reports a real rendition', async ({
+  browserName,
+  page
+}) => {
+  test.skip(browserName === 'webkit', skipWithoutWebKitHlsDecode);
+
+  await page.goto(landing);
+  await activationButton(page).click();
+  await expect(controls(page)).toBeVisible({ timeout: 20_000 });
+
+  await expect(statValue(page, 'Playing')).toContainText(/\d+p/, {
+    timeout: 20_000
+  });
+});
+
+/**
+ * Touch-target floors on phones (#736). `theme.css` and `docked.css` each
+ * used to lower `--playdeck-control-min-size` to 2.5rem (40px) and
+ * `--playdeck-seek-slider-min-block-size` to 1.5rem (24px) inside their own
+ * `48rem` media query -- and the primitives read those two tokens directly as
+ * `min-width`/`min-height`, so whatever the query set was the floor. The
+ * maintainer's ruling holds Playdeck to WCAG 2.2 SC 2.5.5 Target Size
+ * (Enhanced), 44x44 CSS px, so neither floor may drop below that at any width.
+ *
+ * Measured in a real browser, against every narrow width this file already
+ * covers elsewhere, in both shipped skins -- reading the stylesheet's own
+ * header comment is exactly what shipped this defect (it calls 2.75rem "the
+ * locked" floor, while each file's own `48rem` media query overrode it
+ * anyway), so this reads `getBoundingClientRect()` on the actual rendered
+ * controls instead.
+ *
+ * Red: run against the stylesheets before the two lowering declarations were
+ * removed, all 8 cases here (4 widths x 2 skins) failed the button-width
+ * assertion, every one `Received: 40` against `Expected: >= 44` -- 40px
+ * being exactly the `2.5rem` the phone block set. Green on chromium and
+ * firefox after the removal.
+ */
+const narrowFloorViewports: readonly {
+  readonly width: number;
+  readonly height: number;
+  readonly hasTouch?: boolean;
+  readonly isMobile?: boolean;
+}[] = [
+  { width: 320, height: 720 },
+  { width: 360, height: 740, hasTouch: true, isMobile: true },
+  { width: 375, height: 800 },
+  { width: 375, height: 812 }
+];
+
+for (const viewport of narrowFloorViewports) {
+  test.describe(`touch targets hold at 44px, ${viewport.width}x${viewport.height} (#736)`, () => {
+    test.use({
+      viewport: { width: viewport.width, height: viewport.height },
+      hasTouch: viewport.hasTouch ?? false,
+      isMobile: viewport.isMobile ?? false
+    });
+
+    for (const skin of ['theme', 'docked'] as const) {
+      test(`the ${skin} skin`, async ({ page }) => {
+        test.slow();
+        await page.goto(landing);
+        await expect(activationButton(page)).toBeVisible();
+        if (skin === 'docked') {
+          await position(page, 'skin', 'docked').click();
+        }
+        await activationButton(page).click();
+        await expect(controls(page)).toBeVisible({ timeout: 20_000 });
+
+        const controlsBox = await controls(page).boundingBox();
+        if (controlsBox === null) {
+          throw new Error('Could not measure the bar.');
+        }
+        // Held on the bar before reading it, the same guard
+        // `activateAndMeasure` uses: theme's own auto-hide must not catch
+        // this read mid-fade.
+        await page.mouse.move(
+          controlsBox.x + controlsBox.width / 2,
+          controlsBox.y + controlsBox.height / 2
+        );
+
+        const geometry = await page.evaluate(() => {
+          const controlsEl = document.querySelector(
+            '[data-playdeck-part="controls"]'
+          );
+          const seekEl = document.querySelector(
+            '[data-playdeck-part="seek-slider"]'
+          );
+          if (controlsEl === null || seekEl === null) {
+            throw new Error('Missing a required control-bar part.');
+          }
+          // The same button-shaped-part list `e2e/site-bench.spec.ts`'s own
+          // '#622' row-fit test reads from the DOM rather than hand-picking:
+          // a control this clip does not gate on (captions, AirPlay) is
+          // simply absent from the result rather than throwing.
+          const buttonParts = [
+            'play-button',
+            'mute-button',
+            'captions-button',
+            'fullscreen-button',
+            'pip-button',
+            'airplay-button',
+            'settings-menu-trigger'
+          ];
+          const buttonRects = buttonParts
+            .flatMap((part) =>
+              Array.from(
+                controlsEl.querySelectorAll(`[data-playdeck-part="${part}"]`)
+              )
+            )
+            .filter((el) => (el as HTMLElement).offsetParent !== null)
+            .map((el) => {
+              const rect = el.getBoundingClientRect();
+              return {
+                width: rect.width,
+                height: rect.height,
+                top: rect.top,
+                left: rect.left,
+                right: rect.right,
+                bottom: rect.bottom
+              };
+            });
+          const seekRect = seekEl.getBoundingClientRect();
+          return {
+            buttonRects,
+            seekHeight: seekRect.height,
+            controlsScrollWidth: controlsEl.scrollWidth,
+            controlsClientWidth: controlsEl.clientWidth,
+            docScrollWidth: document.documentElement.scrollWidth,
+            docClientWidth: document.documentElement.clientWidth
+          };
+        });
+
+        // At least one button-shaped control renders at every width this
+        // file tests -- an empty result would let every assertion below pass
+        // vacuously.
+        expect(geometry.buttonRects.length).toBeGreaterThan(0);
+
+        for (const rect of geometry.buttonRects) {
+          expect(Math.round(rect.width)).toBeGreaterThanOrEqual(44);
+          expect(Math.round(rect.height)).toBeGreaterThanOrEqual(44);
+        }
+        expect(Math.round(geometry.seekHeight)).toBeGreaterThanOrEqual(44);
+
+        // Neither the bar nor the page scrolls sideways at this width.
+        expect(geometry.controlsScrollWidth).toBeLessThanOrEqual(
+          geometry.controlsClientWidth
+        );
+        expect(geometry.docScrollWidth).toBeLessThanOrEqual(
+          geometry.docClientWidth
+        );
+
+        // No two visible button-shaped controls overlap each other.
+        for (let i = 0; i < geometry.buttonRects.length; i++) {
+          for (let j = i + 1; j < geometry.buttonRects.length; j++) {
+            const a = geometry.buttonRects[i];
+            const b = geometry.buttonRects[j];
+            const overlaps =
+              a.left < b.right &&
+              b.left < a.right &&
+              a.top < b.bottom &&
+              b.top < a.bottom;
+            expect(overlaps).toBe(false);
+          }
+        }
+      });
+    }
+  });
+}
+
+/**
+ * The row-two overflow (#622), on the resting `theme` skin: at the desktop
+ * control size, five buttons plus the times overflowed 375px onto a third
+ * row. `theme.css`'s "below 48rem" query fixes the arithmetic (2.5rem
+ * buttons, no gap, trimmed padding) and hides `pip-button` under a coarse
+ * pointer -- see that file's own comments for the numbers.
+ *
+ * A dedicated `test.use` context rather than a bare `setViewportSize`: a
+ * coarse pointer is what a real phone has and what the fix's `pip-button`
+ * hide and the volume slider's own long-standing hide are both gated on, so
+ * a context with no touch would leave the volume slider in the row and
+ * contradict the maintainer's own report from a real device.
+ */
+test.describe('the phone control bar fits one row (#622)', () => {
+  test.use({
+    viewport: { width: 360, height: 740 },
+    hasTouch: true,
+    isMobile: true
+  });
+
+  test("every control-bar button shares the play button's row, and the bar is no taller than the seek row plus one control row", async ({
+    page
+  }) => {
+    test.slow();
+    await page.goto(landing);
+    await expect(activationButton(page)).toBeVisible();
+    await activationButton(page).click();
+    await expect(controls(page)).toBeVisible({ timeout: 20_000 });
+
+    const controlsBox = await controls(page).boundingBox();
+    if (controlsBox === null) {
+      throw new Error('Could not measure the bar.');
+    }
+    // Held on the bar before reading it, the same guard `activateAndMeasure`
+    // above uses: theme's own auto-hide must not catch this read mid-fade.
+    await page.mouse.move(
+      controlsBox.x + controlsBox.width / 2,
+      controlsBox.y + controlsBox.height / 2
+    );
+
+    const geometry = await page.evaluate(() => {
+      const controlsEl = document.querySelector(
+        '[data-playdeck-part="controls"]'
+      );
+      const seekEl = document.querySelector(
+        '[data-playdeck-part="seek-slider"]'
+      );
+      // Scoped to `controlsEl` rather than `document`: `SurfaceToggle`
+      // (`BenchIsland.tsx`) is `Player.PlayButton` too, full-bleed over the
+      // whole picture and BEFORE the bar in document order, so an unscoped
+      // query finds it first and reads the picture's own top instead of the
+      // bar's second row.
+      const playEl = controlsEl?.querySelector(
+        '[data-playdeck-part="play-button"]'
+      );
+      if (controlsEl === null || seekEl === null || playEl == null) {
+        throw new Error('Missing a required control-bar part.');
+      }
+      // Every button-shaped part the theme's own button rule carries
+      // (`theme.css`'s "every button-shaped part is carried by every button
+      // rule" test pins the same list), read from the DOM rather than
+      // hand-picked, so a control this clip does not gate on (captions,
+      // AirPlay) is simply absent from the result rather than throwing.
+      const buttonParts = [
+        'play-button',
+        'mute-button',
+        'captions-button',
+        'fullscreen-button',
+        'pip-button',
+        'airplay-button',
+        'settings-menu-trigger'
+      ];
+      const visibleTops = buttonParts
+        .flatMap((part) =>
+          Array.from(
+            controlsEl.querySelectorAll(`[data-playdeck-part="${part}"]`)
+          )
+        )
+        .filter((el) => (el as HTMLElement).offsetParent !== null)
+        .map((el) => el.getBoundingClientRect().top);
+      return {
+        controlsHeight: controlsEl.getBoundingClientRect().height,
+        seekHeight: seekEl.getBoundingClientRect().height,
+        playTop: playEl.getBoundingClientRect().top,
+        visibleTops
+      };
+    });
+
+    // `pip-button` is hidden under a coarse pointer, so this is play, mute,
+    // the settings trigger and fullscreen -- four, not the five the desktop
+    // size overflowed at.
+    expect(geometry.visibleTops.length).toBeGreaterThanOrEqual(3);
+    for (const top of geometry.visibleTops) {
+      expect(top).toBeCloseTo(geometry.playTop, 0);
+    }
+
+    // One control row's worth of slack (44px, the desktop control size, used
+    // as a safe upper bound) plus room for padding and gaps -- comfortably
+    // under the ~40px a genuine third row would add.
+    expect(geometry.controlsHeight).toBeLessThanOrEqual(
+      geometry.seekHeight + 44 + 24
+    );
+  });
+});
+
+/**
+ * The settings menu on a phone (issue #594's follow-up): opening the gear on
+ * the control bar used to anchor the menu inside the picture, above the
+ * trigger -- and the letterboxed 16:9 stage at 375px wide is only about
+ * 184px tall, shorter than the menu itself (Auto, three qualities, four
+ * rates, Restart), so the menu was cut off by the stage's own bounds.
+ * `theme.css`'s "menu, phone" rule turns it into a bottom sheet instead:
+ * `position: fixed`, pinned to the viewport rather than the stage, with a
+ * scrim behind it -- what YouTube and Vimeo do at this width.
+ *
+ * 375x812 rather than 375x800, matching the letterbox test above: a true
+ * iPhone viewport height, and what the maintainer's own report was measured
+ * against.
+ */
+test.describe('the settings menu is a bottom sheet on phones (#594 follow-up)', () => {
+  test.use({ viewport: { width: 375, height: 812 } });
+
+  test('the menu and every item sit inside the viewport, flush with its bottom, and a scrim tap closes it', async ({
+    page
+  }) => {
+    test.slow();
+    await page.goto(landing);
+    await expect(activationButton(page)).toBeVisible();
+    await activationButton(page).click();
+    await expect(controls(page)).toBeVisible({ timeout: 20_000 });
+
+    // Held on the bar before opening the menu, the same guard the letterbox
+    // and row-fit tests above use: theme's own auto-hide must not catch this
+    // mid-fade.
+    const controlsBox = await controls(page).boundingBox();
+    if (controlsBox === null) {
+      throw new Error('Could not measure the bar.');
+    }
+    await page.mouse.move(
+      controlsBox.x + controlsBox.width / 2,
+      controlsBox.y + controlsBox.height / 2
+    );
+
+    await settingsTrigger(page).click();
+    await expect(settingsMenu(page)).toBeVisible();
+
+    const viewport = page.viewportSize();
+    if (viewport === null) {
+      throw new Error('No viewport size.');
+    }
+
+    const menuBox = await settingsMenu(page).boundingBox();
+    if (menuBox === null) {
+      throw new Error('Could not measure the menu.');
+    }
+    expect(menuBox.x).toBeGreaterThanOrEqual(0);
+    expect(menuBox.y).toBeGreaterThanOrEqual(0);
+    expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(viewport.width);
+    expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(viewport.height);
+    // The sheet's whole point: its bottom edge is the viewport's own, not
+    // the stage's.
+    expect(menuBox.y + menuBox.height).toBeCloseTo(viewport.height, 0);
+
+    const items = await settingsMenu(page)
+      .locator('[role="menuitem"], [role="menuitemradio"]')
+      .all();
+    expect(items.length).toBeGreaterThan(0);
+    for (const item of items) {
+      const box = await item.boundingBox();
+      if (box === null) continue; // Not every rung is necessarily visible.
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+      expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+    }
+
+    // A tap on the scrim -- well above the sheet, which even at its tallest
+    // (`max-block-size: 70vh`, 568px of 812) leaves the top of the screen
+    // clear -- closes the menu. No code catches this deliberately: the
+    // shadow paints the dimming but is not an element, so the tap reaches
+    // past it to whatever the page has there, which
+    // `SettingsMenuContent`'s existing outside-pointerdown listener already
+    // treats as outside the menu.
+    await page.mouse.click(viewport.width / 2, 10);
+    await expect(settingsMenu(page)).toBeHidden();
+  });
 });

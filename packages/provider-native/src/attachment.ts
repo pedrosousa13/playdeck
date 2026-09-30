@@ -12,8 +12,10 @@ import {
   toRanges,
   type EmitProviderState
 } from './adapter-values.js';
+import type { NativeAudioTracks } from './audio-tracks.js';
 import type { NativePlayback } from './playback.js';
 import type { NativePresentation } from './presentation.js';
+import type { NativeRemotePlayback } from './remote-playback.js';
 import type { NativeTextTracks } from './text-tracks.js';
 
 export type NativeAttachmentDeps = {
@@ -26,8 +28,16 @@ export type NativeAttachmentDeps = {
     'applyInitialPosition' | 'cancelPendingReplay' | 'handlers'
   >;
   readonly presentation: Pick<NativePresentation, 'handlers'>;
+  readonly remotePlayback: Pick<
+    NativeRemotePlayback,
+    'attachListeners' | 'destroy'
+  >;
   readonly textTracks: Pick<
     NativeTextTracks,
+    'attachListeners' | 'discover' | 'destroy'
+  >;
+  readonly audioTracks: Pick<
+    NativeAudioTracks,
     'attachListeners' | 'discover' | 'destroy'
   >;
   // Drops the host's provider-state subscribers on destroy.
@@ -55,7 +65,9 @@ export const createNativeAttachment = (
     getCapabilities,
     playback,
     presentation,
+    remotePlayback,
     textTracks,
+    audioTracks,
     clearStateListeners
   }: NativeAttachmentDeps
 ): NativeAttachment => {
@@ -270,13 +282,14 @@ export const createNativeAttachment = (
   };
   // `seekable` on every one of these, withheld or not: only `buffered` carries
   // the ambiguity, and `progress` is the event that reports the window moving.
-  const onProgress = (): void =>
+  const onProgress = (): void => {
     emit(
       syncLive({
         ...syncBuffered(),
         seekable: toRanges(media.seekable)
       })
     );
+  };
   // The one point inside an attachment where an empty buffer is news rather
   // than silence. `emptied` fires from the media load algorithm, which empties
   // the element's buffer as it runs, so here the ranges are gone rather than
@@ -299,7 +312,7 @@ export const createNativeAttachment = (
     lastBuffered = [];
     emit(syncLive({ buffered: [] }));
   };
-  const onVolumeChange = (originalEvent: Event): void =>
+  const onVolumeChange = (originalEvent: Event): void => {
     emit(
       { muted: media.muted, volume: media.volume },
       providerEvent('volumechange', originalEvent, {
@@ -307,13 +320,15 @@ export const createNativeAttachment = (
         volume: media.volume
       })
     );
-  const onRateChange = (originalEvent: Event): void =>
+  };
+  const onRateChange = (originalEvent: Event): void => {
     emit(
       { playbackRate: media.playbackRate },
       providerEvent('ratechange', originalEvent, {
         playbackRate: media.playbackRate
       })
     );
+  };
 
   const addListeners = (): void => {
     media.addEventListener('play', onPlay);
@@ -397,6 +412,9 @@ export const createNativeAttachment = (
       addListeners();
       textTracks.attachListeners();
       textTracks.discover();
+      audioTracks.attachListeners();
+      audioTracks.discover();
+      remotePlayback.attachListeners();
       emitMediaState();
     },
     load: () => {
@@ -418,6 +436,8 @@ export const createNativeAttachment = (
       playback.cancelPendingReplay();
       if (attached) removeListeners();
       textTracks.destroy();
+      audioTracks.destroy();
+      remotePlayback.destroy();
       if (!media.paused) {
         try {
           media.pause();

@@ -52,6 +52,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { referencePackageDirs } from './reference-packages.mjs';
 import { PROVIDER_SETUP_DOC, providerDocuments } from './provider-pages.mjs';
 import { GUIDES, guideDocument } from './guide-pages.mjs';
+import { COMPARISON_FILES, comparisonDocument } from './comparison-page.mjs';
+import { iconizeFeaturesTable } from './comparison-icons.mjs';
 
 const repoRoot = import.meta.env.PLAYDECK_REPO_ROOT;
 const packagesDir = join(repoRoot, 'packages');
@@ -445,6 +447,14 @@ const providers = defineCollection({
  * title, lifted out of the document's own `# ` heading, and the position the
  * table in that module puts it at. Still no schema, for the reason the two
  * above have none — nothing here is frontmatter.
+ *
+ * One entry in this collection is not a workbench document: the library
+ * comparison guide, composed from `docs/comparison/`'s three generated files
+ * by `src/comparison-page.mjs` (issue #637). It sits in this collection rather
+ * than a fourth one because it wants the exact route the other four already
+ * get — `/guides/<slug>/`, listed on `/guides` — and a collection of its own
+ * would only re-earn that; `syncComparison` below is the one sync path in this
+ * loader that is not driven by `GUIDES`.
  */
 const guides = defineCollection({
   loader: {
@@ -489,22 +499,67 @@ const guides = defineCollection({
         });
       };
 
+      /**
+       * The comparison guide, stored under `comparison` and ordered after
+       * every entry `GUIDES` lists. `comparisonDocument` reads and composes
+       * all three source files itself, so unlike `sync` above this takes no
+       * argument naming one of them — any of the three changing is a reason
+       * to recompose the whole thing.
+       *
+       * `filePath` names `method.md` alone, the fullest of the three source
+       * files, rather than all three: the field holds one path and a document
+       * assembled from three of them has no single truer answer, so this
+       * picks the one a reader landing here from an error would most want to
+       * open first.
+       *
+       * The icon pass runs after `renderMarkdown`, on its `html` and nothing
+       * else it returns, for the reason `src/comparison-icons.mjs`'s own
+       * header gives: a footnote reference is only a real link once Markdown
+       * has compiled it, and this rewrites the table around that link rather
+       * than the reference itself.
+       */
+      const syncComparison = async () => {
+        const { title, markdown } = comparisonDocument(repoRoot);
+        const path = join(repoRoot, COMPARISON_FILES[2]);
+        const rendered = await renderMarkdown(markdown, {
+          fileURL: pathToFileURL(path)
+        });
+        store.set({
+          id: 'comparison',
+          data: { title, order: GUIDES.length },
+          body: markdown,
+          filePath: relative(root, path),
+          digest: generateDigest(markdown),
+          rendered: { ...rendered, html: iconizeFeaturesTable(rendered.html) }
+        });
+      };
+
       store.clear();
       await Promise.all(GUIDES.map((guide, order) => sync(guide, order)));
+      await syncComparison();
 
-      // Dev only: `watcher` is absent in a build. `apps/storybook/` is outside
-      // everything this dev server watches, so without this an edit to one of
-      // those documents would leave the open guide page showing the previous
-      // text until the server was restarted — the same stale-copy failure these
-      // pages exist to prevent, arriving by another route.
+      // Dev only: `watcher` is absent in a build. `apps/storybook/` and
+      // `docs/comparison/` are both outside everything this dev server
+      // watches, so without this an edit to one of those documents would
+      // leave the open guide page showing the previous text until the server
+      // was restarted — the same stale-copy failure these pages exist to
+      // prevent, arriving by another route.
       if (watcher === undefined) {
         return;
       }
       for (const { file } of GUIDES) {
         watcher.add(join(repoRoot, file));
       }
+      for (const file of COMPARISON_FILES) {
+        watcher.add(join(repoRoot, file));
+      }
       const reload = async (changed: string) => {
         const path = relative(repoRoot, changed).split(sep).join('/');
+        if (COMPARISON_FILES.includes(path)) {
+          await syncComparison();
+          logger.info(`Reloaded ${path}`);
+          return;
+        }
         const order = GUIDES.findIndex((entry) => entry.file === path);
         if (order === -1) {
           return;

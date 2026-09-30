@@ -328,22 +328,21 @@ test('both menus stay inside the document at 640px with text at 200%', async ({
 //
 // Unlike the widths above, neither of these fails without the fix — measured, the
 // settings box top is 102 at 640 and 192 at 800 on the pre-fix file. That is the
-// point: this is the no-regression half, and what it can catch is a correction
-// that moves a menu which was already placed correctly.
+// point: this is the no-regression half for the settings menu, and what it can
+// catch there is a correction that moves a menu which was already placed
+// correctly. The captions menu has no pre-#467 measurement to regress
+// against — it was a static, in-flow box until #467 gave it the same
+// position/bottom/right/z-index as the settings menu — so asserting `upward`
+// for it here is a first pin of new behaviour, not a regression check.
 for (const width of [640, 900] as const) {
-  test(`the settings menu still opens upward from its trigger at ${width}px`, async ({
+  test(`both menus still open upward from their trigger at ${width}px`, async ({
     page
   }) => {
     await page.setViewportSize({ width, height: 720 });
     await page.goto(composition);
     await expect(controls(page)).toBeVisible();
 
-    // Only the settings menu is asked where it opens. `CaptionsMenu` is a preset
-    // that renders `SettingsMenuContent` itself and takes no className from the
-    // composition, so no placement rule reaches it at any width: it is a static,
-    // in-flow box inside the control row. That is why it satisfies #413's
-    // containment criteria for free, and it is not this issue's to change.
     for (const menu of menus)
-      await assertPlacement(page, menu, { upward: menu.name === 'settings' });
+      await assertPlacement(page, menu, { upward: true });
   });
 }

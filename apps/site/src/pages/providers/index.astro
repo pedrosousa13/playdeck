@@ -50,47 +50,40 @@ const adapters = (dirs, title) =>
     <h1>Provider setup</h1>
     <p class="lead">
       Which source values each provider accepts, which it refuses, and what its
-      own options are, rendered from{' '}
-      <code>docs/provider-setup.md</code>. There is no second copy: the page and
-      the document in the repository are the same text. Native files and HLS
-      share a page, because the document covers them in one passage and one
-      extension table.
+      own options are, rendered from <code>docs/provider-setup.md</code>. There
+      is no second copy: the page and the document in the repository are the
+      same text. Native files and HLS share a page, because the document covers
+      them in one passage and one extension table.
     </p>
     <Sweep form="accent" />
 
-    {
-      /* A list and not a grid of cards, which is the finding the package index
-       * already records: boxes of identical size are what a layout defaults to
-       * when nothing has been decided about the contents, and they cost a
-       * reader every name being close enough to the next to compare in one
-       * glance. */
-    }
+    {/* A list and not a grid of cards, which is the finding the package index
+     * already records: boxes of identical size are what a layout defaults to
+     * when nothing has been decided about the contents, and they cost a
+     * reader every name being close enough to the next to compare in one
+     * glance. */}
     <ul class="providers">
-      {
-        providers.map((provider) => (
-          <li class="provider">
-            <h2 class="provider__name">
-              <a href={providerUrl(provider.slug)}>{provider.title}</a>
-            </h2>
-            <ul class="provider__adapters">
-              {adapters(provider.packages, provider.title).map((entry) => (
-                <li>
-                  <code>{entry.name}</code> {entry.description}
-                </li>
-              ))}
-            </ul>
-          </li>
-        ))
-      }
+      {providers.map((provider) => (
+        <li class="provider">
+          <h2 class="provider__name">
+            <a href={providerUrl(provider.slug)}>{provider.title}</a>
+          </h2>
+          <ul class="provider__adapters">
+            {adapters(provider.packages, provider.title).map((entry) => (
+              <li>
+                <code>{entry.name}</code> {entry.description}
+              </li>
+            ))}
+          </ul>
+        </li>
+      ))}
     </ul>
 
-    {
-      /* The comparison, under the list of ways in. It moved here from `/`
-       * (#542's rework): a reader deciding between providers is the reader of
-       * this index, and the landing page's job is the thesis rather than the
-       * reference. The component brings its own heading, its own lede and its
-       * own scroll container, so this page adds nothing around it. */
-    }
+    {/* The comparison, under the list of ways in. It moved here from `/`
+     * (#542's rework): a reader deciding between providers is the reader of
+     * this index, and the landing page's job is the thesis rather than the
+     * reference. The component brings its own heading, its own lede and its
+     * own scroll container, so this page adds nothing around it. */}
     <ProviderTruth />
   </main>
 </Base>
