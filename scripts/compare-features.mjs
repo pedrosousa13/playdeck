@@ -126,7 +126,7 @@ export const libraries = [
   { name: 'Vidstack', module: '@vidstack/react' },
   { name: 'Media Chrome', module: 'media-chrome' },
   { name: 'Video.js', module: 'video.js' },
-  { name: 'Video.js 10 (beta)', module: '@videojs/react' }
+  { name: 'Video.js 10 (rc)', module: '@videojs/react' }
 ];
 
 /**

@@ -589,7 +589,7 @@ export const libraries = [
     requiredChunk: () => false
   },
   {
-    name: 'Video.js 10 (beta)',
+    name: 'Video.js 10 (rc)',
     package: '@videojs/react',
     entry: 'entries/videojs-react.tsx',
     composition:
