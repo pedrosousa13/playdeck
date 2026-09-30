@@ -15,12 +15,12 @@ packages:
 # Every floor names the advisory behind it, so a later reader can tell when an
 # entry has outlived its reason. Six entries cover five advisories, because
 # js-yaml takes one entry per major for the reason given below:
-#   brace-expansion >=5.0.9  GHSA-rgw5-rvv9-x895 (high, DoS)
+#   brace-expansion >=5.0.12 GHSA-rgw5-rvv9-x895 (high, DoS)
 #   postcss         >=8.5.23 GHSA-fxqj-rqcc-2cmp (moderate, sourceMappingURL)
 #   sharp           >=0.35.0 GHSA-f88m-g3jw-g9cj (high, libvips CVEs)
 #   nanoid          >=3.3.17 GHSA-2v37-7h3g-55p8 (high, infinite loop on zero size)
-#   js-yaml         >=3.15.1 GHSA-5p4m-2wfm-xmqj (high, quadratic CPU in !!omap)
-#   js-yaml         >=4.3.1  GHSA-5p4m-2wfm-xmqj (same advisory, 4.x range)
+#   js-yaml         >=3.15.2 GHSA-5p4m-2wfm-xmqj (high, quadratic CPU in !!omap)
+#   js-yaml         >=4.3.2  GHSA-5p4m-2wfm-xmqj (same advisory, 4.x range)
 # None of the five reaches a publishable package as the graph resolves today.
 # Publishable means the manifest does not set `private`, and nothing else --
 # scripts/workspace-packages.mjs holds that definition, and it is not the
@@ -53,12 +53,12 @@ packages:
 # `nanoid` carries a ceiling for the same reason: unbounded, it resolves to
 # 6.x, which is ESM-only and requires Node >=22 -- below our 20.19 floor.
 overrides:
-  brace-expansion@<5.0.9: '>=5.0.9'
+  brace-expansion@<5.0.12: '>=5.0.12'
   postcss@<8.5.23: '>=8.5.23'
   sharp@<0.35.0: '>=0.35.0'
   nanoid@<3.3.17: '>=3.3.17 <4'
-  js-yaml@3: '>=3.15.1 <4'
-  js-yaml@4: '>=4.3.1 <5'
+  js-yaml@3: '>=3.15.2 <4'
+  js-yaml@4: '>=4.3.2 <5'
 allowBuilds:
   esbuild@0.28.1: true
 # A 24-hour hold, in minutes, before a newly published version is eligible to
@@ -80,3 +80,8 @@ minimumReleaseAgeExclude:
   - react@19.2.8
   - '@publint/pack@0.1.6'
   - publint@0.3.22
+  # wrangler@4.144.0 and its miniflare@5.20260926.1-alpha: close the undici
+  # advisories affecting >=7.0.0 <7.29.1, reached through miniflare -- the
+  # fix hasn't sat 24h yet, so it can't clear the hold on its own.
+  - wrangler@4.144.0
+  - miniflare@5.20260926.1-alpha
