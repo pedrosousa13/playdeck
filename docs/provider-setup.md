@@ -817,6 +817,58 @@ The workbench stages this same adapter in
 `apps/storybook/stories/supplied-provider.stories.tsx`, pointed at its own
 local clip through `providerOptions` rather than the placeholder URL above.
 
+### Upgrading a custom provider to 1.2.0
+
+1.2.0 adds four required fields to `PlayerCapabilities`: `liveEdge`,
+`selectQualityAuto`, `selectAudioTrack`, and `remotePlayback`. Any object
+built to satisfy that type — a custom provider adapter, or a capabilities
+fixture in a test — needs all four before it type-checks again, the same
+compatibility impact `providerPoster` had when it landed in 1.1.0.
+
+- `liveEdge` — whether the provider can report a live edge for
+  `seekToLiveEdge` to land on. A provider with no way to answer this for any
+  source returns `{ status: 'unavailable', reason: 'provider' }`.
+- `selectQualityAuto` — whether an automatic-choice item belongs beside the
+  published rungs in `QualityMenu`, distinct from `selectQuality`: a provider
+  can select real rungs while refusing an auto choice. A provider with no
+  quality ladder at all returns `{ status: 'unavailable', reason: 'provider' }`.
+- `selectAudioTrack` — whether the provider can switch between alternate audio
+  renditions. A provider with no audio-track surface to wire the command to
+  returns `{ status: 'unavailable', reason: 'provider' }`.
+- `remotePlayback` — whether the element exposes the Remote Playback API
+  `RemotePlaybackButton` reads. A provider with no media element to read
+  `remote` off returns `{ status: 'unavailable', reason: 'provider' }`.
+
+Each reports the same `unavailable`/`provider` pair `chapters` and
+`providerPoster` already use for a capability the adapter itself leaves out
+entirely, as opposed to `source` or `browser`, which name a limit that is not
+the adapter's own.
+
+<!-- example:provider-setup-1-2-0-capabilities -->
+
+```ts
+import type { Availability, PlayerCapabilities } from '@playdeck/core';
+
+// The four fields 1.2.0 added to `PlayerCapabilities`, filled with the value
+// a provider that does not support the feature returns for each -- the same
+// `unavailable`/`provider` pair `examples/provider-setup-file-adapter.tsx`'s
+// `unimplemented` already reports for every other capability its reference
+// adapter leaves out.
+const unsupported: Availability = { status: 'unavailable', reason: 'provider' };
+
+export const newCapabilitiesFields: Pick<
+  PlayerCapabilities,
+  'liveEdge' | 'selectQualityAuto' | 'selectAudioTrack' | 'remotePlayback'
+> = {
+  liveEdge: unsupported,
+  selectQualityAuto: unsupported,
+  selectAudioTrack: unsupported,
+  remotePlayback: unsupported
+};
+```
+
+<!-- /example -->
+
 ## What a refusal reads like
 
 A refused source is published on `PlayerState.error` and rendered by
