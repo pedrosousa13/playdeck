@@ -35,8 +35,10 @@ The guides at [playdeck.video/guides](https://playdeck.video/guides/) carry the
 full styling contract ([**Contract**](https://playdeck.video/guides/contract/)),
 the caption guidance ([**Captions**](https://playdeck.video/guides/captions/)),
 the quality-selection guidance ([**Quality**](https://playdeck.video/guides/quality/)),
-the playback-rate guidance ([**Playback rate**](https://playdeck.video/guides/playback-rate/))
-and the chapters guidance ([**Chapters**](https://playdeck.video/guides/chapters/)).
+the playback-rate guidance ([**Playback rate**](https://playdeck.video/guides/playback-rate/)),
+the chapters guidance ([**Chapters**](https://playdeck.video/guides/chapters/)),
+the audio-track guidance ([**Audio tracks**](https://playdeck.video/guides/audio-tracks/))
+and the live-playback guidance ([**Live**](https://playdeck.video/guides/live/)).
 Every primitive below is also staged, running, in this repository's Storybook
 workbench, which is a development tool rather than a published surface.
 
@@ -340,7 +342,9 @@ Each overlay renders only when its own state calls for it — nothing is drawn
 disabled, with one exception: `LiveIndicator` stays mounted where its
 `liveEdge` capability is unavailable, as a disabled badge rather than an
 active button, for the reason given beside the capability-gating rule above
-(see the comment in the example below):
+(see the comment in the example below). `LiveIndicator`'s data attributes,
+`PlayerState.live` and which providers can report it are covered in
+[**Live**](https://playdeck.video/guides/live/):
 
 <!-- example:react-overlays -->
 
@@ -482,9 +486,15 @@ Video.js all read, so an existing sprite-generation pipeline needs no change.
 The file is fetched once, lazily, on the first hover or the first keyboard
 focus of the input — never at mount — and, once loaded, `SeekSlider` renders a
 `thumbnail` part cropped to the cue for the pointer or focus position, above
-the track. Without the prop, nothing extra renders. Every cue's image URL
-passes through the same allowlist every other URL in the player does; a
-refused `thumbnails` URL or a refused cue image publishes the same
+the track. Without the prop, nothing extra renders. A relative cue image
+URL — the ordinary output of a sprite generator — resolves against the VTT
+file's own final address, not the page's, before it ever reaches the
+allowlist below, so the allowlist judges the same address the `<img>` will
+actually request
+(`@playdeck/core`'s [`parseThumbnailCues`](https://github.com/pedrosousa13/playdeck/blob/main/packages/core/README.md#thumbnail-preview)).
+Every cue's image URL passes through the same allowlist every other URL in
+the player does; a refused `thumbnails` URL or a refused cue image publishes
+the same
 [A URL prop the allowlist refused](https://github.com/pedrosousa13/playdeck/blob/main/packages/core/README.md#a-url-prop-the-allowlist-refused)
 notice `mediaMetadata`'s artwork does. The part's name and its `data-state`
 values are documented in the
@@ -558,6 +568,35 @@ Text entry (a text `<input>`, `<textarea>`, `<select>` or content-editable
 region) still swallows every key, and a focused button, link or checkbox keeps
 Space and `Enter` for itself.
 
+In `global` mode, an arrow key leaves a widget outside the player alone when
+that widget answers arrows itself: a native radio or range input, or anything
+inside an element carrying one of the WAI-ARIA composite-widget roles that
+navigate with arrows — `radiogroup`, `tablist`, `slider`, `spinbutton`,
+`listbox`, `menu`, `menubar`, `tree`, `treegrid`, `grid` or `toolbar`. Neither
+the bound shortcut nor `preventDefault()` runs there, so a radio group, a
+tab strip or a slider elsewhere on the page keeps its own roving-focus
+navigation instead of losing it to volume or seek. The exemption only ever
+applies outside the player: `Player.Viewport`'s own DOM node where the
+region renders inside one, this region's own node otherwise. An arrow key
+still belongs to the layer wherever focus sits inside that boundary, its own
+sliders included and a consumer's own control composed elsewhere in the same
+viewport included, and still fires normally on any other page content.
+
+`PageUp` and `PageDown` are in-region only in `global` mode: outside that same
+boundary the layer does not handle either key and does not call
+`preventDefault()`, on any target — `<body>`, a plain scrollable element, a
+`grid` or `tablist`, or anything else — so the page keeps its own paging.
+Unlike the arrow exemption above, this one does not check what the target is;
+native paging outranks the shortcut everywhere outside the player. The rule
+follows the two keys themselves rather than the actions bound to them, so
+`shortcuts={{ seekForwardLarge: 'l', toggleFullscreen: 'PageUp' }}` — which
+frees `PageUp` from the default `seekForwardLarge` binding before handing it
+to `toggleFullscreen` — keeps that in-region-only behaviour for the rebound
+key: outside the boundary it still does nothing, and inside it it toggles
+fullscreen instead of seeking. `PageUp`/`PageDown` at their defaults seek
+inside the boundary exactly as described above, and scoped mode is unchanged
+either way.
+
 `shortcuts` controls the layer. `shortcuts={false}` turns it off entirely — in
 `global` mode no `document` listener is attached at all. An object is a partial
 override map of action to a `KeyboardEvent.key` value, an array of them, or
@@ -587,10 +626,12 @@ consumer who wants one on its own, the same way `CaptionsMenu` is for
 captions — covered in [**Quality**](https://playdeck.video/guides/quality/),
 [**Playback rate**](https://playdeck.video/guides/playback-rate/) and
 [**Chapters**](https://playdeck.video/guides/chapters/). `AudioTrackMenu` is
-the same shape for `state.audioTracks`: it lists a rung per published track
-and marks whichever one carries `active: true` — there is no "Auto" row and
-no sibling selection field, since an audio track carries its own selection
-(see the **Audio track** glossary entry in `CONTEXT.md`).
+the same shape for `state.audioTracks`, covered in
+[**Audio tracks**](https://playdeck.video/guides/audio-tracks/). It lists a
+rung per published track and marks whichever one carries `active: true`.
+There is no "Auto" row and no sibling selection field, since an audio track
+carries its own selection (see the **Audio track** glossary entry in
+`CONTEXT.md`).
 
 <!-- example:react-menus -->
 

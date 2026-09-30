@@ -86,7 +86,7 @@ export {
   unsupportedSourceFormat
 } from './source-detection.js';
 
-export { textTrackLabel } from './text-tracks.js';
+export { plainCueText, textTrackLabel } from './text-tracks.js';
 
 export { createTimeBoundary } from './time-boundary.js';
 

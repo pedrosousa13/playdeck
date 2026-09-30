@@ -46,6 +46,14 @@ class ControlledIntersectionObserver implements IntersectionObserver {
   readonly scrollMargin = '0px';
   private readonly callback: IntersectionObserverCallback;
   private target?: Element;
+  // Armed by `primeNextObserve` below and consumed by the next `observe()`
+  // call -- models the spec's own guarantee that a freshly observed target is
+  // always queued an initial notification carrying its actual current
+  // geometry (#746). `undefined` by default, so every existing test's
+  // `observe()` call -- the one `use-activation.ts` makes when it first
+  // builds the observer -- delivers nothing on its own, exactly as before;
+  // only a test that primes one models a re-observe reporting fresh geometry.
+  private primedEntry?: Partial<IntersectionObserverEntry>;
 
   constructor(
     callback: IntersectionObserverCallback,
@@ -62,9 +70,30 @@ class ControlledIntersectionObserver implements IntersectionObserver {
   disconnect = vi.fn();
   observe = vi.fn((target: Element) => {
     this.target = target;
+    if (this.primedEntry === undefined) return;
+    const entry = this.primedEntry;
+    this.primedEntry = undefined;
+    this.callback([this.buildEntry(target, entry)], this);
   });
   takeRecords = () => [];
   unobserve = vi.fn();
+
+  private buildEntry(
+    target: Element,
+    entry: Partial<IntersectionObserverEntry>
+  ): IntersectionObserverEntry {
+    const rect = target.getBoundingClientRect();
+    return {
+      boundingClientRect: rect,
+      intersectionRatio: 1,
+      intersectionRect: rect,
+      isIntersecting: true,
+      rootBounds: null,
+      target,
+      time: 0,
+      ...entry
+    };
+  }
 
   /**
    * Reports an entry for the observed target, as a scroll would. Defaults to
@@ -73,23 +102,7 @@ class ControlledIntersectionObserver implements IntersectionObserver {
    * `boundingClientRect` to describe a partial or an oversized one instead.
    */
   intersect(entry: Partial<IntersectionObserverEntry> = {}) {
-    const target = this.target!;
-    const rect = target.getBoundingClientRect();
-    this.callback(
-      [
-        {
-          boundingClientRect: rect,
-          intersectionRatio: 1,
-          intersectionRect: rect,
-          isIntersecting: true,
-          rootBounds: null,
-          target,
-          time: 0,
-          ...entry
-        }
-      ],
-      this
-    );
+    this.callback([this.buildEntry(this.target!, entry)], this);
   }
 
   /**
@@ -101,20 +114,23 @@ class ControlledIntersectionObserver implements IntersectionObserver {
    */
   intersectBatch(entries: readonly Partial<IntersectionObserverEntry>[]) {
     const target = this.target!;
-    const rect = target.getBoundingClientRect();
     this.callback(
-      entries.map((entry) => ({
-        boundingClientRect: rect,
-        intersectionRatio: 1,
-        intersectionRect: rect,
-        isIntersecting: true,
-        rootBounds: null,
-        target,
-        time: 0,
-        ...entry
-      })),
+      entries.map((entry) => this.buildEntry(target, entry)),
       this
     );
+  }
+
+  /**
+   * Arms the entry the *next* `observe()` call delivers synchronously,
+   * modelling a freshly (re-)observed target's initial notification (#746):
+   * `use-activation.ts`'s viewport re-sync calls `unobserve()` then
+   * `observe()` on the same target, and a real engine queues that call an
+   * initial entry reflecting its actual current geometry, independent of
+   * whatever the observer's own internal crossing state was stuck at.
+   * Defaulted the same way `intersect`'s partial is.
+   */
+  primeNextObserve(entry: Partial<IntersectionObserverEntry> = {}) {
+    this.primedEntry = entry;
   }
 }
 
@@ -953,6 +969,125 @@ test('an engine resuming its own auto-pause keeps ownership, not a takeover', as
   await vi.waitFor(() =>
     expect(pauseWithOrigin).toHaveBeenNthCalledWith(2, 'autoplay')
   );
+});
+
+// #746: the diagnosis behind this ruling found that on WebKit, the crossing
+// that should follow exactly the scenario above -- an engine-resumed
+// auto-pause -- is sometimes never delivered to *any* `IntersectionObserver`
+// on the target, even a second, independent one watching the same element.
+// When that happens the observer callback that pauses on exit is never
+// invoked at all, so nothing but a backstop can catch it. This test never
+// calls `observer.intersect(...)` after the resume -- modelling the missed
+// crossing directly -- and primes the entry the re-sync's own `unobserve()` +
+// `observe()` delivers instead, with the target already out of view, the way
+// a quick second scroll-out would leave it by the time that re-check runs.
+//
+// Demonstrated red: run against `use-activation.ts` before
+// `resyncViewportObserver` and the timer the ownership listener's `play`
+// handler schedules existed, this failed --
+//
+//   AssertionError: expected "pauseWithOrigin" to be called with arguments:
+//   [ 'autoplay' ]
+//
+//   Number of calls: 1
+//
+// -- because the only `pauseWithOrigin('autoplay')` call was the first exit,
+// and nothing paused the resumed playback a second time: the observer
+// callback was never invoked, and there was nothing else to catch it.
+test('a bounded re-check pauses a resume the observer never reported leaving view', async () => {
+  const { controller, fake, observer, pauseWithOrigin } =
+    await setUpViewportPlayback();
+  await playAs(controller, fake, 'autoplay');
+  act(() =>
+    observer.intersect({ isIntersecting: false, intersectionRatio: 0 })
+  );
+  await vi.waitFor(() =>
+    expect(pauseWithOrigin).toHaveBeenCalledExactlyOnceWith('autoplay')
+  );
+  act(() => fake.emit({ playback: 'paused' }, pauseEvent));
+
+  vi.useFakeTimers();
+  // Primed so the re-sync's own `observe()` call is what reports the target
+  // out of view -- no `observer.intersect(...)` of this test's own ever does,
+  // which is the point: the observer callback the existing exit/re-entry
+  // tests rely on is never invoked here at all.
+  observer.primeNextObserve({ isIntersecting: false, intersectionRatio: 0 });
+  // The engine resumes the media on its own -- no `playWithOrigin` call of
+  // ours precedes this, so `engineResumedOwnPause` is what grants ownership
+  // back, exactly as the "an engine resuming its own auto-pause" test above
+  // stages it.
+  act(() => fake.emit({ playback: 'playing' }, playEvent));
+
+  await act(() => vi.advanceTimersByTimeAsync(0));
+
+  expect(pauseWithOrigin).toHaveBeenNthCalledWith(2, 'autoplay');
+});
+
+// The backstop's own restraint, mirrored against the two guards the observer
+// callback already applies: it must never override a pause or a playback a
+// viewer or a consumer owns, and it must never act on a target that is
+// genuinely still in view. The first half schedules a real re-check -- an
+// autoplay resume grants `'autoplaying'` ownership, exactly what schedules
+// one -- and only then lets the viewer take over and pause it, so the
+// assertion is on the re-check's own ownership guard at the time it actually
+// runs, not merely on nothing having been scheduled at all.
+//
+// Neither half can be un-written -- there is no prior commit where
+// `resyncViewportObserver` existed without these guards -- so each was
+// falsified against its own named substitute mutation in
+// `use-activation.ts`, run in isolation and reverted after
+// (`docs/agents/demonstrated-red.md`'s fallback):
+//
+//   Mutation 1, for the user-owned half: delete the
+//   `playbackOwnership !== 'autoplaying'` early return *and* replace the
+//   `unobserve`/`observe` call with a direct, unconditional
+//   `controller.pauseWithOrigin('autoplay')` -- the re-check with no
+//   restraint left at all. Red at the first assertion:
+//
+//     AssertionError: expected "pauseWithOrigin" to not be called at all,
+//     but actually been called 1 times
+//     1st pauseWithOrigin call: [ "autoplay" ]
+//      ❯ activation.test.tsx:1049:31 (the first `not.toHaveBeenCalled()`)
+//
+//   Mutation 2, for the in-view half: leave the ownership guard intact and
+//   only replace `unobserve`/`observe` with the same direct,
+//   unconditional pause -- bypassing just `meetsThreshold`, not ownership.
+//   The first assertion now passes (the ownership guard alone already
+//   protects it, confirming that guard's own coverage), and red moves to
+//   the second:
+//
+//     AssertionError: expected "pauseWithOrigin" to not be called at all,
+//     but actually been called 1 times
+//     1st pauseWithOrigin call: [ "autoplay" ]
+//      ❯ activation.test.tsx:1058:31 (the second `not.toHaveBeenCalled()`)
+//
+// Both pass again with the mutation reverted (this file's actual state).
+test('the re-check leaves a user-owned pause and an in-view resume alone', async () => {
+  const { controller, fake, observer, pauseWithOrigin } =
+    await setUpViewportPlayback();
+
+  vi.useFakeTimers();
+  await playAs(controller, fake, 'autoplay');
+  await playAs(controller, fake, 'user');
+  await act(() => controller.pauseWithOrigin('user'));
+  act(() => fake.emit({ playback: 'paused' }, pauseEvent));
+  pauseWithOrigin.mockClear();
+
+  // If the re-check ran regardless of ownership, this primed out-of-view
+  // entry is what would make it fire a pause.
+  observer.primeNextObserve({ isIntersecting: false, intersectionRatio: 0 });
+  await act(() => vi.advanceTimersByTimeAsync(0));
+  expect(pauseWithOrigin).not.toHaveBeenCalled();
+
+  // A fresh autoplay resume, with the target genuinely still in view when
+  // the re-check's own `observe()` call reports it: it must not treat a
+  // target it finds in view as anything to act on.
+  await playAs(controller, fake, 'autoplay');
+  observer.primeNextObserve({ isIntersecting: true, intersectionRatio: 1 });
+  await act(() => vi.advanceTimersByTimeAsync(0));
+
+  expect(pauseWithOrigin).not.toHaveBeenCalled();
+  expect(controller.getState().playback).toBe('playing');
 });
 
 // The rule's other edge, and the reason it is not "unowned plays become

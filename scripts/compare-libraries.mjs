@@ -356,25 +356,46 @@ export const libraries = [
     composition: 'core + native provider, no control parts',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 22162 bytes measured 2026-09-23 -- 21.642578125 KB, 21.64 KB to two
-    // places, rounded up to the next 0.25 KB. The few bytes past the
-    // previous 22134-byte figure are #755's shared own-property lookup
-    // (`ownEntry`, `provider-loaders.ts`), which the other three Playdeck
-    // rows below picked up the same way. See the `libraries` doc comment
-    // above for what raising this means. What carried this row past
-    // 21.50 KB is #754's copy of a supplied-kind explicit source object:
-    // `copySuppliedSourceValue` and `copySuppliedSourceObject`
-    // (`provider-loaders.ts`) -- the depth cap, the `ancestors` cycle guard,
-    // the node budget that bounds the copy's own total size, the plain-value
-    // walk, and the `try`/`catch` that makes the whole copy throw-safe --
-    // plus `use-activation.ts`'s `echoSource` bounding its own
-    // `JSON.stringify` call the same way, for a refused source's own error
-    // message. All of it sits in code every composition here reaches
-    // regardless of which parts it renders, so all four Playdeck rows moved
-    // together. The whole distance from the last committed figure is this
-    // issue's: that figure was 21.29 KB, measured the same day (2026-09-23)
-    // before this change, per `results.md` on `main`.
-    ceilingKb: 21.75
+    // 22292 bytes measured 2026-09-24 -- 21.76953125 KB, 21.77 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 21.75 KB is #746's viewport re-sync backstop in `use-activation.ts`:
+    // the `resyncTimeout` ref, the `resyncViewportObserver` callback and the
+    // scheduling it adds to the ownership listener's `play` handler. That
+    // code sits in every composition here reaches regardless of which parts
+    // it renders, so all four Playdeck rows moved together (the "Playdeck"
+    // row below grew too, from 22.29 KB to 22.43 KB, without needing its own
+    // ceiling raised). The whole distance from the last committed figure is
+    // this issue's: that figure was 21.64 KB (22160 bytes), measured the
+    // same day (2026-09-24) before this change, per `results.md` on `main`.
+    //
+    // 22581 bytes measured 2026-09-28 -- 22.0517578125 KB, 22.05 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 22 KB is #797's `plainCueText` (`@playdeck/core`) replacing its chain
+    // of sequential `.replace` calls with one regex and a callback, which
+    // this composition's native provider reaches through its own cue-text
+    // passthrough. The whole distance from the last committed figure is
+    // this issue's: that figure was 22.00 KB (22526 bytes), measured the
+    // same day (2026-09-28) before this change, per `results.md` on `main`.
+    //
+    // Measures 22.19 KB (22724 bytes) after #802's fix leaving arrow keys to
+    // a widget outside the player that answers them itself -- up from
+    // 22.05 KB (22581 bytes) the same day (2026-09-28), per `results.md` on
+    // `main` -- which stays under this ceiling with no raise needed. The
+    // growth is `controls.tsx`'s own new role list and containment check,
+    // part of every composition here regardless of which parts it renders.
+    //
+    // 22804 bytes measured 2026-09-29 -- 22.26953125 KB, 22.27 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 22.25 KB is naming a supplied provider's own registration key in its
+    // load-failure message instead of "undefined": `use-activation.ts`'s
+    // `suppliedProviderLabel` and the `WeakMap` `provider-loaders.ts` adds to
+    // back it (`suppliedDetectRegistrationKeys`). Both sit in every
+    // composition this fixture builds regardless of provider, the same way
+    // `use-activation.ts`'s existing code already does. The whole distance
+    // from the last committed figure is this change's: that figure was
+    // 22.19 KB (22724 bytes), measured the same day (2026-09-29) before this
+    // change, per `results.md` on `main`.
+    ceilingKb: 22.5
   },
   {
     name: 'Playdeck',
@@ -391,7 +412,55 @@ export const libraries = [
     // The whole distance from the last committed figure is this issue's:
     // that figure was 21.96 KB, measured the same day (2026-09-23) before
     // this change, per `results.md` on `main`.
-    ceilingKb: 22.5
+    //
+    // Still measures 22.43 KB after #746's viewport re-sync backstop
+    // (`use-activation.ts`) -- up from 22.29 KB the same day, per the "no
+    // parts" row's comment above -- which stays under this ceiling with no
+    // raise needed.
+    //
+    // 23064 bytes measured 2026-09-28 -- 22.5234375 KB, 22.52 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 22.5 KB is #797's `plainCueText` (`@playdeck/core`): the native
+    // provider's own cue-text passthrough grew into a call to it, which this
+    // composition's native provider reaches. The whole distance from the
+    // last committed figure is this issue's: that figure was 22.45 KB
+    // (22986 bytes), measured the same day (2026-09-28) before this change,
+    // per `results.md` on `main`.
+    //
+    // Measures 22.74 KB (23289 bytes) after #799's fix for a class-based or
+    // frozen supplied adapter losing its own methods on the queued-play
+    // path -- up from 22.70 KB (23240 bytes) the same day (2026-09-28), per
+    // `results.md` on `main` -- which stays under this ceiling with no
+    // raise needed. The growth is `use-activation.ts`'s own queued-play
+    // branch, part of every composition this fixture builds regardless of
+    // provider: the copy-free `Proxy` that replaces the old `{ ...adapter,
+    // load: ... }` reads every property through `Reflect.get` and binds
+    // each function to the real adapter, which this row's own bundle
+    // reaches the same way every other row here reaches the rest of
+    // `@playdeck/react`.
+    //
+    // 23327 bytes measured 2026-09-28 -- 22.7802734375 KB, 22.78 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 22.75 KB is #800's fix for a supplied registration's `detect` result
+    // claiming a built-in source type: `detectSourceWithProviders`'s
+    // string branch now copies `detect`'s own return through
+    // `copySuppliedSourceObject` before trusting anything about it -- the
+    // same copy the explicit-object path already ran, closing a getter
+    // that could answer one way to the check below and a different way to
+    // `loadProvider`'s later dispatch -- and checks the copy's own `type`
+    // against the reserved-name list, alongside the registration-key check
+    // already there. Both reach every composition this fixture builds
+    // regardless of provider. The whole distance from the last committed
+    // figure is this issue's: that figure was 22.74 KB (23289 bytes),
+    // measured the same day (2026-09-28) before this change, per
+    // `results.md` on `main`.
+    //
+    // Measures 22.84 KB (23393 bytes) after #802's fix leaving arrow keys to
+    // a widget outside the player that answers them itself, the same
+    // change described on the "no parts" row above -- up from 22.78 KB
+    // (23327 bytes) the same day (2026-09-28), per `results.md` on `main`
+    // -- which stays under this ceiling with no raise needed.
+    ceilingKb: 23
   },
   {
     name: 'Playdeck (play-only)',
@@ -401,15 +470,51 @@ export const libraries = [
       'core + primitives + native provider + one control (PlayButton)',
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 23933 bytes measured 2026-09-23 -- 23.3720703125 KB, 23.37 KB to two
+    // 24066 bytes measured 2026-09-24 -- 23.501953125 KB, 23.50 KB to two
+    // places, rounded up to the next 0.25 KB (23.50 itself is not far
+    // enough: the row is 2 bytes past 23.5 KB exactly). What carried this
+    // row past 23.5 KB is #746's viewport re-sync backstop, the same change
+    // described on the "no parts" row above. The whole distance from the
+    // last committed figure is this issue's: that figure was 23.37 KB
+    // (23929 bytes), measured the same day (2026-09-24) before this change,
+    // per `results.md` on `main`.
+    //
+    // 24338 bytes measured 2026-09-28 -- 23.7675781250 KB, 23.77 KB to two
     // places, rounded up to the next 0.25 KB. What carried this row past
-    // 23.25 KB is #754's supplied-kind source copy, the same change
-    // described on the "no parts" row above; the same row's #755
-    // own-property lookup accounts for the few bytes past the previous
-    // 23905-byte figure. The whole distance from the last committed figure
-    // is this issue's: that figure was 23.05 KB, measured the same day
-    // (2026-09-23) before this change, per `results.md` on `main`.
-    ceilingKb: 23.5,
+    // 23.75 KB is #797's `plainCueText` (`@playdeck/core`) growing to decode
+    // decimal and hexadecimal numeric character references, which this
+    // composition's native provider reaches through its own cue-text
+    // passthrough. The whole distance from the last committed figure is this
+    // issue's: that figure was 23.64 KB (24203 bytes), measured the same day
+    // (2026-09-28) before this change, per `results.md` on `main`.
+    //
+    // 24644 bytes measured 2026-09-28 -- 24.06640625 KB, 24.07 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 24 KB is #802's fix leaving arrow keys to a widget outside the player
+    // that answers them itself: `handleShortcut`'s new containment-gated
+    // check, the role list it closes against, the native radio/range check
+    // beside it, and the viewport-boundary lookup the containment check
+    // runs against, all reach every composition that renders
+    // `Player.Controls`, this one's `PlayButton` included. The whole
+    // distance from the last committed figure is this issue's: that figure
+    // was 23.90 KB (24471 bytes), measured the same day (2026-09-28) before
+    // this change, per `results.md` on `main`.
+    //
+    // 24858 bytes measured 2026-09-29 -- 24.271484375 KB, 24.28 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 24.25 KB is storing a literal `__proto__` key as an own data property
+    // in two places that build an object from a supplied kind's own input,
+    // rather than as the object's own prototype: `provider-loaders.ts`'s
+    // `copySuppliedSourceValue` (the supplied source copy) and
+    // `sanitizeSuppliedProviderOptions` (the supplied `providerOptions` bag),
+    // both switched from bracket assignment to `Object.defineProperty`.
+    // Every composition here reaches both through `use-activation.ts`'s own
+    // calls into `detectSourceWithProviders` and `loadProvider`, regardless
+    // of whether it renders a supplied provider. The whole distance from the
+    // last committed figure is this change's: that figure was 24.24 KB,
+    // measured the same day (2026-09-29) before this change, per
+    // `results.md` on `main`.
+    ceilingKb: 24.5,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
@@ -420,15 +525,40 @@ export const libraries = [
       "core + primitives + native provider + control bar (5 of Media Chrome's 7 controls)",
     requiredChunk: (chunk) =>
       chunk.moduleIds.some((id) => id.includes('/provider-native/')),
-    // 27053 bytes measured 2026-09-23 -- 26.4189453125 KB, 26.42 KB to two
+    // 27187 bytes measured 2026-09-24 -- 26.5498046875 KB, 26.55 KB to two
     // places, rounded up to the next 0.25 KB. What carried this row past
-    // 26.25 KB is #754's supplied-kind source copy, the same change
-    // described on the "no parts" row above; the same row's #755
-    // own-property lookup accounts for the few bytes past the previous
-    // 27026-byte figure. The whole distance from the last committed figure
-    // is this issue's: that figure was 26.09 KB, measured the same day
-    // (2026-09-23) before this change, per `results.md` on `main`.
-    ceilingKb: 26.5
+    // 26.5 KB is #746's viewport re-sync backstop, the same change described
+    // on the "no parts" row above. The whole distance from the last
+    // committed figure is this issue's: that figure was 26.42 KB
+    // (27057 bytes), measured the same day (2026-09-24) before this change,
+    // per `results.md` on `main`.
+    //
+    // 27465 bytes measured 2026-09-28 -- 26.8212890625 KB, 26.82 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 26.75 KB is #797's `plainCueText` (`@playdeck/core`) growing to decode
+    // decimal and hexadecimal numeric character references, the same change
+    // described on the "play-only" row above. The whole distance from the
+    // last committed figure is this issue's: that figure was 26.70 KB
+    // (27341 bytes), measured the same day (2026-09-28) before this change,
+    // per `results.md` on `main`.
+    //
+    // 27771 bytes measured 2026-09-28 -- 27.1201171875 KB, 27.12 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 27 KB is #802's arrow-key exemption, the same change described on the
+    // "play-only" row above, which this composition's control bar reaches
+    // the same way. The whole distance from the last committed figure is
+    // this issue's: that figure was 26.96 KB (27612 bytes), measured the
+    // same day (2026-09-28) before this change, per `results.md` on `main`.
+    //
+    // 27914 bytes measured 2026-09-29 -- 27.259765625 KB, 27.26 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 27.25 KB is the global-mode boundary check added for `PageUp`/
+    // `PageDown`, alongside the arrow-key exemption above, which this
+    // composition's control bar reaches the same way. The whole distance
+    // from the last committed figure is this change's: that figure was
+    // 27.24 KB (27896 bytes), measured the same day (2026-09-29) before this
+    // change, per `results.md` on `main`.
+    ceilingKb: 27.5
   },
   {
     name: 'react-player',

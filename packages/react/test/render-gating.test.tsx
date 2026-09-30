@@ -437,9 +437,11 @@ const PART_TABLE: Record<string, PartEntry> = {
     ]),
     mount: bare(Player.Controls)
   },
-  // No `usePlayerState` call at all -- only `usePlayer()` for the controller.
+  // `capabilities` (`seek`) gates whether a double tap is allowed to call
+  // the seek command at all. That it actually reads only this field is
+  // proven by `test/gestures.test.tsx`, not by this table entry.
   Gestures: {
-    fields: new Set(),
+    fields: new Set(['capabilities']),
     mount: bare(Player.Gestures)
   },
   // The whole `SettingsMenu` family is local `useState` (open/closed, roving

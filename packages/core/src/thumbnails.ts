@@ -20,6 +20,17 @@ export type ThumbnailCue = {
   // The payload URL with any `#xywh=` fragment removed. A non-xywh fragment,
   // if the file happens to carry one, is left exactly as the cue wrote it —
   // this module only ever strips the one fragment it understands.
+  //
+  // Resolved to an absolute URL against `parseThumbnailCues`'s own
+  // `baseUrl` argument, when one was given and resolution against it
+  // succeeded. Relative, root-relative or protocol-relative exactly as the
+  // cue wrote it otherwise: no `baseUrl` was given; `baseUrl` was not
+  // itself a valid absolute URL; `baseUrl` used a non-hierarchical scheme
+  // such as `data:` or `blob:`, which cannot resolve a relative reference
+  // against it either; or the payload contained a raw tab, newline or other
+  // C0 control character (see `parseThumbnailCues` and `resolveCueUrl` for
+  // all four). A consumer that runs this through its own URL allowlist
+  // before use sees whichever of those this field actually holds.
   readonly url: string;
   // `null` when the cue names no region at all, or names one this module
   // does not resolve to pixels (see `parseXywh` below).
@@ -106,6 +117,53 @@ const parseXywh = (
   };
 };
 
+// Whether a raw tab, carriage return, line feed, or any other C0 control
+// character (U+0000-U+001F) appears anywhere in `url`. A `charCodeAt` walk
+// rather than a regex containing those code points, the same way
+// `isPermittedSourceUrl`'s own `hasParserStrippedEdge` (`source-detection.ts`)
+// avoids one for its own edge-only check -- both sidestep `no-control-regex`.
+//
+// The WHATWG URL parser removes an ASCII tab or newline from anywhere in
+// its input, and a leading or trailing C0 control the same way
+// `hasParserStrippedEdge` already checks for -- so the string that parser
+// resolves is not the string the cue actually wrote. `resolveCueUrl` below
+// refuses to resolve a URL this flags, rather than have the allowlist judge
+// a cleaned-up string the cue never published: `'htt\tp://evil.example/x.jpg'`
+// contains a tab, so `isPermittedSourceUrl` already refuses it outright on
+// the raw string (the same rule `source-detection.ts` documents at length)
+// -- but once resolved, the tab is gone and the result is the unremarkable
+// `'http://evil.example/x.jpg'`, which the allowlist would wrongly permit.
+// Leaving the cue's URL exactly as written keeps the allowlist's verdict on
+// it identical to what it was before this module resolved anything.
+const hasUrlControlCharacter = (url: string): boolean => {
+  for (let index = 0; index < url.length; index += 1) {
+    if (url.charCodeAt(index) <= 0x1f) return true;
+  }
+  return false;
+};
+
+// Resolves a cue's payload URL against `baseUrl`, the same way a browser
+// resolves a relative URL discovered inside any other fetched document --
+// against that document's own address, never the page that requested it
+// (see `parseThumbnailCues`'s own comment for where `baseUrl` comes from
+// and why). The cue's URL is left exactly as it was written, rather than
+// resolved, in every one of these cases: no `baseUrl` was given; `url`
+// itself contains a raw tab, newline or other C0 control character (see
+// `hasUrlControlCharacter` above); or resolving `url` against `baseUrl`
+// throws -- which happens both for a `baseUrl` that is not itself a valid
+// absolute URL, and for one using a non-hierarchical scheme such as
+// `data:` or `blob:`, which has no path a relative reference can resolve
+// against. None of these drop the cue -- the same leniency `parseXywh`
+// above gives a fragment it does not recognise.
+const resolveCueUrl = (url: string, baseUrl: string | undefined): string => {
+  if (baseUrl === undefined || hasUrlControlCharacter(url)) return url;
+  try {
+    return new URL(url, baseUrl).href;
+  } catch {
+    return url;
+  }
+};
+
 // Splits the cue body (everything after the header line) into blocks
 // separated by one or more blank lines. A line of only whitespace counts as
 // blank here, more lenient than the spec's zero-length definition — real
@@ -137,7 +195,10 @@ const toBlocks = (lines: readonly string[]): readonly (readonly string[])[] => {
 // payload — is dropped silently rather than treated as a document-level
 // error: per-block leniency, not the header's all-or-nothing check, is what
 // decides whether a given cue survives.
-const parseCueBlock = (block: readonly string[]): ThumbnailCue | null => {
+const parseCueBlock = (
+  block: readonly string[],
+  baseUrl: string | undefined
+): ThumbnailCue | null => {
   const timingIndex = block.findIndex((line) => line.includes('-->'));
   if (timingIndex === -1) return null;
 
@@ -155,7 +216,7 @@ const parseCueBlock = (block: readonly string[]): ThumbnailCue | null => {
   if (payloadLine === undefined) return null;
 
   const { url, region } = parseXywh(payloadLine.trim());
-  return { startTime, endTime, url, region };
+  return { startTime, endTime, url: resolveCueUrl(url, baseUrl), region };
 };
 
 // A cap on the cues `parseThumbnailCues` will publish, so a hostile or
@@ -188,7 +249,22 @@ const THUMBNAIL_CUE_CAP = 100_000;
 // parsing stops the moment the cap is passed, rather than finishing the walk
 // only to discard the result, and the file publishes no cues at all rather
 // than the cues found before the cap.
-export const parseThumbnailCues = (vtt: string): readonly ThumbnailCue[] => {
+//
+// `baseUrl` is the address each cue's payload URL is resolved against --
+// exactly what a browser does for a relative URL it finds inside any other
+// fetched document: resolve against that document's own final address, not
+// the page that requested it. A caller that fetched the VTT file itself
+// should pass the response's own final address, not the URL it requested
+// the file with: those two differ across a redirect, and it is the
+// response's address a browser resolves a fetched document's own relative
+// URLs against. Omit `baseUrl` and every cue's `url` publishes exactly as
+// the file wrote it, relative forms included. See `ThumbnailCue.url` and
+// `resolveCueUrl` above for the other cases a cue's URL is left exactly as
+// written rather than resolved.
+export const parseThumbnailCues = (
+  vtt: string,
+  baseUrl?: string
+): readonly ThumbnailCue[] => {
   const withoutBom = vtt.charCodeAt(0) === 0xfeff ? vtt.slice(1) : vtt;
   const lines = withoutBom.split(/\r\n|\r|\n/);
   const headerLine = lines[0] ?? '';
@@ -209,7 +285,7 @@ export const parseThumbnailCues = (vtt: string): readonly ThumbnailCue[] => {
     ) {
       continue;
     }
-    const cue = parseCueBlock(block);
+    const cue = parseCueBlock(block, baseUrl);
     if (cue !== null) {
       cues.push(cue);
       if (cues.length > THUMBNAIL_CUE_CAP) return Object.freeze([]);

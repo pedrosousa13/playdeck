@@ -300,24 +300,34 @@ export const Media = ({
   // ref (rather than Viewport's stable-callback + separate `[ref]` effect):
   // Media is committed-source-gated and mounts its <video> late, so a `[ref]`
   // effect would run before the element exists and never forward the ref when
-  // it finally mounts. Consumer refs on Media are expected to be stable; the
-  // trade-off is that a volatile (inline) ref re-runs this callback each
-  // render — behavior-preserving, verified to not reload the provider. Only
-  // the native <video> branch attaches this; the iframe mounts aren't a video
-  // element. Declared before the committed-source gate returns to keep hook
-  // order stable.
+  // it finally mounts. `mediaRef` itself must still stay stable across
+  // renders -- a new identity makes React run the old callback's cleanup and
+  // the new one back to back, which tears the provider down and reloads it --
+  // so the consumer's ref is read from `consumerRef` rather than closed over
+  // directly, and kept current below. Only the native <video> branch attaches
+  // this; the iframe mounts aren't a video element. Declared before the
+  // committed-source gate returns to keep hook order stable.
+  const consumerRef = useRef(ref);
+  /* eslint-disable react-hooks/refs -- mediaRef needs the current consumer ref before it runs in commit, not after passive effects. */
+  consumerRef.current = ref;
+  /* eslint-enable react-hooks/refs */
   const mediaRef = useCallback(
     (node: HTMLVideoElement | null) => {
       registerMedia(node);
-      const consumerCleanup = assignRef(ref, node);
+      // Captured once per attach, not re-read from `consumerRef` in the
+      // cleanup below -- the ref that receives `null` must be the same one
+      // that received the node, even if the consumer swaps in a different
+      // ref before this node unmounts.
+      const attachedRef = consumerRef.current;
+      const consumerCleanup = assignRef(attachedRef, node);
       if (!node) return;
       return () => {
         registerMedia(null);
         if (consumerCleanup) consumerCleanup();
-        else assignRef(ref, null);
+        else assignRef(attachedRef, null);
       };
     },
-    [registerMedia, ref]
+    [registerMedia]
   );
   if (!sourceCommitted || source.status === 'failure') {
     return null;

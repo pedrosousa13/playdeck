@@ -248,7 +248,10 @@ full build otherwise: 53 KB is not worth a caption track your viewers needed.
   seekable end, the only notion of it a plain media element has.
 - **Captions** on the hls.js engine come from hls.js, which is the sole owner:
   sidecar `<track>` children discovered by the native subsystem are dropped so
-  the two cannot both claim the state.
+  the two cannot both claim the state. hls.js's parsed cues can carry WebVTT
+  tags and character references, so cue markup reaches `TextCue.text` as
+  plain text — tags stripped, entities decoded. On the native HLS engine
+  captions come from the embedded native adapter, which decodes the same way.
 - **Chapters** are the native adapter's, on both engines. HLS carries no
   chapters concept of its own, and `EXT-X-DATERANGE` routes into the metadata
   track, so a `kind="chapters"` text track on the media element is the only

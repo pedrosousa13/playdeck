@@ -1205,6 +1205,107 @@ describe('theme.css overlay rules (not shared with docked.css)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// The control surface's own gradient scrim, against the text it sits behind.
+//
+// #599's axe pass (`e2e/theme-a11y.spec.ts`) tolerates a `color-contrast`
+// finding on the current/duration `<time>` whenever the control bar is
+// visible: axe-core reports `messageKey: bgGradient` ("Element's background
+// color could not be determined due to a background gradient") for any text
+// over `--playdeck-overlay-scrim`'s `linear-gradient`, the same tool
+// limitation #760 already documents for text over a rasterised video frame
+// (`messageKey: imgNode`) -- axe has no rule that resolves either kind of
+// background, so it reports "needs review" rather than a verdict. This is the
+// arithmetic that finding stands in for.
+//
+// Scoped to this file's own default backdrop deliberately: `ThemedPlayer`
+// (`.storybook/theme.tsx`'s render target, the composition the axe pass
+// scans) mounts no `Player.Media`/`Player.Poster`, so nothing paints behind
+// the bar but `--playdeck-color-backdrop` itself -- unlike #760's cue, which
+// has to clear 4.5:1 against arbitrary video content because a real
+// `<video>` sits behind it. Both stops turning out equal to the backdrop
+// below is what makes one sample of the gradient stand for the whole of it.
+describe('theme.css overlay-scrim text contrast (#599)', () => {
+  const backdrop = parseColor(tokenDefault('--playdeck-color-backdrop'));
+
+  // `--playdeck-overlay-scrim`'s own default is one `var()` fallback --
+  // `linear-gradient(to top, rgb(0 0 0 / 0.78), rgb(0 0 0 / 0) 65%)` -- read
+  // whole by `tokenDefault`'s paren walk, then split on its two `rgb(...)`
+  // colour stops. Not a general gradient parser: this file has exactly one
+  // gradient token to check, and a general parser is not owed for one.
+  const scrimDefault = tokenDefault('--playdeck-overlay-scrim');
+  const stops = [...scrimDefault.matchAll(/rgb\([^)]*\)/g)].map(
+    (match) => match[0]
+  );
+
+  test('the scrim default has exactly two colour stops', () => {
+    expect(stops).toHaveLength(2);
+  });
+
+  const opaqueEnd = over(parseColor(stops[0]), backdrop);
+  const transparentEnd = over(parseColor(stops[1]), backdrop);
+
+  test('both ends of the gradient composite to the same colour as the backdrop', () => {
+    // Both stops are `rgb(0 0 0 / a)` at whatever alpha -- pure black over a
+    // pure black backdrop composites to pure black regardless of alpha, so
+    // the gradient is invisible against this file's own default backdrop:
+    // every point along it is the one colour below, not a range axe has
+    // reason to distrust a single sample of.
+    expect(opaqueEnd).toEqual(backdrop);
+    expect(transparentEnd).toEqual(backdrop);
+  });
+
+  // The current time inherits `color` from the viewport rule (the base
+  // `time` rule sets no colour of its own); the duration half dims by its own
+  // token instead of `opacity`, for the reason stated beside
+  // `--playdeck-color-duration`'s own read above.
+  const onSurface = parseColor(tokenDefault('--playdeck-color-on-surface'));
+  const duration = over(
+    parseColor(tokenDefault('--playdeck-color-duration')),
+    backdrop
+  );
+
+  test('states the composited ratio of both time segments against the scrim', () => {
+    expect({
+      'current time (on-surface) vs the scrim': `${contrast(onSurface, backdrop).toFixed(2)}:1`,
+      'duration (dimmed) vs the scrim': `${contrast(duration, backdrop).toFixed(2)}:1`
+    }).toEqual({
+      'current time (on-surface) vs the scrim': '21.00:1',
+      'duration (dimmed) vs the scrim': '8.34:1'
+    });
+  });
+
+  test('both clear 4.5:1', () => {
+    expect(contrast(onSurface, backdrop)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(duration, backdrop)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+// Demonstrated red (#599): with `--playdeck-color-duration`'s default
+// darkened from `rgb(255 255 255 / 0.64)` to `rgb(10 10 10 / 0.64)`, both
+// tests above failed with the real composited numbers:
+//
+//   AssertionError: expected { …(2) } to deeply equal { …(2) }
+//   - Expected
+//   + Received
+//     {
+//       "current time (on-surface) vs the scrim": "21.00:1",
+//   -   "duration (dimmed) vs the scrim": "8.34:1",
+//   +   "duration (dimmed) vs the scrim": "1.04:1",
+//     }
+//
+//   AssertionError: expected 1.0388514538942513 to be greater than or equal
+//   to 4.5
+//
+// Reverted, both passed again at the stated ratios. This is also the
+// substitute `e2e/theme-a11y.spec.ts`'s own `knownIncomplete` comment points
+// back to: the same mutation left that file's axe pass green, because
+// axe-core's `bgGradient` classification never resolves a background either
+// way -- it does not depend on the foreground colour it is declining to
+// judge. This describe's arithmetic is what the tolerated `color-contrast`
+// finding actually depends on, and it is what a genuine regression here would
+// really fail.
+
+// ---------------------------------------------------------------------------
 // docked.css's own copy of the row-two arithmetic (#622). Not the parameterised
 // `describe.each` above: that suite's assertions are shared shape, and this one
 // is a query only this file carries -- `theme.css` was never docked to begin

@@ -46,13 +46,34 @@ import {
 // implementation -- only the reference travels), and the refusal
 // registration written out below against `controller` directly.
 
-// The fetch's own deadline, in the same shape and order of magnitude as the
-// other two fetches this library makes on its own initiative --
-// `OEMBED_REQUEST_TIMEOUT_MS` (`packages/provider-vimeo/src/oembed-availability.ts`)
-// and `POSTER_PROBE_TIMEOUT_MS` (`packages/provider-wistia/src/poster-availability.ts`).
+// How long this module waits for `fetch()` itself to settle -- the response
+// headers arriving, not the body behind them -- in the same shape and order
+// of magnitude as the other two fetches this library makes on its own
+// initiative -- `OEMBED_REQUEST_TIMEOUT_MS`
+// (`packages/provider-vimeo/src/oembed-availability.ts`) and
+// `POSTER_PROBE_TIMEOUT_MS` (`packages/provider-wistia/src/poster-availability.ts`).
 // A WebVTT host that is malicious or merely compromised must not be able to
-// hold this fetch open indefinitely.
+// hold this fetch open indefinitely by never answering at all.
 export const THUMBNAILS_FETCH_TIMEOUT_MS = 4000;
+
+// How long this module then waits for the body behind those headers, once
+// they have arrived, to finish -- separate from and far more generous than
+// the deadline above, because a response that is steadily arriving but
+// simply slow (a large sprite VTT on a slow mobile link) needs time to
+// finish a download that was always going to succeed, rather than being cut
+// off by a budget sized for "is anything answering at all." A response that
+// stops delivering bytes partway through still ends as a failure once this
+// elapses, the same as one that never answered. Independent of
+// `THUMBNAILS_FETCH_BYTE_CAP` below, which keeps doing its own job
+// regardless of either deadline.
+export const THUMBNAILS_BODY_READ_TIMEOUT_MS = 20_000;
+
+// How long a URL whose fetch just failed is left alone before a later arm
+// -- a hover or a keyboard focus -- may try it again. Long enough that
+// leaving and re-entering the slider while a host is down doesn't retry on
+// every pointer movement; short enough that a transient failure recovers
+// within one viewing session.
+export const THUMBNAILS_RETRY_BACKOFF_MS = 5000;
 
 // A cap on the bytes this module will read out of the fetched body.
 // `Content-Length` is not trustworthy on its own -- a response can omit it,
@@ -101,20 +122,56 @@ const readCappedBody = async (
   return text;
 };
 
+// `response.url`, when a real fetch produced `response`, is the address the
+// browser ultimately requested -- across any redirect -- which is the base
+// each cue's own URL should resolve against (`parseThumbnailCues`'s
+// `baseUrl`). It reads `''` for a `Response` this module did not itself
+// receive from a real network fetch: a hand-built `Response` (this
+// package's own tests construct exactly one this way), and some fetch
+// polyfills and opaque-response cases do the same. Falling back to
+// `requestUrl` -- the address this fetch was actually made with -- resolved
+// against the document's own base URL recovers the same final address a
+// populated `response.url` would have reported, since that resolution is
+// exactly what the browser already did to turn `requestUrl` into the
+// request it sent. No `document` at all (server-side rendering, or any
+// other non-DOM environment) leaves nothing to resolve `requestUrl`
+// against, so this falls through to `undefined`: cues then publish
+// unresolved, the same as every other missing-`baseUrl` case
+// `parseThumbnailCues` already handles.
+const responseBaseUrl = (
+  response: Response,
+  requestUrl: string
+): string | undefined => {
+  if (response.url !== '') return response.url;
+  if (typeof document === 'undefined') return undefined;
+  try {
+    return new URL(requestUrl, document.baseURI).href;
+  } catch {
+    return undefined;
+  }
+};
+
 const EMPTY_CUES: readonly ThumbnailCue[] = Object.freeze([]);
+
+// A fetch for `url` has not started yet (`undefined`), is in flight, has
+// succeeded -- cues published, never refetched -- or has failed and is
+// waiting out `retryAt` before a later arm may try again.
+type FetchStatus = 'in-flight' | 'succeeded' | 'failed';
 
 type CuesState = {
   readonly url: string | undefined;
   readonly cues: readonly ThumbnailCue[];
-  // Whether a fetch for `url` has already started (or finished), so a later
-  // render that is still armed does not start a second one.
-  readonly armed: boolean;
+  readonly status: FetchStatus | undefined;
+  // Meaningful only while `status` is `'failed'`: the `Date.now()` value a
+  // later arm must reach before this URL is retried.
+  readonly retryAt: number;
 };
 
 const initialState: CuesState = Object.freeze({
   url: undefined,
   cues: EMPTY_CUES,
-  armed: false
+  status: undefined,
+  retryAt: 0
 });
 
 // Loads and parses the WebVTT file `SeekSlider`'s `thumbnails` prop names,
@@ -123,22 +180,28 @@ const initialState: CuesState = Object.freeze({
 // keyboard focus -- never at mount, so a consumer who sets the prop but
 // whose viewer never hovers or tabs to the control never costs a network
 // request. `armed` going false again (the pointer left, the input blurred)
-// does not undo that: the fetch is kept, and its cues with it, so moving the
-// pointer on and off the slider is one request rather than one per pass.
+// and true again later is what a retry rides on: a succeeded fetch is never
+// repeated, but a failed one is eligible again on that next arm, once
+// `THUMBNAILS_RETRY_BACKOFF_MS` has passed -- so a transient failure
+// recovers on a later hover instead of leaving the preview empty for the
+// rest of the URL's life, while a host that keeps failing is not retried on
+// every pointer movement in between.
 //
-// One fetch per resolved `url`: a changed `url` invalidates whatever was in
-// flight or already parsed for the old one -- its cues are dropped and the
-// next interaction re-arms and re-fetches for the new one. The in-flight
-// request is aborted on unmount too, on the same path a `url` change already
-// takes.
+// One fetch in flight, and at most one outstanding, per resolved `url`: a
+// changed `url` invalidates whatever was in flight or already parsed for
+// the old one -- its cues are dropped and the next interaction re-arms and
+// re-fetches for the new one. The in-flight request is aborted on unmount
+// too, on the same path a `url` change already takes.
 //
-// A response that fails to fetch, or parses to no cues, settles on the same
-// empty result an unset `thumbnails` prop produces. This module is not the
-// allowlist: `SeekSlider` resolves `url` through `permittedUrl` before it
-// ever reaches here (and a refused one never mounts this component at all),
-// so a fetch failure or an empty parse here is a malformed or unreachable
-// file, not a refused one, and stays silent the same way
-// `parseThumbnailCues` itself does (see its own header comment).
+// A response that parses to no cues settles on the same empty result an
+// unset `thumbnails` prop produces, and is not retried: this module is not
+// the allowlist -- `SeekSlider` resolves `url` through `permittedUrl` before
+// it ever reaches here, and a refused one never mounts this component at
+// all -- so an empty parse here is a malformed file, not a broken fetch, and
+// stays silent the same way `parseThumbnailCues` itself does (see its own
+// header comment). A fetch that never produced a body to parse at all -- a
+// network failure, a non-ok response, or either deadline above -- is what
+// counts as a failure eligible for retry.
 export const useThumbnailCues = (
   url: string | undefined,
   armed: boolean
@@ -150,6 +213,14 @@ export const useThumbnailCues = (
   // (`cues`) for everything downstream to use like ordinary state.
   const stateRef = useRef<CuesState>(initialState);
   const abortRef = useRef<AbortController | null>(null);
+  // Owned by whichever effect run below is currently active -- set at the
+  // start of that run, cleared by its own cleanup -- so a fetch's failure
+  // handler always schedules a retry (or does nothing) on the CURRENT run's
+  // behalf, never a since-retired one. A fetch outlives the arm that started
+  // it (leaving the slider does not cancel it), so the run whose `.catch()`
+  // ends up publishing a given failure is not always the run still mounted
+  // when it does.
+  const wakeRef = useRef<(() => void) | null>(null);
   // Its setter's only job is forcing a re-render once the fetch resolves and
   // mutates `stateRef` from outside render -- the same pairing `PosterImage`
   // uses for its own ref-backed state (`poster.tsx`).
@@ -166,7 +237,7 @@ export const useThumbnailCues = (
   if (stateRef.current.url !== url) {
     abortRef.current?.abort();
     abortRef.current = null;
-    stateRef.current = { url, cues: EMPTY_CUES, armed: false };
+    stateRef.current = { url, cues: EMPTY_CUES, status: undefined, retryAt: 0 };
   }
   const cues = stateRef.current.cues;
   /* eslint-enable react-hooks/refs */
@@ -182,62 +253,155 @@ export const useThumbnailCues = (
   }, []);
 
   useEffect(() => {
-    if (!armed || url === undefined || stateRef.current.armed) return;
-    stateRef.current = { ...stateRef.current, armed: true };
-    const controller = new AbortController();
-    abortRef.current = controller;
-    // Set only by the deadline's own callback below, never by an unmount's
-    // or a url change's abort -- what lets `.catch()` tell the three apart:
-    // those two must stay silent, and this one must not.
-    let deadlineExpired = false;
-    // The deadline: aborts the same signal a url change or unmount already
-    // aborts, so a host that never answers cannot hold this open forever.
-    const timer = setTimeout(() => {
-      deadlineExpired = true;
-      controller.abort();
-    }, THUMBNAILS_FETCH_TIMEOUT_MS);
-    // Publishes `cues` for `url`, unless a later `url` change has already
-    // moved this instance on to a different fetch this result must not
-    // overwrite. Shared by the two branches below that both resolve to a
-    // published result: a valid (or empty) parse, and -- now -- a deadline
-    // that expired before either arrived.
+    if (!armed || url === undefined) return;
+    // Cleared by this effect's own cleanup below (disarmed, `url` changed or
+    // unmounted), so a wake-up scheduled for a URL or arm this instance has
+    // since moved on from never fires `tryStart` against stale state.
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    // Publishes `cues` for `url` as a success, unless a later `url` change
+    // has already moved this instance on to a different fetch this result
+    // must not overwrite.
     const publishCues = (cues: readonly ThumbnailCue[]): void => {
       if (stateRef.current.url !== url) return;
-      stateRef.current = { url, cues, armed: true };
+      stateRef.current = { url, cues, status: 'succeeded', retryAt: 0 };
       rerender((value) => value + 1);
     };
-    fetch(url, {
-      signal: controller.signal,
-      // Unlike the Vimeo oEmbed fetch (`provider-vimeo/src/oembed-availability.ts`),
-      // no domain-restriction check anywhere reads this request's referrer, and
-      // a consumer's own sprite host has no reason to learn what page embedded
-      // it -- so this drops the referrer entirely rather than narrowing it to
-      // the origin the way that fetch does.
-      referrerPolicy: 'no-referrer'
-    })
-      .then((response) => (response.ok ? readCappedBody(response) : undefined))
-      .then((text) => {
-        // Stale if aborted before a response arrived to read at all -- a
-        // narrow race between the fetch settling and this callback running.
-        if (controller.signal.aborted) return;
-        publishCues(text === undefined ? EMPTY_CUES : parseThumbnailCues(text));
+    // Publishes a failure for `url`, with the same staleness guard as
+    // `publishCues` -- and, unlike it, a `retryAt` a later arm has to reach
+    // before this same `url` is tried again. Reports whether it actually
+    // published, so a stale failure does not go on to wake up a `url` this
+    // instance has already left behind.
+    const publishFailure = (): boolean => {
+      if (stateRef.current.url !== url) return false;
+      stateRef.current = {
+        url,
+        cues: EMPTY_CUES,
+        status: 'failed',
+        retryAt: Date.now() + THUMBNAILS_RETRY_BACKOFF_MS
+      };
+      rerender((value) => value + 1);
+      return true;
+    };
+    // A failure only retries on a later arm -- a hover or focus that toggles
+    // `armed` and re-runs this effect. That never happens if the pointer (or
+    // keyboard focus) never leaves across the whole backoff: `armed` stays
+    // true the entire time, so nothing re-invokes `tryStart` on its own.
+    // This schedules that invocation directly, for `THUMBNAILS_RETRY_BACKOFF_MS`
+    // out from the failure just published, so a still-armed instance retries
+    // without needing to be disarmed and re-armed first. Registered on
+    // `wakeRef` rather than called directly: the fetch this run started can
+    // still be the one whose `.catch()` publishes a failure well after this
+    // very run has been cleaned up (the fetch outlives disarming), and by
+    // then this closure's own `tryStart` is not who should be woken --
+    // whichever run is current, if any, is `wakeRef.current` at that
+    // moment.
+    const scheduleWake = (): void => {
+      retryTimer = setTimeout(tryStart, THUMBNAILS_RETRY_BACKOFF_MS);
+    };
+    wakeRef.current = scheduleWake;
+    const startFetch = (): void => {
+      stateRef.current = { ...stateRef.current, status: 'in-flight' };
+      const controller = new AbortController();
+      abortRef.current = controller;
+      // Set only by their own timer's callback below, never by an unmount's
+      // or a url change's abort -- what lets each stage's `.catch()` below
+      // tell a deadline apart from a stale abort: a stale abort stays
+      // silent, a deadline does not.
+      let headersDeadlineExpired = false;
+      let bodyDeadlineExpired = false;
+      // Bounds the wait for `fetch()` itself to settle, so a host that never
+      // answers at all cannot hold this open forever.
+      const headersTimer = setTimeout(() => {
+        headersDeadlineExpired = true;
+        controller.abort();
+      }, THUMBNAILS_FETCH_TIMEOUT_MS);
+      fetch(url, {
+        signal: controller.signal,
+        // Unlike the Vimeo oEmbed fetch (`provider-vimeo/src/oembed-availability.ts`),
+        // no domain-restriction check anywhere reads this request's referrer, and
+        // a consumer's own sprite host has no reason to learn what page embedded
+        // it -- so this drops the referrer entirely rather than narrowing it to
+        // the origin the way that fetch does.
+        referrerPolicy: 'no-referrer'
       })
-      .catch(() => {
-        // A network failure is silent, same as a fetch that resolves but
-        // fails: no thumbnails, no notice. An abort from unmount or a url
-        // change stays silent the same way -- the instance is gone, or has
-        // already moved on to a different fetch neither should touch. Only
-        // the deadline is treated like the unparseable-file result above:
-        // reported the way that path already reports, via the same
-        // `publishCues`.
-        if (deadlineExpired) publishCues(EMPTY_CUES);
-      })
-      .finally(() => {
-        // Runs on every path above, including ordinary success -- not only
-        // the three aborts -- so the timer never outlives the fetch it
-        // guards.
-        clearTimeout(timer);
-      });
+        .then((response) => {
+          clearTimeout(headersTimer);
+          if (!response.ok) {
+            if (publishFailure()) wakeRef.current?.();
+            return;
+          }
+          // See `responseBaseUrl`'s own comment for why this is not simply
+          // `response.url`. Threaded through so a cue payload naming a
+          // relative image path resolves against the VTT file's own address
+          // rather than the page's, which is what `parseThumbnailCues`'s
+          // `baseUrl` argument is for.
+          const baseUrl = responseBaseUrl(response, url);
+          // The body's own deadline, started only now that headers are in
+          // hand: a response still going this long after headers arrived is
+          // failing, not merely slow the way one still inside the headers
+          // deadline is.
+          const bodyTimer = setTimeout(() => {
+            bodyDeadlineExpired = true;
+            controller.abort();
+          }, THUMBNAILS_BODY_READ_TIMEOUT_MS);
+          return readCappedBody(response)
+            .then((text) => {
+              // Stale if aborted before the body finished reading -- a
+              // narrow race between the read settling and this callback
+              // running.
+              if (controller.signal.aborted) return;
+              publishCues(
+                text === undefined
+                  ? EMPTY_CUES
+                  : parseThumbnailCues(text, baseUrl)
+              );
+            })
+            .catch(() => {
+              // A stale abort -- unmount, or a url change moving this
+              // instance on -- stays silent; the body's own deadline, or any
+              // other read failure, is a real failure and is reported as
+              // one.
+              if (controller.signal.aborted && !bodyDeadlineExpired) return;
+              if (publishFailure()) wakeRef.current?.();
+            })
+            .finally(() => {
+              clearTimeout(bodyTimer);
+            });
+        })
+        .catch(() => {
+          // Same distinction as the body stage's own `.catch()` above: a
+          // stale abort stays silent, a network failure or the headers
+          // deadline itself is reported.
+          if (controller.signal.aborted && !headersDeadlineExpired) return;
+          if (publishFailure()) wakeRef.current?.();
+        })
+        .finally(() => {
+          clearTimeout(headersTimer);
+        });
+    };
+    // Starts a fetch if none is owed yet, does nothing while one is already
+    // in flight or has already succeeded, and otherwise schedules itself for
+    // whenever the backoff on a failed one ends -- covering both this
+    // effect's own first run and a wake-up through `wakeRef` set up above.
+    const tryStart = (): void => {
+      const current = stateRef.current;
+      if (current.status === 'in-flight' || current.status === 'succeeded') {
+        return;
+      }
+      if (current.status === 'failed') {
+        const remaining = current.retryAt - Date.now();
+        if (remaining > 0) {
+          retryTimer = setTimeout(tryStart, remaining);
+          return;
+        }
+      }
+      startFetch();
+    };
+    tryStart();
+    return () => {
+      wakeRef.current = null;
+      if (retryTimer !== null) clearTimeout(retryTimer);
+    };
   }, [armed, url]);
 
   /* eslint-disable react-hooks/refs -- `cues` is the synchronous snapshot

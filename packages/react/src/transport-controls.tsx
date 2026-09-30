@@ -681,7 +681,17 @@ export const SeekSlider = ({
       style={{
         position: 'relative',
         minHeight: SEEK_SLIDER_MIN_BLOCK_SIZE,
-        ...style
+        ...style,
+        // After `...style`, so a consumer's own `style` cannot reintroduce
+        // what this overrides: a right-to-left ancestor mirrors the native
+        // range input below -- its thumb sits at the right edge at time
+        // zero -- while `seek-progress`, the buffered ranges and the
+        // thumbnail preview's pointer math all keep positioning themselves
+        // left-to-right regardless, which would leave the visible thumb
+        // disagreeing with the fill it is meant to track. Pinning it here,
+        // inherited, keeps the whole seek bar reading as one direction
+        // matching a video's own playback direction, not the page's.
+        direction: 'ltr'
       }}
     >
       <div aria-hidden="true" data-playdeck-part="seek-buffered">
