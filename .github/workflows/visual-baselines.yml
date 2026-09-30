@@ -36,11 +36,41 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
+      # `test:e2e`'s Playwright config builds `apps/site` to serve the
+      # `site-*` specs (`playwright.config.ts`'s second `webServer`), so this
+      # job needs the same `ffmpeg` check and media cache the `site` job has.
+      - uses: ./.github/actions/sprite-fright-media
       # `--update-snapshots` writes missing and changed baselines and reports
       # the run as failed when it changed anything, which is correct but not
       # useful here: the artifact is the deliverable either way.
-      - run: pnpm test:e2e --project=visual --update-snapshots
+      - run: pnpm test:e2e --project=visual --update-snapshots --reporter=list,json
         continue-on-error: true
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: playwright-report.json
+      # `continue-on-error` above also swallowed the defect that shipped here:
+      # without the `sprite-fright-media` step, `apps/site`'s build broke, so
+      # Playwright's webServer never started and no test ran at all -- yet the
+      # step still went green and the upload below still ran (run 35919816879:
+      # "Process from config.webServer was not able to start. Exit code: 1",
+      # job conclusion success). On that path the run aborts before the
+      # reporter's `onBegin` ever fires, so the JSON reporter has no suite to
+      # serialize and writes nothing rather than an empty report -- a missing
+      # file is as much a red signal here as a zero count inside one.
+      - name: Confirm the visual project actually ran
+        run: |
+          if [ ! -s playwright-report.json ]; then
+            echo "::error::No Playwright JSON report was written -- the run above aborted before any test started."
+            exit 1
+          fi
+          node -e '
+            const { stats } = JSON.parse(require("fs").readFileSync("playwright-report.json", "utf8"));
+            const ran = (stats.expected ?? 0) + (stats.unexpected ?? 0) + (stats.flaky ?? 0);
+            if (ran === 0) {
+              console.error("Playwright reported zero completed tests:", stats);
+              process.exit(1);
+            }
+            console.log(ran + " visual test(s) ran.");
+          '
       - uses: actions/upload-artifact@v7
         with:
           name: visual-baselines
