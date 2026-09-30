@@ -1637,7 +1637,7 @@ export const axes = [
           includes: 'PlaylistProps'
         },
         source:
-          VIDEOJS10_DOCS + ' (`how-to/migrate-from-video-js-8.md`, "Plugins")',
+          VIDEOJS10_DOCS + ' (`guides/migrate-from-video-js-8.md`, "Plugins")',
         note: 'Searched for `PlaylistProps`, the name a Playlist component would carry in a package that gives every component an `XProps` type: the bare word appears in `@videojs/media` for Google Cast queues and HLS media-playlist parsing. Its own migration guide lists playlists among the "genuinely missing features" that "need real work".'
       }
     }
@@ -1719,7 +1719,7 @@ export const axes = [
           includes: 'AdBreak'
         },
         source:
-          VIDEOJS10_DOCS + ' (`how-to/migrate-from-video-js-8.md`, "Plugins")',
+          VIDEOJS10_DOCS + ' (`guides/migrate-from-video-js-8.md`, "Plugins")',
         note: 'Its own migration guide says "If your player depends on an ads plugin, there\'s no v10 answer today".'
       }
     }
@@ -1878,7 +1878,7 @@ export const axes = [
           includes: 'registerPlugin'
         },
         source:
-          VIDEOJS10_DOCS + ' (`how-to/migrate-from-video-js-8.md`, "Plugins")',
+          VIDEOJS10_DOCS + ' (`guides/migrate-from-video-js-8.md`, "Plugins")',
         note: 'Its own migration guide opens that section "v10 has no plugin system"; extension is composition, an ejected skin, or a swapped media component.'
       }
     }
