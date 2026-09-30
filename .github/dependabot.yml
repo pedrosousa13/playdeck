@@ -28,6 +28,14 @@
 # request: a major can carry a breaking change, so it needs its own review and
 # its own decision to take or defer, not a spot inside a batch of routine
 # bumps nobody reads that closely.
+#
+# A few dependencies don't version independently of their own family: one
+# member pins a sibling to its own exact version, or peers against it at that
+# exact version, so the family only installs together. Leaving majors
+# ungrouped splits those apart -- one member bumped, the rest left behind --
+# and the result installs but doesn't run. Those families get their own
+# group, ordered before the general one so Dependabot claims them there
+# first, with major updates included alongside minor and patch.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -50,6 +58,53 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
+      vitest:
+        patterns:
+          - 'vitest'
+          - '@vitest/*'
+        update-types:
+          - major
+          - minor
+          - patch
+      playwright:
+        patterns:
+          - 'playwright'
+          - '@playwright/*'
+        update-types:
+          - major
+          - minor
+          - patch
+      storybook:
+        patterns:
+          - 'storybook'
+          - '@storybook/*'
+        update-types:
+          - major
+          - minor
+          - patch
+      react:
+        patterns:
+          - 'react'
+          - 'react-dom'
+        update-types:
+          - major
+          - minor
+          - patch
+      tailwindcss:
+        patterns:
+          - 'tailwindcss'
+          - '@tailwindcss/*'
+        update-types:
+          - major
+          - minor
+          - patch
+      videojs:
+        patterns:
+          - '@videojs/*'
+        update-types:
+          - major
+          - minor
+          - patch
       minor-and-patch:
         update-types:
           - minor
