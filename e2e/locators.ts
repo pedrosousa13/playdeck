@@ -92,3 +92,6 @@ export const pipButton = (page: Page) =>
 
 export const airPlayButton = (page: Page) =>
   page.locator('[data-playdeck-part="airplay-button"]');
+
+export const errorDisplay = (page: Page) =>
+  page.locator('[data-playdeck-part="error"]');
