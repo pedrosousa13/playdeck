@@ -85,6 +85,13 @@ export const createNativeAttachment = (
   // `addListeners` so the same elements are unwired in `removeListeners`.
   // Empty for a `src`-attribute media element, which already errors on itself
   // through `onError` below.
+  //
+  // A snapshot rather than a live query is safe because this attachment's
+  // `<video>` cannot gain or lose a `<source>` out from under it: React keys
+  // that element on `sourceKey(source)` (`@playdeck/react`'s
+  // `viewport-media.tsx`), so a change to the source list remounts the
+  // element -- and a remount tears this attachment down and builds a new one
+  // -- rather than patching its children in place.
   let sourceElements: readonly HTMLSourceElement[] = [];
   // Whether this load's source-exhaustion error has already gone out. Reset
   // on `emptied`, which fires at the start of every `media.load()` --

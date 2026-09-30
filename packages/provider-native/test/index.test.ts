@@ -1862,6 +1862,37 @@ test('publishes a source error once every <source> child has failed', async () =
   );
 });
 
+// The guard that keeps this to one publish per load (`sourceErrorPublished`)
+// has to clear on a reload, or a `retry` that fails again would leave a
+// viewer who asked to try again with no sign it was tried. `retry` calls
+// `media.load()`, which fires `emptied` on a real element before anything
+// else -- `onEmptied`'s own header describes that ordering -- so this test
+// dispatches it by hand the way every other test here drives an event
+// happy-dom does not run the real algorithm behind.
+test('re-arms after a reload, publishing again if the retry also fails', async () => {
+  const media = document.createElement('video');
+  const source = document.createElement('source');
+  media.append(source);
+  const patches: unknown[] = [];
+  const provider = createNativeProvider(media);
+  provider.subscribe((patch) => patches.push(patch));
+  await provider.attach();
+  patches.length = 0;
+
+  Object.defineProperty(media, 'networkState', {
+    configurable: true,
+    value: 3
+  });
+  source.dispatchEvent(new Event('error'));
+  expect(patches).toHaveLength(1);
+
+  await provider.retry?.();
+  media.dispatchEvent(new Event('emptied'));
+  source.dispatchEvent(new Event('error'));
+
+  expect(patches).toHaveLength(2);
+});
+
 test('publishes no error while a later <source> candidate can still be tried', async () => {
   const media = document.createElement('video');
   const first = document.createElement('source');

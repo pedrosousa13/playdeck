@@ -66,6 +66,12 @@ type PlayerFixtureProps = {
   // `e2e/native-source-error.spec.ts` can reproduce #857 against a source
   // whose host sends no CORS headers.
   readonly crossOrigin?: 'anonymous' | 'use-credentials';
+  // Mounts `Player.ErrorDisplay`, opt-in so every story that does not set it
+  // renders exactly as it did before #857: this page's own doc warns that a
+  // story here is addressed by ID from `e2e/`, so an element appearing under
+  // every existing story would be a change none of them asked for. Only the
+  // `NativeSourceError*` stories below set it.
+  readonly showErrorDisplay?: boolean;
 };
 
 // Tall enough that the player starts fully outside the observer's root even
@@ -299,7 +305,8 @@ const PlayerFixture = ({
   posterShowWhilePaused,
   scrollPage,
   loop,
-  crossOrigin
+  crossOrigin,
+  showErrorDisplay
 }: PlayerFixtureProps) => {
   const autoplay: Player.RootProps['autoplay'] = autoplayInput ?? false;
   const loading: Player.PlayerLoadingStrategy = loadingInput ?? 'viewport';
@@ -463,7 +470,7 @@ const PlayerFixture = ({
           <Player.Media crossOrigin={crossOrigin} textTracks={textTracks} />
           <Player.Captions />
           <Player.LiveIndicator />
-          <Player.ErrorDisplay />
+          {showErrorDisplay ? <Player.ErrorDisplay /> : null}
         </Player.Viewport>
         <Player.PlayButton />
         <Player.CaptionsButton />
@@ -612,20 +619,20 @@ export const NativeMp4StartTime: Story = {
 // serves that origin itself, without an `access-control-allow-origin`
 // header, to reproduce #857's CORS case against a real cross-origin fetch.
 export const NativeSourceErrorCrossOrigin: Story = {
-  args: { source: 'no-cors', crossOrigin: 'anonymous' }
+  args: { source: 'no-cors', crossOrigin: 'anonymous', showErrorDisplay: true }
 };
 
 // A single candidate source `e2e/native-source-error.spec.ts` intercepts with
 // `page.route` and answers 404, to reproduce #857's other case.
 export const NativeSourceError404: Story = {
-  args: { activationSource: 'external' }
+  args: { activationSource: 'external', showErrorDisplay: true }
 };
 
 // Two candidate sources (`source: 'multi'`, above) -- the shape
 // `e2e/native-source-error.spec.ts` needs to drive the case where the first
 // 404s and the second loads.
 export const NativeSourceErrorMulti: Story = {
-  args: { source: 'multi' }
+  args: { source: 'multi', showErrorDisplay: true }
 };
 
 // The ten-second clip, with `chapters.vtt` attached -- `e2e/chapters.spec.ts`

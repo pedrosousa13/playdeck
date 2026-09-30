@@ -87,6 +87,19 @@ export default defineConfig({
       gracefulShutdown: { signal: 'SIGTERM', timeout: 500 },
       reuseExistingServer: !process.env.CI,
       timeout: 300_000
+    },
+    // `e2e/native-source-error.spec.ts`'s CORS case, on its own port so it is
+    // a real cross-origin request from the storybook origin. See
+    // `e2e/fixtures/no-cors-server.mjs`'s header for why this lives here
+    // rather than in the spec: one process for the whole run, shared by every
+    // project, rather than one bound per test that chromium, firefox and a
+    // retry can race each other to bind.
+    {
+      command: 'node e2e/fixtures/no-cors-server.mjs --port 4174',
+      url: 'http://127.0.0.1:4174/tracer.mp4',
+      gracefulShutdown: { signal: 'SIGTERM', timeout: 500 },
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000
     }
   ],
   projects: [

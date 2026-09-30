@@ -1,5 +1,4 @@
 import { expect, test, type Page } from '@playwright/test';
-import { createServer, type Server } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { errorDisplay, playButton } from './locators';
@@ -20,14 +19,17 @@ const EXTERNAL_SOURCE = 'https://provider.invalid/tracer.mp4';
 const FIRST_MULTI_SOURCE = 'https://source-a.invalid/clip.mp4';
 const SECOND_MULTI_SOURCE = 'https://source-b.invalid/clip.mp4';
 
-// The fixed port `source: 'no-cors'` resolves to in
-// `player-fixture.stories.tsx`. A real local origin rather than a
-// `page.route` fulfilment: Chromium does not apply the opaque-response
-// filter to a response CDP injected for an intercepted request, so a routed
-// response missing `access-control-allow-origin` loads the media anyway --
-// only a genuine cross-origin network round trip reproduces the CORS block
-// this issue reports.
-const NO_CORS_PORT = 4174;
+// Served by `e2e/fixtures/no-cors-server.mjs`, started once for the whole
+// run by `playwright.config.ts`'s `webServer` array -- a real local origin
+// distinct from the storybook dev server's, rather than a `page.route`
+// fulfilment: Chromium does not apply the opaque-response filter to a
+// response CDP injected for an intercepted request, so a routed response
+// missing `access-control-allow-origin` loaded the media anyway in an
+// earlier draft of this test. Only a genuine cross-origin network round trip
+// reproduces the CORS block this issue reports, and a server every project
+// shares avoids chromium, firefox and a retry racing to bind the same port
+// (`no-cors-server.mjs`'s header has the rest of that reasoning).
+const NO_CORS_SOURCE = 'http://127.0.0.1:4174/tracer.mp4';
 
 const clip = fileURLToPath(
   new URL('../apps/storybook/public/tracer.mp4', import.meta.url)
@@ -36,48 +38,38 @@ const clip = fileURLToPath(
 const readError = (page: Page) =>
   page.evaluate(() => window.playdeckHandle?.getState().error ?? null);
 
-// Serves the tracer clip on `NO_CORS_HOST`, deliberately without
-// `access-control-allow-origin`, so a `crossOrigin="anonymous"` fetch of it
-// from the storybook origin (a different port, so a different origin) is
-// genuinely subject to CORS.
-const serveWithoutCors = async (body: Buffer): Promise<Server> => {
-  const server = createServer((_request, response) => {
-    response.writeHead(200, {
-      'content-length': body.byteLength,
-      'content-type': 'video/mp4'
-    });
-    response.end(body);
-  });
-  await new Promise<void>((resolve) =>
-    server.listen(NO_CORS_PORT, '127.0.0.1', resolve)
-  );
-  return server;
-};
-
 test('publishes a source error when crossOrigin blocks the only candidate on CORS', async ({
   page
 }) => {
-  const server = await serveWithoutCors(await readFile(clip));
-  try {
-    await page.goto(CROSS_ORIGIN_STORY);
+  await page.goto(CROSS_ORIGIN_STORY);
 
-    await expect.poll(() => readError(page)).not.toBeNull();
-    const error = await readError(page);
-    if (!error) throw new Error('expected a published error');
+  await expect.poll(() => readError(page)).not.toBeNull();
+  const error = await readError(page);
+  if (!error) throw new Error('expected a published error');
 
-    expect(['source', 'network']).toContain(error.category);
-    expect(error.fatal).toBe(true);
-    expect(error.recoverable).toBe(false);
-    expect(error.message).toContain('crossOrigin="anonymous"');
+  // Ties this spec's `NO_CORS_SOURCE` to the story's own `'no-cors'`
+  // resolution, so the two cannot drift apart in silence. After the error,
+  // not before: the `<source>` element is not guaranteed mounted the instant
+  // `goto` resolves.
+  expect(await page.evaluate(() => document.querySelector('source')?.src)).toBe(
+    NO_CORS_SOURCE
+  );
 
-    await expect(errorDisplay(page)).toHaveAttribute('role', 'alert');
-    await expect(errorDisplay(page)).toHaveAttribute(
-      'data-state',
-      error.category
-    );
-  } finally {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  }
+  // `'source'` on both engines, measured directly rather than assumed: the
+  // category is hard-coded by `sourceExhausted` and never inferred from an
+  // engine's own signals, so there is no path to `'network'` here on either
+  // one -- that category belongs to the pre-existing element-level `onError`
+  // handler this fix leaves alone.
+  expect(error.category).toBe('source');
+  expect(error.fatal).toBe(true);
+  expect(error.recoverable).toBe(false);
+  expect(error.message).toContain('crossOrigin="anonymous"');
+
+  await expect(errorDisplay(page)).toHaveAttribute('role', 'alert');
+  await expect(errorDisplay(page)).toHaveAttribute(
+    'data-state',
+    error.category
+  );
 });
 
 test('publishes a source error when the only candidate 404s', async ({
@@ -90,7 +82,9 @@ test('publishes a source error when the only candidate 404s', async ({
   await expect.poll(() => readError(page)).not.toBeNull();
   const error = await readError(page);
 
-  expect(['source', 'network']).toContain(error?.category);
+  // Measured on both engines the same way the CORS case above was: category
+  // `'source'`, never `'network'` (see the comment there).
+  expect(error?.category).toBe('source');
   expect(error?.fatal).toBe(true);
 });
 
