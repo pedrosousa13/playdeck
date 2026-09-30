@@ -80,8 +80,8 @@
     "react-dom": ">=19 <20"
   },
   "devDependencies": {
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   },
   "scripts": {
     "build": "vite build && vite build --config vite.browser.config.ts && tsc -b",
