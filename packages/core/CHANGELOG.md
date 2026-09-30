@@ -1,5 +1,458 @@
 # @playdeck/core
 
+## 1.2.0
+
+### Minor Changes
+
+- cf879ba: Add a live edge: `PlayerLiveState.offsetFromEdge`, a `liveEdge` capability, and `seekToLiveEdge`
+
+  `PlayerLiveState` gains `offsetFromEdge`: how far behind the provider's live
+  edge playback is, in whole seconds, `0` at or ahead of it. Whole seconds is
+  deliberate — `liveStateEqual` is what every adapter consults to decide
+  whether a changed `live` value is worth publishing, and an unrounded float
+  would differ on essentially every `timeupdate`, so `liveStateEqual` now
+  compares the new field too.
+
+  `PlayerCapabilities` gains a required field, `liveEdge`, told apart the way
+  `chapters` is: `unavailable`/`provider` means the provider has no way to
+  report a live edge at all, `unavailable`/`source` means this particular
+  source is not live. Any object built to satisfy `PlayerCapabilities` — a
+  custom provider adapter, a capabilities fixture in a test — needs the new
+  field before it type-checks again, the same compatibility impact
+  `providerPoster` had when it landed (1.1.0).
+
+  `PlayerController` gains `seekToLiveEdge()`, and `PlayerCommand` gains the
+  matching member. It refuses with `not-ready` whenever there is no provider,
+  `capabilities.liveEdge` is not `available`, or the attached adapter
+  implements no `seekToLiveEdge` — the same `RefusedCommand` shape every other
+  pre-attach refusal uses. Where a provider can answer, the command lands on
+  the provider's own notion of the edge, never a value the controller
+  computes.
+
+  Each provider adapter reports `liveEdge` for what it can actually see:
+
+  - `@playdeck/provider-hls`: on the hls.js engine, `available` once the source
+    is live, hls.js's own `liveSyncPosition` is finite, and the existing
+    seek-window-meaningful check passes — `seekToLiveEdge` lands on
+    `liveSyncPosition`, deliberately behind the raw seekable end. On the native
+    engine, the edge is the raw seekable end, delegated straight to
+    `@playdeck/provider-native`.
+  - `@playdeck/provider-native`: `available` once the source is live and its
+    `seekable` has a finite end, which `seekToLiveEdge` lands on — the only
+    notion of a live edge a plain media element has.
+  - `@playdeck/provider-youtube`: `unavailable`/`provider`. The IFrame Player
+    API exposes no seekable-range accessor at all, and `getDuration()` is a
+    snapshot rather than a value tracking the edge on a live stream.
+  - `@playdeck/provider-vimeo`: `unavailable`/`provider`. `@vimeo/player`
+    (2.30.4) has no live concept anywhere to build one on.
+  - `@playdeck/provider-wistia`: `unavailable`/`provider`. `PublicApi` has no
+    seekable-range accessor and no dedicated live-edge member.
+
+- bfcae93: Add sprite-thumbnail seek preview to `SeekSlider`
+
+  `@playdeck/core` gains `parseThumbnailCues` and `thumbnailCueAt`, parsing the
+  `#xywh=` sprite-region flavour of WebVTT that Vidstack, Media Chrome and
+  Video.js all read, plus the two `ThumbnailCue`/`ThumbnailRegion` types the
+  parsed cues carry. `RefusedUrlSurface` gains `'thumbnails'` and `'thumbnails
+cue image'`, appended at the end of the existing tie-break rank so no
+  existing surface's priority against another changes.
+
+  `@playdeck/react`'s `SeekSlider` gains a `thumbnails` prop: the URL of that
+  WebVTT file. The file is fetched once, lazily, on the first hover or the
+  first keyboard focus of the input — never at mount — and, once loaded, a
+  `thumbnail` part renders the cue image cropped to its region, positioned
+  above the pointer or the current keyboard-focus position and clamped to stay
+  inside the slider's own box. Without the prop, nothing extra renders. A
+  relative cue image URL — the ordinary output of a sprite generator —
+  resolves against the fetched VTT file's own final address, not the page's,
+  through `parseThumbnailCues`'s `baseUrl` argument, before it ever reaches
+  the allowlist. Every image URL — the WebVTT file's own and each cue's —
+  passes through the same allowlist every other URL prop in the player does,
+  and a refused one publishes the existing refusal notice. The feature is
+  provider-agnostic: it derives entirely from the supplied WebVTT/sprite pair,
+  never from provider internals, so it works the same way under every
+  provider.
+
+  No `PlayerCapabilities` change and no provider package changes: the feature
+  needs no per-provider support to gate.
+
+- f116c0a: Resolve thumbnail cue URLs against the WebVTT file's own address
+
+  The still-unreleased sprite-thumbnail seek preview (`.changeset/lucky-hounds-thumbnail.md`)
+  published each cue's image URL exactly as the file wrote it, relative paths
+  included -- a common shape for sprite generator output. Used as an `<img
+src>`, a relative cue URL resolves against the page's own address rather
+  than the thumbnails file's, so a sprite generator's ordinary relative output
+  would have produced a blank, 404'd preview with no notice.
+
+  `parseThumbnailCues` takes a second, optional argument, `baseUrl`: each
+  cue's `url` resolves against it the same way a browser resolves a relative
+  URL found inside any other fetched document -- against that document's own
+  final address, not the page that requested it. A cue's `url` is left
+  exactly as the file wrote it, unresolved, in every case resolution cannot
+  answer for cleanly: no `baseUrl` given; `baseUrl` not itself a valid
+  absolute URL; `baseUrl` using a non-hierarchical scheme such as `data:` or
+  `blob:`; or the cue's own URL carrying a raw tab, newline or other C0
+  control character, which the URL parser would otherwise strip before the
+  existing allowlist ever saw it.
+
+- f912b5d: Load `SeekSlider`'s thumbnail preview only when a consumer sets `thumbnails`
+
+  `@playdeck/core` gains a second export subpath, `@playdeck/core/thumbnails`,
+  exposing `parseThumbnailCues`, `thumbnailCueAt` and the `ThumbnailCue` and
+  `ThumbnailRegion` types. All four stay exported from `@playdeck/core` itself
+  as well, so nothing a consumer writes today changes. The subpath is built as
+  its own bundle rather than as a second entry of the one beside it, which is
+  what keeps `dist/index.js` a single module every bundler can tree-shake the
+  parser out of.
+
+  `@playdeck/react` reaches the parser only through that subpath, from the
+  module it now loads on demand. `SeekSlider` imports its whole thumbnail path
+  — the cue fetch, the cue lookup, the crop geometry and the `thumbnail` part's
+  markup — through a dynamic `import()` started when the `thumbnails` prop is
+  present, the same trade `Player.Root` already makes for provider adapters. A
+  composition that renders a seek slider without the prop no longer downloads
+  any of it: the "Playdeck (control bar)" comparison row falls from 27.01 KB to
+  25.92 KB gzipped, and both bundlers the comparison runs agree on the size of
+  the drop.
+
+  Behaviour with the prop set is unchanged, with one timing difference worth
+  naming: the `thumbnail` part mounts when its module arrives rather than in the
+  same tick as the slider. It is `position: absolute` and starts hidden, so it
+  displaces nothing and paints nothing on arrival, and a hover or focus that
+  happens first is recorded and previewed as soon as the module is there. The
+  WebVTT file is still fetched on first interaction and never at mount.
+
+  The package's `dist` gains files a consumer's bundler resolves on its own:
+  `thumbnails.js` (the preview), and, in the no-build `./browser` entry,
+  `react.js` (React, now shared between that entry and the preview) and
+  `assets/thumbnails.js`.
+
+- 4aa6035: Decode WebVTT cue markup for native and HLS captions
+
+  `defaultCueRenderer` in `@playdeck/react`'s captions overlay renders
+  `TextCue.text` as React text, which is safe from injection but only correct
+  if that text is already plain. It wasn't for the native and HLS providers: a
+  standard cue payload like `<v Bob><i>Look out</i> &amp; run` passed straight
+  through from `VTTCue.text`/hls.js's parsed cue, so tags and character
+  references showed up on screen literally. The Vimeo provider was the only one
+  that stripped WebVTT tags and decoded entities before publishing a cue.
+
+  `TextCue.text`'s own doc comment now states the contract every provider is
+  held to: plain text, markup stripped, character references decoded.
+  `@playdeck/core` gains `plainCueText`, alongside `textTrackLabel` in
+  `text-tracks.ts`, which turns a raw cue payload into that contract -- tag
+  spans removed, and the WebVTT cue-text grammar's six named escapes (`&amp;`,
+  `&lt;`, `&gt;`, `&nbsp;`, `&lrm;`, `&rlm;`) and its decimal and hexadecimal
+  numeric character references (`&#38;`, `&#x26;`) decoded. An invalid or
+  out-of-range numeric reference (0, a lone surrogate half, anything past
+  U+10FFFF) maps to U+FFFD rather than being left literal. Nothing renders
+  through `dangerouslySetInnerHTML`; the overlay keeps drawing plain text
+  exactly as before, and a consumer's own `renderCue` now receives the same
+  cleaned text the default renderer does.
+
+  `@playdeck/provider-native`'s cue-text helper and `@playdeck/provider-hls`'s
+  `normalizeHlsCue` both run their cue's `text` through `plainCueText` before
+  publishing it. `@playdeck/provider-vimeo`'s own `decodeCueEntities` moves to
+  `@playdeck/core` verbatim; its `vimeoCueText` now calls the shared helper
+  after its own `↵`-to-newline substitution, which stays Vimeo's own since no
+  other provider's payload uses it. Vimeo's cue output is unchanged.
+
+  `minor` for `@playdeck/core`: `plainCueText` joins the public entry, the same
+  reason `notifySafely` did (1.1.0) -- a provider package cannot reach a
+  private helper, and copying the implementation into two more packages is how
+  those copies drift. `patch` for the three providers: no export surface moves
+  and no published type changes -- only what a native or HLS `TextCue.text`
+  now reads for a cue whose payload carried markup.
+
+- 059e008: Add `QualityMenu`, a preset quality-selection menu
+
+  `selectQuality` and `PlayerState.qualities` already existed, but no shipped
+  part exposed them — a consumer had to compose one from `SettingsMenu`,
+  `MenuRadioGroup` and `MenuRadioItem` by hand, the way the reference example
+  and `RateMenu` still do for playback rate.
+
+  `Player.QualityMenu` is the same preset shape `Player.CaptionsMenu` is over
+  that composition: it renders nothing until `capabilities.selectQuality`
+  resolves `available`, lists `state.qualities` plus an "Auto" row, and marks
+  the active rung from `state.selectedQualityId`. The auto row's own label
+  names the level actually playing (`state.quality`), e.g. "Auto (1080p)" —
+  `selectedQualityId === null` means auto, and a menu needs both fields, since
+  `quality` moves on its own under adaptive selection while `selectedQualityId`
+  is only what the consumer chose.
+
+  The Auto row carries its own gate, `capabilities.selectQualityAuto` — a new
+  `PlayerCapabilities` field, distinct from `selectQuality`. A provider can
+  select real rungs without honouring `selectQuality(null)` for auto:
+  `@playdeck/provider-vimeo`'s ladder does not always carry an `auto` entry,
+  and where it does not, `selectQuality(null)` resolves `unsupported` against a
+  ladder that otherwise selects fine. A menu gated on `selectQuality` alone
+  would render an Auto row that silently does nothing when chosen on such an
+  embed. `@playdeck/provider-hls` never splits the two — hls.js honours
+  `currentLevel = -1` whenever it has a ladder at all, so `selectQualityAuto`
+  mirrors `selectQuality` there. `@playdeck/provider-native`,
+  `-youtube` and `-wistia` report `selectQualityAuto` unavailable alongside
+  their existing `selectQuality` verdict, for the same reason: none of the
+  three offers quality selection at all.
+
+  `@playdeck/core`'s `PlayerCapabilities` gains a required field: any object
+  built to satisfy that type — a custom provider adapter, a capabilities
+  fixture in a test — needs the new field before it type-checks again, the
+  same compatibility impact `providerPoster` had when it landed (1.1.0).
+
+- cc697b4: Add `PlayerState.audioTracks` and a `selectAudioTrack` command
+
+  No audio-track state, command, or capability existed before this: a consumer
+  could not tell whether a source carried alternate audio, let alone switch
+  between renditions. `@playdeck/core` gains `PlayerState.audioTracks`, each
+  entry carrying an `id`, a `label`, a `language`, and its own `active` flag —
+  unlike a text track or a quality rung, an audio track's selection lives on
+  the entry itself rather than in a sibling `selectedId` field: hls.js's own
+  audio-tracks controller already enforces "at most one enabled" on the track,
+  and `@playdeck/provider-native` enforces that same exclusivity itself for the
+  DOM's `AudioTrackList` (which otherwise permits more than one track enabled
+  at once), leaving no separate slot to mirror either way.
+  `selectAudioTrack(id)` follows the existing refusal semantics every other
+  command does, and `capabilities.selectAudioTrack` uses the existing
+  `Availability` vocabulary.
+
+  `@playdeck/provider-native` answers from the media element's (non-standard,
+  browser-dependent) `AudioTrackList` where it is exposed, and reports
+  `unavailable: 'browser'` where it is not — Chrome does not implement the
+  list at all; Firefox and Safari do.
+
+  `@playdeck/provider-hls` answers from hls.js's own audio tracks when running
+  on that engine, settled the same way subtitle-track support is: from the
+  manifest on `MANIFEST_PARSED` (which tells a build without the alternate-audio
+  controller apart from a source with no alternate-audio renditions at all),
+  then from `AUDIO_TRACKS_UPDATED` once the tracks themselves are in hand. Each
+  entry's `active` flag is settled from hls.js's own `AUDIO_TRACK_SWITCHING`
+  rather than `AUDIO_TRACKS_UPDATED` alone: hls.js fires the latter before it
+  resolves a default track, so reading `active` off it by itself reported every
+  track — including the eventual default — as inactive. On native HLS it
+  answers from the media element, through the same seam
+  `@playdeck/provider-native` exposes.
+
+  `@playdeck/provider-vimeo`, `@playdeck/provider-youtube` and
+  `@playdeck/provider-wistia` all report `selectAudioTrack` unavailable with
+  reason `provider` — none of the three exposes an audio-track surface to wire
+  a command to.
+
+  `@playdeck/core`'s `PlayerCapabilities` gains a required field: any object
+  built to satisfy that type — a custom provider adapter, a capabilities
+  fixture in a test — needs the new field before it type-checks again, the
+  same compatibility impact `providerPoster` and `selectQualityAuto` had.
+
+  Out of scope: the menu part that surfaces this capability to viewers, tracked
+  separately.
+
+- 17627c6: Open `PlayerSource` and `ResolvedPlayerSource` through a generic parameter
+
+  Both types were a closed union of exactly five source kinds, with no seam for
+  a sixth. Each now takes an optional `Extra` type parameter, defaulted to
+  `never` — a union absorbs `never` without contributing a member, so
+  `PlayerSource` and `ResolvedPlayerSource` used bare, the way every existing
+  caller in this repo and out of it already uses them, are unchanged: the
+  identical five-member union they always were.
+
+  This is additive rather than breaking. No prior usage could have supplied a
+  type argument to either type — neither took one — so no existing call site is
+  affected by one becoming available; a type alias cannot be reflected on or
+  pattern-matched by arity the way a function can, so there is no way for a
+  consumer's own code to have depended on either type staying non-generic. What
+  opens up is new: `@playdeck/react`'s `providers` prop on `Player.Root` (added
+  alongside this in `@playdeck/react`) instantiates `Extra` with a supplied
+  kind's own source shape, so `Player.Root`'s `source` prop types that shape
+  directly once a consumer registers it — without widening what the five
+  built-in kinds accept for every consumer who never does.
+
+- 6cc2455: Add `RemotePlaybackButton`, reporting the standards-based Remote Playback API beside AirPlay
+
+  The comparison page marked Chromecast as unsupported because the only route
+  there was the Cast SDK — a sender script and a receiver page. The Remote
+  Playback API is the standards-based alternative already built into the media
+  element: Chrome's own route to Chromecast for a file or an HLS stream, with no
+  SDK to load.
+
+  `@playdeck/core` gains `capabilities.remotePlayback`, beside the existing
+  `airPlay`: `available` where the element's `remote` object exists and a device
+  is currently reachable per its own `watchAvailability()`, `unavailable` with
+  reason `browser` where the API is absent, and `unavailable` with reason
+  `provider` where it exists but no device has announced itself yet — the same
+  three-way split `airPlay` already makes. A `showRemotePlaybackPicker` command
+  joins `PlayerCommand` and `ProviderAdapter`, refusing through the same path
+  every other pre-attach command does. `PlayerState.remotePlayback` reflects the
+  connection state the API itself reports (`connecting`/`connected`/
+  `disconnected`), `null` both before the capability resolves `available` and
+  once it has settled back on `unavailable` — the same pairing
+  `capabilities.providerPoster`/`providerPosterUrl` already are.
+
+  `@playdeck/provider-native` implements all of this against the media element;
+  `@playdeck/provider-hls` delegates to the embedded native adapter the way it
+  already does for `airPlay`. `@playdeck/provider-youtube`, `-vimeo` and
+  `-wistia` report `unavailable`/`provider`: none of the three exposes a media
+  element this adapter has a handle to.
+
+  `@playdeck/react`'s `RemotePlaybackButton` mirrors the existing `AirPlayButton`
+  part exactly — not a toggle, no `aria-pressed`, renders nothing until the
+  capability resolves `available` — and is exported alongside it.
+
+  `@playdeck/core`'s `PlayerCapabilities` gains a required field: any object
+  built to satisfy that type — a custom provider adapter, a capabilities fixture
+  in a test — needs the new field before it type-checks again, the same
+  compatibility impact `providerPoster` had when it landed (1.1.0).
+
+  The features comparison gains a Chromecast/Google Cast anchor reading yes for
+  Playdeck, with a footnote naming the Remote Playback API as the specific route
+  — distinct from the separate, unimplemented Cast SDK.
+
+- 33bbd72: Open `PlayerProvider` and `ProviderAdapter` through a generic parameter
+
+  `PlayerProvider` was a closed union of exactly five provider kinds, with no
+  member a provider implemented outside the published packages could honestly
+  report. Both types now take an optional `Extra` type parameter, defaulted to
+  `never` — a union absorbs `never` without contributing a member, so
+  `PlayerProvider` and `ProviderAdapter` used bare, the way every existing
+  caller in this repo and out of it already uses them, are unchanged:
+  `PlayerState.provider` and `PlayerEventFor.provider` still resolve to exactly
+  the five-member union they always did, and a consumer narrowing on either
+  field keeps handling exactly the five cases it always handled.
+
+  This mirrors `PlayerSource`'s own widening from #662 rather than inventing a
+  second shape for the same problem: one precedent, one mental model, and the
+  two types stay symmetrical, which matters because a supplied provider needs
+  both — its own `PlayerSource` shape and its own `PlayerProvider` identity.
+
+  This is additive rather than breaking, for the same reason that widening was:
+  no prior usage could have supplied a type argument to either type — neither
+  took one — so no existing call site is affected by one becoming available,
+  and a type alias cannot be reflected on or pattern-matched by arity the way a
+  function can, so there is no way for a consumer's own code to have depended
+  on either type staying non-generic. Verified directly rather than assumed: a
+  consumer who narrows `PlayerState.provider` in a switch or an `if` chain today
+  is narrowing the bare, non-generic field, which is untouched by a type
+  parameter it never supplies — `packages/react/test/provider-loaders.test.ts`
+  now asserts this bare form by type equality, not merely by the suite
+  compiling.
+
+  What opens up is new: `@playdeck/react`'s `ProviderAdapterFactory`
+  (`packages/react/src/provider-loaders.ts`, added alongside the `providers`
+  prop in #662) instantiates `Extra` with a supplied kind's own source-type
+  literal, so a supplied provider's own factory can write `provider:
+'example-file'` (say) on the adapter it builds directly, with no cast —
+  `examples/provider-setup-file-adapter.tsx`'s reference adapter no longer needs
+  one.
+
+### Patch Changes
+
+- 7db1141: Replace a re-emitted provider notice rather than registering it again
+
+  A provider that re-decides a `configuration` notice per load and never
+  withdraws it registered one entry per emit in the controller's notice
+  registry, each of them held for the rest of that provider's life.
+  `@playdeck/provider-vimeo` is the concrete case: `start()` re-checks the
+  SEO-metadata suppression and re-emits its notice, `retry()` calls `start()`
+  again, and nothing takes the earlier registration away.
+
+  Nothing a consumer could observe was wrong while they accumulated -- the
+  read-time fold picks one winner however many equal entries stand behind it, so
+  `PlayerState.error` was right throughout -- but the registry grew with every
+  retry, where the single field it replaced could not.
+
+  Registering a provider notice that matches one already registered now replaces
+  it: one provider subscription speaks on that scope, so the same notice again
+  is the same claim restated rather than a second claim. Matching is every field
+  `PlayerError` declares, compared with `Object.is` (`cause` by reference, like
+  the rest), because the controller freezes each notice it is handed and so
+  mints a fresh object per registration -- identity cannot answer the question.
+  Two notices differing in any field are still two entries, and a replacement
+  keeps the earlier registration's place in the registration order the error
+  slot breaks ties by, so which notice that slot publishes is unchanged in every
+  case that worked before.
+
+  Refused consumer URLs are deliberately untouched. Those registrations are one
+  per reporter -- several reporters can hold the same prop and register the very
+  same shared notice value for one surface -- and each is withdrawn only by the
+  reporter that made it.
+
+- 175fbb2: Give the thumbnails fetch deadlines, a retry, a byte cap and a cue cap, and binary-search cue lookup
+
+  The React thumbnails loader's fetch (`packages/react/src/thumbnails.tsx`) now
+  carries two deadlines. `THUMBNAILS_FETCH_TIMEOUT_MS` (4000ms, the same figure
+  and shape `OEMBED_REQUEST_TIMEOUT_MS` (`@playdeck/provider-vimeo`) and
+  `POSTER_PROBE_TIMEOUT_MS` (`@playdeck/provider-wistia`) already give their own
+  fetches) bounds only the wait for a response's headers: a WebVTT host that is
+  malicious or merely compromised can no longer hold it open indefinitely by
+  never answering at all. Once headers arrive, `THUMBNAILS_BODY_READ_TIMEOUT_MS`
+  (20000ms) separately bounds the body read that follows, so a large sprite VTT
+  on a slow connection is given time to finish downloading instead of being cut
+  off by a budget sized for "is anything answering at all" -- a body that stops
+  delivering bytes partway through still ends as a failure once this second
+  deadline elapses.
+
+  A fetch that fails -- a network error, a non-ok response, or either deadline
+  -- is retried once `THUMBNAILS_RETRY_BACKOFF_MS` (5000ms) has passed, rather
+  than staying failed for the rest of the URL's life: whether that backoff ends
+  while the pointer is still hovering the seek slider (or its input still holds
+  keyboard focus) or only once a later hover or focus arrives, either way
+  triggers the retry. A host that keeps failing is retried at most once per
+  backoff, not on every pointer movement in between. A URL that already
+  fetched successfully is still fetched only once.
+
+  The response body is read through a counting stream reader
+  (`readCappedBody`) rather than `response.text()`, and abandoned -- the stream
+  cancelled -- once the running byte count passes `THUMBNAILS_FETCH_BYTE_CAP`
+  (10,000,000 bytes): `Content-Length` is not trusted on its own, since a
+  response can omit or understate it.
+
+  `parseThumbnailCues` (`@playdeck/core/thumbnails`) now stops, and publishes
+  no cues at all, once a file's cue count would exceed an internal cap sized
+  at roughly ten times the ~10,800 cues a 3-hour film produces at one cue per
+  second. Both this and the byte cap resolve to the same "no thumbnails"
+  result an unparseable file already produced; neither throws. The cap itself
+  is not exported: `./thumbnails` is a published subpath built as its own
+  bundle, so anything exported from that module ships in `dist/thumbnails.js`
+  and becomes public API, which this internal limit is not meant to be.
+
+  `thumbnailCueAt` is now a binary search over the cues' own running-maximum
+  `endTime`, rather than a linear `Array.prototype.find`, fixing the O(n) scan
+  `SeekSlider` ran on every `pointermove` while scrubbing a long thumbnail
+  track. It returns exactly what the linear scan returned, including when
+  cues share a `startTime` or overlap.
+
+  No public API changes beyond four new constants on the React side
+  (`THUMBNAILS_FETCH_TIMEOUT_MS`, `THUMBNAILS_BODY_READ_TIMEOUT_MS`,
+  `THUMBNAILS_RETRY_BACKOFF_MS`, `THUMBNAILS_FETCH_BYTE_CAP`), none re-exported
+  from `@playdeck/react`'s main entry point -- the same treatment
+  `OEMBED_REQUEST_TIMEOUT_MS` and `POSTER_PROBE_TIMEOUT_MS` already get.
+
+- b4d5ba1: Gate a supplied provider's own `providerOptions` bag through the shared allowlist before its factory is called
+
+  `loadProvider`'s supplied-kind branch handed `providerOptions[source.type]` straight
+  to the registration's factory with no validation, unlike the resolved source itself,
+  which the shared allowlist already covers. The reference file adapter carries its
+  playback URL in that bag and writes it into a `<source src>`, and `docs/provider-setup.md`
+  told readers that is where the playback URL goes — so a `javascript:` or `data:`
+  value written there by a consumer had no gate between it and provider-authored code.
+  A registration that builds an iframe from an option would have executed a
+  `javascript:` URL in the embedding origin.
+
+  Every string in a supplied kind's own option bag now passes the same shared
+  allowlist the resolved source passes before the factory is ever called. A refused
+  string is omitted from the bag exactly as if the consumer had not set it, never a
+  throw, and reported through `PlayerController.reportRefusedUrl` under a new
+  `providerOptions` surface — the same mechanism every other refused consumer-supplied
+  URL already uses. Numbers and booleans are never checked and always pass through
+  untouched, and built-in kinds' own option handling is unchanged.
+
+  `docs/provider-setup.md` and the reference adapter's comments
+  (`examples/provider-setup-file-adapter.tsx`) now say the allowlist applies here too.
+
+  `@playdeck/core`'s `RefusedUrlSurface` gains a new member, `'providerOptions'`,
+  alongside its notice in `REFUSED_URL_NOTICES` and its rank in
+  `REFUSED_URL_SURFACE_RANK` — the same closed union and tables every other
+  refused-prop surface is already declared in.
+
 ## 1.1.0
 
 ### Minor Changes

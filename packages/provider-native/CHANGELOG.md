@@ -1,5 +1,258 @@
 # @playdeck/provider-native
 
+## 1.2.0
+
+### Minor Changes
+
+- cf879ba: Add a live edge: `PlayerLiveState.offsetFromEdge`, a `liveEdge` capability, and `seekToLiveEdge`
+
+  `PlayerLiveState` gains `offsetFromEdge`: how far behind the provider's live
+  edge playback is, in whole seconds, `0` at or ahead of it. Whole seconds is
+  deliberate — `liveStateEqual` is what every adapter consults to decide
+  whether a changed `live` value is worth publishing, and an unrounded float
+  would differ on essentially every `timeupdate`, so `liveStateEqual` now
+  compares the new field too.
+
+  `PlayerCapabilities` gains a required field, `liveEdge`, told apart the way
+  `chapters` is: `unavailable`/`provider` means the provider has no way to
+  report a live edge at all, `unavailable`/`source` means this particular
+  source is not live. Any object built to satisfy `PlayerCapabilities` — a
+  custom provider adapter, a capabilities fixture in a test — needs the new
+  field before it type-checks again, the same compatibility impact
+  `providerPoster` had when it landed (1.1.0).
+
+  `PlayerController` gains `seekToLiveEdge()`, and `PlayerCommand` gains the
+  matching member. It refuses with `not-ready` whenever there is no provider,
+  `capabilities.liveEdge` is not `available`, or the attached adapter
+  implements no `seekToLiveEdge` — the same `RefusedCommand` shape every other
+  pre-attach refusal uses. Where a provider can answer, the command lands on
+  the provider's own notion of the edge, never a value the controller
+  computes.
+
+  Each provider adapter reports `liveEdge` for what it can actually see:
+
+  - `@playdeck/provider-hls`: on the hls.js engine, `available` once the source
+    is live, hls.js's own `liveSyncPosition` is finite, and the existing
+    seek-window-meaningful check passes — `seekToLiveEdge` lands on
+    `liveSyncPosition`, deliberately behind the raw seekable end. On the native
+    engine, the edge is the raw seekable end, delegated straight to
+    `@playdeck/provider-native`.
+  - `@playdeck/provider-native`: `available` once the source is live and its
+    `seekable` has a finite end, which `seekToLiveEdge` lands on — the only
+    notion of a live edge a plain media element has.
+  - `@playdeck/provider-youtube`: `unavailable`/`provider`. The IFrame Player
+    API exposes no seekable-range accessor at all, and `getDuration()` is a
+    snapshot rather than a value tracking the edge on a live stream.
+  - `@playdeck/provider-vimeo`: `unavailable`/`provider`. `@vimeo/player`
+    (2.30.4) has no live concept anywhere to build one on.
+  - `@playdeck/provider-wistia`: `unavailable`/`provider`. `PublicApi` has no
+    seekable-range accessor and no dedicated live-edge member.
+
+- 059e008: Add `QualityMenu`, a preset quality-selection menu
+
+  `selectQuality` and `PlayerState.qualities` already existed, but no shipped
+  part exposed them — a consumer had to compose one from `SettingsMenu`,
+  `MenuRadioGroup` and `MenuRadioItem` by hand, the way the reference example
+  and `RateMenu` still do for playback rate.
+
+  `Player.QualityMenu` is the same preset shape `Player.CaptionsMenu` is over
+  that composition: it renders nothing until `capabilities.selectQuality`
+  resolves `available`, lists `state.qualities` plus an "Auto" row, and marks
+  the active rung from `state.selectedQualityId`. The auto row's own label
+  names the level actually playing (`state.quality`), e.g. "Auto (1080p)" —
+  `selectedQualityId === null` means auto, and a menu needs both fields, since
+  `quality` moves on its own under adaptive selection while `selectedQualityId`
+  is only what the consumer chose.
+
+  The Auto row carries its own gate, `capabilities.selectQualityAuto` — a new
+  `PlayerCapabilities` field, distinct from `selectQuality`. A provider can
+  select real rungs without honouring `selectQuality(null)` for auto:
+  `@playdeck/provider-vimeo`'s ladder does not always carry an `auto` entry,
+  and where it does not, `selectQuality(null)` resolves `unsupported` against a
+  ladder that otherwise selects fine. A menu gated on `selectQuality` alone
+  would render an Auto row that silently does nothing when chosen on such an
+  embed. `@playdeck/provider-hls` never splits the two — hls.js honours
+  `currentLevel = -1` whenever it has a ladder at all, so `selectQualityAuto`
+  mirrors `selectQuality` there. `@playdeck/provider-native`,
+  `-youtube` and `-wistia` report `selectQualityAuto` unavailable alongside
+  their existing `selectQuality` verdict, for the same reason: none of the
+  three offers quality selection at all.
+
+  `@playdeck/core`'s `PlayerCapabilities` gains a required field: any object
+  built to satisfy that type — a custom provider adapter, a capabilities
+  fixture in a test — needs the new field before it type-checks again, the
+  same compatibility impact `providerPoster` had when it landed (1.1.0).
+
+- cc697b4: Add `PlayerState.audioTracks` and a `selectAudioTrack` command
+
+  No audio-track state, command, or capability existed before this: a consumer
+  could not tell whether a source carried alternate audio, let alone switch
+  between renditions. `@playdeck/core` gains `PlayerState.audioTracks`, each
+  entry carrying an `id`, a `label`, a `language`, and its own `active` flag —
+  unlike a text track or a quality rung, an audio track's selection lives on
+  the entry itself rather than in a sibling `selectedId` field: hls.js's own
+  audio-tracks controller already enforces "at most one enabled" on the track,
+  and `@playdeck/provider-native` enforces that same exclusivity itself for the
+  DOM's `AudioTrackList` (which otherwise permits more than one track enabled
+  at once), leaving no separate slot to mirror either way.
+  `selectAudioTrack(id)` follows the existing refusal semantics every other
+  command does, and `capabilities.selectAudioTrack` uses the existing
+  `Availability` vocabulary.
+
+  `@playdeck/provider-native` answers from the media element's (non-standard,
+  browser-dependent) `AudioTrackList` where it is exposed, and reports
+  `unavailable: 'browser'` where it is not — Chrome does not implement the
+  list at all; Firefox and Safari do.
+
+  `@playdeck/provider-hls` answers from hls.js's own audio tracks when running
+  on that engine, settled the same way subtitle-track support is: from the
+  manifest on `MANIFEST_PARSED` (which tells a build without the alternate-audio
+  controller apart from a source with no alternate-audio renditions at all),
+  then from `AUDIO_TRACKS_UPDATED` once the tracks themselves are in hand. Each
+  entry's `active` flag is settled from hls.js's own `AUDIO_TRACK_SWITCHING`
+  rather than `AUDIO_TRACKS_UPDATED` alone: hls.js fires the latter before it
+  resolves a default track, so reading `active` off it by itself reported every
+  track — including the eventual default — as inactive. On native HLS it
+  answers from the media element, through the same seam
+  `@playdeck/provider-native` exposes.
+
+  `@playdeck/provider-vimeo`, `@playdeck/provider-youtube` and
+  `@playdeck/provider-wistia` all report `selectAudioTrack` unavailable with
+  reason `provider` — none of the three exposes an audio-track surface to wire
+  a command to.
+
+  `@playdeck/core`'s `PlayerCapabilities` gains a required field: any object
+  built to satisfy that type — a custom provider adapter, a capabilities
+  fixture in a test — needs the new field before it type-checks again, the
+  same compatibility impact `providerPoster` and `selectQualityAuto` had.
+
+  Out of scope: the menu part that surfaces this capability to viewers, tracked
+  separately.
+
+- 6cc2455: Add `RemotePlaybackButton`, reporting the standards-based Remote Playback API beside AirPlay
+
+  The comparison page marked Chromecast as unsupported because the only route
+  there was the Cast SDK — a sender script and a receiver page. The Remote
+  Playback API is the standards-based alternative already built into the media
+  element: Chrome's own route to Chromecast for a file or an HLS stream, with no
+  SDK to load.
+
+  `@playdeck/core` gains `capabilities.remotePlayback`, beside the existing
+  `airPlay`: `available` where the element's `remote` object exists and a device
+  is currently reachable per its own `watchAvailability()`, `unavailable` with
+  reason `browser` where the API is absent, and `unavailable` with reason
+  `provider` where it exists but no device has announced itself yet — the same
+  three-way split `airPlay` already makes. A `showRemotePlaybackPicker` command
+  joins `PlayerCommand` and `ProviderAdapter`, refusing through the same path
+  every other pre-attach command does. `PlayerState.remotePlayback` reflects the
+  connection state the API itself reports (`connecting`/`connected`/
+  `disconnected`), `null` both before the capability resolves `available` and
+  once it has settled back on `unavailable` — the same pairing
+  `capabilities.providerPoster`/`providerPosterUrl` already are.
+
+  `@playdeck/provider-native` implements all of this against the media element;
+  `@playdeck/provider-hls` delegates to the embedded native adapter the way it
+  already does for `airPlay`. `@playdeck/provider-youtube`, `-vimeo` and
+  `-wistia` report `unavailable`/`provider`: none of the three exposes a media
+  element this adapter has a handle to.
+
+  `@playdeck/react`'s `RemotePlaybackButton` mirrors the existing `AirPlayButton`
+  part exactly — not a toggle, no `aria-pressed`, renders nothing until the
+  capability resolves `available` — and is exported alongside it.
+
+  `@playdeck/core`'s `PlayerCapabilities` gains a required field: any object
+  built to satisfy that type — a custom provider adapter, a capabilities fixture
+  in a test — needs the new field before it type-checks again, the same
+  compatibility impact `providerPoster` had when it landed (1.1.0).
+
+  The features comparison gains a Chromecast/Google Cast anchor reading yes for
+  Playdeck, with a footnote naming the Remote Playback API as the specific route
+  — distinct from the separate, unimplemented Cast SDK.
+
+### Patch Changes
+
+- 892479a: Fix a looping viewport-autoplayed player auto-pausing only on its first exit
+
+  `restartFromBoundary` plays the media directly to restart a loop, and the
+  resulting `play` event went through the same path as a viewer pressing the
+  native controls, carrying the `'provider'` origin. #309's ownership rule
+  reads any non-`'autoplay'` play as the viewer taking over, so a looping
+  player started by viewport autoplay auto-paused correctly on its first exit
+  and then never again — it played on indefinitely once scrolled offscreen.
+
+  A loop restart is the library continuing playback it started, not the
+  viewer's. `restartFromBoundary` now labels its own `play` event `'system'`
+  — the existing `PlayerEventOrigin` member that was declared and never
+  emitted — and `use-activation.ts`'s ownership tracker treats a `'system'`
+  play as no takeover at all, leaving whatever ownership already stood
+  (`'autoplaying'` or `'none'`) exactly where it was. No new origin, and no
+  further breaking change to `@playdeck/core`.
+
+  A natural end of media (the `onEnded` loop path, with no `endTime`
+  configured) also fires a real `pause` event of its own before `restartFromBoundary`
+  runs, since the underlying element is never given the native `loop`
+  attribute — Playdeck implements looping itself. That pause used to publish
+  with the same `'provider'` origin, handing ownership away before the loop's
+  `play` event ever arrived. It is now suppressed the same way the
+  `endTime`-boundary path already suppresses its own boundary-induced pause,
+  read off `media.ended` rather than a new flag.
+
+  `provider-hls` needs no change of its own: both engines play into the same
+  `<video>` element through an embedded `@playdeck/provider-native` adapter,
+  so this fix reaches a looping HLS source through the same code path.
+
+- 4aa6035: Decode WebVTT cue markup for native and HLS captions
+
+  `defaultCueRenderer` in `@playdeck/react`'s captions overlay renders
+  `TextCue.text` as React text, which is safe from injection but only correct
+  if that text is already plain. It wasn't for the native and HLS providers: a
+  standard cue payload like `<v Bob><i>Look out</i> &amp; run` passed straight
+  through from `VTTCue.text`/hls.js's parsed cue, so tags and character
+  references showed up on screen literally. The Vimeo provider was the only one
+  that stripped WebVTT tags and decoded entities before publishing a cue.
+
+  `TextCue.text`'s own doc comment now states the contract every provider is
+  held to: plain text, markup stripped, character references decoded.
+  `@playdeck/core` gains `plainCueText`, alongside `textTrackLabel` in
+  `text-tracks.ts`, which turns a raw cue payload into that contract -- tag
+  spans removed, and the WebVTT cue-text grammar's six named escapes (`&amp;`,
+  `&lt;`, `&gt;`, `&nbsp;`, `&lrm;`, `&rlm;`) and its decimal and hexadecimal
+  numeric character references (`&#38;`, `&#x26;`) decoded. An invalid or
+  out-of-range numeric reference (0, a lone surrogate half, anything past
+  U+10FFFF) maps to U+FFFD rather than being left literal. Nothing renders
+  through `dangerouslySetInnerHTML`; the overlay keeps drawing plain text
+  exactly as before, and a consumer's own `renderCue` now receives the same
+  cleaned text the default renderer does.
+
+  `@playdeck/provider-native`'s cue-text helper and `@playdeck/provider-hls`'s
+  `normalizeHlsCue` both run their cue's `text` through `plainCueText` before
+  publishing it. `@playdeck/provider-vimeo`'s own `decodeCueEntities` moves to
+  `@playdeck/core` verbatim; its `vimeoCueText` now calls the shared helper
+  after its own `↵`-to-newline substitution, which stays Vimeo's own since no
+  other provider's payload uses it. Vimeo's cue output is unchanged.
+
+  `minor` for `@playdeck/core`: `plainCueText` joins the public entry, the same
+  reason `notifySafely` did (1.1.0) -- a provider package cannot reach a
+  private helper, and copying the implementation into two more packages is how
+  those copies drift. `patch` for the three providers: no export surface moves
+  and no published type changes -- only what a native or HLS `TextCue.text`
+  now reads for a cue whose payload carried markup.
+
+- Updated dependencies [cf879ba]
+- Updated dependencies [bfcae93]
+- Updated dependencies [f116c0a]
+- Updated dependencies [f912b5d]
+- Updated dependencies [4aa6035]
+- Updated dependencies [7db1141]
+- Updated dependencies [059e008]
+- Updated dependencies [cc697b4]
+- Updated dependencies [17627c6]
+- Updated dependencies [6cc2455]
+- Updated dependencies [175fbb2]
+- Updated dependencies [b4d5ba1]
+- Updated dependencies [33bbd72]
+  - @playdeck/core@1.2.0
+
 ## 1.1.0
 
 ### Minor Changes
