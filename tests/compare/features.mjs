@@ -789,11 +789,12 @@ export const axes = [
         anchor: {
           kind: 'file',
           module: '@videojs/react',
-          path: 'docs/reference/shaka-video.md',
+          path: 'docs/reference/components/shaka-video.md',
           includes: 'source.drm'
         },
         source:
-          VIDEOJS10_DOCS + ' (`reference/shaka-video.md`, "Protected content")',
+          VIDEOJS10_DOCS +
+          ' (`reference/components/shaka-video.md`, "Protected content")',
         note: "A `source.drm` map of EME key-system ids on `ShakaVideo` and `HlsjsVideo`; the key-system constants (`KeySystems`) are re-exported by `@videojs/react` from `@videojs/media`, whose `dist/default/core/drm.js` implements them. The playback engine behind it (shaka-player, hls.js) is the consumer's own install."
       }
     }
@@ -932,13 +933,21 @@ export const axes = [
         source: VIDEOJS_DIST
       },
       'Video.js 10 (rc)': {
-        status: 'yes',
+        status: 'plugin',
         anchor: {
-          kind: 'export',
-          module: '@videojs/react/media/dash-video',
-          name: 'DashVideo'
+          kind: 'file',
+          module: '@videojs/react',
+          path: 'docs/reference/components/dash-video.md',
+          includes: 'pnpm add @videojs/dash-video'
         },
-        source: VIDEOJS10_TREE
+        source:
+          VIDEOJS10_DOCS + ' (`reference/components/dash-video.md`, "Import")',
+        note: "Changed since `10.0.0-beta.32`: `DashVideo` is still exported from `@videojs/react/media/dash-video`, but that adapter now imports `@videojs/dash-video`, a package `@videojs/react`'s own `peerDependenciesMeta` marks optional and this pinned install does not add, so importing the subpath throws rather than exporting the component.",
+        plugin: {
+          name: '@videojs/dash-video',
+          repository: 'github.com/videojs/v10',
+          provenance: 'org-published'
+        }
       }
     }
   },
@@ -1074,13 +1083,22 @@ export const axes = [
         }
       },
       'Video.js 10 (rc)': {
-        status: 'yes',
+        status: 'plugin',
         anchor: {
-          kind: 'export',
-          module: '@videojs/react/media/youtube-video',
-          name: 'YouTubeVideo'
+          kind: 'file',
+          module: '@videojs/react',
+          path: 'docs/reference/components/youtube-video.md',
+          includes: 'pnpm add @videojs/youtube-video'
         },
-        source: VIDEOJS10_TREE
+        source:
+          VIDEOJS10_DOCS +
+          ' (`reference/components/youtube-video.md`, "Import")',
+        note: "Changed since `10.0.0-beta.32`: `YouTubeVideo` is still exported from `@videojs/react/media/youtube-video`, but that adapter now imports `@videojs/youtube-video`, a package `@videojs/react`'s own `peerDependenciesMeta` marks optional and this pinned install does not add, so importing the subpath throws rather than exporting the component.",
+        plugin: {
+          name: '@videojs/youtube-video',
+          repository: 'github.com/videojs/v10',
+          provenance: 'org-published'
+        }
       }
     }
   },
@@ -1153,13 +1171,21 @@ export const axes = [
         }
       },
       'Video.js 10 (rc)': {
-        status: 'yes',
+        status: 'plugin',
         anchor: {
-          kind: 'export',
-          module: '@videojs/react/media/vimeo-video',
-          name: 'VimeoVideo'
+          kind: 'file',
+          module: '@videojs/react',
+          path: 'docs/reference/components/vimeo-video.md',
+          includes: 'pnpm add @videojs/vimeo-video'
         },
-        source: VIDEOJS10_TREE
+        source:
+          VIDEOJS10_DOCS + ' (`reference/components/vimeo-video.md`, "Import")',
+        note: "Changed since `10.0.0-beta.32`: `VimeoVideo` is still exported from `@videojs/react/media/vimeo-video`, but that adapter now imports `@videojs/vimeo-video`, a package `@videojs/react`'s own `peerDependenciesMeta` marks optional and this pinned install does not add, so importing the subpath throws rather than exporting the component.",
+        plugin: {
+          name: '@videojs/vimeo-video',
+          repository: 'github.com/videojs/v10',
+          provenance: 'org-published'
+        }
       }
     }
   },
@@ -1197,7 +1223,7 @@ export const axes = [
           includes: 'istia'
         },
         source: VIDSTACK_TREE,
-        note: 'Searched for `istia`, which catches both `wistia` and `Wistia`; the same token is used in the Video.js and Video.js 10 (rc) columns.'
+        note: 'Searched for `istia`, which catches both `wistia` and `Wistia`; the same token is used in the Video.js column.'
       },
       'Media Chrome': {
         status: 'plugin',
@@ -1226,21 +1252,22 @@ export const axes = [
         source: VIDEOJS_TREE
       },
       'Video.js 10 (rc)': {
-        status: 'no',
+        status: 'plugin',
         anchor: {
-          kind: 'absent-in-tree',
-          module: [
-            '@videojs/react',
-            '@videojs/core',
-            '@videojs/media',
-            '@videojs/spf',
-            '@videojs/store',
-            '@videojs/utils'
-          ],
-          glob: ['**/*.js', '**/*.d.ts'],
-          includes: 'istia'
+          kind: 'file',
+          module: '@videojs/react',
+          path: 'docs/reference/components/wistia-video.md',
+          includes: 'pnpm add @videojs/wistia-video'
         },
-        source: VIDEOJS10_TREE
+        source:
+          VIDEOJS10_DOCS +
+          ' (`reference/components/wistia-video.md`, "Import")',
+        note: 'New since `10.0.0-beta.32`, which shipped no Wistia adapter at all (every file of `@videojs/react` and the five engine packages it then depended on was searched and none contained `istia`). `10.0.0-rc.4` adds `WistiaVideo` at `@videojs/react/media/wistia-video`, whose adapter imports the optional peer `@videojs/wistia-video`, not installed by this pinned fixture.',
+        plugin: {
+          name: '@videojs/wistia-video',
+          repository: 'github.com/videojs/v10',
+          provenance: 'org-published'
+        }
       }
     }
   },
@@ -1308,14 +1335,22 @@ export const axes = [
         source: VIDEOJS_TREE
       },
       'Video.js 10 (rc)': {
-        status: 'yes',
+        status: 'plugin',
         anchor: {
-          kind: 'export',
-          module: '@videojs/react/media/twitch-video',
-          name: 'TwitchVideo'
+          kind: 'file',
+          module: '@videojs/react',
+          path: 'docs/reference/components/twitch-video.md',
+          includes: 'pnpm add @videojs/twitch-video'
         },
-        source: VIDEOJS10_TREE,
-        note: 'Twitch, TikTok, Spotify, Cloudflare Stream and Mux each ship as their own media component under the `@videojs/react/media/*` subpath.'
+        source:
+          VIDEOJS10_DOCS +
+          ' (`reference/components/twitch-video.md`, "Import")',
+        note: "Twitch, TikTok, Spotify, Cloudflare Stream and Mux each still ship as their own media component under the `@videojs/react/media/*` subpath, but changed since `10.0.0-beta.32`: each adapter now imports its own optional peer package (`@videojs/twitch-video` here), which `@videojs/react`'s own `peerDependenciesMeta` marks optional and this pinned install does not add, so importing the subpath throws rather than exporting the component.",
+        plugin: {
+          name: '@videojs/twitch-video',
+          repository: 'github.com/videojs/v10',
+          provenance: 'org-published'
+        }
       }
     }
   },
@@ -1751,14 +1786,21 @@ export const axes = [
         }
       },
       'Video.js 10 (rc)': {
-        status: 'yes',
+        status: 'plugin',
         anchor: {
-          kind: 'export',
-          module: '@videojs/react/media/mux-data',
-          name: 'MuxData'
+          kind: 'file',
+          module: '@videojs/react',
+          path: 'docs/reference/components/mux-data.md',
+          includes: 'pnpm add @videojs/react @videojs/mux-data'
         },
-        source: VIDEOJS10_DOCS + ' (`concepts/mux-data.md`)',
-        note: 'A `MuxData` component ships in the package; it reports to Mux Data, and no other analytics vendor has a component here.'
+        source:
+          VIDEOJS10_DOCS + ' (`reference/components/mux-data.md`, "Import")',
+        note: "A `MuxData` component ships in the package, and no other analytics vendor has a component here, but changed since `10.0.0-beta.32`: the component moved from `@videojs/react/media/mux-data` to `@videojs/react/extensions/mux-data`, and its adapter now imports the optional peer `@videojs/mux-data`, which `@videojs/react`'s own `peerDependenciesMeta` marks optional and this pinned install does not add.",
+        plugin: {
+          name: '@videojs/mux-data',
+          repository: 'github.com/videojs/v10',
+          provenance: 'org-published'
+        }
       }
     }
   },
@@ -2031,13 +2073,13 @@ export const axes = [
       'Video.js 10 (rc)': {
         status: 'yes',
         anchor: {
-          kind: 'types',
+          kind: 'file',
           module: '@videojs/react',
-          path: 'dist/dev/presets/video/skin.d.ts',
-          includes: 'skin.css'
+          path: 'docs/guides/skins.md',
+          includes: "import '@videojs/react/video/skin.css';"
         },
-        source: VIDEOJS10_TYPES,
-        note: 'The skin\'s own type declaration says to "import `@videojs/react/video/skin.css` for the packaged styles".'
+        source: VIDEOJS10_DOCS + ' (`guides/skins.md`, "Packaged skin")',
+        note: "Changed since `10.0.0-beta.32`: the skin's own type declaration (`dist/dev/presets/video/skin.d.ts`) no longer names the stylesheet in its doc comment, so this cell now cites the guide's own `import '@videojs/react/video/skin.css';` example instead. The shipped stylesheet itself (`dist/default/presets/video/skin.css`) is unchanged."
       }
     }
   },
