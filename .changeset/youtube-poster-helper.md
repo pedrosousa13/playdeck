@@ -5,9 +5,9 @@
 Add `resolveYouTubePosterUrl`, a pure poster helper for a dormant player
 
 `@playdeck/provider-youtube` exports `resolveYouTubePosterUrl(source)`. It
-parses with the same `detectSource` the adapter itself resolves a source
-with, accepts a URL in any form `docs/provider-setup.md`'s YouTube section
-lists or an explicit `{ type: 'youtube', videoId }` object, and returns the
+parses with the same parser `Player.Root`'s `source` prop resolves with,
+accepts a URL in any form `docs/provider-setup.md`'s YouTube section lists
+or an explicit `{ type: 'youtube', videoId }` object, and returns the
 `i.ytimg.com` poster still for it, or `null` for anything else.
 
 It is synchronous, makes no request and reads no browser global, which is

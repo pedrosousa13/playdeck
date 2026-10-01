@@ -1,8 +1,39 @@
 // `resolveYouTubePosterUrl` is the pure, synchronous half of #859: a poster
 // still for a dormant `loading="interaction"` root, or for the server, where
 // `poster="provider"` cannot resolve because no provider has attached. These
-// tests cover the function itself; `packages/react/test/youtube-poster.ssr.test.ts`
+// tests cover the function itself; `packages/react/test/youtube-poster-ssr.test.tsx`
 // covers the no-request promise end to end, through a rendered `Player.Root`.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md), additive feature, so
+// each is the mutation fallback -- named, run against the real suite below,
+// and reverted once the real output was recorded:
+//
+// 1. The two length-boundary tests and the over-long id test: with the
+//    `youTubeVideoIdShape.test(videoId)` guard dropped from
+//    `resolveYouTubePosterUrl` (`return youTubePosterUrl(videoId);`
+//    unconditionally), all three failed, e.g. "returns null for an id one
+//    character short of YouTube's 11-character shape" --
+//    `expected 'https://i.ytimg.com/vi/dQw4w9WgXc/hqdefault.jpg' to be null`.
+//
+// 2. The look-alike-host, `javascript:`, `data:`, path-traversal and
+//    query-fragment tests (plus the two length-boundary ones and two
+//    positive-detection guards, as collateral): with `detectSource` replaced
+//    entirely by a naive extraction -- a string's `v=` query param or its
+//    last path segment, an object's `videoId` field read and interpolated
+//    with no validation at all -- 11 of 15 tests failed. Two from the named
+//    group: "returns null for a look-alike host, full URL form" --
+//    `expected 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg' to be
+//    null` (the naive extractor reads `v=dQw4w9WgXcQ` off
+//    `https://evil.example/watch?v=dQw4w9WgXcQ` with no host check at all)
+//    -- and "returns null for an id carrying a path traversal segment" --
+//    `expected 'https://i.ytimg.com/vi/../../etc/passwd/hqdefault.jpg' to be
+//    null`.
+//
+// 3. The fixed-host test: with the return changed to
+//    `` `https://${videoId}.i.ytimg.com/vi/${videoId}/hqdefault.jpg` ``,
+//    "the returned URL's origin is the fixed ytimg host, with the id the
+//    only interpolated part" failed --
+//    `expected 'https://m7lc1uvf-ve.i.ytimg.com' to be 'https://i.ytimg.com'`.
 
 import { expect, test } from 'vitest';
 import { resolveYouTubePosterUrl } from '../src/adapter-values';

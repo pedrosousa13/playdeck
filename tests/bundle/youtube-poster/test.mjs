@@ -12,6 +12,16 @@
 // a production minifier (esbuild renames identifiers and rewrites quotes, but
 // leaves string-literal contents alone), so a match is not an artefact of
 // unminified output.
+//
+// Demonstrated red (docs/agents/demonstrated-red.md), additive feature, so
+// the mutation fallback: with `src/main.ts` temporarily edited to also call
+// `createYouTubeProvider(document.createElement('div'), 'dQw4w9WgXcQ')`
+// alongside `resolveYouTubePosterUrl`, the build's single JS asset grew from
+// 6.35 kB (gzip 2.27 kB) to 22.71 kB (gzip 7.81 kB) and this file's own
+// `node test.mjs` failed with the exact error the leak check below raises:
+// `Error: The YouTube iframe API loader leaked into a bundle that imports
+// only resolveYouTubePosterUrl (found 'iframe_api').` Reverted, the build is
+// back to the single 6.35 kB asset and this file passes.
 import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath, URL } from 'node:url';
 

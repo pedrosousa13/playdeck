@@ -16,6 +16,24 @@
 // attempted -- attempting it would throw outright under this environment
 // (`loader.ts` requires `window`/`document`), which would make "never
 // called" indistinguishable from "called and crashed silently".
+//
+// Demonstrated red (docs/agents/demonstrated-red.md), additive feature, so
+// both final assertions are the mutation fallback -- named, run, reverted:
+//
+// - `fetchSpy` not called: with a stray `fetch('https://i.ytimg.com/generate_204');`
+//   added to the top of `resolveYouTubePosterUrl`
+//   (`packages/provider-youtube/src/adapter-values.ts`), this failed --
+//   `expected "vi.fn()" to not be called at all, but actually been called 1
+//   times`, with the call recorded as
+//   `["https://i.ytimg.com/generate_204"]`.
+// - `mockedCreateYouTubeProvider` not called: with a bare
+//   `mockedCreateYouTubeProvider();` call added just before `renderToString`
+//   below (standing in for a future bug where the dormant path constructs a
+//   provider instead of waiting for a click), this failed the same way --
+//   `expected "vi.fn()" to not be called at all, but actually been called 1
+//   times`. `renderToString` itself runs no effect, so nothing short of a
+//   stray synchronous call like this one was ever going to reach either mock
+//   -- this is what proves the assertion would catch one if something did.
 
 import { renderToString } from 'react-dom/server';
 import { afterEach, expect, test, vi } from 'vitest';
