@@ -72,19 +72,29 @@ const nativeTextTrackId = (track: NativeTextTrack, index: number): string =>
   track.id || `native:${index}`;
 
 // `observedReadiness` holds what `syncCaptionTrackListeners`'s `load`/`error`
-// listeners have seen for each track's `<track>` element — the source of
-// truth is events rather than `HTMLTrackElement.readyState`, because this
-// repo's test environment (happy-dom) hard-codes `readyState` to `NONE`, so a
-// transition read off it could never be watched failing before the fix, or
-// regressing after. An observed value wins over the cue-count snapshot
-// below: a track that fired `load` with zero cues (an empty WebVTT) has
-// still finished loading, not stalled in `loading`.
+// listeners have seen for each track's `<track>` element, alongside the
+// `src` the element reported at the moment the event fired: readiness
+// follows those events rather than reading `HTMLTrackElement.readyState`,
+// since every engine fires `load`/`error` on the element and a unit test can
+// drive both directly. An observed value wins over the cue-count snapshot
+// below while its `src` still matches `currentSrc` -- a track that fired
+// `load` with zero cues (an empty WebVTT) has still finished loading, not
+// stalled in `loading`. Once the element's `src` is reassigned, though, the
+// override is stale: the `TextTrack` is unchanged (same object, so
+// `syncCaptionTrackListeners` binds no new listener for it), but the
+// verdict it recorded belongs to a resource that is no longer the one
+// loading, and the snapshot is read again until the new resource's own
+// `load`/`error` arrives.
 const nativeTextTrackReadiness = (
   track: NativeTextTrack,
-  observedReadiness: ReadonlyMap<NativeTextTrack, TextTrackReadiness>
+  observedReadiness: ReadonlyMap<
+    NativeTextTrack,
+    { readonly value: TextTrackReadiness; readonly src: string }
+  >,
+  currentSrc: string | undefined
 ): TextTrackReadiness => {
   const observed = observedReadiness.get(track);
-  if (observed) return observed;
+  if (observed && observed.src === currentSrc) return observed.value;
   return track.cues && track.cues.length > 0 ? 'loaded' : 'loading';
 };
 
@@ -128,13 +138,16 @@ export const createNativeTextTracks = (
   let chapterAvailability: Availability = noChapterSource;
   const cueListeners = new Set<(cues: readonly TextCue[]) => void>();
   // What each caption/subtitle track's `<track>` element has reported via
-  // `load`/`error`, and the listener pair currently bound to that element —
-  // both keyed by the `TextTrack` object so `syncCaptionTrackListeners` can
-  // diff a discovery pass against the previous one and detach exactly what a
-  // departed track or element added.
+  // `load`/`error` (and the `src` it reported it for, so a later `src`
+  // reassignment on the same element can be told apart from the one the
+  // verdict belongs to — see `nativeTextTrackReadiness`), and the listener
+  // pair currently bound to that element — both keyed by the `TextTrack`
+  // object so `syncCaptionTrackListeners` can diff a discovery pass against
+  // the previous one and detach exactly what a departed track or element
+  // added.
   const captionReadinessOverrides = new Map<
     NativeTextTrack,
-    TextTrackReadiness
+    { readonly value: TextTrackReadiness; readonly src: string }
   >();
   const captionTrackListeners = new Map<
     NativeTextTrack,
@@ -370,7 +383,11 @@ export const createNativeTextTracks = (
       label: textTrackLabel(track.label, track.language),
       language: track.language || null,
       kind: track.kind as TextTrackKind,
-      readiness: nativeTextTrackReadiness(track, captionReadinessOverrides)
+      readiness: nativeTextTrackReadiness(
+        track,
+        captionReadinessOverrides,
+        captionTrackListeners.get(track)?.element.src
+      )
     }));
 
   // Keeps each caption/subtitle track's `<track>`-element `load`/`error`
@@ -399,8 +416,10 @@ export const createNativeTextTracks = (
         captionTrackListeners.delete(track);
       }
       if (!element) return;
-      const onLoad = (): void => setCaptionReadiness(track, 'loaded');
-      const onError = (): void => setCaptionReadiness(track, 'error');
+      const onLoad = (): void =>
+        setCaptionReadiness(track, 'loaded', element.src);
+      const onError = (): void =>
+        setCaptionReadiness(track, 'error', element.src);
       element.addEventListener('load', onLoad);
       element.addEventListener('error', onError);
       captionTrackListeners.set(track, { element, onLoad, onError });
@@ -410,13 +429,25 @@ export const createNativeTextTracks = (
   // Republishes the track collection when an element's `load`/`error`
   // changes what it reports for readiness — and only then, so a redundant
   // event (or one confirming the cue-count snapshot's existing verdict)
-  // emits nothing.
+  // emits nothing. `previous` is read before the new override is recorded,
+  // through the same staleness check `nativeTextTrackReadiness` applies on
+  // every other read: passing this event's own `src` as `currentSrc` means
+  // a prior override from a since-reassigned `src` is already treated as
+  // gone, so a track settling on the same verdict for a *new* resource
+  // still counts as a change from whatever the stale override, or the
+  // cue-count snapshot, was reading a moment ago.
   const setCaptionReadiness = (
     track: NativeTextTrack,
-    value: TextTrackReadiness
+    value: TextTrackReadiness,
+    src: string
   ): void => {
-    if (captionReadinessOverrides.get(track) === value) return;
-    captionReadinessOverrides.set(track, value);
+    const previous = nativeTextTrackReadiness(
+      track,
+      captionReadinessOverrides,
+      src
+    );
+    captionReadinessOverrides.set(track, { value, src });
+    if (previous === value) return;
     emit({ textTracks: buildTextTracks(captionTrackEntries()) });
   };
 

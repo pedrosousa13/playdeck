@@ -606,6 +606,80 @@ test('republishes readiness as error when the track element fails to load', asyn
   ]);
 });
 
+// A `<track>` element keeps the same `TextTrack` when its `src` is
+// reassigned, so `syncCaptionTrackListeners` sees the same element on the
+// next discovery pass and binds nothing new -- the `load`/`error` listener
+// from the first `src` is still the one that will fire for the second. The
+// override it already recorded must not outlive the `src` it was recorded
+// for, or a track that settled 'loaded'/'error' would keep reporting that
+// verdict after the swap until the new resource's own `load`/`error`
+// arrives.
+//
+// Red against the code before this fix (before an override's `src` was
+// tracked at all): running this test failed at the middle `toEqual` below
+// with
+//
+//   AssertionError: expected [ Array(1) ] to deeply equal [ Array(1) ]
+//   - Expected
+//   + Received
+//        "readiness": "loading",
+//      + "readiness": "loaded",
+//
+// -- the override from the first `src`'s `load` survived the reassignment
+// and kept reading 'loaded' for a resource that had not fired anything yet.
+test("ignores a readiness override once the track element's src has moved past it", async () => {
+  const { media, provider, patches, trackList } = mountNative([
+    { kind: 'captions', label: 'English', language: 'en', id: 't1' }
+  ]);
+  const trackElement = document.createElement('track');
+  trackElement.setAttribute('kind', 'captions');
+  trackElement.id = 't1';
+  trackElement.src = 'https://example.com/en.vtt';
+  media.appendChild(trackElement);
+
+  await provider.attach();
+  trackElement.dispatchEvent(new Event('load'));
+
+  expect(latest(patches).textTracks).toEqual([
+    {
+      id: 't1',
+      label: 'English',
+      language: 'en',
+      kind: 'captions',
+      readiness: 'loaded'
+    }
+  ]);
+
+  trackElement.src = 'https://example.com/fr.vtt';
+  // Nothing re-discovers on a `src` reassignment by itself (no `TextTrackList`
+  // event fires for it); `change` stands in for whatever next triggers
+  // discovery in a real session -- a track selection, an `addtrack`/
+  // `removetrack` elsewhere in the list, and so on.
+  trackList.dispatch('change');
+
+  expect(latest(patches).textTracks).toEqual([
+    {
+      id: 't1',
+      label: 'English',
+      language: 'en',
+      kind: 'captions',
+      readiness: 'loading'
+    }
+  ]);
+
+  trackElement.dispatchEvent(new Event('load'));
+
+  expect(latest(patches).textTracks).toEqual([
+    {
+      id: 't1',
+      label: 'English',
+      language: 'en',
+      kind: 'captions',
+      readiness: 'loaded'
+    }
+  ]);
+});
+
 // Asserted as add/remove symmetry on the same handler reference, not by
 // dispatching after destroy: `destroy()` also clears the provider's
 // subscriber set, so a post-destroy dispatch produces no patch whether the
