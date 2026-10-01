@@ -1,3 +1,31 @@
+// Bounded so the shape check below can never be asked to run its regex
+// against unbounded input. 35 is generous for any BCP 47 tag actually in
+// use -- the IANA Language Subtag Registry's longest realistic combinations
+// (a language plus script, region and a variant or two, e.g.
+// "zh-cmn-Hans-CN-x-private") run under 30 characters -- with headroom for a
+// tag the registry does not carry yet, not for an arbitrary payload riding
+// along with one.
+const MAX_TEXT_TRACK_LANGUAGE_LENGTH = 35;
+
+// A BCP 47 tag's SHAPE, not its registry membership: RFC 5646 subtags are
+// built from ASCII letters and digits only, joined by hyphens, which is every
+// character this allows. It does not validate subtag lengths, positions or
+// registry membership -- a real BCP 47 parser's job -- because what this
+// guards is a value about to flow into a case-insensitive compare
+// (`resolvePreferredTextTrack`) and a provider URL parameter
+// (`provider-youtube/src/attachment.ts`'s `cc_lang_pref`), not a claim that
+// the tag names a real language.
+const BCP47_SHAPE = /^[A-Za-z0-9-]+$/;
+
+// `Player.Root`'s `preferredTextTrackLanguage` gate, run before the value is
+// used anywhere: matching (`resolvePreferredTextTrack`) and the YouTube
+// adapter's `cc_lang_pref`, both of which treat a value this rejects as
+// though no preference were given at all.
+export const isValidTextTrackLanguage = (value: string): boolean =>
+  value.length > 0 &&
+  value.length <= MAX_TEXT_TRACK_LANGUAGE_LENGTH &&
+  BCP47_SHAPE.test(value);
+
 // `TextTrack.label` is a human label, so it must never be empty: providers
 // hand their raw label through here and get a language-derived one back when
 // there is nothing usable. A `<track srclang="en">` with no `label` would

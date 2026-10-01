@@ -395,7 +395,20 @@ export const libraries = [
     // from the last committed figure is this change's: that figure was
     // 22.19 KB (22724 bytes), measured the same day (2026-09-29) before this
     // change, per `results.md` on `main`.
-    ceilingKb: 22.5
+    //
+    // 23425 bytes measured 2026-10-01 -- 22.8759765625 KB, 22.88 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 22.75 KB is #858's `preferredTextTrackLanguage`/`defaultTextTrack`:
+    // `@playdeck/core` gained `isValidTextTrackLanguage`,
+    // `rejectedTextTrackLanguageNotice` and `PlayerController`'s
+    // `reportRejectedTextTrackLanguage`, and `Root` gained the matching
+    // effect, the validation gate and the notice-reporting effect that use
+    // them -- all reached by every composition this fixture builds, since
+    // `@playdeck/core` and `Root` itself are in every one of them regardless
+    // of provider. The whole distance from the last committed figure is
+    // this issue's: that figure was 22.45 KB, measured per `results.md` on
+    // `main`.
+    ceilingKb: 23
   },
   {
     name: 'Playdeck',
@@ -470,7 +483,15 @@ export const libraries = [
     // whole distance from the last committed figure is this issue's: that
     // figure was 22.95 KB, measured 2026-09-30 (#862) before this change,
     // per `results.md` on `main`.
-    ceilingKb: 23.25
+    //
+    // 24083 bytes measured 2026-10-01 -- 23.5185546875 KB, 23.52 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 23.5 KB is #858's `preferredTextTrackLanguage`/`defaultTextTrack`, the
+    // same change described on the "no parts" row above -- `Root` itself and
+    // `@playdeck/core` sit in every composition this fixture builds. The
+    // whole distance from the last committed figure is this issue's: that
+    // figure was 23.08 KB, measured per `results.md` on `main`.
+    ceilingKb: 23.75
   },
   {
     name: 'Playdeck (play-only)',
@@ -524,7 +545,16 @@ export const libraries = [
     // last committed figure is this change's: that figure was 24.24 KB,
     // measured the same day (2026-09-29) before this change, per
     // `results.md` on `main`.
-    ceilingKb: 24.5,
+    //
+    // 25443 bytes measured 2026-10-01 -- 24.8466796875 KB, 24.85 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 24.75 KB is #858's `preferredTextTrackLanguage`/`defaultTextTrack`,
+    // the same change described on the "no parts" row above -- `Root`
+    // itself and `@playdeck/core` sit in every composition this fixture
+    // builds, this one's `PlayButton` included. The whole distance from the
+    // last committed figure is this issue's: that figure was 24.41 KB,
+    // measured per `results.md` on `main`.
+    ceilingKb: 25,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
@@ -568,7 +598,16 @@ export const libraries = [
     // from the last committed figure is this change's: that figure was
     // 27.24 KB (27896 bytes), measured the same day (2026-09-29) before this
     // change, per `results.md` on `main`.
-    ceilingKb: 27.5
+    //
+    // 28674 bytes measured 2026-10-01 -- 28.001953125 KB, 28.00 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 27.75 KB is #858's `preferredTextTrackLanguage`/`defaultTextTrack`,
+    // the same change described on the "no parts" row above -- `Root`
+    // itself and `@playdeck/core` sit in every composition this fixture
+    // builds, this one's control bar included. The whole distance from the
+    // last committed figure is this issue's: that figure was 27.49 KB,
+    // measured per `results.md` on `main`.
+    ceilingKb: 28.25
   },
   {
     name: 'react-player',

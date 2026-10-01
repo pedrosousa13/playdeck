@@ -31,6 +31,15 @@ export type PlayerContextValue = ActivationBindings & {
   // the Controls `C` shortcut each used to keep their own ref, so the two
   // disagreed whenever one mounted after a selection the other had seen (#58).
   lastSelectedTextTrackId: RefObject<string | null>;
+  // `Root`'s own `preferredTextTrackLanguage` prop, already validated
+  // (`root.tsx`'s `validatedPreferredTextTrackLanguage` -- a value that
+  // failed `isValidTextTrackLanguage` never reaches this far). Threaded
+  // through so `resolveCaptionToggle`'s two call sites (`CaptionsButton`,
+  // `Controls`' own `C` shortcut) can resolve the preference on a toggle
+  // that turns captions on with nothing remembered yet -- the moment
+  // `Root`'s own one-shot effect, having already run once for this source,
+  // no longer reaches.
+  preferredTextTrackLanguage: string | undefined;
   // The volume the user last asked for, held over the round trip to the media
   // element. Player-scoped for the same reason as the selection above:
   // `VolumeSlider` renders it and the `Controls` shortcut layer compounds its

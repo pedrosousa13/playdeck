@@ -54,6 +54,24 @@ const fakeIframeApi = `
       const looping = /[?&]loop=1(?:&|$)/.test(iframe.src);
       const hasStartBoundary = /[?&]start=\\d/.test(iframe.src);
       const duration = looping ? 1 : 120;
+      // Captions module (#858): a fixed two-language tracklist, and the
+      // reported current track. \`loadModule('captions')\` is what
+      // \`attachment.ts\`'s onReady calls unconditionally, mirroring the
+      // observed bug this fixture exists to falsify -- a track already
+      // selected with no command from the adapter -- whenever the embed's
+      // own \`cc_load_policy=0\` var (the fix) is absent from \`iframe.src\`.
+      // This fake HONOURS \`cc_load_policy=0\` by construction, below -- it is
+      // this file's own stand-in for the real behaviour, not a fact about the
+      // real embed. \`attachment.ts\`'s own comment on the var is explicit that
+      // this is UNVERIFIED against a real player: the docs give \`cc_load_policy=0\`
+      // no meaning beyond the var's own absence, so what this fake simulates
+      // is the intended effect, not a measured one.
+      const captionsTracklist = [
+        { languageCode: 'en', displayName: 'English' },
+        { languageCode: 'es', displayName: 'Spanish' }
+      ];
+      const ccLoadPolicyOff = /[?&]cc_load_policy=0(?:&|$)/.test(iframe.src);
+      let captionsTrack = {};
       let clockTimer;
       let lastTick;
       const stopClock = () => {
@@ -105,6 +123,25 @@ const fakeIframeApi = `
         setPlaybackRate: () => {},
         getPlayerState: () => state,
         getIframe: () => iframe,
+        loadModule: (module) => {
+          if (module !== 'captions') return;
+          setTimeout(() => {
+            if (!ccLoadPolicyOff) captionsTrack = { languageCode: 'en' };
+            if (events.onApiChange) events.onApiChange({ target });
+          }, 0);
+        },
+        unloadModule: () => {},
+        getOption: (module, option) => {
+          if (module !== 'captions') return undefined;
+          if (option === 'tracklist') return captionsTracklist;
+          if (option === 'track') return captionsTrack;
+          return undefined;
+        },
+        setOption: (module, option, value) => {
+          if (module === 'captions' && option === 'track') {
+            captionsTrack = value;
+          }
+        },
         destroy: () => {
           stopClock();
           iframe.remove();
@@ -210,6 +247,127 @@ test('youtube one interaction click loads the provider and queues playback', asy
     )
     .count();
   expect(overlayParts).toBe(0);
+});
+
+// Records every `selectedTextTrackId` the player's own state ever carries, by
+// subscribing directly to `playdeckHandle` rather than polling it: a poll
+// between two Playwright round trips can miss a value already corrected by
+// the time the next poll lands, which is exactly the flash #858 asks be
+// falsifiable. `subscribe` misses nothing -- it runs against every `emit()`
+// this session makes, from the first. Installed by `addInitScript` (before
+// any page script, let alone the story's own mount) and polls for
+// `playdeckHandle` itself rather than waiting on a Playwright signal to
+// attach it, so the subscription is in place before the fake's own captions
+// module has a chance to report anything.
+const recordTextTrackSelections = async (page: Page): Promise<void> => {
+  await page.addInitScript(() => {
+    const selections: Array<string | null> = [];
+    (
+      window as unknown as { __textTrackSelections: Array<string | null> }
+    ).__textTrackSelections = selections;
+    const attach = (): void => {
+      const handle = (window as unknown as { playdeckHandle?: unknown })
+        .playdeckHandle as
+        | {
+            subscribe: (
+              l: (s: { selectedTextTrackId: string | null }) => void
+            ) => void;
+          }
+        | undefined;
+      if (!handle) {
+        setTimeout(attach, 1);
+        return;
+      }
+      handle.subscribe((state) => {
+        selections.push(state.selectedTextTrackId);
+      });
+    };
+    attach();
+  });
+};
+
+const textTrackSelections = (page: Page): Promise<Array<string | null>> =>
+  page.evaluate(
+    () =>
+      (window as unknown as { __textTrackSelections?: Array<string | null> })
+        .__textTrackSelections ?? []
+  );
+
+// #858: the observed bug this fixture exists to falsify -- YouTube auto-
+// selecting a caption track with no command from the adapter -- reproduces
+// under `fakeIframeApi`'s own captions-module simulation whenever
+// `cc_load_policy=0` is absent from the embed url.
+//
+// Red, chromium, with root.tsx's `youtube` bag fold changed to
+// `defaultTextTrack: undefined` unconditionally (never 'off'): this test
+// failed -- `expect(received).not.toContain(expected) // indexOf`,
+// `Expected value: not "youtube:en"`, `Received array: [null, null, null,
+// null, null, null, null, "youtube:en", null, null, null]` -- the eighth
+// sampled selection is the fake's own captions-module auto-select this
+// fixture exists to falsify. The contrast test below passed unfixed either
+// way: it asserts the unset-prop default keeps that same auto-select
+// standing, which a reverted fold does not disturb. Restoring the fold made
+// both pass.
+test('defaultTextTrack="off" never selects a caption track on YouTube, not even transiently', async ({
+  page
+}) => {
+  await routeYouTube(page);
+  await recordTextTrackSelections(page);
+  await page.goto(
+    '/iframe.html?id=fixtures-playerfixture--interaction-youtube-captions-off&viewMode=story'
+  );
+  const activationButton = page.getByRole('button', {
+    name: 'Play video',
+    exact: true
+  });
+  await expect(activationButton).toBeVisible();
+
+  await activationButton.click();
+
+  // Discovery settling is the signal that the fake's captions module has run
+  // and reported -- the one moment a flash, if the fix regressed, would
+  // already be in `selections`.
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.playdeckHandle?.getState().textTracks.length)
+    )
+    .toBe(2);
+
+  expect(await textTrackSelections(page)).not.toContain('youtube:en');
+  expect(
+    await page.evaluate(
+      () => window.playdeckHandle?.getState().selectedTextTrackId
+    )
+  ).toBeNull();
+});
+
+// Contrast case: with `defaultTextTrack` left at its `'auto'` default (no
+// prop set), YouTube's own default selection stands -- proving the fake's
+// bug-path simulation above is real, and that the passing test above is not
+// vacuously true.
+test("an unset defaultTextTrack leaves YouTube's own default caption selection standing", async ({
+  page
+}) => {
+  await routeYouTube(page);
+  await recordTextTrackSelections(page);
+  await page.goto(
+    '/iframe.html?id=fixtures-playerfixture--interaction-youtube&viewMode=story'
+  );
+  const activationButton = page.getByRole('button', {
+    name: 'Play video',
+    exact: true
+  });
+  await expect(activationButton).toBeVisible();
+
+  await activationButton.click();
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.playdeckHandle?.getState().textTracks.length)
+    )
+    .toBe(2);
+
+  expect(await textTrackSelections(page)).toContain('youtube:en');
 });
 
 test('youtube docs example stays dormant while the native fixture is used', async ({

@@ -69,10 +69,19 @@ const createMockAdapter = () => {
   };
 };
 
-const renderWithPlayer = (ui: ReactNode, initial?: ProviderStatePatch) => {
+const renderWithPlayer = (
+  ui: ReactNode,
+  initial?: ProviderStatePatch,
+  rootProps: Partial<Player.RootProps> = {}
+) => {
   const handle = createRef<Player.PlayerHandle>();
   const utils = render(
-    <Player.Root loading="interaction" ref={handle} source="/tracer.mp4">
+    <Player.Root
+      loading="interaction"
+      ref={handle}
+      source="/tracer.mp4"
+      {...rootProps}
+    >
       {ui}
     </Player.Root>
   );
@@ -3307,6 +3316,64 @@ describe('Controls container and scoped shortcuts', () => {
     // still in flight.
     await act(async () => {});
     expect(spies.setVolume).toHaveBeenLastCalledWith(0.5);
+  });
+
+  // #858: a provider's own initial default (native's `<track default>`,
+  // YouTube's auto-selected track, a Vimeo track already showing) must not
+  // be mistaken for a viewer's own pick -- `root.tsx`'s one-shot
+  // preference/default apply resets its remembered-selection ref around its
+  // own run, so `preferredTextTrackLanguage` still resolves a toggle that
+  // turns captions back on afterwards, through the "C" shortcut exactly as
+  // through `Player.CaptionsButton` (`captions.test.tsx`'s own version of
+  // this test).
+  //
+  // Red, before root.tsx reset the ref: this test failed --
+  // `expected "vi.fn()" to be called with arguments: [ 'en' ]`, received
+  // `[ "es" ]` -- the provider's own initial "es" was still remembered, so
+  // the shortcut restored it instead of resolving the preference.
+  test('the "C" shortcut resolves the preference even when a provider default was selected at first publish', () => {
+    const { container, emit, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.SeekSlider />
+      </Player.Controls>,
+      controlsState({
+        ...capabilities({
+          seek: available,
+          setVolume: available,
+          fullscreen: available,
+          selectTextTrack: available
+        }),
+        selectedTextTrackId: 'es',
+        textTracks: [
+          {
+            id: 'es',
+            label: 'Spanish',
+            language: 'es',
+            kind: 'subtitles',
+            readiness: 'loaded'
+          },
+          {
+            id: 'en',
+            label: 'English',
+            language: 'en',
+            kind: 'subtitles',
+            readiness: 'loaded'
+          }
+        ]
+      }),
+      { defaultTextTrack: 'off', preferredTextTrackLanguage: 'en' }
+    );
+    // The one-shot apply turning the provider's own default off.
+    expect(spies.selectTextTrack).toHaveBeenCalledWith(null);
+    // The provider confirms it.
+    emit({ selectedTextTrackId: null });
+
+    const seekInput = container.querySelector<HTMLInputElement>(
+      '[data-playdeck-part="seek-slider-input"]'
+    )!;
+    seekInput.focus();
+    fireEvent.keyDown(seekInput, { key: 'c' });
+    expect(spies.selectTextTrack).toHaveBeenLastCalledWith('en');
   });
 
   test('ignores shortcuts while an open menu has focus', () => {

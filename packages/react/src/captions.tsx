@@ -338,15 +338,71 @@ export const Captions = ({
  * next, given the current tracks/selection and the last non-null selection
  * remembered across toggles. Returns `null` to turn captions off, a track id
  * to turn them on, or `undefined` when there is nothing to select (no
- * remembered or first track) — the caller should no-op in that case.
+ * remembered track, no preference and no first track) — the caller should
+ * no-op in that case.
+ *
+ * `rememberedId` names a track the viewer picked for themselves, for this
+ * source -- `Root` resets its own ref to `null` around its one-shot
+ * preference/default apply (`root.tsx`), so a provider's own initial default
+ * is never mistaken for a viewer's pick here. `preferredLanguage` is `Root`'s
+ * own `preferredTextTrackLanguage`, already validated by the time it reaches
+ * here (`root.tsx`'s `validatedPreferredTextTrackLanguage`, threaded through
+ * `PlayerContextValue`), and is consulted only once `rememberedId` comes up
+ * empty: a track the viewer picked for this source always wins over it.
+ * `Root`'s own one-shot effect applies the preference once, at first publish
+ * or first turn-on, and then never again for that source; this is the other
+ * place a source without a remembered pick yet can turn captions on
+ * afterwards, so it is the other place the preference has to reach.
  */
 export const resolveCaptionToggle = (
   textTracks: readonly TextTrack[],
   selectedId: string | null,
-  rememberedId: string | null
+  rememberedId: string | null,
+  preferredLanguage?: string
 ): string | null | undefined => {
   if (selectedId !== null) return null;
-  return textTracks.find((t) => t.id === rememberedId)?.id ?? textTracks[0]?.id;
+  const remembered = textTracks.find((t) => t.id === rememberedId)?.id;
+  if (remembered !== undefined) return remembered;
+  if (textTracks.length === 0) return undefined;
+  return preferredLanguage === undefined
+    ? textTracks[0]!.id
+    : resolvePreferredTextTrack(textTracks, preferredLanguage, null);
+};
+
+// The primary subtag of a BCP 47 tag, lower-cased for a case-insensitive
+// compare -- `en` out of `en-GB`, `es` out of `es`.
+const baseLanguage = (language: string): string =>
+  (language.split('-')[0] ?? language).toLowerCase();
+
+/**
+ * Resolves `Root`'s `preferredTextTrackLanguage` against a source's
+ * published tracks: an exact `language` match first, then a same-base-
+ * language match (`en` matches `en-GB`), then `fallbackId` -- the provider's
+ * own current selection, if it has one -- and finally the first track.
+ * Tracks whose `language` is `null` never match either language step, but
+ * remain eligible for both fallback steps. Matching is case-insensitive.
+ * `fallbackId` naming a track outside `textTracks` is treated the same as
+ * `null` -- nothing for that step to fall back to.
+ */
+export const resolvePreferredTextTrack = (
+  textTracks: readonly TextTrack[],
+  preferredLanguage: string,
+  fallbackId: string | null
+): string | null => {
+  const preferred = preferredLanguage.toLowerCase();
+  const preferredBase = baseLanguage(preferredLanguage);
+  const exact = textTracks.find(
+    (t) => t.language !== null && t.language.toLowerCase() === preferred
+  );
+  if (exact) return exact.id;
+  const base = textTracks.find(
+    (t) => t.language !== null && baseLanguage(t.language) === preferredBase
+  );
+  if (base) return base.id;
+  if (fallbackId !== null && textTracks.some((t) => t.id === fallbackId)) {
+    return fallbackId;
+  }
+  return textTracks[0]?.id ?? null;
 };
 
 export type CaptionsButtonProps = ComponentPropsWithRef<'button'>;
@@ -366,7 +422,8 @@ export const CaptionsButton = ({
       textTracks: state.textTracks
     })
   );
-  const { controller, lastSelectedTextTrackId } = usePlayer();
+  const { controller, lastSelectedTextTrackId, preferredTextTrackLanguage } =
+    usePlayer();
   // One-time announcement: track the previously seen selection so the live
   // region text only changes (and is only announced) on an actual
   // transition, not on every unrelated re-render.
@@ -402,7 +459,8 @@ export const CaptionsButton = ({
           const next = resolveCaptionToggle(
             textTracks,
             selectedId,
-            lastSelectedTextTrackId.current
+            lastSelectedTextTrackId.current,
+            preferredTextTrackLanguage
           );
           if (next !== undefined) void controller.selectTextTrack(next);
         }}

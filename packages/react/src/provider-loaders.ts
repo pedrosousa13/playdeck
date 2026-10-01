@@ -103,6 +103,14 @@ export type PrimitiveOptionBag<
  * writes that opt-in into whichever of the two bags is active. Omitted from
  * `vimeo` and `wistia` here and absent from `youtube` altogether: YouTube's own
  * poster is derivable from the id and needs no opt-in to resolve.
+ *
+ * `defaultTextTrack` and `preferredTextTrackLanguage` join `youtube` alone, for
+ * a narrower reason than the others above: every provider applies both through
+ * `Root`'s own reactive `selectTextTrack` call once a source's tracks publish,
+ * which needs no bag key at all. YouTube alone also needs a value before its
+ * embed ever loads -- `cc_load_policy`/`cc_lang_pref`, written by this bag's own
+ * key (`provider-youtube/src/attachment.ts`) -- so `Root` folds both into it the
+ * same way it folds `startTime`.
  */
 export type PlayerProviderOptions = {
   readonly wistia?: PrimitiveOptionBag<
@@ -114,7 +122,13 @@ export type PlayerProviderOptions = {
   readonly youtube?: PrimitiveOptionBag<
     Omit<
       YouTubeProviderOptions,
-      'controls' | 'endTime' | 'loadIframeApi' | 'loop' | 'startTime'
+      | 'controls'
+      | 'defaultTextTrack'
+      | 'endTime'
+      | 'loadIframeApi'
+      | 'loop'
+      | 'preferredTextTrackLanguage'
+      | 'startTime'
     >
   >;
   readonly vimeo?: PrimitiveOptionBag<

@@ -34,6 +34,7 @@ import {
   noticesMatch,
   notifySafely,
   orderedRanges,
+  rejectedTextTrackLanguageNotice,
   REFUSED_URL_NOTICES,
   standingRefusedUrlNotice,
   toProviderError,
@@ -77,7 +78,13 @@ type PendingOriginKind = PendingOrigin['kind'];
 // own comment on `PlayerController`.
 type NoticeScope =
   | { readonly kind: 'provider' }
-  | { readonly kind: 'refused-url'; readonly surface: RefusedUrlSurface };
+  | { readonly kind: 'refused-url'; readonly surface: RefusedUrlSurface }
+  // A rejected `preferredTextTrackLanguage`: a consumer prop no provider ever
+  // saw, like `'refused-url'`, so it survives an attach the same way. There is
+  // only ever one surface here, unlike `'refused-url'`'s fixed set, so no
+  // per-value discriminant is carried on the scope itself -- the value lives
+  // on the registered notice instead (`rejectedTextTrackLanguageNotice`).
+  | { readonly kind: 'rejected-text-track-language' };
 
 // A patch is the provider confirming the playback command that asked for it.
 const confirmsPlayback = (
@@ -437,14 +444,27 @@ export class PlayerController {
     return standingRefusedUrlNotice(surfaces);
   };
 
+  // The single candidate the `{ kind: 'rejected-text-track-language' }`
+  // entries currently offer the error slot. Unlike `#currentRefusedUrlNotice`,
+  // there is only ever one surface here, so nothing to rank by surface —
+  // insertion order is what ties two, the same tie-break
+  // `#currentProviderNotice` uses and for the same reason (#368).
+  #currentRejectedTextTrackLanguageNotice = (): PlayerError | undefined =>
+    mostImportantNotice(
+      ...[...this.#notices.values()]
+        .filter((entry) => entry.scope.kind === 'rejected-text-track-language')
+        .map((entry) => entry.notice)
+    );
+
   // What `#registerNotice`'s disposer asks after removing an entry: what does
   // this entry's OWN scope resolve to now. Kept as its own read rather than
   // inlined so the disposer stays one implementation regardless of which fold
   // answers it (#475).
-  #resolveScope = (scope: NoticeScope): PlayerError | undefined =>
-    scope.kind === 'provider'
-      ? this.#currentProviderNotice()
-      : this.#currentRefusedUrlNotice();
+  #resolveScope = (scope: NoticeScope): PlayerError | undefined => {
+    if (scope.kind === 'provider') return this.#currentProviderNotice();
+    if (scope.kind === 'refused-url') return this.#currentRefusedUrlNotice();
+    return this.#currentRejectedTextTrackLanguageNotice();
+  };
 
   // Every `{ kind: 'provider' }` entry belongs to the provider being replaced
   // or detached, so all of them go together — on a swap, a detach, and the
@@ -520,6 +540,30 @@ export class PlayerController {
       // `#currentRefusedUrlNotice()` in the same pass. Where the slot holds
       // something else, that something outranks this notice and an empty
       // patch leaves it alone.
+      this.#applyPatch(this.#state.error === before ? { error: null } : {});
+    }
+    return dispose;
+  };
+
+  // Mirrors `reportRefusedUrl` immediately above: a consumer prop no provider
+  // ever saw, registered through the same `#registerNotice` and withdrawn the
+  // same way from the same React-effect shape (`Root`'s own text-track
+  // preference effect, `packages/react/src/root.tsx`). What differs is the
+  // notice itself — `rejectedTextTrackLanguageNotice(value)` builds one
+  // naming the rejected value fresh per call, rather than looking one of the
+  // five shared, value-blind `REFUSED_URL_NOTICES` up by surface — so unlike
+  // `reportRefusedUrl`, two calls with two different values are never the
+  // same registration and neither can withdraw the other's.
+  reportRejectedTextTrackLanguage = (value: string): (() => void) => {
+    const before = this.#currentRejectedTextTrackLanguageNotice();
+    const dispose = this.#registerNotice(
+      rejectedTextTrackLanguageNotice(value),
+      {
+        kind: 'rejected-text-track-language'
+      }
+    );
+    const after = this.#currentRejectedTextTrackLanguageNotice();
+    if (after !== before) {
       this.#applyPatch(this.#state.error === before ? { error: null } : {});
     }
     return dispose;
@@ -1350,26 +1394,31 @@ export class PlayerController {
             // already stands, then the provider's own notice, then a refused
             // consumer URL — the provider reported something about the source
             // that is about to play, and that one is about a prop beside it
-            // (#330).
+            // (#330). A rejected `preferredTextTrackLanguage` is lowest of
+            // all: like a refused URL it is a prop beside the source rather
+            // than about it, and it joined this fold after the other three
+            // already had their order settled.
             (standingFailure ??
             mostImportantNotice(
               standingNotice,
               this.#currentProviderNotice(),
-              this.#currentRefusedUrlNotice()
+              this.#currentRefusedUrlNotice(),
+              this.#currentRejectedTextTrackLanguageNotice()
             ) ??
             null)
     };
     this.#setState(nextState);
   };
 
-  // The two configurations that outlive a provider — the autoplay conflict and
-  // a refused consumer URL — re-applied over a state rebuilt from scratch. Not
-  // a `{ kind: 'provider' }` entry, which belongs to one provider and is
+  // The configurations that outlive a provider — the autoplay conflict, a
+  // refused consumer URL and a rejected `preferredTextTrackLanguage` —
+  // re-applied over a state rebuilt from scratch. None of these is a
+  // `{ kind: 'provider' }` entry, which belongs to one provider and is
   // cleared immediately above the call site. `setProvider` resets to
   // `createInitialPlayerState()` without going through `#applyPatch`, so these
-  // two would otherwise be dropped on every attach — which for a refused
+  // would otherwise be dropped on every attach — which for a refused
   // consumer URL is the common case, not an edge one, because the poster
-  // reports before the provider loads (#330). The two are ranked as
+  // reports before the provider loads (#330). All three are ranked as
   // `#applyPatch` ranks them.
   #withHeldConfiguration = (state: PlayerState): PlayerState => {
     if (this.#hasAutoplayConfigurationError) {
@@ -1380,8 +1429,11 @@ export class PlayerController {
         error: autoplayConfigurationError()
       };
     }
-    const refusedUrlNotice = this.#currentRefusedUrlNotice();
-    return refusedUrlNotice ? { ...state, error: refusedUrlNotice } : state;
+    const heldNotice = mostImportantNotice(
+      this.#currentRefusedUrlNotice(),
+      this.#currentRejectedTextTrackLanguageNotice()
+    );
+    return heldNotice ? { ...state, error: heldNotice } : state;
   };
 
   #synchronizeAutoplay = (): void => {

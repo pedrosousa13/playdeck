@@ -359,7 +359,12 @@ export const Controls = ({
     volume: state.volume,
     volumeStatus: state.capabilities.setVolume.status
   }));
-  const { controller, lastSelectedTextTrackId, volumeRequest } = usePlayer();
+  const {
+    controller,
+    lastSelectedTextTrackId,
+    preferredTextTrackLanguage,
+    volumeRequest
+  } = usePlayer();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const hadFocusWithin = useRef(false);
   // Bumped on every focus into the region, so a blur's deferred check
@@ -544,7 +549,8 @@ export const Controls = ({
           const next = resolveCaptionToggle(
             textTracks,
             selectedTextTrackId,
-            lastSelectedTextTrackId.current
+            lastSelectedTextTrackId.current,
+            preferredTextTrackLanguage
           );
           if (next !== undefined) void controller.selectTextTrack(next);
           return;
@@ -558,6 +564,7 @@ export const Controls = ({
       global,
       lastSelectedTextTrackId,
       muted,
+      preferredTextTrackLanguage,
       seekStatus,
       selectedTextTrackId,
       selectTextTrackStatus,

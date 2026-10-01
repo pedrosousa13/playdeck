@@ -91,7 +91,13 @@ test('the per-provider option bags are the shape the CSP document describes', ()
   expectTypeOf<
     KeysRootOwns<PlayerProviderOptions['youtube'], YouTubeProviderOptions>
   >().toEqualTypeOf<
-    'controls' | 'endTime' | 'loadIframeApi' | 'loop' | 'startTime'
+    | 'controls'
+    | 'defaultTextTrack'
+    | 'endTime'
+    | 'loadIframeApi'
+    | 'loop'
+    | 'preferredTextTrackLanguage'
+    | 'startTime'
   >();
 
   // Wistia keeps `controls`: it has the concept but no fold writes it, so the

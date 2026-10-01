@@ -62,10 +62,18 @@ const createMockAdapter = () => {
   };
 };
 
-const renderWithPlayer = (ui: ReactNode) => {
+const renderWithPlayer = (
+  ui: ReactNode,
+  rootProps: Partial<Player.RootProps> = {}
+) => {
   const handle = createRef<Player.PlayerHandle>();
   const utils = render(
-    <Player.Root loading="interaction" ref={handle} source="/tracer.mp4">
+    <Player.Root
+      loading="interaction"
+      ref={handle}
+      source="/tracer.mp4"
+      {...rootProps}
+    >
       {ui}
     </Player.Root>
   );
@@ -78,6 +86,7 @@ const renderWithPlayer = (ui: ReactNode) => {
   });
   return {
     ...utils,
+    handle,
     controller,
     selectTextTrack: mock.selectTextTrack,
     emitCues: (cues: readonly TextCue[]) => act(() => mock.emitCues(cues)),
@@ -728,6 +737,365 @@ describe('Player.CaptionsButton', () => {
     });
     fireEvent.click(button);
     expect(selectTextTrack).toHaveBeenCalledWith('fr');
+  });
+
+  // #858's own one-shot effect in root.tsx only ever runs once per source --
+  // with defaultTextTrack="off" that one shot turns captions off at first
+  // publish and consumes itself, so preferredTextTrackLanguage has to reach a
+  // *later* toggle through resolveCaptionToggle instead, or a viewer turning
+  // captions on through the button gets whatever track happens to be first
+  // rather than the language they were promised. These two tests pin that:
+  // the first turns captions on with nothing remembered yet, where the
+  // preference is what decides; the second confirms a track the viewer
+  // picked for themselves still wins over the preference on a later toggle,
+  // exactly as it already did with no preference set.
+  //
+  // Red, against resolveCaptionToggle before it took a preferredLanguage
+  // parameter: the first test below failed --
+  // `expected "vi.fn()" to be called with arguments: [ 'en' ]`, received
+  // `[ "es" ]` -- textTracks[0] won the fallback the old code had no
+  // language step in. The second test passed unfixed too: a remembered id
+  // already beat textTracks[0], which is the regression this one guards.
+  test('clicking CaptionsButton with no remembered track resolves the language preference', () => {
+    const { container, emitState, selectTextTrack } = renderWithPlayer(
+      <Player.CaptionsButton />,
+      { defaultTextTrack: 'off', preferredTextTrackLanguage: 'en' }
+    );
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('es', 'Spanish', 'es'), track('en', 'English', 'en')],
+      selectedTextTrackId: null
+    });
+    const button = container.querySelector(
+      '[data-playdeck-part="captions-button"]'
+    ) as HTMLButtonElement;
+    fireEvent.click(button);
+    expect(selectTextTrack).toHaveBeenCalledWith('en');
+  });
+
+  test('a track the viewer picked for themselves still wins over the preference on a later toggle', () => {
+    const { container, emitState, selectTextTrack } = renderWithPlayer(
+      <Player.CaptionsButton />,
+      { defaultTextTrack: 'off', preferredTextTrackLanguage: 'en' }
+    );
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('es', 'Spanish', 'es'), track('en', 'English', 'en')],
+      selectedTextTrackId: null
+    });
+    // The viewer's own pick, simulated the same way the "remembered track"
+    // tests above do: a provider state carrying a selection stands in for
+    // selectTextTrack having been called and confirmed. This is a SECOND
+    // state change, after the one above the one-shot effect already
+    // consumed itself on, so it reaches resolveCaptionToggle untouched.
+    emitState({ selectedTextTrackId: 'es' });
+    const button = container.querySelector(
+      '[data-playdeck-part="captions-button"]'
+    ) as HTMLButtonElement;
+    fireEvent.click(button);
+    expect(selectTextTrack).toHaveBeenCalledWith(null);
+    emitState({ selectedTextTrackId: null });
+    fireEvent.click(button);
+    expect(selectTextTrack).toHaveBeenCalledWith('es');
+  });
+
+  // A provider's own initial default (native's `<track default>`, YouTube's
+  // auto-selected track, a Vimeo track already showing) must not be mistaken
+  // for a viewer's own pick -- `root.tsx`'s one-shot preference/default apply
+  // resets its remembered-selection ref around its own run, so the
+  // preference still resolves a later toggle rather than restoring the
+  // provider's own default.
+  //
+  // Red, before root.tsx reset the ref: this test failed --
+  // `expected "vi.fn()" to be called with arguments: [ 'en' ]`, received
+  // `[ "es" ]` -- the provider's own initial "es" was still remembered, so
+  // the click restored it instead of resolving the preference.
+  test('clicking CaptionsButton resolves the preference even when a provider default was selected at first publish', () => {
+    const { container, emitState, selectTextTrack } = renderWithPlayer(
+      <Player.CaptionsButton />,
+      { defaultTextTrack: 'off', preferredTextTrackLanguage: 'en' }
+    );
+    // The provider's own default, already selected the moment tracks first
+    // publish.
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('es', 'Spanish', 'es'), track('en', 'English', 'en')],
+      selectedTextTrackId: 'es'
+    });
+    expect(selectTextTrack).toHaveBeenCalledWith(null);
+    // The provider confirms the off command the one-shot apply issued.
+    emitState({ selectedTextTrackId: null });
+
+    const button = container.querySelector(
+      '[data-playdeck-part="captions-button"]'
+    ) as HTMLButtonElement;
+    fireEvent.click(button);
+    expect(selectTextTrack).toHaveBeenLastCalledWith('en');
+  });
+});
+
+// Red: with root.tsx's matching effect stubbed to a no-op (`return;` as the
+// first line inside the `controller.subscribe` callback, before its own
+// guard clauses), 8 of the 11 tests below failed -- every assertion that
+// expects a call: `expected "vi.fn()" to be called with arguments: [ 'en' ]`
+// / `[ 'gb' ]` / `[ 'es' ]` / `[ 'unknown' ]` / `[ null ]`, each with `Number
+// of calls: 0`, plus the two call-count assertions ("does not override...",
+// "applies the preference again...") failing `to be called 1 times, but got
+// 0 times`. The three that passed unfixed are the block's own negative
+// assertions ("makes no selection...", "keeps the provider default...",
+// `defaultTextTrack="off"` makes no call...") -- a no-op effect satisfies
+// "nothing was called" by construction, which is exactly why those three
+// carry none of this group's own falsifying power and the other eight do.
+// Restoring the effect made all 11 pass.
+describe('Player.Root preferredTextTrackLanguage / defaultTextTrack', () => {
+  test('makes no selection when neither prop is set', () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null);
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('es', 'Spanish', 'es'), track('en', 'English', 'en')],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).not.toHaveBeenCalled();
+  });
+
+  test('selects the exact language match once tracks first publish', () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: 'en'
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('es', 'Spanish', 'es'), track('en', 'English', 'en')],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).toHaveBeenCalledWith('en');
+  });
+
+  test('falls back to a base-language match (en matches en-GB)', () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: 'en-US'
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('gb', 'English (UK)', 'en-GB')],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).toHaveBeenCalledWith('gb');
+  });
+
+  test('keeps the provider default over the first track when neither language matches', () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: 'de'
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('es', 'Spanish', 'es'), track('fr', 'French', 'fr')],
+      // The provider's own default, already selected -- not the first track
+      // in the list -- so a fallback that blindly picked the first track
+      // would disagree with this and call selectTextTrack.
+      selectedTextTrackId: 'fr'
+    });
+    expect(selectTextTrack).not.toHaveBeenCalled();
+  });
+
+  test('falls back to the first track when there is no provider default and no language matches', () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: 'de'
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('es', 'Spanish', 'es'), track('fr', 'French', 'fr')],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).toHaveBeenCalledWith('es');
+  });
+
+  test('a null-language track never matches by language, but can still be the fallback', () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: 'xx'
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('unknown', 'Unknown'), track('en', 'English', 'en')],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).toHaveBeenCalledWith('unknown');
+  });
+
+  test('a null-language track is skipped when another track matches the preferred language', () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: 'en'
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('unknown', 'Unknown'), track('en', 'English', 'en')],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).toHaveBeenCalledWith('en');
+  });
+
+  test('defaultTextTrack="off" clears a provider default once tracks first publish', () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      defaultTextTrack: 'off'
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English', 'en')],
+      selectedTextTrackId: 'en'
+    });
+    expect(selectTextTrack).toHaveBeenCalledWith(null);
+  });
+
+  test('defaultTextTrack="off" makes no call when nothing was ever selected', () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      defaultTextTrack: 'off'
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English', 'en')],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).not.toHaveBeenCalled();
+  });
+
+  test("does not override a viewer's choice when tracks republish for the same source", () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: 'en'
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('es', 'Spanish', 'es'), track('en', 'English', 'en')],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).toHaveBeenCalledTimes(1);
+    expect(selectTextTrack).toHaveBeenCalledWith('en');
+
+    // The viewer turns captions off through a control or selectTextTrack.
+    emitState({ selectedTextTrackId: null });
+    // The tracks republish for the same source (e.g. a readiness change).
+    emitState({
+      textTracks: [track('es', 'Spanish', 'es'), track('en', 'English', 'en')]
+    });
+    expect(selectTextTrack).toHaveBeenCalledTimes(1);
+  });
+
+  test('applies the preference again for a new source', () => {
+    const { controller, emitState, handle, rerender, selectTextTrack } =
+      renderWithPlayer(null, { preferredTextTrackLanguage: 'en' });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('es', 'Spanish', 'es'), track('en', 'English', 'en')],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).toHaveBeenCalledTimes(1);
+
+    const nextMock = createMockAdapter();
+    rerender(
+      <Player.Root
+        loading="interaction"
+        ref={handle}
+        source="/second.mp4"
+        preferredTextTrackLanguage="en"
+      >
+        {null}
+      </Player.Root>
+    );
+    act(() => {
+      controller.setProvider(nextMock.adapter);
+    });
+    act(() =>
+      nextMock.emitState({
+        capabilities: withSelectTextTrack(available),
+        textTracks: [
+          track('es', 'Spanish', 'es'),
+          track('en', 'English', 'en')
+        ],
+        selectedTextTrackId: null
+      })
+    );
+    expect(nextMock.selectTextTrack).toHaveBeenCalledWith('en');
+  });
+});
+
+// `preferredTextTrackLanguage` is a consumer-supplied string that reaches a
+// case-insensitive compare (`resolvePreferredTextTrack`) and, on YouTube, a
+// provider URL parameter -- an attacker-shaped value could otherwise ride
+// either path. `isValidTextTrackLanguage` (`@playdeck/core`) checks it
+// against a BCP 47 tag's shape before it reaches matching at all, and a
+// value that fails is ignored exactly as an absent prop would be -- never
+// thrown, never used for a comparison or a lookup.
+//
+// Demonstrated red: with `root.tsx`'s gate reverted -- every
+// `validatedPreferredTextTrackLanguage` read replaced by the raw
+// `preferredTextTrackLanguage` prop -- all three tests below failed.
+// `expected "vi.fn()" to not be called at all, but actually been called 1
+// times` with `['es']` for the query-string and markup values (neither
+// matches a track, so `resolvePreferredTextTrack` fell through to the first
+// track rather than making no selection), and with `['aaa...a']` (the full
+// 64-character value) for the over-long one -- it is also this test's own
+// track `language`, so the unvalidated value matched it exactly. Restoring
+// the gate made all three pass.
+describe('Player.Root preferredTextTrackLanguage hostile values', () => {
+  test('ignores a value carrying a query-string-shaped payload', () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: 'en&autoplay=1'
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('es', 'Spanish', 'es'), track('en', 'English', 'en')],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).not.toHaveBeenCalled();
+  });
+
+  test('ignores a value carrying markup', () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: 'en"><script>'
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('es', 'Spanish', 'es'), track('en', 'English', 'en')],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).not.toHaveBeenCalled();
+  });
+
+  test('ignores a value over the length bound', () => {
+    const overLong = 'a'.repeat(64);
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: overLong
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track(overLong, 'Long', overLong)],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).not.toHaveBeenCalled();
+  });
+
+  test('publishes a configuration notice naming the rejected value', () => {
+    const { controller } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: 'en&autoplay=1'
+    });
+
+    expect(controller.getState().error).toMatchObject({
+      category: 'configuration',
+      fatal: false,
+      message: expect.stringContaining('en&autoplay=1')
+    });
+  });
+
+  test('publishes no notice for a valid preferredTextTrackLanguage', () => {
+    const { controller } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: 'en'
+    });
+
+    expect(controller.getState().error).toBeNull();
+  });
+
+  test('publishes no notice when the prop is absent', () => {
+    const { controller } = renderWithPlayer(null);
+
+    expect(controller.getState().error).toBeNull();
   });
 });
 

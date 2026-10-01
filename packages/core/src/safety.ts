@@ -63,6 +63,26 @@ export const autoplayConfigurationError = (): PlayerError =>
     message: 'Muted autoplay conflicts with a controlled unmuted state.'
   });
 
+// `Root`'s `preferredTextTrackLanguage` rejection notice
+// (`PlayerController.reportRejectedTextTrackLanguage`). Built fresh per call
+// rather than shared like `REFUSED_URL_NOTICES` below: a language tag is not
+// a URL that could disclose anything by being echoed, and naming it is the
+// point, so two rejections of two different values are two different
+// messages rather than one shared singleton.
+//
+// `'protective'`, matching `REFUSED_URL_NOTICES` and
+// `provider-youtube/src/index.ts`'s `hostConfigurationNotice`: this reports a
+// validation control that fired and dropped an untrusted value, not a
+// presentational option that simply went unmet.
+export const rejectedTextTrackLanguageNotice = (value: string): PlayerError =>
+  freezeError({
+    category: 'configuration',
+    fatal: false,
+    recoverable: false,
+    severity: 'protective',
+    message: `The preferredTextTrackLanguage option ("${value}") was rejected, so no caption-language preference was applied.`
+  });
+
 // One notice per refused surface, written here rather than at each call site
 // so no caller can compose one of its own. Each names the prop and says
 // what was done instead, the shape of the one notice #318 wrote both halves for

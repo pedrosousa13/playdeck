@@ -2,6 +2,7 @@ import {
   PlayerController,
   bindMediaSession,
   getMediaSessionCoordinator,
+  isValidTextTrackLanguage,
   type AutoplayMode,
   type MediaMetadataInput,
   type MediaSessionBinding,
@@ -9,6 +10,7 @@ import {
   type PlaybackState,
   type PlayerSource
 } from '@playdeck/core';
+import { resolvePreferredTextTrack } from './captions.js';
 import { INTERNAL_CONTROLLER } from './internal-controller.js';
 import {
   collectPlayerActions,
@@ -89,6 +91,19 @@ export type RootProps<P extends ConsumerProviders = Record<string, never>> = {
   readonly defaultMuted?: boolean;
   readonly mediaMetadata?: MediaMetadataInput | null;
   readonly defaultPlaybackRate?: number;
+  /**
+   * Whether a source starts with a caption track already chosen. `'auto'`
+   * (default) leaves the provider's own initial pick alone -- `<track
+   * default>` on native, a manifest's or an embed's own default elsewhere --
+   * subject to `preferredTextTrackLanguage` below. `'off'` starts every
+   * source, including YouTube, with no track selected, overriding that pick;
+   * YouTube is asked not to load its own default in the first place, so
+   * nothing flashes before settling to off. Either way, once the viewer
+   * selects a track (or selects none) through a control or `selectTextTrack`,
+   * this prop stops acting for the rest of that source; a new source applies
+   * it again.
+   */
+  readonly defaultTextTrack?: 'auto' | 'off';
   readonly defaultVolume?: number;
   /**
    * End playback at this offset in seconds, publishing `ended` there rather
@@ -178,6 +193,28 @@ export type RootProps<P extends ConsumerProviders = Record<string, never>> = {
    * no still of their own (#556).
    */
   readonly poster?: string | ResponsivePoster | 'provider';
+  /**
+   * The BCP 47 language tag captions should prefer, matched against each
+   * discovered `TextTrack.language`: an exact match, then the same base
+   * language (`en` matches `en-GB`), then the provider's own default track if
+   * it has one, and otherwise the first `captions`/`subtitles` track.
+   * Case-insensitive; a track whose `language` is `null` never matches
+   * either language step. Applied once a source's tracks first publish, and
+   * again whenever captions turn on without the viewer having picked a
+   * specific track -- never once the viewer has made a choice of their own
+   * for that source, through a control or `selectTextTrack`. A new source
+   * applies it again. On YouTube this also seeds the embed's own
+   * `cc_lang_pref`.
+   *
+   * Checked against a BCP 47 tag's shape (letters, digits and hyphens, up to
+   * 35 characters -- `isValidTextTrackLanguage`, `@playdeck/core`) before it
+   * reaches either consumer above. A value that fails is ignored outright --
+   * selection behaves exactly as if the prop were absent, and no
+   * `cc_lang_pref` is written -- and a `configuration`-category notice naming
+   * the rejected value is published on `PlayerState.error`
+   * (`PlayerController.reportRejectedTextTrackLanguage`).
+   */
+  readonly preferredTextTrackLanguage?: string;
   readonly preload?: import('./use-activation.js').PlayerPreload;
   // Compared by value, not by reference, so an inline literal is safe to
   // pass: see `providerOptionsEqual` in `use-activation.ts`, which compares
@@ -293,6 +330,7 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
   controls,
   defaultMuted = false,
   defaultPlaybackRate = 1,
+  defaultTextTrack = 'auto',
   defaultVolume = 1,
   endTime,
   ignoreReducedMotion = false,
@@ -311,6 +349,7 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
   // that is the whole contract of this prop.
   playThreshold = loadThreshold,
   poster,
+  preferredTextTrackLanguage,
   providerOptions,
   providers,
   ref,
@@ -742,6 +781,46 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
     ]
   );
 
+  // `preferredTextTrackLanguage`'s own gate, run before the value reaches
+  // either of its two consumers below: the matching effect, and the fold into
+  // `resolvedProviderOptions`'s `youtube` bag (`cc_lang_pref`,
+  // `provider-youtube/src/attachment.ts`). A value that fails
+  // `isValidTextTrackLanguage` is treated exactly as an absent prop would be
+  // -- selection falls back to the provider's own default, and no
+  // `cc_lang_pref` is written -- so neither consumer below ever sees the
+  // rejected string.
+  const validatedPreferredTextTrackLanguage =
+    preferredTextTrackLanguage !== undefined &&
+    isValidTextTrackLanguage(preferredTextTrackLanguage)
+      ? preferredTextTrackLanguage
+      : undefined;
+
+  // Reports the rejection as a `configuration` notice naming the value
+  // (`PlayerController.reportRejectedTextTrackLanguage`, mirroring
+  // `hostConfigurationNotice` in `provider-youtube/src/index.ts`), in an
+  // effect rather than from render for the reason `useRefusedUrlReport`
+  // (`player-context.ts`) is: registering writes controller state and wakes
+  // its subscribers, which a render pass may not do. Scoped to
+  // `sourceKeyForRender` so a new source gets its own registration -- exactly
+  // one notice stands per source with a rejected value, none while the value
+  // is valid or absent, matching `textTrackPreferenceAppliedFor` below.
+  useEffect(() => {
+    if (
+      preferredTextTrackLanguage === undefined ||
+      validatedPreferredTextTrackLanguage !== undefined
+    ) {
+      return;
+    }
+    return controller.reportRejectedTextTrackLanguage(
+      preferredTextTrackLanguage
+    );
+  }, [
+    controller,
+    preferredTextTrackLanguage,
+    sourceKeyForRender,
+    validatedPreferredTextTrackLanguage
+  ]);
+
   // `controls` and `loop` folded into the active provider's own bag -- their
   // one home on `Root` reaching that provider by looking, to `useActivation`,
   // like an ordinary provider-option change. Injected only into the bag
@@ -793,8 +872,13 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
         youtube: {
           ...providerOptions?.youtube,
           controls,
+          // Folded only as `'off'`; `'auto'` (this prop's own default) folds
+          // in as `undefined`, the same as an absent key, so a `Root` that
+          // never sets this prop writes no `cc_load_policy` var (`attachment.ts`).
+          defaultTextTrack: defaultTextTrack === 'off' ? 'off' : undefined,
           endTime,
           loop,
+          preferredTextTrackLanguage: validatedPreferredTextTrackLanguage,
           startTime
         }
       };
@@ -827,12 +911,14 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
     return providerOptions ?? {};
   }, [
     controls,
+    defaultTextTrack,
     detectedSource,
     endTime,
     loop,
     poster,
     providerOptions,
-    startTime
+    startTime,
+    validatedPreferredTextTrackLanguage
   ]);
 
   const activation = useActivation({
@@ -1060,15 +1146,84 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
   // Fed by a subscription rather than by a control's render, so it also
   // records selections made by a custom control calling selectTextTrack
   // directly, and stays correct while no captions control is mounted at all.
+  //
+  // Reset to `null` on every source change (the dependency array below), so
+  // a previous source's remembered selection can never leak into a new
+  // source's own toggle fallback (`resolveCaptionToggle`,
+  // `captions.tsx`/`controls.tsx`) -- belt and braces alongside the reset the
+  // preference/default effect below does for its own run, since that one
+  // only fires when `defaultTextTrack`/`preferredTextTrackLanguage` are
+  // actually in play.
   const lastSelectedTextTrackId = useRef<string | null>(null);
+  useEffect(() => {
+    lastSelectedTextTrackId.current = null;
+    return controller.subscribe((state) => {
+      if (state.selectedTextTrackId !== null) {
+        lastSelectedTextTrackId.current = state.selectedTextTrackId;
+      }
+    });
+  }, [controller, sourceKeyForRender]);
+
+  // Applies `defaultTextTrack`/`preferredTextTrackLanguage` once per source --
+  // the first state that has a selection to act on (tracks published, or a
+  // track already selected) -- and never again after, so a viewer's own
+  // choice through a control or `selectTextTrack`, made any time after that
+  // first moment, is never undone, including when tracks later republish
+  // for the same source (e.g. a readiness change). `sourceKeyForRender`
+  // marks the source this ran for; a change to it is what "a new source
+  // applies the props again" means here.
+  const textTrackPreferenceAppliedFor = useRef<string | undefined>(undefined);
   useEffect(
     () =>
       controller.subscribe((state) => {
-        if (state.selectedTextTrackId !== null) {
-          lastSelectedTextTrackId.current = state.selectedTextTrackId;
+        if (textTrackPreferenceAppliedFor.current === sourceKeyForRender) {
+          return;
+        }
+        if (
+          defaultTextTrack !== 'off' &&
+          validatedPreferredTextTrackLanguage === undefined
+        ) {
+          return;
+        }
+        if (
+          state.textTracks.length === 0 &&
+          state.selectedTextTrackId === null
+        ) {
+          return;
+        }
+        textTrackPreferenceAppliedFor.current = sourceKeyForRender;
+        // Whatever `lastSelectedTextTrackId` holds right now is, at most, a
+        // provider's own initial default -- the subscription above runs
+        // before this one (declared earlier, so registered first; `#listeners`
+        // is a `Set`, notified in insertion order) and would already have
+        // recorded a non-null `state.selectedTextTrackId` were there one to
+        // record. That default is not a viewer's pick, so it must not survive
+        // as the "remembered" track a later toggle falls back to. If the
+        // target below is non-null, the subscription above records it once
+        // the provider confirms it, exactly as a viewer's own pick would be
+        // -- that confirmed selection, not this discarded default, is the
+        // baseline a later toggle restores to.
+        lastSelectedTextTrackId.current = null;
+        const target =
+          defaultTextTrack === 'off'
+            ? null
+            : validatedPreferredTextTrackLanguage === undefined
+              ? state.selectedTextTrackId
+              : resolvePreferredTextTrack(
+                  state.textTracks,
+                  validatedPreferredTextTrackLanguage,
+                  state.selectedTextTrackId
+                );
+        if (target !== state.selectedTextTrackId) {
+          void controller.selectTextTrack(target);
         }
       }),
-    [controller]
+    [
+      controller,
+      defaultTextTrack,
+      sourceKeyForRender,
+      validatedPreferredTextTrackLanguage
+    ]
   );
 
   // Also fed by a subscription rather than by a control's render, and for a
@@ -1085,6 +1240,7 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
       source: detectedSource,
       ...activation,
       lastSelectedTextTrackId,
+      preferredTextTrackLanguage: validatedPreferredTextTrackLanguage,
       registerMedia,
       volumeRequest
     }),
@@ -1094,6 +1250,7 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
       controls,
       detectedSource,
       registerMedia,
+      validatedPreferredTextTrackLanguage,
       volumeRequest
     ]
   );

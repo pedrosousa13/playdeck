@@ -139,6 +139,36 @@ provider has no caption seam at all — it is the value the state starts at, so
 nothing having patched it and nothing being there are indistinguishable from
 outside.
 
+Two more `Player.Root` props choose a caption track without a consumer calling
+`selectTextTrack` itself: `preferredTextTrackLanguage?: string` and
+`defaultTextTrack?: 'auto' | 'off'`. `preferredTextTrackLanguage` is a BCP 47
+language tag; once a source's tracks publish, and again whenever captions turn
+on without the viewer having picked a track of their own, selection resolves
+in this order — an exact `TextTrack.language` match, then the same base
+language (`en` matches `en-GB`), then the provider's own default track if it
+has one, and otherwise the first `captions`/`subtitles` track. Matching is
+case-insensitive, and a track whose `language` is `null` never matches either
+language step (it remains eligible for the two fallback steps). `defaultTextTrack`
+defaults to `'auto'`, which leaves that resolution — and, with neither prop
+set, the provider's own initial pick — alone; `'off'` starts every source,
+YouTube included, with no track selected. Either prop stops acting the moment
+the viewer makes their own choice, through a control or `selectTextTrack`, for
+that source; a new source applies both again.
+
+`preferredTextTrackLanguage` is checked against a BCP 47 tag's shape (letters,
+digits and hyphens, up to 35 characters) before it is used anywhere. A value
+that fails is ignored outright — selection behaves exactly as if the prop were
+absent — and a `configuration`-category notice naming the rejected value is
+published on `PlayerState.error` instead of being thrown.
+
+On YouTube, `defaultTextTrack="off"` also writes the embed's own
+`cc_load_policy=0` player var, so a default caption track is never requested
+in the first place. This has not been verified against a real YouTube player:
+YouTube's own docs document `cc_load_policy=1` as forcing captions on, but
+give `0` no documented meaning beyond matching the var's own absence, so this
+repo's coverage of it is a fake iframe API honouring the var by construction,
+not a measurement of real YouTube's response to it.
+
 Optional stylesheet with the default look:
 
 <!-- example:ignore one import line; the theme.css subpath export and its presence in the tarball are gated by test/theme.test.ts -->
