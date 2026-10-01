@@ -408,7 +408,18 @@ export const libraries = [
     // of provider. The whole distance from the last committed figure is
     // this issue's: that figure was 22.45 KB, measured per `results.md` on
     // `main`.
-    ceilingKb: 23
+    // 23655 bytes measured 2026-10-01 -- 23.1005859375 KB, 23.10 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 23 KB is #855's native caption-track readiness fix: each caption/
+    // subtitle `<track>` element now gets a `load`/`error` listener, diffed
+    // against the track set on every discovery pass, plus the two `Map`s
+    // (`captionReadinessOverrides`, `captionTrackListeners`) that back it --
+    // all reached by every composition this fixture builds through its
+    // native provider, regardless of whether it renders captions UI. The
+    // whole distance from the last committed figure is this issue's: that
+    // figure was 22.88 KB (23425 bytes), measured 2026-10-01 before this
+    // change, per `results.md` on `main`.
+    ceilingKb: 23.25
   },
   {
     name: 'Playdeck',
@@ -554,7 +565,15 @@ export const libraries = [
     // builds, this one's `PlayButton` included. The whole distance from the
     // last committed figure is this issue's: that figure was 24.41 KB,
     // measured per `results.md` on `main`.
-    ceilingKb: 25,
+    // 25700 bytes measured 2026-10-01 -- 25.09765625 KB, 25.10 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 25 KB is #855's native caption-track readiness fix, the same change
+    // described on the "no parts" row above -- `@playdeck/provider-native`
+    // sits in every composition this fixture builds, this one's `PlayButton`
+    // included. The whole distance from the last committed figure is this
+    // issue's: that figure was 24.85 KB (25443 bytes), measured 2026-10-01
+    // before this change, per `results.md` on `main`.
+    ceilingKb: 25.25,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
@@ -607,7 +626,15 @@ export const libraries = [
     // builds, this one's control bar included. The whole distance from the
     // last committed figure is this issue's: that figure was 27.49 KB,
     // measured per `results.md` on `main`.
-    ceilingKb: 28.25
+    // 28936 bytes measured 2026-10-01 -- 28.2578125 KB, 28.26 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 28.25 KB is #855's native caption-track readiness fix, the same change
+    // described on the "no parts" row above -- `@playdeck/provider-native`
+    // sits in every composition this fixture builds, this one's control bar
+    // included. The whole distance from the last committed figure is this
+    // issue's: that figure was 28.00 KB (28674 bytes), measured 2026-10-01
+    // before this change, per `results.md` on `main`.
+    ceilingKb: 28.5
   },
   {
     name: 'react-player',

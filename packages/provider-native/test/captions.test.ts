@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { PlayerController } from '@playdeck/core';
 import { captureRethrows } from '@playdeck/test-support/capture-rethrows';
 import { createFakeTrack } from '@playdeck/test-support/fake-text-tracks';
@@ -511,6 +511,101 @@ test('cuechange with WebVTT tags and character references decodes to plain text'
   expect(cueFrames).toEqual([
     [{ id: 'cue-1', startTime: 0, endTime: 1, text: 'Look out & run' }]
   ]);
+});
+
+// --- readiness follows the <track> element's load lifecycle ---
+
+test('republishes readiness as loaded when the track element fires load after discovery', async () => {
+  const { media, provider, patches } = mountNative([
+    { kind: 'captions', label: 'English', language: 'en', id: 't1' }
+  ]);
+  const trackElement = document.createElement('track');
+  trackElement.setAttribute('kind', 'captions');
+  trackElement.id = 't1';
+  media.appendChild(trackElement);
+
+  await provider.attach();
+
+  expect(latest(patches).textTracks).toEqual([
+    {
+      id: 't1',
+      label: 'English',
+      language: 'en',
+      kind: 'captions',
+      readiness: 'loading'
+    }
+  ]);
+
+  trackElement.dispatchEvent(new Event('load'));
+
+  expect(latest(patches).textTracks).toEqual([
+    {
+      id: 't1',
+      label: 'English',
+      language: 'en',
+      kind: 'captions',
+      readiness: 'loaded'
+    }
+  ]);
+  const patchCountAfterLoad = patches.length;
+
+  // A second `load` confirms the readiness already published; it must not
+  // republish.
+  trackElement.dispatchEvent(new Event('load'));
+
+  expect(patches.length).toBe(patchCountAfterLoad);
+});
+
+test('republishes readiness as error when the track element fails to load', async () => {
+  const { media, provider, patches } = mountNative([
+    { kind: 'captions', label: 'English', language: 'en', id: 't1' }
+  ]);
+  const trackElement = document.createElement('track');
+  trackElement.setAttribute('kind', 'captions');
+  trackElement.id = 't1';
+  media.appendChild(trackElement);
+
+  await provider.attach();
+
+  trackElement.dispatchEvent(new Event('error'));
+
+  expect(latest(patches).textTracks).toEqual([
+    {
+      id: 't1',
+      label: 'English',
+      language: 'en',
+      kind: 'captions',
+      readiness: 'error'
+    }
+  ]);
+});
+
+// Asserted as add/remove symmetry on the same handler reference, not by
+// dispatching after destroy: `destroy()` also clears the provider's
+// subscriber set, so a post-destroy dispatch produces no patch whether the
+// `<track>` element's listener was detached or not -- it would be a test
+// that cannot fail (the same reasoning `airplay.test.ts`'s "the AirPlay
+// route listener is removed on destroy (#71)" test records).
+test('the track element load and error listeners are removed on destroy', async () => {
+  const { media, provider } = mountNative([
+    { kind: 'captions', label: 'English', language: 'en', id: 't1' }
+  ]);
+  const trackElement = document.createElement('track');
+  trackElement.setAttribute('kind', 'captions');
+  trackElement.id = 't1';
+  media.appendChild(trackElement);
+  const added = vi.spyOn(trackElement, 'addEventListener');
+  const removed = vi.spyOn(trackElement, 'removeEventListener');
+
+  await provider.attach();
+  await provider.destroy();
+
+  const loadHandler = added.mock.calls.find(([name]) => name === 'load')?.[1];
+  const errorHandler = added.mock.calls.find(([name]) => name === 'error')?.[1];
+  expect(loadHandler).toBeDefined();
+  expect(errorHandler).toBeDefined();
+  expect(removed).toHaveBeenCalledWith('load', loadHandler);
+  expect(removed).toHaveBeenCalledWith('error', errorHandler);
 });
 
 // --- subscriber isolation (#233) ---

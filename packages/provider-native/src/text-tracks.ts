@@ -71,10 +71,22 @@ const noChapterSource: Availability = {
 const nativeTextTrackId = (track: NativeTextTrack, index: number): string =>
   track.id || `native:${index}`;
 
+// `observedReadiness` holds what `syncCaptionTrackListeners`'s `load`/`error`
+// listeners have seen for each track's `<track>` element — the source of
+// truth is events rather than `HTMLTrackElement.readyState`, because this
+// repo's test environment (happy-dom) hard-codes `readyState` to `NONE`, so a
+// transition read off it could never be watched failing before the fix, or
+// regressing after. An observed value wins over the cue-count snapshot
+// below: a track that fired `load` with zero cues (an empty WebVTT) has
+// still finished loading, not stalled in `loading`.
 const nativeTextTrackReadiness = (
-  track: NativeTextTrack
-): TextTrackReadiness =>
-  track.cues && track.cues.length > 0 ? 'loaded' : 'loading';
+  track: NativeTextTrack,
+  observedReadiness: ReadonlyMap<NativeTextTrack, TextTrackReadiness>
+): TextTrackReadiness => {
+  const observed = observedReadiness.get(track);
+  if (observed) return observed;
+  return track.cues && track.cues.length > 0 ? 'loaded' : 'loading';
+};
 
 // Builds the caption/subtitle subsystem that layers on top of an
 // `HTMLMediaElement`'s native `textTracks`: discovery, selection, renderer
@@ -115,6 +127,19 @@ export const createNativeTextTracks = (
   let chapterTrackElement: HTMLTrackElement | undefined;
   let chapterAvailability: Availability = noChapterSource;
   const cueListeners = new Set<(cues: readonly TextCue[]) => void>();
+  // What each caption/subtitle track's `<track>` element has reported via
+  // `load`/`error`, and the listener pair currently bound to that element —
+  // both keyed by the `TextTrack` object so `syncCaptionTrackListeners` can
+  // diff a discovery pass against the previous one and detach exactly what a
+  // departed track or element added.
+  const captionReadinessOverrides = new Map<
+    NativeTextTrack,
+    TextTrackReadiness
+  >();
+  const captionTrackListeners = new Map<
+    NativeTextTrack,
+    { element: HTMLTrackElement; onLoad: () => void; onError: () => void }
+  >();
 
   const captionTrackEntries = (): Array<{
     track: NativeTextTrack;
@@ -241,11 +266,12 @@ export const createNativeTextTracks = (
     return undefined;
   };
 
-  // The `<track>` element behind a text track, matched the way
-  // `defaultCaptionTrackEntry` matches one: by object identity first, falling
-  // back to id equality. Absent for an in-band chapters track, which is why the
-  // element's `load` event cannot be the only read trigger.
-  const chapterTrackElementFor = (
+  // The `<track>` element behind a text track (chapters or caption/subtitle),
+  // matched the way `defaultCaptionTrackEntry` matches one: by object
+  // identity first, falling back to id equality. Absent for an in-band
+  // chapters track, which is why the element's `load` event cannot be the
+  // only read trigger for chapters.
+  const trackElementFor = (
     track: NativeTextTrack
   ): HTMLTrackElement | undefined => {
     const elements = media.querySelectorAll('track');
@@ -320,7 +346,7 @@ export const createNativeTextTracks = (
       if (track) {
         chapterTrack = track;
         track.addEventListener('cuechange', onChapterUpdate);
-        chapterTrackElement = chapterTrackElementFor(track);
+        chapterTrackElement = trackElementFor(track);
         chapterTrackElement?.addEventListener('load', onChapterUpdate);
       }
     }
@@ -336,16 +362,69 @@ export const createNativeTextTracks = (
     }
   };
 
-  const discoverTextTracks = (): void => {
-    const entries = captionTrackEntries();
-    hasSelectableTextTracks = entries.length > 0;
-    const textTracks: TextTrack[] = entries.map(({ track, index }) => ({
+  const buildTextTracks = (
+    entries: Array<{ track: NativeTextTrack; index: number }>
+  ): TextTrack[] =>
+    entries.map(({ track, index }) => ({
       id: nativeTextTrackId(track, index),
       label: textTrackLabel(track.label, track.language),
       language: track.language || null,
       kind: track.kind as TextTrackKind,
-      readiness: nativeTextTrackReadiness(track)
+      readiness: nativeTextTrackReadiness(track, captionReadinessOverrides)
     }));
+
+  // Keeps each caption/subtitle track's `<track>`-element `load`/`error`
+  // listeners in step with the current track set, diffed against the
+  // previous pass: a track no longer discovered, or whose element changed,
+  // has its old listeners removed (and its observed readiness forgotten)
+  // before a new pair is bound for whatever is there now.
+  const syncCaptionTrackListeners = (
+    entries: Array<{ track: NativeTextTrack; index: number }>
+  ): void => {
+    const currentTracks = new Set(entries.map(({ track }) => track));
+    captionTrackListeners.forEach((listener, track) => {
+      if (currentTracks.has(track)) return;
+      listener.element.removeEventListener('load', listener.onLoad);
+      listener.element.removeEventListener('error', listener.onError);
+      captionTrackListeners.delete(track);
+      captionReadinessOverrides.delete(track);
+    });
+    entries.forEach(({ track }) => {
+      const element = trackElementFor(track);
+      const existing = captionTrackListeners.get(track);
+      if (existing && existing.element === element) return;
+      if (existing) {
+        existing.element.removeEventListener('load', existing.onLoad);
+        existing.element.removeEventListener('error', existing.onError);
+        captionTrackListeners.delete(track);
+      }
+      if (!element) return;
+      const onLoad = (): void => setCaptionReadiness(track, 'loaded');
+      const onError = (): void => setCaptionReadiness(track, 'error');
+      element.addEventListener('load', onLoad);
+      element.addEventListener('error', onError);
+      captionTrackListeners.set(track, { element, onLoad, onError });
+    });
+  };
+
+  // Republishes the track collection when an element's `load`/`error`
+  // changes what it reports for readiness — and only then, so a redundant
+  // event (or one confirming the cue-count snapshot's existing verdict)
+  // emits nothing.
+  const setCaptionReadiness = (
+    track: NativeTextTrack,
+    value: TextTrackReadiness
+  ): void => {
+    if (captionReadinessOverrides.get(track) === value) return;
+    captionReadinessOverrides.set(track, value);
+    emit({ textTracks: buildTextTracks(captionTrackEntries()) });
+  };
+
+  const discoverTextTracks = (): void => {
+    const entries = captionTrackEntries();
+    hasSelectableTextTracks = entries.length > 0;
+    syncCaptionTrackListeners(entries);
+    const textTracks = buildTextTracks(entries);
     selectedTextTrackId = resolveSelection(entries);
     applySelection(entries, selectedTextTrackId);
     syncChapterTrack();
@@ -462,6 +541,12 @@ export const createNativeTextTracks = (
       detachCueChangeTrack();
       detachChapterTrack();
       cueListeners.clear();
+      captionTrackListeners.forEach((listener) => {
+        listener.element.removeEventListener('load', listener.onLoad);
+        listener.element.removeEventListener('error', listener.onError);
+      });
+      captionTrackListeners.clear();
+      captionReadinessOverrides.clear();
     },
     selectTextTrackAvailability: () =>
       hasSelectableTextTracks
