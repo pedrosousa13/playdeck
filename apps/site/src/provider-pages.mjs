@@ -118,6 +118,7 @@ const PROVIDERS = [
 const SHARED_SECTIONS = [
   'The `source` prop',
   'Shared rules for a source string',
+  'A poster before the provider attaches',
   'Explicit source objects',
   'Supplying your own provider',
   'What a refusal reads like'

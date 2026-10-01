@@ -1,0 +1,16 @@
+{
+  "name": "@playdeck/bundle-youtube-poster",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "test": "node test.mjs"
+  },
+  "dependencies": {
+    "@playdeck/provider-youtube": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "8.3.1"
+  }
+}
