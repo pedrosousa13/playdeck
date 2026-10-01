@@ -341,16 +341,18 @@ export const Captions = ({
  * remembered track, no preference and no first track) — the caller should
  * no-op in that case.
  *
- * `preferredLanguage` is `Root`'s own `preferredTextTrackLanguage`, already
- * validated by the time it reaches here (`root.tsx`'s
- * `validatedPreferredTextTrackLanguage`, threaded through `PlayerContextValue`).
- * It is consulted only once a remembered track comes up empty -- a track the
- * viewer picked for themselves, for this source, still wins, the same way it
- * already did before this parameter existed. `Root`'s own one-shot effect
- * applies the preference once, at first publish or first turn-on, and then
- * never again for that source; this is the other place a source without a
- * remembered pick yet can turn captions on afterwards, so it is the other
- * place the preference has to reach.
+ * `rememberedId` names a track the viewer picked for themselves, for this
+ * source -- `Root` resets its own ref to `null` around its one-shot
+ * preference/default apply (`root.tsx`), so a provider's own initial default
+ * is never mistaken for a viewer's pick here. `preferredLanguage` is `Root`'s
+ * own `preferredTextTrackLanguage`, already validated by the time it reaches
+ * here (`root.tsx`'s `validatedPreferredTextTrackLanguage`, threaded through
+ * `PlayerContextValue`), and is consulted only once `rememberedId` comes up
+ * empty: a track the viewer picked for this source always wins over it.
+ * `Root`'s own one-shot effect applies the preference once, at first publish
+ * or first turn-on, and then never again for that source; this is the other
+ * place a source without a remembered pick yet can turn captions on
+ * afterwards, so it is the other place the preference has to reach.
  */
 export const resolveCaptionToggle = (
   textTracks: readonly TextTrack[],

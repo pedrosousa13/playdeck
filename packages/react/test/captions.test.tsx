@@ -798,6 +798,40 @@ describe('Player.CaptionsButton', () => {
     fireEvent.click(button);
     expect(selectTextTrack).toHaveBeenCalledWith('es');
   });
+
+  // A provider's own initial default (native's `<track default>`, YouTube's
+  // auto-selected track, a Vimeo track already showing) must not be mistaken
+  // for a viewer's own pick -- `root.tsx`'s one-shot preference/default apply
+  // resets its remembered-selection ref around its own run, so the
+  // preference still resolves a later toggle rather than restoring the
+  // provider's own default.
+  //
+  // Red, before root.tsx reset the ref: this test failed --
+  // `expected "vi.fn()" to be called with arguments: [ 'en' ]`, received
+  // `[ "es" ]` -- the provider's own initial "es" was still remembered, so
+  // the click restored it instead of resolving the preference.
+  test('clicking CaptionsButton resolves the preference even when a provider default was selected at first publish', () => {
+    const { container, emitState, selectTextTrack } = renderWithPlayer(
+      <Player.CaptionsButton />,
+      { defaultTextTrack: 'off', preferredTextTrackLanguage: 'en' }
+    );
+    // The provider's own default, already selected the moment tracks first
+    // publish.
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('es', 'Spanish', 'es'), track('en', 'English', 'en')],
+      selectedTextTrackId: 'es'
+    });
+    expect(selectTextTrack).toHaveBeenCalledWith(null);
+    // The provider confirms the off command the one-shot apply issued.
+    emitState({ selectedTextTrackId: null });
+
+    const button = container.querySelector(
+      '[data-playdeck-part="captions-button"]'
+    ) as HTMLButtonElement;
+    fireEvent.click(button);
+    expect(selectTextTrack).toHaveBeenLastCalledWith('en');
+  });
 });
 
 // Red: with root.tsx's matching effect stubbed to a no-op (`return;` as the

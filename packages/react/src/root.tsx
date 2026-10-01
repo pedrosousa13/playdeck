@@ -1146,16 +1146,23 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
   // Fed by a subscription rather than by a control's render, so it also
   // records selections made by a custom control calling selectTextTrack
   // directly, and stays correct while no captions control is mounted at all.
+  //
+  // Reset to `null` on every source change (the dependency array below), so
+  // a previous source's remembered selection can never leak into a new
+  // source's own toggle fallback (`resolveCaptionToggle`,
+  // `captions.tsx`/`controls.tsx`) -- belt and braces alongside the reset the
+  // preference/default effect below does for its own run, since that one
+  // only fires when `defaultTextTrack`/`preferredTextTrackLanguage` are
+  // actually in play.
   const lastSelectedTextTrackId = useRef<string | null>(null);
-  useEffect(
-    () =>
-      controller.subscribe((state) => {
-        if (state.selectedTextTrackId !== null) {
-          lastSelectedTextTrackId.current = state.selectedTextTrackId;
-        }
-      }),
-    [controller]
-  );
+  useEffect(() => {
+    lastSelectedTextTrackId.current = null;
+    return controller.subscribe((state) => {
+      if (state.selectedTextTrackId !== null) {
+        lastSelectedTextTrackId.current = state.selectedTextTrackId;
+      }
+    });
+  }, [controller, sourceKeyForRender]);
 
   // Applies `defaultTextTrack`/`preferredTextTrackLanguage` once per source --
   // the first state that has a selection to act on (tracks published, or a
@@ -1185,6 +1192,18 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
           return;
         }
         textTrackPreferenceAppliedFor.current = sourceKeyForRender;
+        // Whatever `lastSelectedTextTrackId` holds right now is, at most, a
+        // provider's own initial default -- the subscription above runs
+        // before this one (declared earlier, so registered first; `#listeners`
+        // is a `Set`, notified in insertion order) and would already have
+        // recorded a non-null `state.selectedTextTrackId` were there one to
+        // record. That default is not a viewer's pick, so it must not survive
+        // as the "remembered" track a later toggle falls back to. If the
+        // target below is non-null, the subscription above records it once
+        // the provider confirms it, exactly as a viewer's own pick would be
+        // -- that confirmed selection, not this discarded default, is the
+        // baseline a later toggle restores to.
+        lastSelectedTextTrackId.current = null;
         const target =
           defaultTextTrack === 'off'
             ? null
