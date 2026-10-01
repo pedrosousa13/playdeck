@@ -67,6 +67,9 @@ export type YouTubeAttachmentDeps = {
   readonly controls: boolean | undefined;
   // Unset and `false` both mean play once; see `YouTubeProviderOptions`.
   readonly loop: boolean | undefined;
+  // See `YouTubeProviderOptions`'s own doc comments for both.
+  readonly defaultTextTrack: 'auto' | 'off' | undefined;
+  readonly preferredTextTrackLanguage: string | undefined;
   readonly host: string;
   // The [startTime, endTime] window: it supplies the `start` player var and
   // positions the playhead once the player is ready.
@@ -117,6 +120,8 @@ export const createYouTubeAttachment = (
     emit,
     controls,
     loop,
+    defaultTextTrack,
+    preferredTextTrackLanguage,
     host,
     boundary,
     loadIframeApi,
@@ -248,6 +253,24 @@ export const createYouTubeAttachment = (
       ...(boundary.startPlayerVar === undefined
         ? {}
         : { start: boundary.startPlayerVar }),
+      // The one part of `defaultTextTrack="off"` this adapter can enforce
+      // before the embed ever loads: YouTube's own documented "don't show a
+      // caption track by default" var. Without it, `Root`'s reactive
+      // `selectTextTrack(null)` (issued once this adapter publishes tracks)
+      // would only ever correct a track YouTube already rendered inside its
+      // own iframe -- too late to stop a flash, since Playdeck draws no
+      // overlay of its own in this provider's `captionRendering: 'provider'`
+      // mode. Track *discovery* is unaffected: `onReady`'s
+      // `loadModule('captions')` below still runs regardless.
+      ...(defaultTextTrack === 'off' ? { cc_load_policy: 0 } : {}),
+      // YouTube's own documented caption-language hint, base-subtag only
+      // (`en` out of `en-US`) the way `cc_lang_pref` expects. Reaches every
+      // mode, not only `defaultTextTrack="off"`: under `controls: true` it is
+      // also what a viewer's own first use of YouTube's native caption
+      // toggle starts from.
+      ...(preferredTextTrackLanguage === undefined
+        ? {}
+        : { cc_lang_pref: preferredTextTrackLanguage.split('-')[0]! }),
       playsinline: 1,
       rel: 0,
       ...(embedOrigin ? { origin: embedOrigin } : {})

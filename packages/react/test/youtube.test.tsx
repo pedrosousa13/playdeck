@@ -164,6 +164,54 @@ test('leaves the youtube bag unbounded when Root omits the time props', async ()
   expect(options?.endTime).toBeUndefined();
 });
 
+// `defaultTextTrack` and `preferredTextTrackLanguage` are `Root` props that
+// reach this provider by the same fold `loop`/`startTime`/`endTime` take
+// (`root.tsx`'s `resolvedProviderOptions`) -- `defaultTextTrack="off"` is what
+// lets this adapter write `cc_load_policy` before the embed ever loads.
+test("folds Root's defaultTextTrack and preferredTextTrackLanguage into the youtube provider option bag", async () => {
+  render(
+    <Player.Root
+      defaultTextTrack="off"
+      loading="eager"
+      preferredTextTrackLanguage="en"
+      source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(mockedCreateYouTubeProvider).toHaveBeenCalledTimes(1)
+  );
+  const [, , options] = mockedCreateYouTubeProvider.mock.calls[0]!;
+  expect(options).toMatchObject({
+    defaultTextTrack: 'off',
+    preferredTextTrackLanguage: 'en'
+  });
+});
+
+test('leaves the youtube bag without an explicit off when Root leaves defaultTextTrack at its auto default', async () => {
+  render(
+    <Player.Root
+      loading="eager"
+      source={{ type: 'youtube', videoId: 'dQw4w9WgXcQ' }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  await waitFor(() =>
+    expect(mockedCreateYouTubeProvider).toHaveBeenCalledTimes(1)
+  );
+  const [, , options] = mockedCreateYouTubeProvider.mock.calls[0]!;
+  expect(options?.defaultTextTrack).toBeUndefined();
+  expect(options?.preferredTextTrackLanguage).toBeUndefined();
+});
+
 // SIDEPRO's regression: `providerOptionsEqual` in `use-activation.ts` must
 // compare `youtube` bags by value, or a changed bag looks unchanged and the
 // embed never re-attaches to pick it up.

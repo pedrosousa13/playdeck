@@ -72,6 +72,11 @@ type PlayerFixtureProps = {
   // every existing story would be a change none of them asked for. Only the
   // `NativeSourceError*` stories below set it.
   readonly showErrorDisplay?: boolean;
+  // `Player.Root`'s own `defaultTextTrack` and `preferredTextTrackLanguage`
+  // props, threaded through so `e2e/youtube.spec.ts` can drive a
+  // YouTube-sourced fixture that starts with no caption track selected.
+  readonly defaultTextTrack?: Player.RootProps['defaultTextTrack'];
+  readonly preferredTextTrackLanguage?: Player.RootProps['preferredTextTrackLanguage'];
 };
 
 // Tall enough that the player starts fully outside the observer's root even
@@ -306,7 +311,9 @@ const PlayerFixture = ({
   scrollPage,
   loop,
   crossOrigin,
-  showErrorDisplay
+  showErrorDisplay,
+  defaultTextTrack,
+  preferredTextTrackLanguage
 }: PlayerFixtureProps) => {
   const autoplay: Player.RootProps['autoplay'] = autoplayInput ?? false;
   const loading: Player.PlayerLoadingStrategy = loadingInput ?? 'viewport';
@@ -413,6 +420,7 @@ const PlayerFixture = ({
         autoplay={autoplay}
         captionRenderer={captionRenderer}
         defaultMuted={defaultMuted}
+        defaultTextTrack={defaultTextTrack}
         endTime={endTime}
         loading={loading}
         loop={loop}
@@ -428,6 +436,7 @@ const PlayerFixture = ({
           ]
         }}
         poster={poster}
+        preferredTextTrackLanguage={preferredTextTrackLanguage}
         preload={preload}
         providerOptions={
           vimeoCustomControls || vimeoSuppressSeoMetadata
@@ -774,6 +783,16 @@ export const InteractionPreloadNoneExternalMuted: Story = {
 
 export const InteractionYoutube: Story = {
   args: { loading: 'interaction', activationSource: 'youtube' }
+};
+
+// #858: `defaultTextTrack="off"`, for `e2e/youtube.spec.ts`'s no-flash
+// coverage against the fake iframe API's own captions-module simulation.
+export const InteractionYoutubeCaptionsOff: Story = {
+  args: {
+    loading: 'interaction',
+    activationSource: 'youtube',
+    defaultTextTrack: 'off'
+  }
 };
 
 // poster="provider": e2e/youtube-real.spec.ts fetches the real

@@ -349,6 +349,42 @@ export const resolveCaptionToggle = (
   return textTracks.find((t) => t.id === rememberedId)?.id ?? textTracks[0]?.id;
 };
 
+// The primary subtag of a BCP 47 tag, lower-cased for a case-insensitive
+// compare -- `en` out of `en-GB`, `es` out of `es`.
+const baseLanguage = (language: string): string =>
+  (language.split('-')[0] ?? language).toLowerCase();
+
+/**
+ * Resolves `Root`'s `preferredTextTrackLanguage` against a source's
+ * published tracks: an exact `language` match first, then a same-base-
+ * language match (`en` matches `en-GB`), then `fallbackId` -- the provider's
+ * own current selection, if it has one -- and finally the first track.
+ * Tracks whose `language` is `null` never match either language step, but
+ * remain eligible for both fallback steps. Matching is case-insensitive.
+ * `fallbackId` naming a track outside `textTracks` is treated the same as
+ * `null` -- nothing for that step to fall back to.
+ */
+export const resolvePreferredTextTrack = (
+  textTracks: readonly TextTrack[],
+  preferredLanguage: string,
+  fallbackId: string | null
+): string | null => {
+  const preferred = preferredLanguage.toLowerCase();
+  const preferredBase = baseLanguage(preferredLanguage);
+  const exact = textTracks.find(
+    (t) => t.language !== null && t.language.toLowerCase() === preferred
+  );
+  if (exact) return exact.id;
+  const base = textTracks.find(
+    (t) => t.language !== null && baseLanguage(t.language) === preferredBase
+  );
+  if (base) return base.id;
+  if (fallbackId !== null && textTracks.some((t) => t.id === fallbackId)) {
+    return fallbackId;
+  }
+  return textTracks[0]?.id ?? null;
+};
+
 export type CaptionsButtonProps = ComponentPropsWithRef<'button'>;
 
 export const CaptionsButton = ({

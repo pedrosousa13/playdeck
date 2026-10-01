@@ -62,10 +62,18 @@ const createMockAdapter = () => {
   };
 };
 
-const renderWithPlayer = (ui: ReactNode) => {
+const renderWithPlayer = (
+  ui: ReactNode,
+  rootProps: Partial<Player.RootProps> = {}
+) => {
   const handle = createRef<Player.PlayerHandle>();
   const utils = render(
-    <Player.Root loading="interaction" ref={handle} source="/tracer.mp4">
+    <Player.Root
+      loading="interaction"
+      ref={handle}
+      source="/tracer.mp4"
+      {...rootProps}
+    >
       {ui}
     </Player.Root>
   );
@@ -78,6 +86,7 @@ const renderWithPlayer = (ui: ReactNode) => {
   });
   return {
     ...utils,
+    handle,
     controller,
     selectTextTrack: mock.selectTextTrack,
     emitCues: (cues: readonly TextCue[]) => act(() => mock.emitCues(cues)),
@@ -728,6 +737,175 @@ describe('Player.CaptionsButton', () => {
     });
     fireEvent.click(button);
     expect(selectTextTrack).toHaveBeenCalledWith('fr');
+  });
+});
+
+describe('Player.Root preferredTextTrackLanguage / defaultTextTrack', () => {
+  test('makes no selection when neither prop is set', () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null);
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('es', 'Spanish', 'es'), track('en', 'English', 'en')],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).not.toHaveBeenCalled();
+  });
+
+  test('selects the exact language match once tracks first publish', () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: 'en'
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('es', 'Spanish', 'es'), track('en', 'English', 'en')],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).toHaveBeenCalledWith('en');
+  });
+
+  test('falls back to a base-language match (en matches en-GB)', () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: 'en-US'
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('gb', 'English (UK)', 'en-GB')],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).toHaveBeenCalledWith('gb');
+  });
+
+  test('keeps the provider default over the first track when neither language matches', () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: 'de'
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('es', 'Spanish', 'es'), track('fr', 'French', 'fr')],
+      // The provider's own default, already selected -- not the first track
+      // in the list -- so a fallback that blindly picked the first track
+      // would disagree with this and call selectTextTrack.
+      selectedTextTrackId: 'fr'
+    });
+    expect(selectTextTrack).not.toHaveBeenCalled();
+  });
+
+  test('falls back to the first track when there is no provider default and no language matches', () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: 'de'
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('es', 'Spanish', 'es'), track('fr', 'French', 'fr')],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).toHaveBeenCalledWith('es');
+  });
+
+  test('a null-language track never matches by language, but can still be the fallback', () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: 'xx'
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('unknown', 'Unknown'), track('en', 'English', 'en')],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).toHaveBeenCalledWith('unknown');
+  });
+
+  test('a null-language track is skipped when another track matches the preferred language', () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: 'en'
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('unknown', 'Unknown'), track('en', 'English', 'en')],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).toHaveBeenCalledWith('en');
+  });
+
+  test('defaultTextTrack="off" clears a provider default once tracks first publish', () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      defaultTextTrack: 'off'
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English', 'en')],
+      selectedTextTrackId: 'en'
+    });
+    expect(selectTextTrack).toHaveBeenCalledWith(null);
+  });
+
+  test('defaultTextTrack="off" makes no call when nothing was ever selected', () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      defaultTextTrack: 'off'
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('en', 'English', 'en')],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).not.toHaveBeenCalled();
+  });
+
+  test("does not override a viewer's choice when tracks republish for the same source", () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: 'en'
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('es', 'Spanish', 'es'), track('en', 'English', 'en')],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).toHaveBeenCalledTimes(1);
+    expect(selectTextTrack).toHaveBeenCalledWith('en');
+
+    // The viewer turns captions off through a control or selectTextTrack.
+    emitState({ selectedTextTrackId: null });
+    // The tracks republish for the same source (e.g. a readiness change).
+    emitState({
+      textTracks: [track('es', 'Spanish', 'es'), track('en', 'English', 'en')]
+    });
+    expect(selectTextTrack).toHaveBeenCalledTimes(1);
+  });
+
+  test('applies the preference again for a new source', () => {
+    const { controller, emitState, handle, rerender, selectTextTrack } =
+      renderWithPlayer(null, { preferredTextTrackLanguage: 'en' });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('es', 'Spanish', 'es'), track('en', 'English', 'en')],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).toHaveBeenCalledTimes(1);
+
+    const nextMock = createMockAdapter();
+    rerender(
+      <Player.Root
+        loading="interaction"
+        ref={handle}
+        source="/second.mp4"
+        preferredTextTrackLanguage="en"
+      >
+        {null}
+      </Player.Root>
+    );
+    act(() => {
+      controller.setProvider(nextMock.adapter);
+    });
+    act(() =>
+      nextMock.emitState({
+        capabilities: withSelectTextTrack(available),
+        textTracks: [
+          track('es', 'Spanish', 'es'),
+          track('en', 'English', 'en')
+        ],
+        selectedTextTrackId: null
+      })
+    );
+    expect(nextMock.selectTextTrack).toHaveBeenCalledWith('en');
   });
 });
 

@@ -73,6 +73,29 @@ export type YouTubeProviderOptions = {
    */
   readonly endTime?: number;
   /**
+   * `'off'` writes the embed's own `cc_load_policy=0` player var, so YouTube
+   * never loads a default caption track in the first place -- the one
+   * mechanism this adapter has for stopping a flash of captions before this
+   * package's own reactive `selectTextTrack(null)` (`Root`'s text-track
+   * preference effect) could reach it. `Root`'s `defaultTextTrack` prop is
+   * folded into this bag the way `startTime` is, so `PlayerProviderOptions`
+   * omits the key (ADR-0004). Caption *discovery* is unaffected either way --
+   * `loadModule('captions')` below still runs, so a track list is still
+   * published for a viewer to choose from.
+   */
+  readonly defaultTextTrack?: 'auto' | 'off';
+  /**
+   * Seeds the embed's own `cc_lang_pref` player var with this tag's base
+   * language (`en` out of `en-US`). Folded in from `Root`'s
+   * `preferredTextTrackLanguage` prop the way `startTime` is
+   * (`PlayerProviderOptions` omits the key, ADR-0004); this adapter's own
+   * reactive selection (`Root`'s text-track preference effect) is what
+   * actually picks a track once one publishes, in every mode. `cc_lang_pref`
+   * matters beyond that only under `controls: true`, where it also seeds the
+   * language YouTube's own chrome starts a viewer-driven caption toggle on.
+   */
+  readonly preferredTextTrackLanguage?: string;
+  /**
    * Embed host; defaults to the privacy-enhanced youtube-nocookie.com. Only
    * the two origins YouTube serves the embed from are honoured — anything
    * else falls back to that default.
@@ -304,6 +327,8 @@ export const createYouTubeProvider = (
     emit,
     controls: options.controls,
     loop: options.loop,
+    defaultTextTrack: options.defaultTextTrack,
+    preferredTextTrackLanguage: options.preferredTextTrackLanguage,
     host: resolvedHost,
     boundary,
     loadIframeApi: options.loadIframeApi ?? loadYouTubeIframeApi,

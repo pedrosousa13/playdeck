@@ -1333,6 +1333,78 @@ test('proactively loads the captions module once the player reports ready', asyn
   expect(harness.player.loadModule).toHaveBeenCalledWith('captions');
 });
 
+// `defaultTextTrack`/`preferredTextTrackLanguage` (`Player.Root`) fold into
+// `cc_load_policy`/`cc_lang_pref` (`index.ts`'s `resolvedProviderOptions`
+// equivalent on the react side). Neither var is written unless the matching
+// option is set, so a player with neither prop reaches YouTube exactly as it
+// did before the two existed.
+test('defaultTextTrack="off" asks YouTube not to load captions by default', async () => {
+  const { fake, provider } = createAdapter(undefined, {
+    defaultTextTrack: 'off'
+  });
+
+  await provider.attach();
+  await provider.load();
+
+  expect(embedVars(fake.players[0]!)).toMatchObject({ cc_load_policy: '0' });
+});
+
+test('an unset defaultTextTrack writes no cc_load_policy var', async () => {
+  const { fake, provider } = createAdapter();
+
+  await provider.attach();
+  await provider.load();
+
+  expect(embedVars(fake.players[0]!)).not.toHaveProperty('cc_load_policy');
+});
+
+test("preferredTextTrackLanguage seeds the embed's own cc_lang_pref", async () => {
+  const { fake, provider } = createAdapter(undefined, {
+    preferredTextTrackLanguage: 'en-US'
+  });
+
+  await provider.attach();
+  await provider.load();
+
+  expect(embedVars(fake.players[0]!)).toMatchObject({ cc_lang_pref: 'en' });
+});
+
+test('an unset preferredTextTrackLanguage writes no cc_lang_pref var', async () => {
+  const { fake, provider } = createAdapter();
+
+  await provider.attach();
+  await provider.load();
+
+  expect(embedVars(fake.players[0]!)).not.toHaveProperty('cc_lang_pref');
+});
+
+test('defaultTextTrack="off" still discovers caption tracks for later selection', async () => {
+  const { harness, patches } = await readyAdapter(undefined, {
+    defaultTextTrack: 'off'
+  });
+  harness.captionsTracklist = [{ languageCode: 'en', displayName: 'English' }];
+
+  harness.fireApiChange();
+
+  expect(harness.player.loadModule).toHaveBeenCalledWith('captions');
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      textTracks: [
+        {
+          id: 'youtube:en',
+          label: 'English',
+          language: 'en',
+          kind: 'captions',
+          readiness: 'loaded'
+        }
+      ],
+      capabilities: expect.objectContaining({
+        selectTextTrack: { status: 'available' }
+      })
+    })
+  );
+});
+
 test('discovers caption tracks from the captions module and reports provider rendering', async () => {
   const { harness, patches } = await readyAdapter();
   harness.captionsTracklist = [

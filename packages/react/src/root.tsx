@@ -9,6 +9,7 @@ import {
   type PlaybackState,
   type PlayerSource
 } from '@playdeck/core';
+import { resolvePreferredTextTrack } from './captions.js';
 import { INTERNAL_CONTROLLER } from './internal-controller.js';
 import {
   collectPlayerActions,
@@ -89,6 +90,19 @@ export type RootProps<P extends ConsumerProviders = Record<string, never>> = {
   readonly defaultMuted?: boolean;
   readonly mediaMetadata?: MediaMetadataInput | null;
   readonly defaultPlaybackRate?: number;
+  /**
+   * Whether a source starts with a caption track already chosen. `'auto'`
+   * (default) leaves the provider's own initial pick alone -- `<track
+   * default>` on native, a manifest's or an embed's own default elsewhere --
+   * subject to `preferredTextTrackLanguage` below. `'off'` starts every
+   * source, including YouTube, with no track selected, overriding that pick;
+   * YouTube is asked not to load its own default in the first place, so
+   * nothing flashes before settling to off. Either way, once the viewer
+   * selects a track (or selects none) through a control or `selectTextTrack`,
+   * this prop stops acting for the rest of that source; a new source applies
+   * it again.
+   */
+  readonly defaultTextTrack?: 'auto' | 'off';
   readonly defaultVolume?: number;
   /**
    * End playback at this offset in seconds, publishing `ended` there rather
@@ -178,6 +192,20 @@ export type RootProps<P extends ConsumerProviders = Record<string, never>> = {
    * no still of their own (#556).
    */
   readonly poster?: string | ResponsivePoster | 'provider';
+  /**
+   * The BCP 47 language tag captions should prefer, matched against each
+   * discovered `TextTrack.language`: an exact match, then the same base
+   * language (`en` matches `en-GB`), then the provider's own default track if
+   * it has one, and otherwise the first `captions`/`subtitles` track.
+   * Case-insensitive; a track whose `language` is `null` never matches
+   * either language step. Applied once a source's tracks first publish, and
+   * again whenever captions turn on without the viewer having picked a
+   * specific track -- never once the viewer has made a choice of their own
+   * for that source, through a control or `selectTextTrack`. A new source
+   * applies it again. On YouTube this also seeds the embed's own
+   * `cc_lang_pref`.
+   */
+  readonly preferredTextTrackLanguage?: string;
   readonly preload?: import('./use-activation.js').PlayerPreload;
   // Compared by value, not by reference, so an inline literal is safe to
   // pass: see `providerOptionsEqual` in `use-activation.ts`, which compares
@@ -293,6 +321,7 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
   controls,
   defaultMuted = false,
   defaultPlaybackRate = 1,
+  defaultTextTrack = 'auto',
   defaultVolume = 1,
   endTime,
   ignoreReducedMotion = false,
@@ -311,6 +340,7 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
   // that is the whole contract of this prop.
   playThreshold = loadThreshold,
   poster,
+  preferredTextTrackLanguage,
   providerOptions,
   providers,
   ref,
@@ -793,8 +823,13 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
         youtube: {
           ...providerOptions?.youtube,
           controls,
+          // Folded only as `'off'`; `'auto'` (this prop's own default) folds
+          // in as `undefined`, the same as an absent key, so a `Root` that
+          // never sets this prop writes no `cc_load_policy` var (`attachment.ts`).
+          defaultTextTrack: defaultTextTrack === 'off' ? 'off' : undefined,
           endTime,
           loop,
+          preferredTextTrackLanguage,
           startTime
         }
       };
@@ -827,10 +862,12 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
     return providerOptions ?? {};
   }, [
     controls,
+    defaultTextTrack,
     detectedSource,
     endTime,
     loop,
     poster,
+    preferredTextTrackLanguage,
     providerOptions,
     startTime
   ]);
@@ -1069,6 +1106,45 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
         }
       }),
     [controller]
+  );
+
+  // Applies `defaultTextTrack`/`preferredTextTrackLanguage` once per source --
+  // the first state that has a selection to act on (tracks published, or a
+  // track already selected) -- and never again after, so a viewer's own
+  // choice through a control or `selectTextTrack`, made any time after that
+  // first moment, is never undone, including when tracks later republish
+  // for the same source (e.g. a readiness change). `sourceKeyForRender`
+  // marks the source this ran for; a change to it is what "a new source
+  // applies the props again" means here.
+  const textTrackPreferenceAppliedFor = useRef<string | undefined>(undefined);
+  useEffect(
+    () =>
+      controller.subscribe((state) => {
+        if (textTrackPreferenceAppliedFor.current === sourceKeyForRender) {
+          return;
+        }
+        if (defaultTextTrack !== 'off' && preferredTextTrackLanguage === undefined) {
+          return;
+        }
+        if (state.textTracks.length === 0 && state.selectedTextTrackId === null) {
+          return;
+        }
+        textTrackPreferenceAppliedFor.current = sourceKeyForRender;
+        const target =
+          defaultTextTrack === 'off'
+            ? null
+            : preferredTextTrackLanguage === undefined
+              ? state.selectedTextTrackId
+              : resolvePreferredTextTrack(
+                  state.textTracks,
+                  preferredTextTrackLanguage,
+                  state.selectedTextTrackId
+                );
+        if (target !== state.selectedTextTrackId) {
+          void controller.selectTextTrack(target);
+        }
+      }),
+    [controller, defaultTextTrack, preferredTextTrackLanguage, sourceKeyForRender]
   );
 
   // Also fed by a subscription rather than by a control's render, and for a
