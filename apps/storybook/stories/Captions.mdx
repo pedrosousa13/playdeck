@@ -95,6 +95,33 @@ Selection is a single control point regardless of source:
 `<track default>` attribute (or the provider/manifest's own default flag)
 selects a track; otherwise captions start off.
 
+`Player.Root` can also choose a track on the consumer's behalf, instead of a
+`useEffect` calling `selectTextTrack` once tracks publish. `preferredTextTrackLanguage`
+is a BCP 47 language tag; once a source's tracks publish, and again whenever
+captions turn on without the viewer having picked a track of their own,
+selection resolves in order: an exact `TextTrack.language` match, then the
+same base language (`en` matches `en-GB`), then the provider's own default
+track if it has one, and otherwise the first `captions`/`subtitles` track.
+Matching is case-insensitive; a track whose `language` is `null` never
+matches either language step. `defaultTextTrack` (`'auto'` default, or
+`'off'`) starts every source, YouTube included, with no track selected
+instead. Either prop stops acting the moment the viewer makes their own
+choice for that source — through a control or `selectTextTrack` — and a new
+source applies both again.
+
+`preferredTextTrackLanguage` is checked against a BCP 47 tag's shape (letters,
+digits and hyphens, up to 35 characters) before it is used for matching or, on
+YouTube, folded into the embed's `cc_lang_pref` var. A value that fails is
+ignored outright, the same as an absent prop, and a `configuration`-category
+notice naming the rejected value is published on `PlayerState.error`.
+
+On YouTube, `defaultTextTrack="off"` also writes the embed's own
+`cc_load_policy=0` player var. This has not been verified against a real
+YouTube player: the platform documents `cc_load_policy=1` as forcing captions
+on, but gives `0` no documented meaning beyond matching the var's own
+absence, so this repo's own coverage is a fake iframe API honouring the var
+by construction, not a measurement of a real embed's response to it.
+
 ## Accessibility model
 
 Caption cues are visual media content, not announcements — cue text never

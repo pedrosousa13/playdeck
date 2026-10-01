@@ -107,6 +107,7 @@ out when a command will land; `activation` is not a substitute for either.
 | `bindMediaSession`           | Binds a controller's confirmed playback to a coordinator root, and routes its actions back.                         |
 | `textTrackLabel`             | The label a provider should publish for a track, given its own label and language.                                  |
 | `plainCueText`               | The plain text a provider should publish for a cue, given its raw WebVTT payload — tags stripped, entities decoded. |
+| `isValidTextTrackLanguage`   | Whether a string has a BCP 47 tag's shape (letters, digits and hyphens, bounded length) — `Player.Root`'s `preferredTextTrackLanguage` gate. |
 | `notifySafely`               | Notifies one listener so that its throw neither abandons the emit nor escapes into the caller.                      |
 | `createTimeBoundary`         | The sanitised `[startTime, endTime]` window a provider enforces, and every question it answers.                     |
 | `deriveLiveState`            | The `isLive` / `atLiveEdge` / `offsetFromEdge` derivation every adapter publishes `live` from.                      |
@@ -286,6 +287,7 @@ as the bundled one does.
 import {
   createInitialPlayerState,
   isNotice,
+  isValidTextTrackLanguage,
   plainCueText,
   textTrackLabel,
   type PlayerState
@@ -318,6 +320,14 @@ export const named = textTrackLabel('Commentary', 'en'); // 'Commentary'
 // removed, its character references decoded. Every provider runs its own cue
 // payload through this before publishing it as `TextCue.text`.
 export const cue = plainCueText('<v Bob><i>Look out</i> &amp; run'); // 'Look out & run'
+
+// A BCP 47 tag's shape, not its registry membership: letters, digits and
+// hyphens, bounded length. `Player.Root`'s `preferredTextTrackLanguage` runs
+// every value through this before using it for matching or, on YouTube,
+// folding it into the embed's `cc_lang_pref` var -- a value that fails is
+// ignored exactly as an absent prop would be.
+console.log(isValidTextTrackLanguage('en-GB')); // true
+console.log(isValidTextTrackLanguage('en&autoplay=1')); // false
 ```
 
 <!-- /example -->

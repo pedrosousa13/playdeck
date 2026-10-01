@@ -1,6 +1,7 @@
 import {
   createInitialPlayerState,
   isNotice,
+  isValidTextTrackLanguage,
   plainCueText,
   textTrackLabel,
   type PlayerState
@@ -33,3 +34,11 @@ export const named = textTrackLabel('Commentary', 'en'); // 'Commentary'
 // removed, its character references decoded. Every provider runs its own cue
 // payload through this before publishing it as `TextCue.text`.
 export const cue = plainCueText('<v Bob><i>Look out</i> &amp; run'); // 'Look out & run'
+
+// A BCP 47 tag's shape, not its registry membership: letters, digits and
+// hyphens, bounded length. `Player.Root`'s `preferredTextTrackLanguage` runs
+// every value through this before using it for matching or, on YouTube,
+// folding it into the embed's `cc_lang_pref` var -- a value that fails is
+// ignored exactly as an absent prop would be.
+console.log(isValidTextTrackLanguage('en-GB')); // true
+console.log(isValidTextTrackLanguage('en&autoplay=1')); // false
