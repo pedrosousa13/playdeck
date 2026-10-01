@@ -2,6 +2,7 @@ import {
   PlayerController,
   bindMediaSession,
   getMediaSessionCoordinator,
+  isValidTextTrackLanguage,
   type AutoplayMode,
   type MediaMetadataInput,
   type MediaSessionBinding,
@@ -204,6 +205,14 @@ export type RootProps<P extends ConsumerProviders = Record<string, never>> = {
    * for that source, through a control or `selectTextTrack`. A new source
    * applies it again. On YouTube this also seeds the embed's own
    * `cc_lang_pref`.
+   *
+   * Checked against a BCP 47 tag's shape (letters, digits and hyphens, up to
+   * 35 characters -- `isValidTextTrackLanguage`, `@playdeck/core`) before it
+   * reaches either consumer above. A value that fails is ignored outright --
+   * selection behaves exactly as if the prop were absent, and no
+   * `cc_lang_pref` is written -- and a `configuration`-category notice naming
+   * the rejected value is published on `PlayerState.error`
+   * (`PlayerController.reportRejectedTextTrackLanguage`).
    */
   readonly preferredTextTrackLanguage?: string;
   readonly preload?: import('./use-activation.js').PlayerPreload;
@@ -772,6 +781,44 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
     ]
   );
 
+  // `preferredTextTrackLanguage`'s own gate, run before the value reaches
+  // either of its two consumers below: the matching effect, and the fold into
+  // `resolvedProviderOptions`'s `youtube` bag (`cc_lang_pref`,
+  // `provider-youtube/src/attachment.ts`). A value that fails
+  // `isValidTextTrackLanguage` is treated exactly as an absent prop would be
+  // -- selection falls back to the provider's own default, and no
+  // `cc_lang_pref` is written -- so neither consumer below ever sees the
+  // rejected string.
+  const validatedPreferredTextTrackLanguage =
+    preferredTextTrackLanguage !== undefined &&
+    isValidTextTrackLanguage(preferredTextTrackLanguage)
+      ? preferredTextTrackLanguage
+      : undefined;
+
+  // Reports the rejection as a `configuration` notice naming the value
+  // (`PlayerController.reportRejectedTextTrackLanguage`, mirroring
+  // `hostConfigurationNotice` in `provider-youtube/src/index.ts`), in an
+  // effect rather than from render for the reason `useRefusedUrlReport`
+  // (`player-context.ts`) is: registering writes controller state and wakes
+  // its subscribers, which a render pass may not do. Scoped to
+  // `sourceKeyForRender` so a new source gets its own registration -- exactly
+  // one notice stands per source with a rejected value, none while the value
+  // is valid or absent, matching `textTrackPreferenceAppliedFor` below.
+  useEffect(() => {
+    if (
+      preferredTextTrackLanguage === undefined ||
+      validatedPreferredTextTrackLanguage !== undefined
+    ) {
+      return;
+    }
+    return controller.reportRejectedTextTrackLanguage(preferredTextTrackLanguage);
+  }, [
+    controller,
+    preferredTextTrackLanguage,
+    sourceKeyForRender,
+    validatedPreferredTextTrackLanguage
+  ]);
+
   // `controls` and `loop` folded into the active provider's own bag -- their
   // one home on `Root` reaching that provider by looking, to `useActivation`,
   // like an ordinary provider-option change. Injected only into the bag
@@ -829,7 +876,7 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
           defaultTextTrack: defaultTextTrack === 'off' ? 'off' : undefined,
           endTime,
           loop,
-          preferredTextTrackLanguage,
+          preferredTextTrackLanguage: validatedPreferredTextTrackLanguage,
           startTime
         }
       };
@@ -867,9 +914,9 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
     endTime,
     loop,
     poster,
-    preferredTextTrackLanguage,
     providerOptions,
-    startTime
+    startTime,
+    validatedPreferredTextTrackLanguage
   ]);
 
   const activation = useActivation({
@@ -1123,7 +1170,10 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
         if (textTrackPreferenceAppliedFor.current === sourceKeyForRender) {
           return;
         }
-        if (defaultTextTrack !== 'off' && preferredTextTrackLanguage === undefined) {
+        if (
+          defaultTextTrack !== 'off' &&
+          validatedPreferredTextTrackLanguage === undefined
+        ) {
           return;
         }
         if (state.textTracks.length === 0 && state.selectedTextTrackId === null) {
@@ -1133,18 +1183,23 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
         const target =
           defaultTextTrack === 'off'
             ? null
-            : preferredTextTrackLanguage === undefined
+            : validatedPreferredTextTrackLanguage === undefined
               ? state.selectedTextTrackId
               : resolvePreferredTextTrack(
                   state.textTracks,
-                  preferredTextTrackLanguage,
+                  validatedPreferredTextTrackLanguage,
                   state.selectedTextTrackId
                 );
         if (target !== state.selectedTextTrackId) {
           void controller.selectTextTrack(target);
         }
       }),
-    [controller, defaultTextTrack, preferredTextTrackLanguage, sourceKeyForRender]
+    [
+      controller,
+      defaultTextTrack,
+      sourceKeyForRender,
+      validatedPreferredTextTrackLanguage
+    ]
   );
 
   // Also fed by a subscription rather than by a control's render, and for a

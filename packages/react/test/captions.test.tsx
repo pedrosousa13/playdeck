@@ -909,6 +909,87 @@ describe('Player.Root preferredTextTrackLanguage / defaultTextTrack', () => {
   });
 });
 
+// The security acceptance criteria #858's addendum comment adds:
+// `preferredTextTrackLanguage` is checked against a BCP 47 tag's shape
+// (`isValidTextTrackLanguage`, `@playdeck/core`) before it reaches matching
+// at all, and a value that fails is ignored exactly as an absent prop would
+// be -- never thrown, never used for a comparison or a lookup.
+//
+// Demonstrated red: with `root.tsx`'s gate reverted -- every
+// `validatedPreferredTextTrackLanguage` read replaced by the raw
+// `preferredTextTrackLanguage` prop -- all three tests below failed.
+// `expected "vi.fn()" to not be called at all, but actually been called 1
+// times` with `['es']` for the query-string and markup values (neither
+// matches a track, so `resolvePreferredTextTrack` fell through to the first
+// track rather than making no selection), and with `['aaa...a']` (the full
+// 64-character value) for the over-long one -- it is also this test's own
+// track `language`, so the unvalidated value matched it exactly. Restoring
+// the gate made all three pass.
+describe('Player.Root preferredTextTrackLanguage hostile values', () => {
+  test('ignores a value carrying a query-string-shaped payload', () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: 'en&autoplay=1'
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('es', 'Spanish', 'es'), track('en', 'English', 'en')],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).not.toHaveBeenCalled();
+  });
+
+  test('ignores a value carrying markup', () => {
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: 'en"><script>'
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('es', 'Spanish', 'es'), track('en', 'English', 'en')],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).not.toHaveBeenCalled();
+  });
+
+  test('ignores a value over the length bound', () => {
+    const overLong = 'a'.repeat(64);
+    const { emitState, selectTextTrack } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: overLong
+    });
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track(overLong, 'Long', overLong)],
+      selectedTextTrackId: null
+    });
+    expect(selectTextTrack).not.toHaveBeenCalled();
+  });
+
+  test('publishes a configuration notice naming the rejected value', () => {
+    const { controller } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: 'en&autoplay=1'
+    });
+
+    expect(controller.getState().error).toMatchObject({
+      category: 'configuration',
+      fatal: false,
+      message: expect.stringContaining('en&autoplay=1')
+    });
+  });
+
+  test('publishes no notice for a valid preferredTextTrackLanguage', () => {
+    const { controller } = renderWithPlayer(null, {
+      preferredTextTrackLanguage: 'en'
+    });
+
+    expect(controller.getState().error).toBeNull();
+  });
+
+  test('publishes no notice when the prop is absent', () => {
+    const { controller } = renderWithPlayer(null);
+
+    expect(controller.getState().error).toBeNull();
+  });
+});
+
 describe('Player.CaptionsButton announcer', () => {
   const announcerText = (container: HTMLElement) =>
     container.querySelector('[data-playdeck-part="captions-announcer"]')

@@ -73,12 +73,18 @@ export type YouTubeProviderOptions = {
    */
   readonly endTime?: number;
   /**
-   * `'off'` writes the embed's own `cc_load_policy=0` player var, so YouTube
-   * never loads a default caption track in the first place -- the one
-   * mechanism this adapter has for stopping a flash of captions before this
-   * package's own reactive `selectTextTrack(null)` (`Root`'s text-track
-   * preference effect) could reach it. `Root`'s `defaultTextTrack` prop is
-   * folded into this bag the way `startTime` is, so `PlayerProviderOptions`
+   * `'off'` writes the embed's own `cc_load_policy=0` player var -- the one
+   * mechanism this adapter has for asking YouTube not to load a default
+   * caption track before this package's own reactive `selectTextTrack(null)`
+   * (`Root`'s text-track preference effect) could reach it. **Unverified
+   * against a real player**: per
+   * developers.google.com/youtube/player_parameters, `cc_load_policy=1`
+   * forces captions on, but the docs give `0` no documented meaning beyond
+   * matching the var's own absence ("based on user's preference"), so this
+   * ships on the strength of `e2e/youtube.spec.ts`'s fake iframe API alone,
+   * which only exercises the var's presence or absence in the embed URL, not
+   * a real YouTube player's response to it. `Root`'s `defaultTextTrack` prop
+   * is folded into this bag the way `startTime` is, so `PlayerProviderOptions`
    * omits the key (ADR-0004). Caption *discovery* is unaffected either way --
    * `loadModule('captions')` below still runs, so a track list is still
    * published for a viewer to choose from.
@@ -86,13 +92,19 @@ export type YouTubeProviderOptions = {
   readonly defaultTextTrack?: 'auto' | 'off';
   /**
    * Seeds the embed's own `cc_lang_pref` player var with this tag's base
-   * language (`en` out of `en-US`). Folded in from `Root`'s
-   * `preferredTextTrackLanguage` prop the way `startTime` is
-   * (`PlayerProviderOptions` omits the key, ADR-0004); this adapter's own
-   * reactive selection (`Root`'s text-track preference effect) is what
-   * actually picks a track once one publishes, in every mode. `cc_lang_pref`
-   * matters beyond that only under `controls: true`, where it also seeds the
-   * language YouTube's own chrome starts a viewer-driven caption toggle on.
+   * language (`en` out of `en-US`), when the tag passes
+   * `isValidTextTrackLanguage` (`@playdeck/core`) -- letters, digits and
+   * hyphens, up to 35 characters. A value that fails is dropped the same way
+   * an absent one is: no `cc_lang_pref` var is written. Folded in from
+   * `Root`'s `preferredTextTrackLanguage` prop the way `startTime` is
+   * (`PlayerProviderOptions` omits the key, ADR-0004) -- `Root` validates the
+   * same way before folding, and `attachment.ts` validates again rather than
+   * trust the caller, since this bag is reachable directly by code that
+   * skips `Root`. This adapter's own reactive selection (`Root`'s text-track
+   * preference effect) is what actually picks a track once one publishes, in
+   * every mode. `cc_lang_pref` matters beyond that only under
+   * `controls: true`, where it also seeds the language YouTube's own chrome
+   * starts a viewer-driven caption toggle on.
    */
   readonly preferredTextTrackLanguage?: string;
   /**

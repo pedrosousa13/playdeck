@@ -60,8 +60,12 @@ const fakeIframeApi = `
       // observed bug this fixture exists to falsify -- a track already
       // selected with no command from the adapter -- whenever the embed's
       // own \`cc_load_policy=0\` var (the fix) is absent from \`iframe.src\`.
-      // With it present, YouTube's documented param suppresses that default
-      // and \`captionsTrack\` stays empty.
+      // This fake HONOURS \`cc_load_policy=0\` by construction, below -- it is
+      // this file's own stand-in for the real behaviour, not a fact about the
+      // real embed. \`attachment.ts\`'s own comment on the var is explicit that
+      // this is UNVERIFIED against a real player: the docs give \`cc_load_policy=0\`
+      // no meaning beyond the var's own absence, so what this fake simulates
+      // is the intended effect, not a measured one.
       const captionsTracklist = [
         { languageCode: 'en', displayName: 'English' },
         { languageCode: 'es', displayName: 'Spanish' }

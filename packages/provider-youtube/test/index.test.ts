@@ -1378,6 +1378,49 @@ test('an unset preferredTextTrackLanguage writes no cc_lang_pref var', async () 
   expect(embedVars(fake.players[0]!)).not.toHaveProperty('cc_lang_pref');
 });
 
+// The security acceptance criteria #858's addendum comment adds: a hostile
+// `preferredTextTrackLanguage` must leave the embed url with no extra
+// parameter and no unescaped character. `isValidTextTrackLanguage`
+// (`@playdeck/core`) rejects all three values below on shape or length, so
+// `cc_lang_pref` is never written at all -- the strongest form of "no extra
+// parameter", since there is nothing for `url.searchParams.set` to escape.
+// `url.searchParams` already makes `URLSearchParams` the only way any player
+// var reaches the url (`youTubeEmbedUrl`), so this is reached directly rather
+// than through `Root`, pinning the adapter's own gate independently of
+// `Root`'s.
+//
+// Demonstrated red: with `attachment.ts`'s validation gate reverted --
+// `preferredTextTrackLanguage.split('-')[0]!` used unconditionally, as it was
+// before this change -- the first two cases below failed
+// `not.toHaveProperty('cc_lang_pref')` with `cc_lang_pref: 'en&autoplay=1'`
+// and `cc_lang_pref: 'en"><script>'` respectively (both still written, just
+// percent-escaped by `URLSearchParams` rather than dropped), and the
+// over-long case failed with `cc_lang_pref` equal to the full 64-character
+// value. Restoring the gate made all three pass.
+test.each([
+  ['a query-string-shaped payload', 'en&autoplay=1'],
+  ['markup', 'en"><script>'],
+  ['a value over the length bound', 'a'.repeat(64)]
+])(
+  'drops a preferredTextTrackLanguage carrying %s rather than write it',
+  async (_form, hostileValue) => {
+    const { fake, provider } = createAdapter(undefined, {
+      preferredTextTrackLanguage: hostileValue
+    });
+
+    await provider.attach();
+    await provider.load();
+
+    const harness = fake.players[0]!;
+    expect(embedVars(harness)).not.toHaveProperty('cc_lang_pref');
+    // The var this hostile value's own `&`/`=` pair would otherwise have
+    // smuggled a second value into, unmoved from the adapter's own fixed
+    // `autoplay: 0`.
+    expect(embedVars(harness)).toMatchObject({ autoplay: '0' });
+    expect(embedUrl(harness).href).not.toMatch(/[<>"]/);
+  }
+);
+
 test('defaultTextTrack="off" still discovers caption tracks for later selection', async () => {
   const { harness, patches } = await readyAdapter(undefined, {
     defaultTextTrack: 'off'

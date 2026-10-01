@@ -1102,3 +1102,94 @@ test('drops every provider entry from the registry on a swap', () => {
 
   expect(noticeCount()).toBe(0);
 });
+
+// `reportRejectedTextTrackLanguage` mirrors `reportRefusedUrl` (above), for
+// `Root`'s own `preferredTextTrackLanguage` prop -- a consumer-supplied value
+// no provider ever validates. Unlike a refused URL, the value itself is not
+// sensitive and the maintainer brief for #858 asks the notice name it, so
+// these tests check the message carries the exact value rather than, as
+// `REFUSED_URL_MESSAGES` above is careful to assert, never carrying one.
+//
+// Red, with the new fold line removed from `#applyPatch`'s
+// `mostImportantNotice(...)` call (`this.#currentRejectedTextTrackLanguageNotice()`
+// deleted from that argument list): this test's `error` stays `null` --
+// `reportRejectedTextTrackLanguage` still registers the entry, but nothing
+// reads it into the published slot, so the assertion below failed with
+// `expected null to match object ...` before that line was restored.
+test('publishes a rejected preferredTextTrackLanguage as a notice naming the value', () => {
+  const controller = new PlayerController();
+
+  controller.reportRejectedTextTrackLanguage('en&autoplay=1');
+
+  expect(controller.getState().error).toMatchObject({
+    category: 'configuration',
+    fatal: false,
+    recoverable: false,
+    severity: 'protective',
+    message: expect.stringContaining('en&autoplay=1')
+  });
+  expect(controller.getState().lifecycle).not.toBe('error');
+});
+
+test('withdraws the rejected-text-track-language notice once released', () => {
+  const controller = new PlayerController();
+
+  const release = controller.reportRejectedTextTrackLanguage('xx--too-long');
+  expect(controller.getState().error).not.toBeNull();
+
+  release();
+
+  expect(controller.getState().error).toBeNull();
+});
+
+// Mirrors `does not re-plant a withdrawn notice on a later setProvider`
+// above: the withdrawal has to reach `#withHeldConfiguration`'s own fold, or
+// a released rejection notice would reappear on the very next attach.
+test('does not re-plant a withdrawn rejected-text-track-language notice on setProvider', () => {
+  const controller = new PlayerController();
+  const fake = createProvider();
+
+  controller.reportRejectedTextTrackLanguage('bad lang')();
+  controller.setProvider(fake.provider);
+
+  expect(controller.getState().error).toBeNull();
+});
+
+// Survives an attach the same way a refused URL does: `Root`'s own effect
+// reports before the provider has necessarily finished loading.
+test('keeps a rejected-text-track-language notice through a provider attaching after it', () => {
+  const controller = new PlayerController();
+  const fake = createProvider();
+
+  controller.reportRejectedTextTrackLanguage('bad lang');
+  const reported = controller.getState().error;
+  controller.setProvider(fake.provider);
+
+  expect(controller.getState().error).toMatchObject(reported!);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' });
+
+  expect(controller.getState().error).toMatchObject(reported!);
+});
+
+// Ranked below a refused-URL notice, the same way a refused URL is ranked
+// below a provider's own notice: both describe a prop beside the source
+// rather than the source itself, but the refused-URL mechanism is the older
+// of the two security controls, so a tie keeps it.
+test('keeps a refused-URL notice over an equally protective rejected-text-track-language notice', () => {
+  const controller = new PlayerController();
+
+  controller.reportRefusedUrl('poster src');
+  const refused = controller.getState().error;
+  controller.reportRejectedTextTrackLanguage('bad lang');
+
+  expect(controller.getState().error).toMatchObject(refused!);
+});
+
+test('publishes the rejected-text-track-language notice frozen', () => {
+  const controller = new PlayerController();
+
+  controller.reportRejectedTextTrackLanguage('bad lang');
+
+  expect(Object.isFrozen(controller.getState().error)).toBe(true);
+});
