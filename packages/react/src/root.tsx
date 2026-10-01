@@ -811,7 +811,9 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
     ) {
       return;
     }
-    return controller.reportRejectedTextTrackLanguage(preferredTextTrackLanguage);
+    return controller.reportRejectedTextTrackLanguage(
+      preferredTextTrackLanguage
+    );
   }, [
     controller,
     preferredTextTrackLanguage,
@@ -1176,7 +1178,10 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
         ) {
           return;
         }
-        if (state.textTracks.length === 0 && state.selectedTextTrackId === null) {
+        if (
+          state.textTracks.length === 0 &&
+          state.selectedTextTrackId === null
+        ) {
           return;
         }
         textTrackPreferenceAppliedFor.current = sourceKeyForRender;

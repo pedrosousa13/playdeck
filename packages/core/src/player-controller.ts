@@ -452,9 +452,7 @@ export class PlayerController {
   #currentRejectedTextTrackLanguageNotice = (): PlayerError | undefined =>
     mostImportantNotice(
       ...[...this.#notices.values()]
-        .filter(
-          (entry) => entry.scope.kind === 'rejected-text-track-language'
-        )
+        .filter((entry) => entry.scope.kind === 'rejected-text-track-language')
         .map((entry) => entry.notice)
     );
 
@@ -558,9 +556,12 @@ export class PlayerController {
   // same registration and neither can withdraw the other's.
   reportRejectedTextTrackLanguage = (value: string): (() => void) => {
     const before = this.#currentRejectedTextTrackLanguageNotice();
-    const dispose = this.#registerNotice(rejectedTextTrackLanguageNotice(value), {
-      kind: 'rejected-text-track-language'
-    });
+    const dispose = this.#registerNotice(
+      rejectedTextTrackLanguageNotice(value),
+      {
+        kind: 'rejected-text-track-language'
+      }
+    );
     const after = this.#currentRejectedTextTrackLanguageNotice();
     if (after !== before) {
       this.#applyPatch(this.#state.error === before ? { error: null } : {});

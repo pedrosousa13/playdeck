@@ -95,31 +95,31 @@ out when a command will land; `activation` is not a substitute for either.
 
 ### Values
 
-| Export                       | What it is                                                                                                          |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `PlayerController`           | The controller: holds state, issues commands, emits events, owns a `ProviderAdapter`.                               |
-| `detectSource`               | Resolves a string or explicit source object into a `ResolvedPlayerSource`, or an explained failure.                 |
-| `isPermittedSourceUrl`       | Whether the library will carry a source URL to a provider — the one such decision, which detection consults.        |
-| `resolveNetworkPath`         | Normalises a protocol-relative URL (`//host/...`) to `https:`; returns every other value unchanged.                 |
-| `createInitialPlayerState`   | The state a controller starts from — useful for server rendering and for test fixtures.                             |
-| `isNotice`                   | Whether a published error is a notice — a rejected value reported while the player carried on — or a failure.       |
-| `getMediaSessionCoordinator` | The one coordinator for a given `MediaSession`, so several players arbitrate lock-screen ownership.                 |
-| `bindMediaSession`           | Binds a controller's confirmed playback to a coordinator root, and routes its actions back.                         |
-| `textTrackLabel`             | The label a provider should publish for a track, given its own label and language.                                  |
-| `plainCueText`               | The plain text a provider should publish for a cue, given its raw WebVTT payload — tags stripped, entities decoded. |
+| Export                       | What it is                                                                                                                                   |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PlayerController`           | The controller: holds state, issues commands, emits events, owns a `ProviderAdapter`.                                                        |
+| `detectSource`               | Resolves a string or explicit source object into a `ResolvedPlayerSource`, or an explained failure.                                          |
+| `isPermittedSourceUrl`       | Whether the library will carry a source URL to a provider — the one such decision, which detection consults.                                 |
+| `resolveNetworkPath`         | Normalises a protocol-relative URL (`//host/...`) to `https:`; returns every other value unchanged.                                          |
+| `createInitialPlayerState`   | The state a controller starts from — useful for server rendering and for test fixtures.                                                      |
+| `isNotice`                   | Whether a published error is a notice — a rejected value reported while the player carried on — or a failure.                                |
+| `getMediaSessionCoordinator` | The one coordinator for a given `MediaSession`, so several players arbitrate lock-screen ownership.                                          |
+| `bindMediaSession`           | Binds a controller's confirmed playback to a coordinator root, and routes its actions back.                                                  |
+| `textTrackLabel`             | The label a provider should publish for a track, given its own label and language.                                                           |
+| `plainCueText`               | The plain text a provider should publish for a cue, given its raw WebVTT payload — tags stripped, entities decoded.                          |
 | `isValidTextTrackLanguage`   | Whether a string has a BCP 47 tag's shape (letters, digits and hyphens, bounded length) — `Player.Root`'s `preferredTextTrackLanguage` gate. |
-| `notifySafely`               | Notifies one listener so that its throw neither abandons the emit nor escapes into the caller.                      |
-| `createTimeBoundary`         | The sanitised `[startTime, endTime]` window a provider enforces, and every question it answers.                     |
-| `deriveLiveState`            | The `isLive` / `atLiveEdge` / `offsetFromEdge` derivation every adapter publishes `live` from.                      |
-| `liveStateEqual`             | Whether two live states say the same thing — what an adapter checks before publishing a change.                     |
-| `deriveChapters`             | The published `Chapter` collection, given what a provider reports and the media duration — end times included.      |
-| `chaptersEqual`              | Whether two chapter collections say the same thing — what an adapter checks before publishing a change.             |
-| `isYouTubeVideoId`           | Whether a value is a well-formed YouTube video id — what `createYouTubeProvider` validates a direct call with.      |
-| `isVimeoVideoId`             | Whether a value is a well-formed Vimeo video id — what `createVimeoProvider` validates a direct call with.          |
-| `isVimeoHash`                | Whether a value is a well-formed Vimeo privacy hash — what `createVimeoProvider` validates a direct call with.      |
-| `isWistiaMediaId`            | Whether a value is a well-formed Wistia media id — what `createWistiaProvider` validates a direct call with.        |
-| `parseThumbnailCues`         | Parses a seek-preview WebVTT file into its ordered, sprite-region-resolved cues.                                    |
-| `thumbnailCueAt`             | The cue covering a given time, matched half-open, or `null`.                                                        |
+| `notifySafely`               | Notifies one listener so that its throw neither abandons the emit nor escapes into the caller.                                               |
+| `createTimeBoundary`         | The sanitised `[startTime, endTime]` window a provider enforces, and every question it answers.                                              |
+| `deriveLiveState`            | The `isLive` / `atLiveEdge` / `offsetFromEdge` derivation every adapter publishes `live` from.                                               |
+| `liveStateEqual`             | Whether two live states say the same thing — what an adapter checks before publishing a change.                                              |
+| `deriveChapters`             | The published `Chapter` collection, given what a provider reports and the media duration — end times included.                               |
+| `chaptersEqual`              | Whether two chapter collections say the same thing — what an adapter checks before publishing a change.                                      |
+| `isYouTubeVideoId`           | Whether a value is a well-formed YouTube video id — what `createYouTubeProvider` validates a direct call with.                               |
+| `isVimeoVideoId`             | Whether a value is a well-formed Vimeo video id — what `createVimeoProvider` validates a direct call with.                                   |
+| `isVimeoHash`                | Whether a value is a well-formed Vimeo privacy hash — what `createVimeoProvider` validates a direct call with.                               |
+| `isWistiaMediaId`            | Whether a value is a well-formed Wistia media id — what `createWistiaProvider` validates a direct call with.                                 |
+| `parseThumbnailCues`         | Parses a seek-preview WebVTT file into its ordered, sprite-region-resolved cues.                                                             |
+| `thumbnailCueAt`             | The cue covering a given time, matched half-open, or `null`.                                                                                 |
 
 ### Types
 

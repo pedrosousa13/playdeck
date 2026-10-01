@@ -268,7 +268,11 @@ const recordTextTrackSelections = async (page: Page): Promise<void> => {
     const attach = (): void => {
       const handle = (window as unknown as { playdeckHandle?: unknown })
         .playdeckHandle as
-        | { subscribe: (l: (s: { selectedTextTrackId: string | null }) => void) => void }
+        | {
+            subscribe: (
+              l: (s: { selectedTextTrackId: string | null }) => void
+            ) => void;
+          }
         | undefined;
       if (!handle) {
         setTimeout(attach, 1);
