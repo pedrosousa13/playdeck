@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { PlayerController } from '@playdeck/core';
 import { captureRethrows } from '@playdeck/test-support/capture-rethrows';
 import { createFakeTrack } from '@playdeck/test-support/fake-text-tracks';
@@ -511,6 +511,259 @@ test('cuechange with WebVTT tags and character references decodes to plain text'
   expect(cueFrames).toEqual([
     [{ id: 'cue-1', startTime: 0, endTime: 1, text: 'Look out & run' }]
   ]);
+});
+
+// --- readiness follows the <track> element's load lifecycle ---
+
+// Red on the unfixed code (no `load`/`error` listener existed on a
+// caption/subtitle `<track>` element at all): running this test against
+// the pre-fix `text-tracks.ts` (`be936b4`, before #855's `load`/`error`
+// listener was added) failed at the `toEqual` below with
+//
+//   AssertionError: expected [ Array(1) ] to deeply equal [ Array(1) ]
+//   - Expected
+//   + Received
+//   @@ -2,8 +2,8 @@
+//        "readiness": "loaded",
+//      + "readiness": "loading",
+//
+// -- the dispatched `load` had no effect, so readiness stayed the cue-count
+// snapshot's `'loading'` forever.
+test('republishes readiness as loaded when the track element fires load after discovery', async () => {
+  const { media, provider, patches } = mountNative([
+    { kind: 'captions', label: 'English', language: 'en', id: 't1' }
+  ]);
+  const trackElement = document.createElement('track');
+  trackElement.setAttribute('kind', 'captions');
+  trackElement.id = 't1';
+  media.appendChild(trackElement);
+
+  await provider.attach();
+
+  expect(latest(patches).textTracks).toEqual([
+    {
+      id: 't1',
+      label: 'English',
+      language: 'en',
+      kind: 'captions',
+      readiness: 'loading'
+    }
+  ]);
+
+  trackElement.dispatchEvent(new Event('load'));
+
+  expect(latest(patches).textTracks).toEqual([
+    {
+      id: 't1',
+      label: 'English',
+      language: 'en',
+      kind: 'captions',
+      readiness: 'loaded'
+    }
+  ]);
+  const patchCountAfterLoad = patches.length;
+
+  // A second `load` confirms the readiness already published; it must not
+  // republish.
+  trackElement.dispatchEvent(new Event('load'));
+
+  expect(patches.length).toBe(patchCountAfterLoad);
+});
+
+// Red on the unfixed code, the same way: running this test against the
+// pre-fix `text-tracks.ts` (`be936b4`) failed at the `toEqual` below with
+//
+//   AssertionError: expected [ Array(1) ] to deeply equal [ Array(1) ]
+//   - Expected
+//   + Received
+//   @@ -2,8 +2,8 @@
+//        "readiness": "error",
+//      + "readiness": "loading",
+//
+// -- `TextTrackReadiness`'s `'error'` had no producer at all, so the
+// dispatched `error` had no effect either.
+test('republishes readiness as error when the track element fails to load', async () => {
+  const { media, provider, patches } = mountNative([
+    { kind: 'captions', label: 'English', language: 'en', id: 't1' }
+  ]);
+  const trackElement = document.createElement('track');
+  trackElement.setAttribute('kind', 'captions');
+  trackElement.id = 't1';
+  media.appendChild(trackElement);
+
+  await provider.attach();
+
+  trackElement.dispatchEvent(new Event('error'));
+
+  expect(latest(patches).textTracks).toEqual([
+    {
+      id: 't1',
+      label: 'English',
+      language: 'en',
+      kind: 'captions',
+      readiness: 'error'
+    }
+  ]);
+});
+
+// A `<track>` element keeps the same `TextTrack` when its `src` is
+// reassigned, so `syncCaptionTrackListeners` sees the same element on the
+// next discovery pass and binds nothing new -- the `load`/`error` listener
+// from the first `src` is still the one that will fire for the second. The
+// override it already recorded must not outlive the `src` it was recorded
+// for, or a track that settled 'loaded'/'error' would keep reporting that
+// verdict after the swap until the new resource's own `load`/`error`
+// arrives.
+//
+// Red against the code before this fix (before an override's `src` was
+// tracked at all): running this test failed at the middle `toEqual` below
+// with
+//
+//   AssertionError: expected [ Array(1) ] to deeply equal [ Array(1) ]
+//   - Expected
+//   + Received
+//        "readiness": "loading",
+//      + "readiness": "loaded",
+//
+// -- the override from the first `src`'s `load` survived the reassignment
+// and kept reading 'loaded' for a resource that had not fired anything yet.
+test("ignores a readiness override once the track element's src has moved past it", async () => {
+  const { media, provider, patches, trackList } = mountNative([
+    { kind: 'captions', label: 'English', language: 'en', id: 't1' }
+  ]);
+  const trackElement = document.createElement('track');
+  trackElement.setAttribute('kind', 'captions');
+  trackElement.id = 't1';
+  trackElement.src = 'https://example.com/en.vtt';
+  media.appendChild(trackElement);
+
+  await provider.attach();
+  trackElement.dispatchEvent(new Event('load'));
+
+  expect(latest(patches).textTracks).toEqual([
+    {
+      id: 't1',
+      label: 'English',
+      language: 'en',
+      kind: 'captions',
+      readiness: 'loaded'
+    }
+  ]);
+
+  trackElement.src = 'https://example.com/fr.vtt';
+  // Nothing re-discovers on a `src` reassignment by itself (no `TextTrackList`
+  // event fires for it); `change` stands in for whatever next triggers
+  // discovery in a real session -- a track selection, an `addtrack`/
+  // `removetrack` elsewhere in the list, and so on.
+  trackList.dispatch('change');
+
+  expect(latest(patches).textTracks).toEqual([
+    {
+      id: 't1',
+      label: 'English',
+      language: 'en',
+      kind: 'captions',
+      readiness: 'loading'
+    }
+  ]);
+
+  trackElement.dispatchEvent(new Event('load'));
+
+  expect(latest(patches).textTracks).toEqual([
+    {
+      id: 't1',
+      label: 'English',
+      language: 'en',
+      kind: 'captions',
+      readiness: 'loaded'
+    }
+  ]);
+});
+
+// Asserted as add/remove symmetry on the same handler reference, not by
+// dispatching after destroy: `destroy()` also clears the provider's
+// subscriber set, so a post-destroy dispatch produces no patch whether the
+// `<track>` element's listener was detached or not -- it would be a test
+// that cannot fail (the same reasoning `airplay.test.ts`'s "the AirPlay
+// route listener is removed on destroy (#71)" test records). On the
+// *unfixed* code this test is equally unfalsifiable for a different reason:
+// no `load`/`error` listener is ever added to a caption/subtitle `<track>`
+// element at all, so the assertion below cannot tell "removed" from "never
+// wired up" (docs/agents/demonstrated-red.md's fallback applies). Red was
+// produced instead by a mutation on the *fixed* code: commenting out
+// `destroy()`'s `captionTrackListeners.forEach(...)` removal block (the two
+// `removeEventListener` calls, right before `captionTrackListeners.clear()`)
+// and running this test alone failed at the first `toHaveBeenCalledWith`
+// below with
+//
+//   AssertionError: expected "removeEventListener" to be called with
+//   arguments: [ 'load', [Function onLoad] ]
+//   Number of calls: 0
+//
+// Restoring the removal block made it pass again.
+test('the track element load and error listeners are removed on destroy', async () => {
+  const { media, provider } = mountNative([
+    { kind: 'captions', label: 'English', language: 'en', id: 't1' }
+  ]);
+  const trackElement = document.createElement('track');
+  trackElement.setAttribute('kind', 'captions');
+  trackElement.id = 't1';
+  media.appendChild(trackElement);
+  const added = vi.spyOn(trackElement, 'addEventListener');
+  const removed = vi.spyOn(trackElement, 'removeEventListener');
+
+  await provider.attach();
+  await provider.destroy();
+
+  const loadHandler = added.mock.calls.find(([name]) => name === 'load')?.[1];
+  const errorHandler = added.mock.calls.find(([name]) => name === 'error')?.[1];
+  expect(loadHandler).toBeDefined();
+  expect(errorHandler).toBeDefined();
+  expect(removed).toHaveBeenCalledWith('load', loadHandler);
+  expect(removed).toHaveBeenCalledWith('error', errorHandler);
+});
+
+// The destroy path above only proves the whole-provider teardown removes a
+// listener; `syncCaptionTrackListeners` also has to detach one when a
+// single track departs while the provider stays alive (a `removetrack`
+// event), which is a separate branch in `destroy`'s source removable in
+// isolation. Same unfalsifiability on the unfixed code as the destroy test
+// above (no listener is ever added), so again asserted as add/remove
+// symmetry rather than by dispatching after the removal. Red was produced
+// by a mutation on the *fixed* code: commenting out the two
+// `removeEventListener` calls inside `syncCaptionTrackListeners`'s
+// departed-track `captionTrackListeners.forEach` (the one above the
+// entries-diffing `forEach`, before `captionTrackListeners.delete(track)`)
+// and running this test alone failed at the first `toHaveBeenCalledWith`
+// below with
+//
+//   AssertionError: expected "removeEventListener" to be called with
+//   arguments: [ 'load', [Function onLoad] ]
+//   Number of calls: 0
+//
+// Restoring the removal calls made it pass again.
+test("removing a track via removetrack removes its track element's load and error listeners", async () => {
+  const { media, provider, trackList } = mountNative([
+    { kind: 'captions', label: 'English', language: 'en', id: 't1' },
+    { kind: 'subtitles', label: 'Spanish', language: 'es', id: 't2' }
+  ]);
+  const trackElement2 = document.createElement('track');
+  trackElement2.setAttribute('kind', 'subtitles');
+  trackElement2.id = 't2';
+  media.appendChild(trackElement2);
+  const added = vi.spyOn(trackElement2, 'addEventListener');
+  const removed = vi.spyOn(trackElement2, 'removeEventListener');
+
+  await provider.attach();
+  trackList.pop();
+  trackList.dispatch('removetrack');
+
+  const loadHandler = added.mock.calls.find(([name]) => name === 'load')?.[1];
+  const errorHandler = added.mock.calls.find(([name]) => name === 'error')?.[1];
+  expect(loadHandler).toBeDefined();
+  expect(errorHandler).toBeDefined();
+  expect(removed).toHaveBeenCalledWith('load', loadHandler);
+  expect(removed).toHaveBeenCalledWith('error', errorHandler);
 });
 
 // --- subscriber isolation (#233) ---
