@@ -738,8 +738,81 @@ describe('Player.CaptionsButton', () => {
     fireEvent.click(button);
     expect(selectTextTrack).toHaveBeenCalledWith('fr');
   });
+
+  // #858's own one-shot effect in root.tsx only ever runs once per source --
+  // with defaultTextTrack="off" that one shot turns captions off at first
+  // publish and consumes itself, so preferredTextTrackLanguage has to reach a
+  // *later* toggle through resolveCaptionToggle instead, or a viewer turning
+  // captions on through the button gets whatever track happens to be first
+  // rather than the language they were promised. These two tests pin that:
+  // the first turns captions on with nothing remembered yet, where the
+  // preference is what decides; the second confirms a track the viewer
+  // picked for themselves still wins over the preference on a later toggle,
+  // exactly as it already did with no preference set.
+  //
+  // Red, against resolveCaptionToggle before it took a preferredLanguage
+  // parameter: the first test below failed --
+  // `expected "vi.fn()" to be called with arguments: [ 'en' ]`, received
+  // `[ "es" ]` -- textTracks[0] won the fallback the old code had no
+  // language step in. The second test passed unfixed too: a remembered id
+  // already beat textTracks[0], which is the regression this one guards.
+  test('clicking CaptionsButton with no remembered track resolves the language preference', () => {
+    const { container, emitState, selectTextTrack } = renderWithPlayer(
+      <Player.CaptionsButton />,
+      { defaultTextTrack: 'off', preferredTextTrackLanguage: 'en' }
+    );
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('es', 'Spanish', 'es'), track('en', 'English', 'en')],
+      selectedTextTrackId: null
+    });
+    const button = container.querySelector(
+      '[data-playdeck-part="captions-button"]'
+    ) as HTMLButtonElement;
+    fireEvent.click(button);
+    expect(selectTextTrack).toHaveBeenCalledWith('en');
+  });
+
+  test('a track the viewer picked for themselves still wins over the preference on a later toggle', () => {
+    const { container, emitState, selectTextTrack } = renderWithPlayer(
+      <Player.CaptionsButton />,
+      { defaultTextTrack: 'off', preferredTextTrackLanguage: 'en' }
+    );
+    emitState({
+      capabilities: withSelectTextTrack(available),
+      textTracks: [track('es', 'Spanish', 'es'), track('en', 'English', 'en')],
+      selectedTextTrackId: null
+    });
+    // The viewer's own pick, simulated the same way the "remembered track"
+    // tests above do: a provider state carrying a selection stands in for
+    // selectTextTrack having been called and confirmed. This is a SECOND
+    // state change, after the one above the one-shot effect already
+    // consumed itself on, so it reaches resolveCaptionToggle untouched.
+    emitState({ selectedTextTrackId: 'es' });
+    const button = container.querySelector(
+      '[data-playdeck-part="captions-button"]'
+    ) as HTMLButtonElement;
+    fireEvent.click(button);
+    expect(selectTextTrack).toHaveBeenCalledWith(null);
+    emitState({ selectedTextTrackId: null });
+    fireEvent.click(button);
+    expect(selectTextTrack).toHaveBeenCalledWith('es');
+  });
 });
 
+// Red: with root.tsx's matching effect stubbed to a no-op (`return;` as the
+// first line inside the `controller.subscribe` callback, before its own
+// guard clauses), 8 of the 11 tests below failed -- every assertion that
+// expects a call: `expected "vi.fn()" to be called with arguments: [ 'en' ]`
+// / `[ 'gb' ]` / `[ 'es' ]` / `[ 'unknown' ]` / `[ null ]`, each with `Number
+// of calls: 0`, plus the two call-count assertions ("does not override...",
+// "applies the preference again...") failing `to be called 1 times, but got
+// 0 times`. The three that passed unfixed are the block's own negative
+// assertions ("makes no selection...", "keeps the provider default...",
+// `defaultTextTrack="off"` makes no call...") -- a no-op effect satisfies
+// "nothing was called" by construction, which is exactly why those three
+// carry none of this group's own falsifying power and the other eight do.
+// Restoring the effect made all 11 pass.
 describe('Player.Root preferredTextTrackLanguage / defaultTextTrack', () => {
   test('makes no selection when neither prop is set', () => {
     const { emitState, selectTextTrack } = renderWithPlayer(null);

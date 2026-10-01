@@ -1221,6 +1221,7 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
       source: detectedSource,
       ...activation,
       lastSelectedTextTrackId,
+      preferredTextTrackLanguage: validatedPreferredTextTrackLanguage,
       registerMedia,
       volumeRequest
     }),
@@ -1230,6 +1231,7 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
       controls,
       detectedSource,
       registerMedia,
+      validatedPreferredTextTrackLanguage,
       volumeRequest
     ]
   );

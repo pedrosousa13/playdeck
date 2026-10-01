@@ -338,15 +338,33 @@ export const Captions = ({
  * next, given the current tracks/selection and the last non-null selection
  * remembered across toggles. Returns `null` to turn captions off, a track id
  * to turn them on, or `undefined` when there is nothing to select (no
- * remembered or first track) — the caller should no-op in that case.
+ * remembered track, no preference and no first track) — the caller should
+ * no-op in that case.
+ *
+ * `preferredLanguage` is `Root`'s own `preferredTextTrackLanguage`, already
+ * validated by the time it reaches here (`root.tsx`'s
+ * `validatedPreferredTextTrackLanguage`, threaded through `PlayerContextValue`).
+ * It is consulted only once a remembered track comes up empty -- a track the
+ * viewer picked for themselves, for this source, still wins, the same way it
+ * already did before this parameter existed. `Root`'s own one-shot effect
+ * applies the preference once, at first publish or first turn-on, and then
+ * never again for that source; this is the other place a source without a
+ * remembered pick yet can turn captions on afterwards, so it is the other
+ * place the preference has to reach.
  */
 export const resolveCaptionToggle = (
   textTracks: readonly TextTrack[],
   selectedId: string | null,
-  rememberedId: string | null
+  rememberedId: string | null,
+  preferredLanguage?: string
 ): string | null | undefined => {
   if (selectedId !== null) return null;
-  return textTracks.find((t) => t.id === rememberedId)?.id ?? textTracks[0]?.id;
+  const remembered = textTracks.find((t) => t.id === rememberedId)?.id;
+  if (remembered !== undefined) return remembered;
+  if (textTracks.length === 0) return undefined;
+  return preferredLanguage === undefined
+    ? textTracks[0]!.id
+    : resolvePreferredTextTrack(textTracks, preferredLanguage, null);
 };
 
 // The primary subtag of a BCP 47 tag, lower-cased for a case-insensitive
@@ -402,7 +420,8 @@ export const CaptionsButton = ({
       textTracks: state.textTracks
     })
   );
-  const { controller, lastSelectedTextTrackId } = usePlayer();
+  const { controller, lastSelectedTextTrackId, preferredTextTrackLanguage } =
+    usePlayer();
   // One-time announcement: track the previously seen selection so the live
   // region text only changes (and is only announced) on an actual
   // transition, not on every unrelated re-render.
@@ -438,7 +457,8 @@ export const CaptionsButton = ({
           const next = resolveCaptionToggle(
             textTracks,
             selectedId,
-            lastSelectedTextTrackId.current
+            lastSelectedTextTrackId.current,
+            preferredTextTrackLanguage
           );
           if (next !== undefined) void controller.selectTextTrack(next);
         }}
