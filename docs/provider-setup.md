@@ -309,6 +309,105 @@ extensions — is refused. There is no fall-back provider that tries it anyway, 
 `clip.avi` and `https://example.com/clip.avi` are both refused on the extension:
 in the first there is no host to blame at all.
 
+## A poster before the provider attaches
+
+`Player.Root`'s `poster="provider"` asks the attached provider for its own
+still, which means it only ever resolves once a provider _has_ attached. Under
+`loading="interaction"` that never happens before the viewer's first click —
+the provider stays dormant, nothing fetched and no embed mounted, exactly as
+`loading="interaction"` promises — so `poster="provider"` shows nothing for
+the whole window a dormant player spends on screen. A still for that window
+has to come from somewhere that does not need the provider.
+
+**YouTube.** `@playdeck/provider-youtube` exports
+`resolveYouTubePosterUrl(source)`: synchronous, makes no request, and reads no
+browser global, so it is safe to call before any provider attaches, including
+on the server. It parses with the same `detectSource` this page's YouTube
+section describes — a URL in any form listed above, or an explicit
+`{ type: 'youtube', videoId }` object — and returns `null` for anything else,
+including a source another provider would claim. Pass the result straight into
+`poster`:
+
+<!-- example:provider-setup-youtube-poster -->
+
+```tsx
+import * as Player from '@playdeck/react';
+import { resolveYouTubePosterUrl } from '@playdeck/provider-youtube';
+
+// `poster="provider"` resolves once a provider has attached, so it never
+// resolves for a `loading="interaction"` root: the provider stays dormant
+// until the viewer's first click, by design (the same guarantee `Player.Root`
+// gives every dormant source -- nothing fetched, no embed mounted). A still
+// for that window has to come from somewhere that does not need the
+// provider. `resolveYouTubePosterUrl` is exactly that: synchronous, makes no
+// request, and reads the same `source` a running YouTube adapter would.
+const source = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+
+// `null` for anything that is not a YouTube source `resolveYouTubePosterUrl`
+// recognises -- `?? undefined` is what hands `Player.Root` "no poster" rather
+// than the string `"null"`.
+export const YouTubeClipDormantUntilInteraction = () => (
+  <Player.Root
+    loading="interaction"
+    poster={resolveYouTubePosterUrl(source) ?? undefined}
+    source={source}
+  >
+    <Player.Viewport>
+      {/* No children: `Player.Poster` falls back to `Root`'s own `poster`
+          prop, the same default image a resolved `poster="provider"` would
+          render. */}
+      <Player.Poster />
+      <Player.Media />
+      <Player.ActivationButton aria-label="Play" />
+    </Player.Viewport>
+  </Player.Root>
+);
+```
+
+<!-- /example -->
+
+The still this resolves to is `hqdefault.jpg` — generated for every upload,
+unlike `maxresdefault.jpg`, which only exists for an upload at a resolution
+high enough to have one and 404s silently on every other video, so it is not
+named here as a reliable alternative. `hqdefault.jpg` is itself a 4:3 image
+with the real frame letterboxed inside it wherever the source is a wider
+aspect ratio — expect bars, not a full-bleed still.
+
+**Vimeo and Wistia.** Neither provider derives a poster from an id alone —
+Vimeo's still comes from its oEmbed response, Wistia's from its own oEmbed —
+so there is no pure helper for either: resolving one means a request, and
+making that request while a `loading="interaction"` root is still dormant
+would break the one promise that loading mode makes (no provider request
+before a click). That request path is also not one this library takes on
+itself — see `.out-of-scope/media-url-address-policy.md` for why a new
+non-browser fetch stays out of scope.
+
+The pattern instead is to resolve the still once, at build time (a script,
+a CI step, a server action — anywhere that is not the dormant player), and
+pass the fixed URL into `poster` the same way the YouTube example above
+does:
+
+<!-- example:ignore a build-time script, run ahead of the player, not a browser example; nothing in examples/ compiles it -->
+
+```ts
+// Run ahead of time, wherever the rest of a page's content is prepared —
+// never from the player itself.
+const response = await fetch(
+  `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(vimeoUrl)}`
+);
+const { thumbnail_url: posterUrl } = await response.json();
+```
+
+Wistia's own oEmbed endpoint (`https://fast.wistia.com/oembed`) answers the
+same shape. Both are the requests this library already makes itself when a
+consumer opts into runtime `poster="provider"` resolution —
+`packages/provider-vimeo/src/oembed-availability.ts` and
+`packages/provider-wistia/src/poster-availability.ts` — reused here ahead of
+time instead of at attach. Neither oEmbed response promises a fixed size: the
+thumbnail dimensions vary by video and, for Vimeo, by the request itself, so
+treat whatever width and height come back as the still's real size rather than
+assuming one.
+
 ## Explicit source objects
 
 An object skips host and path detection and names its provider itself. The same

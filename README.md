@@ -90,7 +90,7 @@ one of these sources it is large. Gzip, excluding React itself and the optional
 | HLS on Safari and iOS                             | the above + HLS adapter 5.5                                        | **45.0 KB**  |
 | HLS on Chrome, Edge, Firefox                      | the above + **hls.js 192.4**                                       | **237.4 KB** |
 | HLS on Chrome, Edge, Firefox, with `hls.js/light` | core + primitives + native + HLS adapter 45.0 + hls.js light 123.3 | **168.3 KB** |
-| YouTube                                           | core 9.6 + primitives 23.0 + adapter 6.4                           | **39.0 KB**  |
+| YouTube                                           | core 9.6 + primitives 23.0 + adapter 6.5                           | **39.1 KB**  |
 | Vimeo                                             | core 9.6 + primitives 23.0 + adapter 8.2 + `@vimeo/player` 8.5     | **49.3 KB**  |
 | Wistia                                            | core 9.6 + primitives 23.0 + adapter 5.9                           | **38.5 KB**  |
 

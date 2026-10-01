@@ -255,6 +255,12 @@ method, which is worth saying because it is where a reader looks for it first.
 It starts a player that `loading="interaction"` has left dormant — nothing
 fetched, no provider network request made — and `PlayerController` has no
 concept of that dormancy: only the activation `Player.Root` runs has one.
+That dormancy is also why `poster="provider"` never shows anything before the
+click: it resolves from the attached provider, and nothing attaches here
+until one. See
+[A poster before the provider attaches](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md#a-poster-before-the-provider-attaches)
+in Provider setup for a poster that does not need the wait — a pure helper for
+YouTube, and the build-time pattern for Vimeo and Wistia.
 Joining it to the handle is what lets an external control surface drive
 activation through the ref it already holds, without the controller growing an
 activation concern of its own. It returns `void` rather than a `CommandResult`,

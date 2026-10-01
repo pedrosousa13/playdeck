@@ -30,6 +30,7 @@ export {
 
 export { PLAYBACK_CONFIRMATION_TIMEOUT_MS } from './playback.js';
 export { PLAYER_READY_TIMEOUT_MS } from './attachment.js';
+export { resolveYouTubePosterUrl } from './adapter-values.js';
 
 export type YouTubeProviderOptions = {
   /**

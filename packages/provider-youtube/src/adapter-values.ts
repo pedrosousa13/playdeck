@@ -1,14 +1,15 @@
-import type {
-  Availability,
-  CommandResult,
-  PlayerCapabilities,
-  PlayerError,
-  PlayerEventDetailMap,
-  PlayerEventOrigin,
-  PlayerEventType,
-  ProviderEvent,
-  ProviderEventFor,
-  ProviderStatePatch
+import {
+  detectSource,
+  type Availability,
+  type CommandResult,
+  type PlayerCapabilities,
+  type PlayerError,
+  type PlayerEventDetailMap,
+  type PlayerEventOrigin,
+  type PlayerEventType,
+  type ProviderEvent,
+  type ProviderEventFor,
+  type ProviderStatePatch
 } from '@playdeck/core';
 
 // Publishes a provider-state patch to every subscriber, optionally paired
@@ -66,6 +67,50 @@ export const browserUnavailable: Availability = {
 // through `unknown` first.
 export const youTubePosterUrl = (videoId: string): string =>
   `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+
+// `isYouTubeVideoId` (`@playdeck/core`) is deliberately unbounded
+// (`[A-Za-z0-9_-]+`): it also has to pass a short-host URL path segment
+// before this package's own embed ever reads it, and a path keyword like
+// `shorts` is itself a valid id shape that only the host/path rules above it
+// rule out. `resolveYouTubePosterUrl` below has no such second rule standing
+// over it, so it holds every id it is asked to build a URL for to YouTube's
+// real shape -- 11 characters, always -- rather than to the wider shape
+// `detectSource` stops at.
+const youTubeVideoIdShape = /^[A-Za-z0-9_-]{11}$/;
+
+/**
+ * The poster still for whatever `detectSource` (`@playdeck/core`) would
+ * resolve to a YouTube source -- a URL string in any form
+ * [Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md#youtube)
+ * lists, or an explicit `{ type: 'youtube', videoId }` object -- and `null`
+ * for anything else, including a source another provider would claim and one
+ * no provider would.
+ *
+ * Synchronous and makes no request, reads no browser global: the still is
+ * derivable from the video id alone (`youTubePosterUrl` above), which is what
+ * makes this safe to call before a provider has attached, including on the
+ * server and including for a `loading="interaction"` root, where
+ * `poster="provider"` cannot resolve because no provider attaches until a
+ * viewer's first click.
+ *
+ * Parses with `detectSource`, the same parser `@playdeck/react`'s `source`
+ * prop resolves with, rather than a second one of this package's own, and
+ * then holds the extracted id to YouTube's own shape -- exactly 11 characters
+ * -- tighter than `detectSource`'s own `[A-Za-z0-9_-]+`. A look-alike host, a
+ * `javascript:` or `data:` URL, an id carrying a path or query fragment, and
+ * an id of the wrong length are all read `null` here the same as any other
+ * input `detectSource` would refuse. The URL returned is built from a fixed
+ * host -- `i.ytimg.com` -- with the id as the only interpolated part; nothing
+ * this function takes can move that host.
+ */
+export const resolveYouTubePosterUrl = (source: unknown): string | null => {
+  const detected = detectSource(source);
+  if (detected.status !== 'success' || detected.source.type !== 'youtube') {
+    return null;
+  }
+  const { videoId } = detected.source;
+  return youTubeVideoIdShape.test(videoId) ? youTubePosterUrl(videoId) : null;
+};
 
 const fixedCapabilities = {
   // Enumerable but not selectable, so nothing is offered. Measured against the
