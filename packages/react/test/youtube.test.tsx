@@ -168,6 +168,14 @@ test('leaves the youtube bag unbounded when Root omits the time props', async ()
 // reach this provider by the same fold `loop`/`startTime`/`endTime` take
 // (`root.tsx`'s `resolvedProviderOptions`) -- `defaultTextTrack="off"` is what
 // lets this adapter write `cc_load_policy` before the embed ever loads.
+//
+// Red, with both keys dropped from the `youtube` bag's fold in
+// `resolvedProviderOptions`: the first test below failed --
+// `expected { controls: undefined, ...(3) } to match object { defaultTextTrack:
+// 'off', ...(1) }`, the actual bag carrying neither key at all. The second
+// test passed unfixed too: an absent key and a folded `undefined` are the
+// same thing it asserts, so dropping the fold cannot make it fail -- it
+// guards the "auto" default's own shape, not the fold's existence.
 test("folds Root's defaultTextTrack and preferredTextTrackLanguage into the youtube provider option bag", async () => {
   render(
     <Player.Root

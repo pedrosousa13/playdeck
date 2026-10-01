@@ -1105,9 +1105,12 @@ test('drops every provider entry from the registry on a swap', () => {
 
 // `reportRejectedTextTrackLanguage` mirrors `reportRefusedUrl` (above), for
 // `Root`'s own `preferredTextTrackLanguage` prop -- a consumer-supplied value
-// no provider ever validates. Unlike a refused URL, the value itself is not
-// sensitive and the maintainer brief for #858 asks the notice name it, so
-// these tests check the message carries the exact value rather than, as
+// no provider ever validates. Unlike a refused URL, which could disclose
+// something a page never meant to publish if echoed back into an error an
+// operator might log or render, a language tag names nothing sensitive, and
+// naming the one that was rejected is what lets an operator tell a typo'd
+// tag from a hostile one without reproducing the report themselves. So these
+// tests check the message carries the exact value, rather than, as
 // `REFUSED_URL_MESSAGES` above is careful to assert, never carrying one.
 //
 // Red, with the new fold line removed from `#applyPatch`'s

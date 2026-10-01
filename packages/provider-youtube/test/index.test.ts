@@ -1338,6 +1338,16 @@ test('proactively loads the captions module once the player reports ready', asyn
 // equivalent on the react side). Neither var is written unless the matching
 // option is set, so a player with neither prop reaches YouTube exactly as it
 // did before the two existed.
+//
+// Red, with both `cc_load_policy` and `cc_lang_pref` spreads commented out of
+// `attachment.ts`'s player-vars object: the first and third tests below
+// failed -- `expected { enablejsapi: '1', ...(6) } to match object {
+// cc_load_policy: '0' }` and the equivalent for `cc_lang_pref: 'en'`, the
+// actual bag carrying neither key in either case. The second and fourth
+// ("an unset ... writes no ... var") passed unfixed too: a var that is never
+// written and a var that was never going to be written either way both read
+// as absent, so dropping the vars cannot fail an assertion built around their
+// absence.
 test('defaultTextTrack="off" asks YouTube not to load captions by default', async () => {
   const { fake, provider } = createAdapter(undefined, {
     defaultTextTrack: 'off'
@@ -1378,9 +1388,9 @@ test('an unset preferredTextTrackLanguage writes no cc_lang_pref var', async () 
   expect(embedVars(fake.players[0]!)).not.toHaveProperty('cc_lang_pref');
 });
 
-// The security acceptance criteria #858's addendum comment adds: a hostile
-// `preferredTextTrackLanguage` must leave the embed url with no extra
-// parameter and no unescaped character. `isValidTextTrackLanguage`
+// A hostile `preferredTextTrackLanguage` must leave the embed url with no
+// extra parameter and no unescaped character -- the attack surface this
+// value sits on once it reaches a provider URL. `isValidTextTrackLanguage`
 // (`@playdeck/core`) rejects all three values below on shape or length, so
 // `cc_lang_pref` is never written at all -- the strongest form of "no extra
 // parameter", since there is nothing for `url.searchParams.set` to escape.

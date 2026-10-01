@@ -982,11 +982,13 @@ describe('Player.Root preferredTextTrackLanguage / defaultTextTrack', () => {
   });
 });
 
-// The security acceptance criteria #858's addendum comment adds:
-// `preferredTextTrackLanguage` is checked against a BCP 47 tag's shape
-// (`isValidTextTrackLanguage`, `@playdeck/core`) before it reaches matching
-// at all, and a value that fails is ignored exactly as an absent prop would
-// be -- never thrown, never used for a comparison or a lookup.
+// `preferredTextTrackLanguage` is a consumer-supplied string that reaches a
+// case-insensitive compare (`resolvePreferredTextTrack`) and, on YouTube, a
+// provider URL parameter -- an attacker-shaped value could otherwise ride
+// either path. `isValidTextTrackLanguage` (`@playdeck/core`) checks it
+// against a BCP 47 tag's shape before it reaches matching at all, and a
+// value that fails is ignored exactly as an absent prop would be -- never
+// thrown, never used for a comparison or a lookup.
 //
 // Demonstrated red: with `root.tsx`'s gate reverted -- every
 // `validatedPreferredTextTrackLanguage` read replaced by the raw

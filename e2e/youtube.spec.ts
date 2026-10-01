@@ -296,12 +296,18 @@ const textTrackSelections = (page: Page): Promise<Array<string | null>> =>
 // #858: the observed bug this fixture exists to falsify -- YouTube auto-
 // selecting a caption track with no command from the adapter -- reproduces
 // under `fakeIframeApi`'s own captions-module simulation whenever
-// `cc_load_policy=0` is absent from the embed url. Demonstrated red: with
-// `defaultTextTrack="off"`'s fold into the `youtube` provider-option bag
-// (`root.tsx`'s `resolvedProviderOptions`) reverted, this test's own
-// `InteractionYoutubeCaptionsOff` fixture fails it -- `selections` contains
-// `'youtube:en'`, the same value the contrast test below asserts for the
-// plain `InteractionYoutube` fixture.
+// `cc_load_policy=0` is absent from the embed url.
+//
+// Red, chromium, with root.tsx's `youtube` bag fold changed to
+// `defaultTextTrack: undefined` unconditionally (never 'off'): this test
+// failed -- `expect(received).not.toContain(expected) // indexOf`,
+// `Expected value: not "youtube:en"`, `Received array: [null, null, null,
+// null, null, null, null, "youtube:en", null, null, null]` -- the eighth
+// sampled selection is the fake's own captions-module auto-select this
+// fixture exists to falsify. The contrast test below passed unfixed either
+// way: it asserts the unset-prop default keeps that same auto-select
+// standing, which a reverted fold does not disturb. Restoring the fold made
+// both pass.
 test('defaultTextTrack="off" never selects a caption track on YouTube, not even transiently', async ({
   page
 }) => {
