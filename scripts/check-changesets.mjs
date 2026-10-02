@@ -1,9 +1,6 @@
 #!/usr/bin/env node
 // The rule that a pending changeset's prose is written in the present tense,
-// never narrating how the code used to behave. #807, #814 and #809 each
-// shipped a changeset that broke it, and #869's pull request carried "now"
-// twice before a reviewer caught both by eye. The rule lived only in prose
-// and in agent memory, so nothing failed a build when it broke again.
+// never narrating how the code used to behave -- #870.
 //
 // Front matter is exempt because it never reads as prose: changesets writes
 // it as a package name and a bump level, never a sentence a reader narrates
