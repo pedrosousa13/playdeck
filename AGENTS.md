@@ -28,4 +28,4 @@ A pending changeset's prose is written in the present tense, describing the chan
 
 ### Verify
 
-`pnpm verify` (`scripts/verify.mjs`) runs every local CI gate, in CI's own order, stopping at the first failure. `scripts/verify.test.mjs` parses `.github/workflows/ci.yml` and fails if a `pnpm` command it runs is in neither `verify.mjs`'s step list nor its exclusion list. The byte checks it includes (`docs:bytes:check`, `compare:libraries:check`) measure gzipped size, which moves with the Node version doing the gzipping — run `pnpm verify` under Node 22 to match CI.
+`pnpm verify` (`scripts/verify.mjs`) runs every local CI gate, in CI's own order, stopping at the first failure. `scripts/verify.test.mjs` parses `.github/workflows/ci.yml` and fails if a `pnpm` command it runs is in neither `verify.mjs`'s step list nor its exclusion list. The byte checks it includes (`docs:bytes:check`, `compare:libraries:check`) measure gzipped size, which moves with the Node version doing the gzipping — they expect Node 22, the version CI uses.

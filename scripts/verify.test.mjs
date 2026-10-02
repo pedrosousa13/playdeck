@@ -111,3 +111,48 @@ test('finds no drift between the real ci.yml and the verify + exclusion lists', 
   );
   assert.deepEqual(driftProblems(workflowYaml, STEPS, EXCLUSIONS), []);
 });
+
+test('strips a leading env assignment before classifying the pnpm call', () => {
+  assert.deepEqual(
+    workflowPnpmInvocations(
+      'jobs:\n  j:\n    steps:\n      - run: NODE_ENV=production pnpm test:new\n'
+    ),
+    [{ form: 'script', script: 'test:new' }]
+  );
+});
+
+test('reads pnpm run <script> as the named script, not a script literally named run', () => {
+  assert.deepEqual(
+    workflowPnpmInvocations(
+      'jobs:\n  j:\n    steps:\n      - run: pnpm run build\n'
+    ),
+    [{ form: 'script', script: 'build' }]
+  );
+});
+
+test('reads an unclassifiable pnpm call as unrecognized and reports it as drift', () => {
+  // `-r` is a pnpm flag, not a script name -- reading it as one would
+  // silently misname a call that may not run a package.json script at all.
+  const workflowYaml = 'jobs:\n  j:\n    steps:\n      - run: pnpm -r build\n';
+  assert.deepEqual(workflowPnpmInvocations(workflowYaml), [
+    { form: 'unrecognized', statement: 'pnpm -r build' }
+  ]);
+  assert.deepEqual(driftProblems(workflowYaml, STEPS, EXCLUSIONS), [
+    { form: 'unrecognized', statement: 'pnpm -r build' }
+  ]);
+});
+
+test('strips an env assignment on a line inside a multi-line run: block too', () => {
+  const workflowYaml = [
+    'jobs:',
+    '  example:',
+    '    steps:',
+    '      - run: |',
+    '          echo setup',
+    '          NODE_ENV=production pnpm test:multiline-drift',
+    '          node .gate/audit.mjs'
+  ].join('\n');
+  assert.deepEqual(driftProblems(workflowYaml, STEPS, EXCLUSIONS), [
+    { form: 'script', script: 'test:multiline-drift' }
+  ]);
+});

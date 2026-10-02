@@ -3,17 +3,17 @@
 // the first failure and names it -- #871. The two things CI runs that this
 // deliberately does not: `pnpm install` (whoever runs this has already run
 // it to have `node_modules` at all) and `pnpm test:e2e` (browser-bound and
-// slow, and already exercised three times over in the `e2e` matrix plus once
-// more as `visual`). The `.gate/` steps the `audit` and `package` jobs run
-// to pin a gate's source to `main` need no mention here either: they invoke
-// `node .gate/*.mjs` directly, never `pnpm`, so they are simply not the kind
-// of thing this module or the drift check below ever sees.
+// slow, and run in its own CI jobs rather than here). The `.gate/` steps the
+// `audit` and `package` jobs run to pin a gate's source to `main` need no
+// mention here either: they invoke `node .gate/*.mjs` directly, never
+// `pnpm`, so they are simply not the kind of thing this module or the drift
+// check below ever sees.
 //
 // `docs:bytes:check` and `compare:libraries:check` measure a gzipped byte
-// count, which moves with the Node version doing the gzipping -- CI runs
-// Node 22 (every job in .github/workflows/ci.yml pins it), so a `pnpm
-// verify` run under a different Node can disagree with CI on a budget that
-// has not actually moved. See AGENTS.md.
+// count, which moves with the Node version doing the gzipping -- the byte
+// checks expect Node 22, the version CI uses, so a `pnpm verify` run under a
+// different Node can disagree with CI on a budget that has not actually
+// moved. See AGENTS.md.
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -31,29 +31,54 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
  * are never what distinguishes one gate from another, so they are dropped
  * rather than carried through.
  *
- * - `{ form: 'script', script }` -- a bare `pnpm <script>`, a root
+ * - `{ form: 'script', script }` -- a bare `pnpm <script>` or `pnpm run
+ *   <script>` (`run` names no shape of its own; it is `pnpm`'s own way of
+ *   saying "run this script", so both reduce to the same identity), a root
  *   package.json script, matched on the script name alone.
  * - `{ form: 'filter', filter, script }` -- `pnpm --filter <target>
  *   <script>`, a workspace package's own script rather than a root one,
  *   matched on the target and the script together.
  * - `{ form: 'exec', command }` -- `pnpm exec <command...>`, which names no
  *   package.json script at all, matched on the whole trailing command.
- * @typedef {{ form: 'script', script: string } | { form: 'filter', filter: string, script: string } | { form: 'exec', command: string }} PnpmInvocation
+ * - `{ form: 'unrecognized', statement }` -- a `pnpm` call this module
+ *   cannot place into one of the three shapes above (a flag-led form such
+ *   as `pnpm -r build`, or a subcommand such as `pnpm dlx <pkg>` that runs
+ *   something ad hoc rather than a package.json script), matched on the
+ *   whole statement. `driftProblems` reports these rather than silently
+ *   dropping them or misreading a flag or subcommand as a script name.
+ * @typedef {{ form: 'script', script: string } | { form: 'filter', filter: string, script: string } | { form: 'exec', command: string } | { form: 'unrecognized', statement: string }} PnpmInvocation
  */
 
 /**
- * `statement`, read as a `PnpmInvocation` if it is a `pnpm` call and `null`
- * otherwise -- almost every statement in a CI step is not: `git fetch`,
- * `node -e`, `rm -rf .gate`, the pinned gate runs (`node .gate/audit.mjs`).
- * Those read logic straight out of `main` rather than through a
- * package.json script (see the `audit` and `package` jobs' own comments),
- * which is exactly why nothing here has to name them: they never match
- * `^pnpm\b` and so never reach STEPS or EXCLUSIONS at all.
+ * `statement` with any leading shell variable assignments stripped --
+ * `NODE_ENV=production pnpm test` runs `pnpm test` exactly as a bare `pnpm
+ * test` would, and matching only `^pnpm\b` would read no call there at all.
+ * @param {string} statement
+ * @returns {string}
+ */
+const withoutEnvPrefix = (statement) =>
+  statement.replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)+/, '');
+
+/**
+ * `statement`, read as a `PnpmInvocation` if it names a `pnpm` call and
+ * `null` otherwise -- almost every statement in a CI step is not: `git
+ * fetch`, `node -e`, `rm -rf .gate`, the pinned gate runs (`node
+ * .gate/audit.mjs`). Those read logic straight out of `main` rather than
+ * through a package.json script (see the `audit` and `package` jobs' own
+ * comments), which is exactly why nothing here has to name them: they never
+ * match `^pnpm\b` and so never reach STEPS or EXCLUSIONS at all.
+ *
+ * A call this module cannot place into one of the three known shapes --
+ * `pnpm -r build`, `pnpm dlx <pkg>`, or anything else led by a flag -- reads
+ * as `{ form: 'unrecognized', statement }` rather than `null` or a guess:
+ * `null` would leave the drift check silently blind to it, and reading its
+ * first token as a script name would silently misname a call that may not
+ * run a package.json script at all.
  * @param {string} statement
  * @returns {PnpmInvocation | null}
  */
 const pnpmInvocation = (statement) => {
-  const call = statement.match(/^pnpm\s+(.+)$/);
+  const call = withoutEnvPrefix(statement).match(/^pnpm\s+(.+)$/);
   if (!call) return null;
   const rest = call[1].trim();
 
@@ -63,8 +88,24 @@ const pnpmInvocation = (statement) => {
   const filter = rest.match(/^--filter\s+(\S+)\s+(\S+)/);
   if (filter) return { form: 'filter', filter: filter[1], script: filter[2] };
 
+  // `run` names no shape of its own -- `pnpm run build` and `pnpm build` run
+  // the same script, so both reduce to the same `script` identity.
+  const run = rest.match(/^run\s+(\S+)/);
+  if (run) return { form: 'script', script: run[1] };
+
+  // `dlx` runs a package ad hoc rather than a script named in this
+  // repository's own package.json, so it is read as unrecognized rather
+  // than as a script literally named "dlx".
+  if (/^dlx\s+/.test(rest)) {
+    return { form: 'unrecognized', statement: statement.trim() };
+  }
+
   const script = rest.match(/^(\S+)/);
-  return script ? { form: 'script', script: script[1] } : null;
+  if (script && !script[1].startsWith('-')) {
+    return { form: 'script', script: script[1] };
+  }
+
+  return { form: 'unrecognized', statement: statement.trim() };
 };
 
 /**
@@ -91,12 +132,6 @@ const statements = (run) =>
  * quote from a step. `yaml`'s `parse` already drops every comment before
  * this ever sees the document, which is what rules that out structurally
  * rather than by pattern.
- *
- * An earlier version of this function did scan the raw text, and running
- * scripts/verify.test.mjs against it showed exactly that failure --
- * recorded in the commit introducing this file, alongside the real count of
- * spurious invocations (21) that version read out of the real ci.yml, every
- * one of them a word quoted in a comment rather than a command that runs.
  * @param {string} workflowYaml
  * @returns {PnpmInvocation[]}
  */
@@ -125,13 +160,18 @@ const invocationKey = (invocation) =>
     ? `script:${invocation.script}`
     : invocation.form === 'filter'
       ? `filter:${invocation.filter}:${invocation.script}`
-      : `exec:${invocation.command}`;
+      : invocation.form === 'exec'
+        ? `exec:${invocation.command}`
+        : `unrecognized:${invocation.statement}`;
 
 /**
  * Every `pnpm` invocation `workflowYaml` makes that is named in neither
  * `steps` nor `exclusions` -- a gate CI runs that `pnpm verify` does not run
  * and nobody decided to leave out. Pure over its inputs, so a test can feed
  * it a fixture workflow and a fixture list without touching the real ones.
+ * An `unrecognized` invocation's key is its whole statement text, which
+ * nothing in `steps` or `exclusions` declares, so it is always reported --
+ * the fail-closed guard against a `pnpm` shape this module cannot read.
  * @param {string} workflowYaml
  * @param {{ invocation: PnpmInvocation }[]} steps
  * @param {{ invocation: PnpmInvocation }[]} exclusions
@@ -320,8 +360,8 @@ export const EXCLUSIONS = [
     invocation: { form: 'script', script: 'install' }
   },
   {
-    // Browser-bound and slow, and already run three times over in the `e2e`
-    // matrix plus once more as `visual` -- #871's brief excludes it by name.
+    // Browser-bound and slow, and run in its own CI jobs rather than here
+    // -- #871's brief excludes it by name.
     name: 'test:e2e',
     invocation: { form: 'script', script: 'test:e2e' }
   }
@@ -343,6 +383,26 @@ const exitCodeOf = (error) =>
     ? error.status
     : 1;
 
+/**
+ * Thrown by `main` when a step's own command exits non-zero, naming the
+ * step and its exit code -- the progress line `main` prints before running
+ * a step is easy to scroll past, and `execFileSync`'s own error names the
+ * command it ran rather than this file's step name.
+ */
+class StepFailure extends Error {
+  /** @type {number} */
+  status;
+
+  /**
+   * @param {string} name
+   * @param {number} status
+   */
+  constructor(name, status) {
+    super(`verify: step \`${name}\` failed (exit ${status})`);
+    this.status = status;
+  }
+}
+
 const main = () => {
   const workflowYaml = readFileSync(
     new URL('../.github/workflows/ci.yml', import.meta.url),
@@ -359,10 +419,14 @@ const main = () => {
 
   for (const step of STEPS) {
     console.log(`\n> ${step.name}`);
-    execFileSync(step.command[0], step.command.slice(1), {
-      cwd: repoRoot,
-      stdio: 'inherit'
-    });
+    try {
+      execFileSync(step.command[0], step.command.slice(1), {
+        cwd: repoRoot,
+        stdio: 'inherit'
+      });
+    } catch (error) {
+      throw new StepFailure(step.name, exitCodeOf(error));
+    }
   }
   console.log(`\nAll ${STEPS.length} verify steps passed.`);
 };
@@ -372,7 +436,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     main();
   } catch (error) {
     console.error(
-      `\npnpm verify failed: ${error instanceof Error ? error.message : String(error)}`
+      `\n${error instanceof Error ? error.message : String(error)}`
     );
     process.exit(exitCodeOf(error));
   }
