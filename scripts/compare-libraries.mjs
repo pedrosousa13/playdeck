@@ -436,6 +436,15 @@ export const libraries = [
     // headroom the removed module held. The whole distance from the last
     // committed figure is this change's: that figure was 23.13 KB
     // (23690 bytes), measured per `results.md` on `main`.
+    //
+    // Measures 22.56 KB (23105 bytes) after giving the coordinator registry
+    // in `media-session.ts` a well-known global key instead of a module-level
+    // `WeakMap` -- up from 22.53 KB (23068 bytes) the same day (2026-10-02),
+    // per `results.md` on `main` -- which stays under this ceiling with no
+    // raise needed. The growth is the fix itself: a module-level registry
+    // gave the main entry's inlined copy and the `./media-session` subpath's
+    // own copy two different `WeakMap`s, so a page running both resolved two
+    // coordinators over one `navigator.mediaSession`.
     ceilingKb: 22.75
   },
   {

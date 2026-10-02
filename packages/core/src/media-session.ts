@@ -263,10 +263,37 @@ const createMediaSessionCoordinator = (
   };
 };
 
-// One coordinator per document, keyed by the MediaSession object identity. This
-// is what enforces the "single navigator.mediaSession per document" rule when
-// several roots resolve the coordinator independently.
-const coordinators = new WeakMap<MediaSessionLike, MediaSessionCoordinator>();
+// `Symbol.for`, not `Symbol()`: the registry below has to be the SAME object
+// no matter which copy of this module asks for it, and the global symbol
+// registry is what a well-known name resolves to regardless.
+const MEDIA_SESSION_COORDINATORS: unique symbol = Symbol.for(
+  '@playdeck/core/media-session-coordinators'
+);
+
+type MediaSessionCoordinatorsGlobal = {
+  [MEDIA_SESSION_COORDINATORS]?: WeakMap<
+    MediaSessionLike,
+    MediaSessionCoordinator
+  >;
+};
+
+// One coordinator per document, keyed by the MediaSession object identity --
+// held on a well-known global rather than this module's own top-level scope,
+// because this module ships as two separate bundles. `@playdeck/core`'s main
+// entry inlines it for a direct import, and `@playdeck/core/media-session` is
+// built as its own file so `@playdeck/react`'s `Root` can reach it through a
+// dynamic `import()` from its mount effect, which is what keeps the binding
+// out of a page's eager chunk. A module-level `WeakMap` would give each
+// bundle its own registry, so a page running a `Root` alongside any other
+// caller of `getMediaSessionCoordinator` reached through the main entry would
+// get two coordinators arbitrating the same `navigator.mediaSession`, neither
+// aware the other exists -- exactly what "one coordinator per document" is
+// here to prevent. The global resolves to one registry for both, and, as a
+// side effect, for two installed copies of `@playdeck/core` on the same page
+// too.
+const coordinators = ((globalThis as MediaSessionCoordinatorsGlobal)[
+  MEDIA_SESSION_COORDINATORS
+] ??= new WeakMap<MediaSessionLike, MediaSessionCoordinator>());
 
 export const getMediaSessionCoordinator = (
   session: MediaSessionLike

@@ -71,6 +71,30 @@ test('getMediaSessionCoordinator returns one coordinator per session (per docume
   );
 });
 
+// This module ships as two bundles: `@playdeck/core`'s main entry inlines it,
+// and `@playdeck/core/media-session` is built as its own file so
+// `@playdeck/react`'s `Root` can reach it through a dynamic `import()`
+// (`root.tsx`'s mount effect). A registry held in this module's own
+// top-level scope would give each bundle its own copy, so a page running
+// both -- a `Root`, and any other caller reaching `getMediaSessionCoordinator`
+// through the main entry -- would get two coordinators arbitrating the same
+// `navigator.mediaSession`, neither aware of the other. `vi.resetModules()`
+// between two dynamic imports of the same source file stands in for that:
+// each import gets a fresh top-level scope, exactly like two separate
+// bundles would.
+test('two independent module instances resolve the same coordinator for one session', async () => {
+  const { session } = createSession();
+
+  vi.resetModules();
+  const first = await import('../src/media-session');
+  vi.resetModules();
+  const second = await import('../src/media-session');
+
+  expect(second.getMediaSessionCoordinator(session)).toBe(
+    first.getMediaSessionCoordinator(session)
+  );
+});
+
 test('a playing root registers metadata and action handlers', () => {
   const { session, handlers } = createSession();
   const coordinator = getMediaSessionCoordinator(session);
