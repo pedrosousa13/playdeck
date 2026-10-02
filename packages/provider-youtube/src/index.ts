@@ -294,7 +294,9 @@ export const createYouTubeProvider = (
     emit,
     isDestroyed: () => attachment.isDestroyed(),
     getPlayer: () => attachment.getPlayer(),
-    boundary: { onTimeReport: (time) => boundary.onTimeReport(time) }
+    boundary: { onTimeReport: (time) => boundary.onTimeReport(time) },
+    // The same document `attachment.ts`'s own `ownerDocument` reads from.
+    ownerDocument: mount.ownerDocument
   });
 
   const boundary = createYouTubeBoundary(options, {

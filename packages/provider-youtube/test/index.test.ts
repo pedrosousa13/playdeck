@@ -1757,6 +1757,38 @@ test('a resume from the provider chrome re-enforces the end boundary', async () 
   expect(harness.player.pauseVideo).toHaveBeenCalledTimes(2);
 });
 
+test('a hidden tab stops the time poll while playing, and resumes with one immediate tick on show', async () => {
+  vi.useFakeTimers();
+  const { harness, patches, provider } = await readyAdapter('M7lc1UVf-VE');
+
+  harness.fireStateChange(playerStates.PLAYING);
+  const beforeHide = patches.length;
+
+  const visibility = vi
+    .spyOn(document, 'visibilityState', 'get')
+    .mockReturnValue('hidden');
+  document.dispatchEvent(new Event('visibilitychange'));
+
+  harness.currentTime = 42;
+  await vi.advanceTimersByTimeAsync(1_000);
+  expect(patches.slice(beforeHide)).not.toContainEqual(
+    expect.objectContaining({ currentTime: 42 })
+  );
+
+  visibility.mockReturnValue('visible');
+  document.dispatchEvent(new Event('visibilitychange'));
+
+  expect(patches.slice(beforeHide)).toContainEqual(
+    expect.objectContaining({ currentTime: 42 })
+  );
+
+  // Otherwise the visibility listener this adapter's poll installed outlives
+  // the test on the shared `document`, the same leak fixed in
+  // time-updates.test.ts.
+  await provider.destroy();
+  visibility.mockRestore();
+});
+
 test('the pause the end boundary causes publishes no paused patch', async () => {
   vi.useFakeTimers();
   const { harness, patches } = await readyAdapter('M7lc1UVf-VE', {
