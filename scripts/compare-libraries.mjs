@@ -423,7 +423,20 @@ export const libraries = [
     // distance from the last committed figure is this issue's: that figure
     // was 22.88 KB (23425 bytes), measured 2026-10-01 before this change,
     // per `results.md` on `main`.
-    ceilingKb: 23.25
+    //
+    // 23068 bytes measured 2026-10-02 -- 22.52734375 KB, 22.53 KB to two
+    // places, rounded up to the next 0.25 KB. This row drops rather than
+    // grows: `@playdeck/core/media-session` -- a second entry point carrying
+    // `bindMediaSession` and `getMediaSessionCoordinator`, built the same way
+    // `./thumbnails` already was -- lets `@playdeck/react`'s `Root` reach
+    // both through a dynamic `import()` inside the mount effect that binds
+    // them, which never runs on the server or during render, so they leave
+    // this composition's eager graph. The ceiling comes down with it, to
+    // hold the saving rather than leave the row free to grow back into the
+    // headroom the removed module held. The whole distance from the last
+    // committed figure is this change's: that figure was 23.13 KB
+    // (23690 bytes), measured per `results.md` on `main`.
+    ceilingKb: 22.75
   },
   {
     name: 'Playdeck',

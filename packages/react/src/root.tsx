@@ -1,7 +1,5 @@
 import {
   PlayerController,
-  bindMediaSession,
-  getMediaSessionCoordinator,
   isValidTextTrackLanguage,
   type AutoplayMode,
   type MediaMetadataInput,
@@ -1120,21 +1118,40 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
   }, [controller, playbackRate, reconcilePlaybackRate]);
 
   // Media Session: bind confirmed playback to the single, document-scoped
-  // coordinator. Re-runs on source change so the effect cleanup releases the
+  // coordinator, reached through a dynamic `import()` of
+  // `@playdeck/core/media-session` -- built as its own bundle for exactly
+  // this -- so the binding and its coordinator never reach a page's eager
+  // chunk. Re-runs on source change so the effect cleanup releases the
   // previous binding (and clears the shared surface only if this root still
   // owns it). Ownership follows the most-recently-playing root across roots.
   useEffect(() => {
     const mediaSession: MediaSessionLike | undefined =
       typeof navigator !== 'undefined' ? navigator.mediaSession : undefined;
     if (!mediaSession) return;
-    const binding = bindMediaSession(
-      controller,
-      getMediaSessionCoordinator(mediaSession),
-      { metadata: mediaMetadataSeed.current ?? null }
-    );
-    mediaSessionBinding.current = binding;
+    // Guards the `.then()` below against an unmount (or a source change
+    // starting the next run) that happens before the import resolves: the
+    // cleanup this run registers below sees no binding yet to release, so
+    // without this flag a late resolution would bind one nothing ever
+    // releases.
+    let live = true;
+    void import('@playdeck/core/media-session')
+      .then(({ bindMediaSession, getMediaSessionCoordinator }) => {
+        if (!live) return;
+        mediaSessionBinding.current = bindMediaSession(
+          controller,
+          getMediaSessionCoordinator(mediaSession),
+          { metadata: mediaMetadataSeed.current ?? null }
+        );
+      })
+      .catch(() => {
+        // A chunk that fails to load leaves the player exactly as it is
+        // without Media Session -- no lock-screen integration, nothing
+        // reported -- the same silence the missing-`mediaSession` case above
+        // already settles on.
+      });
     return () => {
-      binding.release();
+      live = false;
+      mediaSessionBinding.current?.release();
       mediaSessionBinding.current = undefined;
     };
   }, [controller, sourceKeyForRender]);

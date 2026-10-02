@@ -953,6 +953,16 @@ export const release = (): void => binding.release();
 
 <!-- /example -->
 
+Both functions, and both types, are also reachable at
+`@playdeck/core/media-session` — a second entry point carrying them and
+nothing else, built as its own bundle like `@playdeck/core/thumbnails`.
+Import them from there when the code that uses them is loaded on demand:
+`@playdeck/react`'s `Root` reaches them through a dynamic `import()` inside
+the effect that binds the session, which never runs on the server or during
+render, and that is what keeps this module out of a page's eager chunk.
+`@playdeck/core` itself keeps exporting both from its main entry, so a direct
+import that does not care changes nothing.
+
 ## License
 
 [MIT](LICENSE).

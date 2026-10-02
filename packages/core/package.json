@@ -44,6 +44,10 @@
     "./thumbnails": {
       "types": "./dist/thumbnails.d.ts",
       "default": "./dist/thumbnails.js"
+    },
+    "./media-session": {
+      "types": "./dist/media-session.d.ts",
+      "default": "./dist/media-session.js"
     }
   },
   "files": [
@@ -59,7 +63,7 @@
     "provenance": true
   },
   "scripts": {
-    "build": "vite build && vite build --config vite.thumbnails.config.ts && tsc -b",
+    "build": "vite build && vite build --config vite.thumbnails.config.ts && vite build --config vite.media-session.config.ts && tsc -b",
     "test": "vitest run --config ../../vitest.config.ts packages/core/test"
   }
 }
