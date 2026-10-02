@@ -1118,6 +1118,72 @@ test('preserves range identities when an unrelated provider patch arrives', () =
   expect(controller.getState().seekable).toBe(seekable);
 });
 
+// A provider's own poll can repeat a patch's ranges verbatim under a fresh
+// array identity on every tick -- YouTube's 250ms poll
+// (`provider-youtube/src/time-updates.ts`) does this whether or not either
+// range moved, and so does any provider's `progress` event. A selector
+// naming `buffered` or `seekable` compares the held array by `Object.is`
+// (`player-context.ts`'s `selectionsEqual`), so a patch that keeps the same
+// spans under a new identity must not publish a new array, or every such tick
+// re-renders every part that reads either field.
+test('keeps the held buffered and seekable arrays when a patch repeats the same ranges under a new identity', () => {
+  let emit: ProviderStateListener | undefined;
+  const controller = new PlayerController();
+  controller.setProvider({
+    provider: 'native',
+    attach: () => undefined,
+    load: () => undefined,
+    destroy: () => undefined,
+    subscribe: (listener) => {
+      emit = listener;
+      return () => undefined;
+    }
+  });
+  emit?.({
+    buffered: [{ start: 0, end: 4 }],
+    seekable: [{ start: 0, end: 10 }]
+  });
+  const { buffered, seekable } = controller.getState();
+
+  emit?.({
+    buffered: [{ start: 0, end: 4 }],
+    seekable: [{ start: 0, end: 10 }]
+  });
+
+  expect(controller.getState().buffered).toBe(buffered);
+  expect(controller.getState().seekable).toBe(seekable);
+});
+
+test('replaces the held buffered and seekable arrays when a patch changes a range', () => {
+  let emit: ProviderStateListener | undefined;
+  const controller = new PlayerController();
+  controller.setProvider({
+    provider: 'native',
+    attach: () => undefined,
+    load: () => undefined,
+    destroy: () => undefined,
+    subscribe: (listener) => {
+      emit = listener;
+      return () => undefined;
+    }
+  });
+  emit?.({
+    buffered: [{ start: 0, end: 4 }],
+    seekable: [{ start: 0, end: 10 }]
+  });
+  const { buffered, seekable } = controller.getState();
+
+  emit?.({
+    buffered: [{ start: 0, end: 5 }],
+    seekable: [{ start: 0, end: 12 }]
+  });
+
+  expect(controller.getState().buffered).not.toBe(buffered);
+  expect(controller.getState().seekable).not.toBe(seekable);
+  expect(controller.getState().buffered).toEqual([{ start: 0, end: 5 }]);
+  expect(controller.getState().seekable).toEqual([{ start: 0, end: 12 }]);
+});
+
 // A provider is free to hand over its ranges in whatever order its engine
 // reports them (hls.js and the Vimeo SDK both do), and a consumer drawing a
 // buffer bar walks the list in order. Sorting is the contract, not a

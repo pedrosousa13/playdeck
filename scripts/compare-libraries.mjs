@@ -546,7 +546,17 @@ export const libraries = [
     // with it, to hold the saving. The whole distance from the last
     // committed figure is this change's: that figure was 23.77 KB
     // (24343 bytes), measured per `results.md` on `main`.
-    ceilingKb: 23.25
+    //
+    // 23816 bytes measured 2026-10-02 -- 23.2578125000 KB, 23.26 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 23.25 KB is `PlayerController` keeping the `buffered`/`seekable`
+    // array it already holds when a patch repeats the same ranges under a
+    // fresh identity, which adds `safety.ts`'s `sameOrderedRanges` and
+    // `#applyPatch`'s own `nextRanges` closure -- both reached by every
+    // composition here through `@playdeck/core`. The whole distance from
+    // the last committed figure is this change's: that figure was 23.22 KB
+    // (23780 bytes), measured per `results.md` on `main`.
+    ceilingKb: 23.5
   },
   {
     name: 'Playdeck (play-only)',
