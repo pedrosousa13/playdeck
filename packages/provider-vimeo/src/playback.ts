@@ -44,7 +44,26 @@ export type VimeoPlaybackPlayer = Pick<
   | 'setPlaybackRate'
   | 'getMuted'
   | 'getBuffered'
+  | 'getCurrentTime'
+  | 'getPaused'
 >;
+
+// How long a play command waits to see the SDK's own `timeupdate` before
+// concluding this embed will not fire playback events at all, and falling
+// back to polling `getCurrentTime()`/`getPaused()` itself (#856). Eight
+// polls' worth of headroom: generous enough that an embed merely buffering
+// before its first report is not judged dead, while still recovering
+// progress for one that genuinely never reports within a viewer's patience.
+// Distinct from `PLAYER_READY_TIMEOUT_MS` (`attachment.ts`), which bounds the
+// wait for `ready()` itself rather than for an event once playback has
+// already been asked for.
+export const EVENT_WATCHDOG_TIMEOUT_MS = 2_000;
+
+// The interval the fallback polls at once it engages -- the same cadence
+// `provider-youtube`'s own always-on poll uses (`time-updates.ts`'s
+// `TIME_UPDATE_INTERVAL_MS`), so a dead embed's reported position advances at
+// the rate a live one's `timeupdate` would have.
+export const POLL_INTERVAL_MS = 250;
 
 type VimeoPlaybackCommand =
   | 'play'
@@ -119,6 +138,10 @@ export type VimeoPlayback = Required<
   readonly setVolumeAvailability: () => Availability;
   // The `setPlaybackRate` facet of the host's capabilities.
   readonly setPlaybackRateAvailability: () => Availability;
+  // Stops the event-dead fallback's watchdog and poll, if either is running.
+  // Called by the attachment seam on teardown, so a retry or a destroy never
+  // leaves a poll ticking against a player that is on its way out.
+  readonly reset: () => void;
 };
 
 export const createVimeoPlayback = (
@@ -129,6 +152,14 @@ export const createVimeoPlayback = (
   let duration: number | null = null;
   let volumeAvailability: Availability = available;
   let playbackRateAvailability: Availability = available;
+  let watchdogTimer: ReturnType<typeof setTimeout> | undefined;
+  let pollTimer: ReturnType<typeof setInterval> | undefined;
+  // Bumped every time the poll is stopped, so a tick already awaiting the SDK
+  // when that happens cannot publish once it resolves. `isStale` cannot catch
+  // this on its own: a real `timeupdate`/`pause`/`ended` stops the fallback
+  // without the player itself becoming stale, and a stop followed by a
+  // restart must still keep the earlier tick out (#856).
+  let pollGeneration = 0;
 
   const clampVolume = (volume: number): number =>
     Math.min(1, Math.max(0, volume));
@@ -185,19 +216,87 @@ export const createVimeoPlayback = (
     return target;
   };
 
+  const stopPolling = (): void => {
+    if (pollTimer === undefined) return;
+    clearInterval(pollTimer);
+    pollTimer = undefined;
+    pollGeneration++;
+  };
+
+  const disarmWatchdog = (): void => {
+    if (watchdogTimer === undefined) return;
+    clearTimeout(watchdogTimer);
+    watchdogTimer = undefined;
+  };
+
+  // Called wherever a real `timeupdate`, `pause` or `ended` event proves this
+  // embed's own events are alive, and on destroy.
+  const stopEventFallback = (): void => {
+    disarmWatchdog();
+    stopPolling();
+  };
+
+  // Polls in place of the `timeupdate` this embed never sends. `getPaused` is
+  // read alongside the position because a dead embed's own `pause` will not
+  // arrive either -- without it a viewer who paused would be polled forever,
+  // reporting a playhead that had already stopped moving as still playing.
+  const startPolling = (): void => {
+    if (pollTimer !== undefined) return;
+    pollTimer = setInterval(() => {
+      // Captured before the SDK calls below, so a stop that lands while they
+      // are in flight is visible on resolve even though neither call can be
+      // cancelled.
+      const tickGeneration = pollGeneration;
+      const player = getPlayer();
+      if (!player) return;
+      void Promise.all([player.getCurrentTime(), player.getPaused()]).then(
+        ([seconds, paused]) => {
+          if (isStale(player) || pollGeneration !== tickGeneration) return;
+          if (paused) {
+            stopPolling();
+            currentTime = seconds;
+            emit(
+              { playback: 'paused', currentTime: seconds },
+              providerEvent('pause', undefined)
+            );
+            return;
+          }
+          currentTime = correctPosition(seconds) ?? seconds;
+          boundary.setEnded(false);
+          emit({ currentTime });
+        },
+        () => undefined
+      );
+    }, POLL_INTERVAL_MS);
+  };
+
+  // Armed fresh on every play request rather than once: a video whose events
+  // never recover must not be judged by an earlier attempt's already-expired
+  // watchdog.
+  const armEventWatchdog = (): void => {
+    stopEventFallback();
+    watchdogTimer = setTimeout(() => {
+      watchdogTimer = undefined;
+      startPolling();
+    }, EVENT_WATCHDOG_TIMEOUT_MS);
+  };
+
   return {
-    play: () =>
-      runVimeoCommand(getPlayer(), async (player) => {
+    play: () => {
+      const player = getPlayer();
+      if (player) armEventWatchdog();
+      return runVimeoCommand(player, async (activePlayer) => {
         // A play from the end boundary is a replay, not a resume: the playhead
         // is still sitting on the boundary the adapter ended at.
         if (boundary.hasEnded() || boundary.atEnd(duration, currentTime)) {
           boundary.setEnded(false);
           const target = boundary.start(duration);
           currentTime = target;
-          await player.setCurrentTime(target);
+          await activePlayer.setCurrentTime(target);
         }
-        return player.play();
-      }),
+        return activePlayer.play();
+      });
+    },
     pause: () => runVimeoCommand(getPlayer(), (player) => player.pause()),
     seekTo: (time) => {
       if (!Number.isFinite(time))
@@ -300,6 +399,9 @@ export const createVimeoPlayback = (
       },
       onPlaying: () => emit({ playback: 'playing', buffering: false }),
       onPause: (data) => {
+        // A real `pause`, whatever caused it, proves this embed's events are
+        // alive, so the event-dead fallback has nothing left to do (#856).
+        stopEventFallback();
         // The pause the end boundary itself asked for, and the synthetic one
         // Vimeo fires just before `ended`, are both bookkeeping — neither is a
         // viewer pausing.
@@ -316,6 +418,9 @@ export const createVimeoPlayback = (
         );
       },
       onEnded: (data) => {
+        // Same proof as `onPause` above: a real `ended` means this embed's
+        // events are alive (#856).
+        stopEventFallback();
         // Only a looping window with a start boundary needs correcting; with
         // no start, `loop=1` already restarts where the window begins and the
         // embed's own end stays the end it has always published (the same gate
@@ -333,6 +438,10 @@ export const createVimeoPlayback = (
         );
       },
       onTimeUpdate: (data) => {
+        // A real `timeupdate` is exactly what the watchdog above is waiting
+        // to see; once one arrives there is nothing left for the fallback to
+        // do, this report included (#856).
+        stopEventFallback();
         const seconds = numberField(data, 'seconds');
         const nextDuration = numberField(data, 'duration');
         if (seconds === undefined) return;
@@ -450,6 +559,7 @@ export const createVimeoPlayback = (
       }
     },
     setVolumeAvailability: () => volumeAvailability,
-    setPlaybackRateAvailability: () => playbackRateAvailability
+    setPlaybackRateAvailability: () => playbackRateAvailability,
+    reset: stopEventFallback
   };
 };

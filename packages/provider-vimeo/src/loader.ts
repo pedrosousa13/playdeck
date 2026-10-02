@@ -36,6 +36,9 @@ export type VimeoSdkPlayer = {
   setCurrentTime: (seconds: number) => Promise<unknown>;
   getCurrentTime: () => Promise<number>;
   getDuration: () => Promise<number>;
+  // Read only by the event-dead fallback (`playback.ts`), to tell a poll that
+  // finds the embed genuinely paused from one still playing (#856).
+  getPaused: () => Promise<boolean>;
   // Real, possibly disjoint ranges as [start, end] pairs. The `progress` event
   // only reports the edge of the range holding the playhead (#91).
   getBuffered: () => Promise<ReadonlyArray<readonly number[]>>;

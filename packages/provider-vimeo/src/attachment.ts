@@ -186,7 +186,7 @@ export type VimeoAttachmentDeps = {
     VimeoPosterAvailability,
     'probe' | 'adopt' | 'cancel' | 'url'
   >;
-  readonly playback: Pick<VimeoPlayback, 'adopt' | 'handlers'>;
+  readonly playback: Pick<VimeoPlayback, 'adopt' | 'handlers' | 'reset'>;
   readonly presentation: Pick<VimeoPresentation, 'handlers'>;
   readonly qualityLevels: Pick<VimeoQualityLevels, 'adopt' | 'handlers'>;
   readonly textTracks: Pick<
@@ -292,6 +292,9 @@ export const createVimeoAttachment = (
     // video that is no longer there.
     textTracks.reset();
     chapters.reset();
+    // The event-dead fallback's watchdog/poll belong to the player being
+    // discarded; a retry's replacement starts with neither pending (#856).
+    playback.reset();
     clearDimensions();
     if (player) {
       try {
