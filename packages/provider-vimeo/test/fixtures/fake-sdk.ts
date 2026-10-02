@@ -37,6 +37,7 @@ export type FakePlayerOptions = {
   readonly requestPictureInPicture?: () => Promise<unknown>;
   readonly getBuffered?: () => Promise<ReadonlyArray<readonly number[]>>;
   readonly getDuration?: () => Promise<number>;
+  readonly getPaused?: () => Promise<boolean>;
   readonly videoWidth?: number;
   readonly videoHeight?: number;
   readonly getVideoWidth?: () => Promise<number>;
@@ -49,6 +50,7 @@ export class FakeVimeoPlayer implements VimeoSdkPlayer {
   muted: boolean;
   volume: number;
   playbackRate: number;
+  paused = false;
   readonly #options: FakePlayerOptions;
   readonly #listeners = new Map<string, Set<VimeoSdkEventListener>>();
   #textTracks: ReadonlyArray<VimeoSdkTextTrack>;
@@ -115,6 +117,10 @@ export class FakeVimeoPlayer implements VimeoSdkPlayer {
   );
 
   getCurrentTime: Mock<() => Promise<number>> = vi.fn(() => Promise.resolve(0));
+
+  getPaused: Mock<() => Promise<boolean>> = vi.fn(
+    () => this.#options.getPaused?.() ?? Promise.resolve(this.paused)
+  );
 
   getDuration: Mock<() => Promise<number>> = vi.fn(
     () =>

@@ -39,7 +39,11 @@ import {
   type VimeoProviderOptions
 } from '../src/index';
 import type { VimeoSdkChapter, VimeoSdkQuality } from '../src/loader';
-import { createVimeoPlayback } from '../src/playback';
+import {
+  createVimeoPlayback,
+  EVENT_WATCHDOG_TIMEOUT_MS,
+  POLL_INTERVAL_MS
+} from '../src/playback';
 import { createVimeoPosterAvailability } from '../src/poster-availability';
 import { createVimeoPresentation } from '../src/presentation';
 import { createVimeoQualityLevels } from '../src/quality-levels';
@@ -2066,6 +2070,114 @@ test('maps playback, buffering, and timeline events to confirmed state', async (
   player.emit('ended', { duration: 60, percent: 1, seconds: 60 });
   expect(patches.at(-1)).toMatchObject({ playback: 'ended', currentTime: 60 });
   expect(events.at(-1)).toMatchObject({ type: 'ended' });
+});
+
+// --- event-dead fallback polling (#856) ---
+//
+// Video 76979871 plays in Vimeo's iframe but its SDK fires no `playing` or
+// `timeupdate` at all, so the adapter's own mirror never moved and state read
+// `playing` at 0s forever. These fakes stand in for that embed by simply never
+// emitting anything after `play()`.
+
+test('polls getCurrentTime when the embed fires no events after play', async () => {
+  vi.useFakeTimers();
+  const { patches, provider, sdk } = await setup();
+  const player = sdk.instances[0]!;
+  player.getCurrentTime.mockResolvedValue(10);
+
+  void provider.play();
+  await vi.advanceTimersByTimeAsync(EVENT_WATCHDOG_TIMEOUT_MS);
+  player.getCurrentTime.mockResolvedValue(10.25);
+  await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+
+  expect(patches.at(-1)).toMatchObject({ currentTime: 10.25 });
+});
+
+test('never calls getCurrentTime when the embed keeps firing timeupdate', async () => {
+  vi.useFakeTimers();
+  const { provider, sdk } = await setup();
+  const player = sdk.instances[0]!;
+
+  void provider.play();
+  player.emit('play', { seconds: 0 });
+  // One timeupdate well inside the watchdog window is enough to prove the
+  // channel is alive; the rest of the window and a full poll interval after
+  // it pass with nothing further.
+  player.emit('timeupdate', { seconds: 1 });
+  await vi.advanceTimersByTimeAsync(
+    EVENT_WATCHDOG_TIMEOUT_MS + POLL_INTERVAL_MS
+  );
+
+  expect(player.getCurrentTime).not.toHaveBeenCalled();
+});
+
+test('stops polling once a real pause event arrives', async () => {
+  vi.useFakeTimers();
+  const { provider, sdk } = await setup();
+  const player = sdk.instances[0]!;
+
+  void provider.play();
+  // Proves the fallback was actually running before asking whether the pause
+  // stopped it -- otherwise "no further calls" would hold just as well for a
+  // fallback that never started.
+  await vi.advanceTimersByTimeAsync(
+    EVENT_WATCHDOG_TIMEOUT_MS + POLL_INTERVAL_MS
+  );
+  expect(player.getCurrentTime).toHaveBeenCalled();
+
+  player.emit('pause', { seconds: 5 });
+  player.getCurrentTime.mockClear();
+  await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 3);
+
+  expect(player.getCurrentTime).not.toHaveBeenCalled();
+});
+
+test('stops polling once a real ended event arrives', async () => {
+  vi.useFakeTimers();
+  const { provider, sdk } = await setup();
+  const player = sdk.instances[0]!;
+
+  void provider.play();
+  await vi.advanceTimersByTimeAsync(
+    EVENT_WATCHDOG_TIMEOUT_MS + POLL_INTERVAL_MS
+  );
+  expect(player.getCurrentTime).toHaveBeenCalled();
+
+  player.emit('ended', { duration: 60, percent: 1, seconds: 60 });
+  player.getCurrentTime.mockClear();
+  await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 3);
+
+  expect(player.getCurrentTime).not.toHaveBeenCalled();
+});
+
+test('stops polling once the poll itself finds the embed paused', async () => {
+  vi.useFakeTimers();
+  const { patches, provider, sdk } = await setup();
+  const player = sdk.instances[0]!;
+  player.getCurrentTime.mockResolvedValue(5);
+  player.paused = true;
+
+  void provider.play();
+  await vi.advanceTimersByTimeAsync(
+    EVENT_WATCHDOG_TIMEOUT_MS + POLL_INTERVAL_MS
+  );
+  player.getCurrentTime.mockClear();
+  await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 3);
+
+  expect(patches.at(-1)).toMatchObject({ playback: 'paused', currentTime: 5 });
+  expect(player.getCurrentTime).not.toHaveBeenCalled();
+});
+
+test('leaves no poll timer pending after destroy', async () => {
+  vi.useFakeTimers();
+  const { provider } = await setup();
+
+  void provider.play();
+  await vi.advanceTimersByTimeAsync(EVENT_WATCHDOG_TIMEOUT_MS);
+  const pendingBefore = vi.getTimerCount();
+  provider.destroy();
+
+  expect(vi.getTimerCount()).toBeLessThan(pendingBefore);
 });
 
 // --- buffered ranges (#91) ---
