@@ -25,3 +25,7 @@ A new assertion does not count until it has been shown failing against the unfix
 ### Changesets
 
 A pending changeset's prose is written in the present tense, describing the change as it stands — never narrating history ("now", "previously", "as before"). `pnpm test:changesets` enforces this in the CI `static` job. See `docs/agents/changesets.md`.
+
+### Verify
+
+`pnpm verify` (`scripts/verify.mjs`) runs every local CI gate, in CI's own order, stopping at the first failure. `scripts/verify.test.mjs` parses `.github/workflows/ci.yml` and fails if a `pnpm` command it runs is in neither `verify.mjs`'s step list nor its exclusion list. The byte checks it includes (`docs:bytes:check`, `compare:libraries:check`) measure gzipped size, which moves with the Node version doing the gzipping — they expect Node 22, the version CI uses.
