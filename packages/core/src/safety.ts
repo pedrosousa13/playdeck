@@ -45,6 +45,26 @@ export const orderedRanges = (
       .sort((left, right) => left.start - right.start)
   );
 
+// `#applyPatch`'s own choice between the ranges a patch just ordered and the
+// array it already holds: a provider's poll (YouTube's 250ms tick,
+// `provider-youtube/src/time-updates.ts`) sends a fresh `buffered` array on
+// every tick whether or not either range moved, and so does any provider's
+// `progress` event, so ordering alone is not enough to keep a selector
+// naming `buffered`/`seekable` from re-rendering on every one of them
+// (`player-context.ts`'s `selectionsEqual` compares the array by `Object.is`,
+// never by its contents). Compared by value, length then each start/end
+// pair in order -- both lists are already `orderedRanges`' output, so
+// index-wise comparison is enough; nothing here re-sorts.
+export const sameOrderedRanges = (
+  left: ReadonlyArray<TimeRange>,
+  right: ReadonlyArray<TimeRange>
+): boolean =>
+  left.length === right.length &&
+  left.every(
+    (range, index) =>
+      range.start === right[index]!.start && range.end === right[index]!.end
+  );
+
 export const toProviderError = (cause: unknown): PlayerError =>
   freezeError({
     category: 'provider',

@@ -20,7 +20,8 @@ import type {
   RefusedCommand,
   RefusedPlay,
   RefusedUrlSurface,
-  TextCue
+  TextCue,
+  TimeRange
 } from './types.js';
 
 import {
@@ -35,6 +36,7 @@ import {
   notifySafely,
   orderedRanges,
   rejectedTextTrackLanguageNotice,
+  sameOrderedRanges,
   REFUSED_URL_NOTICES,
   standingRefusedUrlNotice,
   toProviderError,
@@ -1307,17 +1309,26 @@ export class PlayerController {
         : null;
     const standingNotice =
       standingFailure === null ? (errorBeforeNotice ?? undefined) : undefined;
+    // Keeps the array already held when a patch repeats the same ranges
+    // under a fresh identity -- a provider's own poll re-reports
+    // `buffered`/`seekable` on every tick regardless of whether either
+    // moved (see `sameOrderedRanges`'s own comment in `safety.ts`), and
+    // `#setState` notifies subscribers on every call regardless of what
+    // changed, so a selector naming either field would otherwise re-render
+    // once per tick rather than once per actual change.
+    const nextRanges = (
+      held: ReadonlyArray<TimeRange>,
+      patched: ReadonlyArray<TimeRange> | undefined
+    ): ReadonlyArray<TimeRange> => {
+      if (patched === undefined) return held;
+      const ordered = orderedRanges(patched);
+      return sameOrderedRanges(held, ordered) ? held : ordered;
+    };
     const nextState: PlayerState = {
       ...this.#state,
       ...patch,
-      buffered:
-        patch.buffered === undefined
-          ? this.#state.buffered
-          : orderedRanges(patch.buffered),
-      seekable:
-        patch.seekable === undefined
-          ? this.#state.seekable
-          : orderedRanges(patch.seekable),
+      buffered: nextRanges(this.#state.buffered, patch.buffered),
+      seekable: nextRanges(this.#state.seekable, patch.seekable),
       capabilities:
         patch.capabilities === undefined
           ? this.#state.capabilities
