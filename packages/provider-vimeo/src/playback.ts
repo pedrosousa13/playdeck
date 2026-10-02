@@ -154,6 +154,12 @@ export const createVimeoPlayback = (
   let playbackRateAvailability: Availability = available;
   let watchdogTimer: ReturnType<typeof setTimeout> | undefined;
   let pollTimer: ReturnType<typeof setInterval> | undefined;
+  // Bumped every time the poll is stopped, so a tick already awaiting the SDK
+  // when that happens cannot publish once it resolves. `isStale` cannot catch
+  // this on its own: a real `timeupdate`/`pause`/`ended` stops the fallback
+  // without the player itself becoming stale, and a stop followed by a
+  // restart must still keep the earlier tick out (#856).
+  let pollGeneration = 0;
 
   const clampVolume = (volume: number): number =>
     Math.min(1, Math.max(0, volume));
@@ -214,6 +220,7 @@ export const createVimeoPlayback = (
     if (pollTimer === undefined) return;
     clearInterval(pollTimer);
     pollTimer = undefined;
+    pollGeneration++;
   };
 
   const disarmWatchdog = (): void => {
@@ -236,15 +243,22 @@ export const createVimeoPlayback = (
   const startPolling = (): void => {
     if (pollTimer !== undefined) return;
     pollTimer = setInterval(() => {
+      // Captured before the SDK calls below, so a stop that lands while they
+      // are in flight is visible on resolve even though neither call can be
+      // cancelled.
+      const tickGeneration = pollGeneration;
       const player = getPlayer();
       if (!player) return;
       void Promise.all([player.getCurrentTime(), player.getPaused()]).then(
         ([seconds, paused]) => {
-          if (isStale(player)) return;
+          if (isStale(player) || pollGeneration !== tickGeneration) return;
           if (paused) {
             stopPolling();
             currentTime = seconds;
-            emit({ playback: 'paused', currentTime: seconds });
+            emit(
+              { playback: 'paused', currentTime: seconds },
+              providerEvent('pause', undefined)
+            );
             return;
           }
           currentTime = correctPosition(seconds) ?? seconds;

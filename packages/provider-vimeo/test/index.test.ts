@@ -2180,6 +2180,108 @@ test('leaves no poll timer pending after destroy', async () => {
   expect(vi.getTimerCount()).toBeLessThan(pendingBefore);
 });
 
+test('publishes a consumer-visible pause event when the poll finds the embed paused', async () => {
+  vi.useFakeTimers();
+  const { events, provider, sdk } = await setup();
+  const player = sdk.instances[0]!;
+  player.paused = true;
+
+  void provider.play();
+  await vi.advanceTimersByTimeAsync(
+    EVENT_WATCHDOG_TIMEOUT_MS + POLL_INTERVAL_MS
+  );
+
+  expect(events.at(-1)).toMatchObject({ type: 'pause', origin: 'provider' });
+});
+
+// A poll tick's `Promise.all` can still be in flight when a real event or a
+// destroy stops the fallback out from under it -- the tick started before
+// either, and nothing cancels the SDK calls it is awaiting. Each case holds
+// the tick open with a deferred pair, stops the fallback a different way,
+// then resolves it and checks the resolve landed as a no-op.
+const heldPoll = (
+  player: FakeSdk['instances'][number]
+): {
+  readonly resolve: (seconds: number, paused: boolean) => void;
+} => {
+  let resolveTime: ((seconds: number) => void) | undefined;
+  let resolvePaused: ((paused: boolean) => void) | undefined;
+  player.getCurrentTime.mockImplementation(
+    () =>
+      new Promise<number>((resolve) => {
+        resolveTime = resolve;
+      })
+  );
+  player.getPaused.mockImplementation(
+    () =>
+      new Promise<boolean>((resolve) => {
+        resolvePaused = resolve;
+      })
+  );
+  return {
+    resolve: (seconds, paused) => {
+      resolveTime?.(seconds);
+      resolvePaused?.(paused);
+    }
+  };
+};
+
+test('drops a poll tick that resolves after a real ended stopped the fallback', async () => {
+  vi.useFakeTimers();
+  const { patches, provider, sdk } = await setup();
+  const player = sdk.instances[0]!;
+  const held = heldPoll(player);
+
+  void provider.play();
+  await vi.advanceTimersByTimeAsync(EVENT_WATCHDOG_TIMEOUT_MS);
+  await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+
+  player.emit('ended', { duration: 60, percent: 1, seconds: 60 });
+  const beforeResolve = patches.length;
+  held.resolve(999, false);
+  await flushMicrotasks();
+
+  expect(patches.length).toBe(beforeResolve);
+  expect(patches.at(-1)).toMatchObject({ playback: 'ended', currentTime: 60 });
+});
+
+test('drops a poll tick that resolves after a real pause stopped the fallback', async () => {
+  vi.useFakeTimers();
+  const { patches, provider, sdk } = await setup();
+  const player = sdk.instances[0]!;
+  const held = heldPoll(player);
+
+  void provider.play();
+  await vi.advanceTimersByTimeAsync(EVENT_WATCHDOG_TIMEOUT_MS);
+  await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+
+  player.emit('pause', { seconds: 5 });
+  const beforeResolve = patches.length;
+  held.resolve(999, false);
+  await flushMicrotasks();
+
+  expect(patches.length).toBe(beforeResolve);
+  expect(patches.at(-1)).toMatchObject({ playback: 'paused' });
+});
+
+test('drops a poll tick that resolves after destroy stopped the fallback', async () => {
+  vi.useFakeTimers();
+  const { patches, provider, sdk } = await setup();
+  const player = sdk.instances[0]!;
+  const held = heldPoll(player);
+
+  void provider.play();
+  await vi.advanceTimersByTimeAsync(EVENT_WATCHDOG_TIMEOUT_MS);
+  await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+
+  provider.destroy();
+  const beforeResolve = patches.length;
+  held.resolve(999, false);
+  await flushMicrotasks();
+
+  expect(patches.length).toBe(beforeResolve);
+});
+
 // --- buffered ranges (#91) ---
 
 const bufferedPatches = (
