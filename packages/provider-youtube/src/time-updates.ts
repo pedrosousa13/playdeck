@@ -43,6 +43,10 @@ export type YouTubeTimeUpdatesDeps = {
   // The poll is the only time report YouTube gives, so it is where the
   // [startTime, endTime] window is enforced — before anything is published.
   readonly boundary: Pick<YouTubeBoundary, 'onTimeReport'>;
+  // The document whose visibility gates the poll -- the mount's own
+  // (`attachment.ts`'s `ownerDocument`), so a host embedding the player into
+  // another frame is judged by that frame's visibility, not the top one's.
+  readonly ownerDocument: Document;
 };
 
 // The polling seam: the iframe API pushes no time updates, so position and
@@ -68,7 +72,8 @@ export const createYouTubeTimeUpdates = ({
   emit,
   isDestroyed,
   getPlayer,
-  boundary
+  boundary,
+  ownerDocument
 }: YouTubeTimeUpdatesDeps): YouTubeTimeUpdates => {
   let timeInterval: ReturnType<typeof setInterval> | undefined;
   // The iframe API proxies commands over postMessage, so getters read stale
@@ -76,6 +81,11 @@ export const createYouTubeTimeUpdates = ({
   // intended position instead; commands emit intent, polling confirms.
   let knownCurrentTime = 0;
   let bufferView: BufferView | undefined;
+  // Whether playback wants the poll running, independent of `timeInterval`:
+  // the interval itself also pauses while the document is hidden, and this is
+  // what the visibility listener consults to decide whether to resume it.
+  let wanted = false;
+  let visibilityListenerAdded = false;
 
   const bufferedRanges = (
     current: YouTubeTimedPlayer,
@@ -92,31 +102,82 @@ export const createYouTubeTimeUpdates = ({
       : [];
   };
 
-  const stop = (): void => {
+  // The interval's own body, factored out so the immediate poll fired on
+  // becoming visible again runs the exact same read-and-publish as a regular
+  // tick, rather than waiting out a first interval delay on top of however
+  // long the tab was hidden.
+  const tick = (): void => {
+    const current = getPlayer();
+    if (isDestroyed() || !current) return;
+    try {
+      knownCurrentTime = current.getCurrentTime();
+      // The boundary may pin the mirror and stop the poll from in here; a
+      // report it consumed is one this poll must not publish.
+      if (!boundary.onTimeReport(knownCurrentTime)) return;
+      emit({
+        currentTime: knownCurrentTime,
+        buffered: bufferedRanges(current, knownCurrentTime)
+      });
+    } catch {
+      // Polling must not escape the provider boundary.
+    }
+  };
+
+  const stopInterval = (): void => {
     if (timeInterval === undefined) return;
     clearInterval(timeInterval);
     timeInterval = undefined;
   };
 
+  const startInterval = (): void => {
+    if (timeInterval !== undefined) return;
+    timeInterval = setInterval(tick, TIME_UPDATE_INTERVAL_MS);
+  };
+
+  // A hidden tab still runs the interval, just throttled; clearing it instead
+  // stops the work outright rather than relying on the browser to slow it
+  // down. Showing the tab again polls once right away -- the whole point of
+  // not waiting out a timer the hidden period already starved -- and only
+  // restarts the interval if `start()` is still what called for it.
+  //
+  // `wanted` is read again after `tick()`, not only before it: the tick can
+  // be the report that reaches the boundary's own end, and `onTimeReport`
+  // stops the poll from inside that call (`boundary.ts`'s `boundaryEnded`
+  // path) before this function gets to decide whether to restart the
+  // interval. Restarting on the pre-tick value would leave an interval
+  // running that nothing goes on to clear.
+  const onVisibilityChange = (): void => {
+    if (ownerDocument.visibilityState === 'hidden') {
+      stopInterval();
+      return;
+    }
+    if (!wanted) return;
+    tick();
+    if (wanted) startInterval();
+  };
+
+  const removeVisibilityListener = (): void => {
+    if (!visibilityListenerAdded) return;
+    ownerDocument.removeEventListener('visibilitychange', onVisibilityChange);
+    visibilityListenerAdded = false;
+  };
+
+  const stop = (): void => {
+    stopInterval();
+    wanted = false;
+    removeVisibilityListener();
+  };
+
   return {
     start: () => {
-      if (timeInterval !== undefined) return;
-      timeInterval = setInterval(() => {
-        const current = getPlayer();
-        if (isDestroyed() || !current) return;
-        try {
-          knownCurrentTime = current.getCurrentTime();
-          // The boundary may pin the mirror and stop the poll from in here; a
-          // report it consumed is one this poll must not publish.
-          if (!boundary.onTimeReport(knownCurrentTime)) return;
-          emit({
-            currentTime: knownCurrentTime,
-            buffered: bufferedRanges(current, knownCurrentTime)
-          });
-        } catch {
-          // Polling must not escape the provider boundary.
-        }
-      }, TIME_UPDATE_INTERVAL_MS);
+      if (wanted) return;
+      wanted = true;
+      if (!visibilityListenerAdded) {
+        ownerDocument.addEventListener('visibilitychange', onVisibilityChange);
+        visibilityListenerAdded = true;
+      }
+      if (ownerDocument.visibilityState === 'hidden') return;
+      startInterval();
     },
     stop,
     adoptCurrentTime: (current) => {
