@@ -536,7 +536,17 @@ export const libraries = [
     // native` sits in every composition this fixture builds. The whole
     // distance from the last committed figure is this issue's: that figure
     // was 23.52 KB, measured per `results.md` on `main`.
-    ceilingKb: 24
+    //
+    // 23780 bytes measured 2026-10-02 -- 23.2226562500 KB, 23.22 KB to two
+    // places, rounded up to the next 0.25 KB. This row drops rather than
+    // grows, the same change described on the "no parts" row above:
+    // `@playdeck/core`'s media-session binding and coordinator leave every
+    // composition's eager graph, this one included, through a dynamic
+    // `import()` of `@playdeck/core/media-session`. The ceiling comes down
+    // with it, to hold the saving. The whole distance from the last
+    // committed figure is this change's: that figure was 23.77 KB
+    // (24343 bytes), measured per `results.md` on `main`.
+    ceilingKb: 23.25
   },
   {
     name: 'Playdeck (play-only)',
@@ -608,7 +618,17 @@ export const libraries = [
     // included. The whole distance from the last committed figure is this
     // issue's: that figure was 24.88 KB (25477 bytes), measured per
     // `results.md` on `main`.
-    ceilingKb: 25.25,
+    //
+    // 25143 bytes measured 2026-10-02 -- 24.5537109375 KB, 24.55 KB to two
+    // places, rounded up to the next 0.25 KB. This row drops rather than
+    // grows, the same change described on the "no parts" row above:
+    // `@playdeck/core`'s media-session binding and coordinator leave every
+    // composition's eager graph, this one's `PlayButton` included, through
+    // a dynamic `import()` of `@playdeck/core/media-session`. The ceiling
+    // comes down with it, to hold the saving. The whole distance from the
+    // last committed figure is this change's: that figure was 25.13 KB
+    // (25734 bytes), measured per `results.md` on `main`.
+    ceilingKb: 24.75,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
@@ -670,7 +690,17 @@ export const libraries = [
     // included. The whole distance from the last committed figure is this
     // issue's: that figure was 28.04 KB (28713 bytes), measured per
     // `results.md` on `main`.
-    ceilingKb: 28.5
+    //
+    // 28360 bytes measured 2026-10-02 -- 27.6953125 KB, 27.70 KB to two
+    // places, rounded up to the next 0.25 KB. This row drops rather than
+    // grows, the same change described on the "no parts" row above:
+    // `@playdeck/core`'s media-session binding and coordinator leave every
+    // composition's eager graph, this one's control bar included, through a
+    // dynamic `import()` of `@playdeck/core/media-session`. The ceiling
+    // comes down with it, to hold the saving. The whole distance from the
+    // last committed figure is this change's: that figure was 28.29 KB
+    // (28966 bytes), measured per `results.md` on `main`.
+    ceilingKb: 27.75
   },
   {
     name: 'react-player',

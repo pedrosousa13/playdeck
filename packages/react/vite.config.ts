@@ -8,11 +8,12 @@ export default defineConfig({
         'react',
         'react/jsx-runtime',
         '@playdeck/core',
-        // The second subpath, named separately: an `external` entry is an
-        // exact specifier match, so leaving this out would bundle the parser
+        // Each of the two subpaths, named separately: an `external` entry is
+        // an exact specifier match, so leaving either out would bundle it
         // into the chunk that imports it and publish a second copy of code
         // the consumer already resolves from `@playdeck/core`.
         '@playdeck/core/thumbnails',
+        '@playdeck/core/media-session',
         '@playdeck/provider-hls',
         '@playdeck/provider-native',
         '@playdeck/provider-vimeo',

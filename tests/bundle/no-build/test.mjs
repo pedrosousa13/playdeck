@@ -175,20 +175,45 @@ try {
   // catch a missing native chunk and a foreign provider, but neither would
   // notice a chunk that is new and unaccounted for -- a primitive split out
   // on its own, or a second copy of something already in the graph. This
-  // entry's initial cost is four files, and that is the claim its budget
+  // entry's initial cost is five files, and that is the claim its budget
   // rows are written against, so the test asserts the set rather than
   // reporting it.
   //
-  // `react.js` is the fourth, and it arrived with the thumbnail preview
-  // moving behind a dynamic import (#727): the entry and that preview are
-  // both React code, so Rollup factors React itself out of the entry into a
-  // chunk they share. It is one more request at the same depth in the
-  // waterfall as `core.js`, not one more round trip after it, and it is
-  // fewer bytes overall -- the entry's eager gzip total fell from 93.76 KB
-  // to 92.87 KB across that change, measured on this build with the preview
-  // absent, which is the case this page is. A page that does set
-  // `thumbnails` pays for the preview then, and only then.
+  // `react.js` arrived with the thumbnail preview moving behind a dynamic
+  // import (#727): the entry and that preview are both React code, so Rollup
+  // factors React itself out of the entry into a chunk they share. It is one
+  // more request at the same depth in the waterfall as `core.js`, not one
+  // more round trip after it, and it is fewer bytes overall -- the entry's
+  // eager gzip total fell from 93.76 KB to 92.87 KB across that change,
+  // measured on this build with the preview absent, which is the case this
+  // page is. A page that does set `thumbnails` pays for the preview then,
+  // and only then.
+  //
+  // `assets/media-session.js` is the fifth. `Root`'s mount effect binds the
+  // player to `navigator.mediaSession` through a dynamic `import()`, and a
+  // real browser -- this one included -- answers `typeof
+  // navigator.mediaSession` with an object, so the import fires right after
+  // mount: it is already in `requestedScripts` by the time this test's own
+  // `playButton.waitFor()` resolves, well before any click, and never
+  // depends on `provider-native.js` or playback starting. That is what makes
+  // it one more request at the same depth as the four above rather than a
+  // round trip gated behind activation. Checked for duplication the way
+  // `react.js` already settled it for the thumbnail preview: `core.js` does
+  // not carry a second copy. Search its text for `seekbackward` -- a literal
+  // `wireHandlers` alone uses -- rather than `'mediaSession artwork'`, which
+  // names the shared refused-surface notice every one of the other seven
+  // refusable props also produces and so says nothing about this one on its
+  // own. The cost is real, unlike `react.js`'s: the entry's eager gzip total, summed the
+  // same way as every other row here, RISES from 113.36 KB to 113.96 KB,
+  // because `media-session.ts`'s own allowlist calls (`isPermittedSourceUrl`,
+  // `resolveNetworkPath`) are inlined into this new chunk same as into
+  // `core.js`, rather than shared between them -- the same trade-off
+  // `docs/comparison/results.md`'s "Playdeck (no parts)" row takes the other
+  // side of: a bundler that tree-shakes an export nothing names drops this
+  // chunk's weight from the page that never needed it, which this no-bundler
+  // entry cannot do for itself.
   const expectedScripts = [
+    '/assets/media-session.js',
     '/browser.js',
     '/core.js',
     '/provider-native.js',
