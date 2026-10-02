@@ -21,3 +21,7 @@ Durable rationale belongs in source; investigation narrative belongs on the issu
 ### Demonstrated red
 
 A new assertion does not count until it has been shown failing against the unfixed code, with the real output recorded in the PR body, the commit message, or a comment beside the test. Where the code cannot be un-written, name the substitute mutation used and record its output instead. See `docs/agents/demonstrated-red.md`.
+
+### Changesets
+
+A pending changeset's prose is written in the present tense, describing the change as it stands — never narrating history ("now", "previously", "as before"). `pnpm test:changesets` enforces this in the CI `static` job. See `docs/agents/changesets.md`.
