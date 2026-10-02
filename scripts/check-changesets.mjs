@@ -12,8 +12,8 @@
 // with where the problem is, and reading a directory happens only in
 // `pendingChangesetFiles`/`pendingChangesetProblems` and in `main`.
 // `README.md` and `config.json` are never read as changesets -- the first
-// documents the format, the second configures the release tool -- and both
-// are excluded by the `.md`-except-`README.md` filter below.
+// documents the format and is excluded by name, the second configures the
+// release tool and is excluded by the `.md` extension alone.
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -28,10 +28,13 @@ const CHANGESET_DIR = '.changeset';
  * The phrasing this rule exists to catch, case-insensitively: a bare "now"
  * (never inside a longer word such as "known" or "snow", which `\b` excludes
  * because neither has a word boundary on both sides of its "now"),
- * "previously", "used to", and "as before". Each names a state the code is no
- * longer in rather than the one a reader installing the version gets.
+ * "previously", and "as before". Each names a state the code is no longer in
+ * rather than the one a reader installing the version gets. "used to" is
+ * deliberately not one of them: it also reads as present tense, as in "this
+ * option is used to configure retries", and that phrasing is unrelated to
+ * what this rule exists to catch.
  */
-const NARRATES_HISTORY = /\bnow\b|previously|used to|as before/gi;
+const NARRATES_HISTORY = /\bnow\b|previously|as before/gi;
 
 /**
  * Where, in one changeset's lines, its prose starts -- the index just past
@@ -110,7 +113,7 @@ const main = () => {
 
   if (problems.length > 0) {
     throw new Error(
-      `A pending changeset narrates history instead of describing the change in force. Write it in the present tense -- never "now", "previously", "used to" or "as before":\n${problems
+      `A pending changeset narrates history instead of describing the change in force. Write it in the present tense -- never "now", "previously" or "as before":\n${problems
         .map(
           (problem) =>
             `  ${relative(repoRoot, join(dir, problem.file))}:${problem.line} — "${problem.word}"`

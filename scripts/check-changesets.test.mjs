@@ -72,13 +72,20 @@ test('does not match a word merely containing "now"', () => {
 
 test('matches every phrase the rule exists to catch, case-insensitively', () => {
   assert.deepEqual(
-    changesetProblems(
-      'Previously this threw.\nIt USED TO retry forever.\nAs before, nothing changes.\n'
-    ),
+    changesetProblems('Previously this threw.\nAs before, nothing changes.\n'),
     [
       { line: 1, word: 'Previously' },
-      { line: 2, word: 'USED TO' },
-      { line: 3, word: 'As before' }
+      { line: 2, word: 'As before' }
     ]
+  );
+});
+
+// "used to" also reads as present tense -- "this option is used to configure
+// retries" describes what the option does today, not what it used to do --
+// so it is deliberately not one of the phrases this rule catches.
+test('passes prose using "used to" in its present-tense sense', () => {
+  assert.deepEqual(
+    changesetProblems('This option is used to configure retries.\n'),
+    []
   );
 });
