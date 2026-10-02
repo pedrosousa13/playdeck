@@ -16,10 +16,11 @@ export default defineConfig({
     // workspace already symlinks it into `apps/site/node_modules` and its
     // `package.json` already maps `./theme.css` and `./docked.css` to the real
     // files, so once the alias stops swallowing the subpath, plain Node
-    // resolution answers it. For `@playdeck/core/thumbnails` it is not, since
-    // Node resolution would answer with the package's built `dist`, and every
-    // other alias here exists precisely so a test runs the source it is
-    // testing -- so that subpath gets an alias of its own, to the module the
+    // resolution answers it. For `@playdeck/core`'s own subpaths
+    // (`./thumbnails`, `./media-session`) it is not, since Node resolution
+    // would answer with the package's built `dist`, and every other alias
+    // here exists precisely so a test runs the source it is testing -- so
+    // each of those subpaths gets an alias of its own, to the module the
     // bare specifier's own alias would never reach. `/^@playdeck\/react$/` and
     // `/^@playdeck\/core$/`, anchored, are what narrow each match to the bare
     // specifier only.
@@ -42,6 +43,12 @@ export default defineConfig({
         find: /^@playdeck\/core\/thumbnails$/,
         replacement: fileURLToPath(
           new URL('./packages/core/src/thumbnails.ts', import.meta.url)
+        )
+      },
+      {
+        find: /^@playdeck\/core\/media-session$/,
+        replacement: fileURLToPath(
+          new URL('./packages/core/src/media-session.ts', import.meta.url)
         )
       },
       {

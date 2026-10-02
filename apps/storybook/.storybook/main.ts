@@ -77,10 +77,16 @@ const config: StorybookConfig = {
       alias: {
         ...viteConfig.resolve?.alias,
         // Longest first: Vite matches an object alias by prefix, so a bare
-        // `@playdeck/core` entry ahead of this one would rewrite the subpath
+        // `@playdeck/core` entry ahead of these would rewrite the subpath
         // against `index.ts` and resolve nothing.
         '@playdeck/core/thumbnails': fileURLToPath(
           new URL('../../../packages/core/src/thumbnails.ts', import.meta.url)
+        ),
+        '@playdeck/core/media-session': fileURLToPath(
+          new URL(
+            '../../../packages/core/src/media-session.ts',
+            import.meta.url
+          )
         ),
         '@playdeck/core': fileURLToPath(
           new URL('../../../packages/core/src/index.ts', import.meta.url)
