@@ -250,6 +250,44 @@ describe('SeekSlider thumbnails', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  test('measures the track at most once per animation frame during a burst of pointermoves', () => {
+    renderWithPlayer(
+      <Player.SeekSlider thumbnails="https://cdn.example.test/thumbs.vtt" />
+    );
+    const slider = getSlider();
+    stubBox(slider);
+    const rectSpy = vi.spyOn(slider, 'getBoundingClientRect');
+
+    fireEvent.pointerMove(slider, { clientX: 10 });
+    fireEvent.pointerMove(slider, { clientX: 20 });
+    fireEvent.pointerMove(slider, { clientX: 30 });
+    fireEvent.pointerMove(slider, { clientX: 40 });
+    fireEvent.pointerMove(slider, { clientX: 50 });
+
+    expect(rectSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('measures again once a frame flushes, so a later pointer position is never stale', () => {
+    vi.useFakeTimers({
+      toFake: ['requestAnimationFrame', 'cancelAnimationFrame']
+    });
+    renderWithPlayer(
+      <Player.SeekSlider thumbnails="https://cdn.example.test/thumbs.vtt" />
+    );
+    const slider = getSlider();
+    stubBox(slider);
+    const rectSpy = vi.spyOn(slider, 'getBoundingClientRect');
+
+    fireEvent.pointerMove(slider, { clientX: 10 });
+    fireEvent.pointerMove(slider, { clientX: 20 });
+    expect(rectSpy).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(16); // flushes the frame the first event scheduled
+
+    fireEvent.pointerMove(slider, { clientX: 30 });
+    expect(rectSpy).toHaveBeenCalledTimes(2);
+  });
+
   test('arms the fetch on the first keyboard focus on the input', async () => {
     renderWithPlayer(
       <Player.SeekSlider thumbnails="https://cdn.example.test/thumbs.vtt" />

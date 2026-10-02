@@ -710,7 +710,15 @@ export const libraries = [
     // comes down with it, to hold the saving. The whole distance from the
     // last committed figure is this change's: that figure was 28.29 KB
     // (28966 bytes), measured per `results.md` on `main`.
-    ceilingKb: 27.75
+    //
+    // 28452 bytes measured 2026-10-02 -- 27.78515625 KB, 27.79 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 27.75 KB is a per-frame rect cache in `SeekSlider`'s `trackPointer` --
+    // two more refs and an unmount effect, in `transport-controls.tsx`,
+    // which this composition's control bar bundles directly. The whole
+    // distance from the last committed figure is this change's: that figure
+    // was 27.74 KB, measured per `results.md` on `main`.
+    ceilingKb: 28
   },
   {
     name: 'react-player',

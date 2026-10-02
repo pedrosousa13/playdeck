@@ -19,6 +19,7 @@ import {
 import {
   useEffect,
   useId,
+  useRef,
   useState,
   useSyncExternalStore,
   type ComponentPropsWithRef,
@@ -629,9 +630,40 @@ export const SeekSlider = ({
   // one that gesture asked for instead of the next one.
   const [pointerFraction, setPointerFraction] = useState<number | null>(null);
   const [inputFocused, setInputFocused] = useState(false);
+  // One measurement per animation frame: a drag or hover fires `pointermove`
+  // far more often than layout can change, so the first event in a frame
+  // measures the track and every later one in that same frame reads the
+  // cached rect instead of forcing another layout. Each event still turns
+  // its own `clientX` into its own fraction against that rect, so the
+  // preview keeps a value for every event -- only the measurement is shared.
+  const trackedRectRef = useRef<DOMRect | null>(null);
+  const trackedRectFrameRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (trackedRectFrameRef.current !== null) {
+        cancelAnimationFrame(trackedRectFrameRef.current);
+        // Cleared, not just cancelled: this cleanup can run on a still-live
+        // instance (StrictMode's double effect invocation, or a hidden/shown
+        // `<Activity>`) and leave the component mounted with a frame it
+        // cancelled but never fired. Without this, `trackedRectFrameRef`
+        // stays non-null forever, so `trackPointer` believes a frame is
+        // still pending and never measures again.
+        trackedRectFrameRef.current = null;
+        trackedRectRef.current = null;
+      }
+    },
+    []
+  );
   const trackPointer = (clientX: number, target: Element): void => {
     if (resolvedThumbnails === undefined) return;
-    const rect = target.getBoundingClientRect();
+    if (trackedRectFrameRef.current === null) {
+      trackedRectRef.current = target.getBoundingClientRect();
+      trackedRectFrameRef.current = requestAnimationFrame(() => {
+        trackedRectFrameRef.current = null;
+      });
+    }
+    // Non-null: the branch above always sets it before this line runs.
+    const rect = trackedRectRef.current!;
     setPointerFraction(
       rect.width > 0
         ? Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
