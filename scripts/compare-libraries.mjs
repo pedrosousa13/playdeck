@@ -161,20 +161,67 @@ const REACT_EXTERNALS = [
 
 /**
  * The name of the first entry in `forbidden` that `chunks` makes reachable,
- * or `undefined` if none of them do. The module-level counterpart to
- * `requiredChunk`'s reachability call above: where `requiredChunk` decides
- * what a composition may not do *without*, this decides what a composition
- * must not reach *at all*, and names the specific module rather than only
- * moving a byte count -- see the play-only row's `forbiddenModules` below
- * for what it is checked against and why.
+ * together with the chunk that carries it -- or `undefined` if none of them
+ * do. The module-level counterpart to `requiredChunk`'s reachability call
+ * above: where `requiredChunk` decides what a composition may not do
+ * *without*, this decides what a composition must not reach *at all*, and
+ * names the specific module rather than only moving a byte count -- see
+ * `forbiddenPartsExcept` below for what it is checked against and why. The
+ * chunk comes back alongside the name so `measure` below can name an import
+ * chain, where one exists, rather than only the module.
  * @param {readonly Chunk[]} chunks
  * @param {readonly { name: string; reachedBy: (chunk: Chunk) => boolean }[]} forbidden
- * @returns {string | undefined}
+ * @returns {{ name: string; chunk: Chunk } | undefined}
  */
 export const reachedForbiddenModule = (chunks, forbidden) => {
   for (const chunk of chunks) {
     for (const entry of forbidden) {
-      if (entry.reachedBy(chunk)) return entry.name;
+      if (entry.reachedBy(chunk)) return { name: entry.name, chunk };
+    }
+  }
+  return undefined;
+};
+
+/**
+ * One static-import path from `chunks`' own entry chunk to `targetFileName`,
+ * as `fileName`s from entry to target inclusive, or `undefined` if no static
+ * path exists -- the target is then reached only through the dynamic-import
+ * half of `reachableChunks`, which this does not retrace. A breadth-first
+ * walk of `imports` edges, so where more than one static path exists this
+ * returns the shortest, not the only one -- enough for `measure` below to
+ * name a real chain a reader can follow, not a claim that it is the sole
+ * route in.
+ * @param {readonly Chunk[]} chunks
+ * @param {string} targetFileName
+ * @returns {readonly string[] | undefined}
+ */
+export const staticImportChain = (chunks, targetFileName) => {
+  const entry = chunks.find((chunk) => chunk.isEntry);
+  if (!entry) return undefined;
+  if (entry.fileName === targetFileName) return [entry.fileName];
+  const byFile = new Map(chunks.map((chunk) => [chunk.fileName, chunk]));
+  /** @type {Map<string, string | undefined>} */
+  const parent = new Map([[entry.fileName, undefined]]);
+  const queue = [entry.fileName];
+  while (queue.length > 0) {
+    const current = /** @type {string} */ (queue.shift());
+    if (current === targetFileName) {
+      /** @type {string[]} */
+      const chain = [];
+      for (
+        let step = /** @type {string | undefined} */ (current);
+        step !== undefined;
+        step = parent.get(step)
+      ) {
+        chain.unshift(step);
+      }
+      return chain;
+    }
+    for (const imported of byFile.get(current)?.imports ?? []) {
+      if (!parent.has(imported)) {
+        parent.set(imported, current);
+        queue.push(imported);
+      }
     }
   }
   return undefined;
@@ -187,142 +234,203 @@ const reachesExport = (chunk, exportName) =>
   );
 
 /**
- * What the "Playdeck (play-only)" row's composition -- core, the native
- * provider, and one control part, `Player.PlayButton`
- * (`tests/compare/entries/playdeck-play-only.tsx`) -- must not reach,
- * checked by `measure` below against that fixture's own reachable Vite
- * chunks. Read off `packages/react/src/index.tsx`'s runtime re-export list
- * (`compare-libraries.test.mjs` checks this list against that file directly,
- * so the two cannot drift apart silently):
+ * The guardable, non-universal part of `@playdeck/react`'s own runtime
+ * export list (`packages/react/src/index.tsx`) -- every named export except
+ * `Root`, `Media` and `Viewport`, which every measured Playdeck composition
+ * needs regardless of which control parts it renders, and so could never be
+ * forbidden for any of them. Grouped by the module `index.tsx` re-exports
+ * each name from, the same grouping `compare-libraries.test.mjs` checks
+ * against that file directly so this list cannot drift from it silently.
  *
- * - "the menu primitives": `settings-menu.tsx`'s entire export list --
- *   `SettingsMenu`, `SettingsMenuTrigger`, `SettingsMenuContent`,
- *   `MenuItem`, `MenuRadioGroup`, `MenuRadioItem`.
- * - "both sliders": `VolumeSlider` and `SeekSlider`, two of
- *   `transport-controls.tsx`'s five exports -- not `PlayButton`,
- *   `MuteButton` or `Time`, which this row (or the control-bar row) reaches
- *   legitimately.
- * - "captions rendering": `captions.tsx`'s entire export list -- `Captions`,
- *   `CaptionsButton`, `CaptionsMenu`.
- * - "quality selection": `quality.tsx`'s one export, `QualityMenu`.
- * - "playback rate": `playback-rate.tsx`'s one export, `PlaybackRateMenu`.
- * - "audio tracks": `audio-tracks.tsx`'s one export, `AudioTrackMenu`.
- * - "every provider other than native": matched the same way `requiredChunk`
- *   below matches `provider-native` itself, by the package's own directory
- *   appearing in a reachable chunk's `moduleIds`. `requiredChunk` already
- *   keeps a *dynamically* imported non-native provider out of `reachable`,
- *   so this half only ever fires against a provider reached some other way
- *   -- a static import, say, which `reachableChunks` admits into the
- *   entry's closure unconditionally, before `requiredChunk` is ever asked.
+ * Left out, deliberately: the three hooks (`useActiveCues`,
+ * `usePlayerActions`, `usePlayerState`), `Poster`/`PosterImage`/
+ * `normalizePoster`, `LiveIndicator`, `Gestures`, and every icon
+ * (`icons.tsx`). None of the four fixtures below renders any of these, but
+ * none is a "control part" in the sense `docs/comparison/method.md`'s "Who
+ * this is for" section already uses the word -- the buttons, sliders, menus
+ * and wrappers a consumer composes on top of core -- and guarding a hook or
+ * an icon would check a different claim than this matrix is for.
+ * @type {readonly string[]}
+ */
+export const GUARDABLE_PART_NAMES = [
+  // settings-menu.tsx -- the whole menu primitive surface.
+  'SettingsMenu',
+  'SettingsMenuTrigger',
+  'SettingsMenuContent',
+  'MenuItem',
+  'MenuRadioGroup',
+  'MenuRadioItem',
+  // captions.tsx -- the whole captions-rendering surface.
+  'Captions',
+  'CaptionsButton',
+  'CaptionsMenu',
+  // quality.tsx -- one export, composed entirely of already-forbidden menu
+  // primitives (SettingsMenu, MenuRadioGroup, MenuRadioItem).
+  //
+  // Demonstrated red (docs/agents/demonstrated-red.md), recorded verbatim:
+  // temporarily importing `<Player.QualityMenu />` into
+  // tests/compare/entries/playdeck-play-only.tsx and running
+  // `node scripts/compare-libraries.mjs --check` produced:
+  //
+  //   Playdeck (play-only)'s reachable chunks reach SettingsMenu, which
+  //   this composition (core + primitives + native provider + one control
+  //   (PlayButton)) does not use.
+  //
+  // Reverting the import returned the check to
+  // "docs/comparison/results.md already matches a fresh run". Honest note:
+  // the failure attributes to `SettingsMenu`, not to this entry --
+  // QualityMenu is composed entirely of already-forbidden modules, so the
+  // gate would have caught this violation with or without `'QualityMenu'`
+  // named here. This entry keeps the list's own stated convention -- every
+  // menu preset named explicitly, the way `CaptionsMenu` already is --
+  // rather than being load-bearing on its own.
+  'QualityMenu',
+  // playback-rate.tsx -- one export, the same already-forbidden-primitives
+  // shape as QualityMenu above.
+  //
+  // Demonstrated red (docs/agents/demonstrated-red.md), recorded verbatim:
+  // temporarily importing `<Player.PlaybackRateMenu />` into
+  // tests/compare/entries/playdeck-play-only.tsx and running
+  // `node scripts/compare-libraries.mjs --check` produced:
+  //
+  //   Playdeck (play-only)'s reachable chunks reach SettingsMenu, which
+  //   this composition (core + primitives + native provider + one control
+  //   (PlayButton)) does not use.
+  //
+  // Reverting the import returned the check to
+  // "docs/comparison/results.md already matches a fresh run". Honest note,
+  // the same one QualityMenu's own entry above carries: the failure
+  // attributes to `SettingsMenu`, not to this entry -- PlaybackRateMenu is
+  // composed entirely of already-forbidden modules, so the gate would have
+  // caught this violation with or without `'PlaybackRateMenu'` named here.
+  'PlaybackRateMenu',
+  // chapters.tsx -- one export, the same shape again.
+  //
+  // Demonstrated red (docs/agents/demonstrated-red.md), recorded verbatim:
+  // temporarily importing `<Player.ChaptersMenu />` into
+  // tests/compare/entries/playdeck-play-only.tsx and running
+  // `node scripts/compare-libraries.mjs --check` (after a fresh
+  // `@playdeck/react` build, which this check bundles from) produced:
+  //
+  //   Playdeck (play-only)'s reachable chunks reach SettingsMenu, which
+  //   this composition (core + primitives + native provider + one control
+  //   (PlayButton)) does not use.
+  //
+  // Reverting the import returned the check to
+  // "docs/comparison/results.md already matches a fresh run". Honest note,
+  // the same one QualityMenu's and PlaybackRateMenu's own entries above
+  // carry: the failure attributes to `SettingsMenu`, not to this entry --
+  // ChaptersMenu is composed entirely of already-forbidden modules, so the
+  // gate would have caught this violation with or without `'ChaptersMenu'`
+  // named here.
+  'ChaptersMenu',
+  // audio-tracks.tsx -- one export, the same shape again.
+  //
+  // Demonstrated red (docs/agents/demonstrated-red.md), recorded verbatim:
+  // temporarily importing `<Player.AudioTrackMenu />` into
+  // tests/compare/entries/playdeck-play-only.tsx and running
+  // `node scripts/compare-libraries.mjs --check` (after a fresh
+  // `@playdeck/react` build) produced:
+  //
+  //   Playdeck (play-only)'s reachable chunks reach SettingsMenu, which
+  //   this composition (core + primitives + native provider + one control
+  //   (PlayButton)) does not use.
+  //
+  // Reverting the import returned the check to
+  // "docs/comparison/results.md already matches a fresh run". Honest note,
+  // the same one QualityMenu's, PlaybackRateMenu's and ChaptersMenu's own
+  // entries above carry: the failure attributes to `SettingsMenu`, not to
+  // this entry -- AudioTrackMenu is composed entirely of already-forbidden
+  // modules, so the gate would have caught this violation with or without
+  // `'AudioTrackMenu'` named here.
+  'AudioTrackMenu',
+  // transport-controls.tsx -- all five exports; which of them a given row
+  // uses is exactly what tells the four Playdeck rows apart.
+  'MuteButton',
+  'PlayButton',
+  'SeekSlider',
+  'Time',
+  'VolumeSlider',
+  // display-controls.tsx -- all four exports, for the same reason: the
+  // control-bar row uses `FullscreenButton` and nothing else here.
+  'AirPlayButton',
+  'FullscreenButton',
+  'PipButton',
+  'RemotePlaybackButton',
+  // controls.tsx -- the wrapper two of the four rows render parts inside.
+  'Controls',
+  // loading-error.tsx -- `ActivationButton` is the fourth row-distinguishing
+  // part; `ErrorDisplay` and `LoadingIndicator` are its siblings, unused by
+  // every fixture here.
+  'ActivationButton',
+  'ErrorDisplay',
+  'LoadingIndicator'
+];
+
+/**
+ * The four non-native provider packages, matched the way `requiredChunk`
+ * above matches `provider-native` itself: by the package's own directory
+ * appearing in a reachable chunk's `moduleIds`. `requiredChunk` already
+ * keeps a *dynamically* imported non-native provider out of `reachable`, so
+ * this only ever fires against one reached some other way -- a static
+ * import, say, which `reachableChunks` admits into the entry's closure
+ * unconditionally, before `requiredChunk` is ever asked. Forbidden for every
+ * Playdeck row alike: none of the four fixtures imports a non-native
+ * provider at all.
  * @type {readonly { name: string; reachedBy: (chunk: Chunk) => boolean }[]}
  */
-export const PLAY_ONLY_FORBIDDEN_MODULES = [
-  ...[
-    'SettingsMenu',
-    'SettingsMenuTrigger',
-    'SettingsMenuContent',
-    'MenuItem',
-    'MenuRadioGroup',
-    'MenuRadioItem',
-    'VolumeSlider',
-    'SeekSlider',
-    'Captions',
-    'CaptionsButton',
-    'CaptionsMenu',
-    // Demonstrated red (docs/agents/demonstrated-red.md), recorded verbatim:
-    // temporarily importing `<Player.QualityMenu />` into
-    // tests/compare/entries/playdeck-play-only.tsx and running
-    // `node scripts/compare-libraries.mjs --check` produced:
-    //
-    //   Playdeck (play-only)'s reachable chunks reach SettingsMenu, which
-    //   this composition (core + primitives + native provider + one control
-    //   (PlayButton)) does not use.
-    //
-    // Reverting the import returned the check to
-    // "docs/comparison/results.md already matches a fresh run". Honest note:
-    // the failure attributes to `SettingsMenu`, not to this entry --
-    // QualityMenu is composed entirely of already-forbidden modules
-    // (SettingsMenu, MenuRadioGroup, MenuRadioItem), so the gate would have
-    // caught this violation with or without `'QualityMenu'` named here. This
-    // entry keeps the list's own stated convention -- every menu preset
-    // named explicitly, the way `CaptionsMenu` already is -- rather than
-    // being load-bearing on its own.
-    'QualityMenu',
-    // Demonstrated red (docs/agents/demonstrated-red.md), recorded verbatim:
-    // temporarily importing `<Player.PlaybackRateMenu />` into
-    // tests/compare/entries/playdeck-play-only.tsx and running
-    // `node scripts/compare-libraries.mjs --check` produced:
-    //
-    //   Playdeck (play-only)'s reachable chunks reach SettingsMenu, which
-    //   this composition (core + primitives + native provider + one control
-    //   (PlayButton)) does not use.
-    //
-    // Reverting the import returned the check to
-    // "docs/comparison/results.md already matches a fresh run". Honest note,
-    // the same one QualityMenu's own entry above carries: the failure
-    // attributes to `SettingsMenu`, not to this entry -- PlaybackRateMenu is
-    // composed entirely of already-forbidden modules (SettingsMenu,
-    // MenuRadioGroup, MenuRadioItem), so the gate would have caught this
-    // violation with or without `'PlaybackRateMenu'` named here. This entry
-    // keeps the list's own stated convention -- every menu preset named
-    // explicitly -- rather than being load-bearing on its own.
-    'PlaybackRateMenu',
-    // Demonstrated red (docs/agents/demonstrated-red.md), recorded verbatim:
-    // temporarily importing `<Player.ChaptersMenu />` into
-    // tests/compare/entries/playdeck-play-only.tsx and running
-    // `node scripts/compare-libraries.mjs --check` (after a fresh
-    // `@playdeck/react` build, which this check bundles from) produced:
-    //
-    //   Playdeck (play-only)'s reachable chunks reach SettingsMenu, which
-    //   this composition (core + primitives + native provider + one control
-    //   (PlayButton)) does not use.
-    //
-    // Reverting the import returned the check to
-    // "docs/comparison/results.md already matches a fresh run". Honest note,
-    // the same one QualityMenu's and PlaybackRateMenu's own entries above
-    // carry: the failure attributes to `SettingsMenu`, not to this entry --
-    // ChaptersMenu is composed entirely of already-forbidden modules
-    // (SettingsMenu, MenuRadioGroup, MenuRadioItem), so the gate would have
-    // caught this violation with or without `'ChaptersMenu'` named here.
-    // This entry keeps the list's own stated convention -- every menu
-    // preset named explicitly -- rather than being load-bearing on its own.
-    'ChaptersMenu',
-    // Demonstrated red (docs/agents/demonstrated-red.md), recorded verbatim:
-    // temporarily importing `<Player.AudioTrackMenu />` into
-    // tests/compare/entries/playdeck-play-only.tsx and running
-    // `node scripts/compare-libraries.mjs --check` (after a fresh
-    // `@playdeck/react` build) produced:
-    //
-    //   Playdeck (play-only)'s reachable chunks reach SettingsMenu, which
-    //   this composition (core + primitives + native provider + one control
-    //   (PlayButton)) does not use.
-    //
-    // Reverting the import returned the check to
-    // "docs/comparison/results.md already matches a fresh run". Honest note,
-    // the same one QualityMenu's, PlaybackRateMenu's and ChaptersMenu's own
-    // entries above carry: the failure attributes to `SettingsMenu`, not to
-    // this entry -- AudioTrackMenu is composed entirely of already-forbidden
-    // modules (SettingsMenu, MenuRadioGroup, MenuRadioItem), so the gate
-    // would have caught this violation with or without `'AudioTrackMenu'`
-    // named here. This entry keeps the list's own stated convention -- every
-    // menu preset named explicitly -- rather than being load-bearing on its
-    // own.
-    'AudioTrackMenu'
-  ].map((name) => ({
-    name,
-    reachedBy: (/** @type {Chunk} */ chunk) => reachesExport(chunk, name)
-  })),
-  ...[
-    'provider-youtube',
-    'provider-wistia',
-    'provider-hls',
-    'provider-vimeo'
-  ].map((dir) => ({
-    name: `@playdeck/${dir}`,
-    reachedBy: (/** @type {Chunk} */ chunk) =>
-      chunk.moduleIds.some((id) => id.includes(`/${dir}/`))
-  }))
-];
+const NON_NATIVE_PROVIDER_FORBIDDEN_MODULES = [
+  'provider-youtube',
+  'provider-wistia',
+  'provider-hls',
+  'provider-vimeo'
+].map((dir) => ({
+  name: `@playdeck/${dir}`,
+  reachedBy: (/** @type {Chunk} */ chunk) =>
+    chunk.moduleIds.some((id) => id.includes(`/${dir}/`))
+}));
+
+/**
+ * One composition's forbidden-module list: every name in
+ * `GUARDABLE_PART_NAMES` the composition does not use, plus the four
+ * non-native providers unconditionally. This is the matrix's row-building
+ * function -- a row is "every guardable part minus what this fixture
+ * renders" rather than a hand-maintained list that can drift from the
+ * fixture it describes. `usedPartNames` is read off each fixture's own JSX
+ * by `compare-libraries.test.mjs`'s cross-check, the same way
+ * `controlBarParts` there already reads the control-bar fixture, so a row
+ * declared here and the fixture it is for cannot drift apart silently.
+ * @param {readonly string[]} usedPartNames
+ * @returns {readonly { name: string; reachedBy: (chunk: Chunk) => boolean }[]}
+ */
+export const forbiddenPartsExcept = (usedPartNames) => {
+  const used = new Set(usedPartNames);
+  return [
+    ...GUARDABLE_PART_NAMES.filter((name) => !used.has(name)).map((name) => ({
+      name,
+      reachedBy: (/** @type {Chunk} */ chunk) => reachesExport(chunk, name)
+    })),
+    ...NON_NATIVE_PROVIDER_FORBIDDEN_MODULES
+  ];
+};
+
+/**
+ * What the "Playdeck (play-only)" row's composition -- core, the native
+ * provider, and exactly `Player.Controls` wrapping one `Player.PlayButton`
+ * (`tests/compare/entries/playdeck-play-only.tsx`) -- must not reach: every
+ * guardable part except `PlayButton` and `Controls`, the two this fixture
+ * renders.
+ *
+ * Kept as its own named export, rather than inlined where it is used below,
+ * because #649 introduced it under this name before the other three rows
+ * carried a forbidden-module check of their own, and this file's own
+ * demonstrated-red history above still refers to it by name.
+ * @type {readonly { name: string; reachedBy: (chunk: Chunk) => boolean }[]}
+ */
+export const PLAY_ONLY_FORBIDDEN_MODULES = forbiddenPartsExcept([
+  'PlayButton',
+  'Controls'
+]);
 
 /**
  * One compared library. `composition` is prose, not a measurement, printed
@@ -331,13 +439,15 @@ export const PLAY_ONLY_FORBIDDEN_MODULES = [
  * in this file's header, made once here rather than re-argued at call sites.
  *
  * `ceilingKb` and `forbiddenModules` exist for the four Playdeck rows alone
- * (#649) -- no other library's row carries either, which is deliberate and
- * out of this issue's scope. `ceilingKb` is a committed upper bound on that
- * row's measured Vite gzip figure, checked by `checkCeiling` below and
- * raised only by editing the number here, with a reason, never by editing
- * `docs/comparison/method.md`'s prose (see that document's "Date and how to
- * re-run" section). `forbiddenModules`, present on the play-only row only,
- * is `reachedForbiddenModule`'s second argument.
+ * (#649, extended to all four rows by #875) -- no other library's row
+ * carries either, which is deliberate and out of this issue's scope.
+ * `ceilingKb` is a committed upper bound on that row's measured Vite gzip
+ * figure, checked by `checkCeiling` below and raised only by editing the
+ * number here, with a reason, never by editing `docs/comparison/method.md`'s
+ * prose (see that document's "Date and how to re-run" section).
+ * `forbiddenModules`, present on all four Playdeck rows and built by
+ * `forbiddenPartsExcept` beside each one, is `reachedForbiddenModule`'s
+ * second argument.
  * @type {readonly {
  *   name: string;
  *   package: string;
@@ -445,7 +555,11 @@ export const libraries = [
     // gave the main entry's inlined copy and the `./media-session` subpath's
     // own copy two different `WeakMap`s, so a page running both resolved two
     // coordinators over one `navigator.mediaSession`.
-    ceilingKb: 22.75
+    ceilingKb: 22.75,
+    // This fixture renders no control part at all (see
+    // tests/compare/entries/playdeck-no-parts.tsx's own header) -- every
+    // guardable part is forbidden.
+    forbiddenModules: forbiddenPartsExcept([])
   },
   {
     name: 'Playdeck',
@@ -556,7 +670,11 @@ export const libraries = [
     // composition here through `@playdeck/core`. The whole distance from
     // the last committed figure is this change's: that figure was 23.22 KB
     // (23780 bytes), measured per `results.md` on `main`.
-    ceilingKb: 23.5
+    ceilingKb: 23.5,
+    // This fixture renders one `Player.ActivationButton` and nothing else
+    // guardable (tests/compare/entries/playdeck.tsx) -- every guardable
+    // part except `ActivationButton` is forbidden.
+    forbiddenModules: forbiddenPartsExcept(['ActivationButton'])
   },
   {
     name: 'Playdeck (play-only)',
@@ -718,7 +836,23 @@ export const libraries = [
     // which this composition's control bar bundles directly. The whole
     // distance from the last committed figure is this change's: that figure
     // was 27.74 KB, measured per `results.md` on `main`.
-    ceilingKb: 28
+    ceilingKb: 28,
+    // This fixture's control bar renders `ActivationButton`, `Controls`,
+    // `PlayButton`, `MuteButton`, `VolumeSlider`, `SeekSlider`, `Time` and
+    // `FullscreenButton` (tests/compare/entries/playdeck-control-bar.tsx,
+    // also checked against the fixture directly by
+    // compare-libraries.test.mjs's own cross-check) -- every other
+    // guardable part is forbidden.
+    forbiddenModules: forbiddenPartsExcept([
+      'ActivationButton',
+      'Controls',
+      'PlayButton',
+      'MuteButton',
+      'VolumeSlider',
+      'SeekSlider',
+      'Time',
+      'FullscreenButton'
+    ])
   },
   {
     name: 'react-player',
@@ -1339,17 +1473,22 @@ const measure = async () => {
 
     // Checked against Vite's own reachable chunks and nowhere else -- see
     // the `Chunk` typedef above for why esbuild's metafile cannot answer
-    // this same question, which is why the play-only row is the only entry
-    // this ever runs for and why it runs before the esbuild build below
-    // rather than after it.
+    // this same question, which is why this runs only for the four
+    // Playdeck rows (the only ones carrying `forbiddenModules`) and before
+    // the esbuild build below rather than after it.
     if (library.forbiddenModules) {
       const offending = reachedForbiddenModule(
         reachable,
         library.forbiddenModules
       );
       if (offending !== undefined) {
+        const chain = staticImportChain(reachable, offending.chunk.fileName);
+        const chainNote =
+          chain && chain.length > 1
+            ? ` (reached via ${chain.join(' -> ')})`
+            : '';
         throw new Error(
-          `${library.name}'s reachable chunks reach ${offending}, which this composition (${library.composition}) does not use.`
+          `${library.name}'s reachable chunks reach ${offending.name}, which this composition (${library.composition}) does not use${chainNote}.`
         );
       }
     }

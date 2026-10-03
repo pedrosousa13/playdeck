@@ -10,6 +10,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
+import { gzipSync } from 'node:zlib';
 
 // Matches scripts/check-bundle-budgets.mjs's own convention: the lint config
 // gives this directory node globals, but `console` still has to be reached
@@ -231,7 +232,43 @@ try {
     );
   }
 
+  // A gzip byte ceiling on the sum above -- each of the five scripts gzipped
+  // on its own and added, the same "sum of separate gzips, not one gzip of
+  // the concatenation" rule `scripts/compare-libraries.mjs`'s own header
+  // documents, and the same measurement this fixture already serves these
+  // five scripts from, read straight off disk rather than re-fetched.
+  //
+  // 116818 bytes measured 2026-10-03 -- 114.080078125 KB, 114.08 KB to two
+  // places, rounded up to the next 0.25 KB -- the same "round up to the
+  // next 0.25 KB" rule `scripts/compare-libraries.mjs` already commits its
+  // own four Playdeck ceilings with, borrowed here rather than invented
+  // fresh: 114.25 KB.
+  // This is the entry's first committed ceiling -- 113.96 KB, named only in
+  // the comment two blocks above, was never a checked figure, and measuring
+  // fresh here (rather than trusting that comment) found 114.08 KB, not
+  // 113.96 KB -- the distance is #888 and #889's YouTube-poll and
+  // currentTime-state changes, both reached by every composition through
+  // `@playdeck/core` and `Root` regardless of provider.
+  const GZIP_EAGER_CEILING_KB = 114.25;
+  const gzipKb = (bytes) => (bytes / 1024).toFixed(2);
+  const scriptBytes = await Promise.all(
+    expectedScripts.map((pathname) => readFile(resolveRequest(pathname)))
+  );
+  const totalGzipBytes = scriptBytes.reduce(
+    (sum, bytes) => sum + gzipSync(bytes).length,
+    0
+  );
+  const ceilingBytes = GZIP_EAGER_CEILING_KB * 1024;
+  if (totalGzipBytes > ceilingBytes) {
+    throw new Error(
+      `The no-build entry's eager total measures ${gzipKb(totalGzipBytes)} KB, past its committed ceiling of ${gzipKb(ceilingBytes)} KB. Raise GZIP_EAGER_CEILING_KB in tests/bundle/no-build/test.mjs with a stated reason if this growth is deliberate, or shrink the entry back under it.`
+    );
+  }
+
   console.log('OK: the no-build entry played tracer.mp4 with no bundler.');
+  console.log(
+    `Eager gzip total: ${gzipKb(totalGzipBytes)} KB (ceiling ${gzipKb(ceilingBytes)} KB).`
+  );
   console.log(`Scripts requested: ${requestedScripts.join(', ')}`);
 } finally {
   try {

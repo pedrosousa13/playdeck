@@ -11,6 +11,8 @@ import {
   checkCeiling,
   delta,
   excludedChunks,
+  forbiddenPartsExcept,
+  GUARDABLE_PART_NAMES,
   gzipBytes,
   kb,
   libraries,
@@ -23,7 +25,8 @@ import {
   reachableChunks,
   reachedForbiddenModule,
   renderResultsDoc,
-  renderTable
+  renderTable,
+  staticImportChain
 } from './compare-libraries.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
@@ -1132,7 +1135,8 @@ test("each Playdeck row's committed ceiling is that row's own results.md figure,
   }
 });
 
-// ---- reachedForbiddenModule and the play-only row's module gate (#649) ------
+// ---- reachedForbiddenModule, staticImportChain and the per-row module
+// ---- gate (#649, extended to a matrix of all four rows by #875) ------------
 
 // `chunk` is the same hand-built-fixture helper the `reachableChunks` tests
 // above use -- no real `vite build` here either, for the same reason stated
@@ -1161,7 +1165,7 @@ test('reachedForbiddenModule returns undefined when nothing reachable carries a 
   );
 });
 
-test('reachedForbiddenModule names a reached menu primitive', () => {
+test('reachedForbiddenModule names a reached menu primitive and the chunk that carries it', () => {
   // Red: standing in for tests/compare/entries/playdeck-play-only.tsx being
   // edited to import `Player.SettingsMenu` -- a hand-built chunk carrying
   // that export, the way `reachableChunks` above already stands in for a
@@ -1171,19 +1175,16 @@ test('reachedForbiddenModule names a reached menu primitive', () => {
   // (play-only)'s reachable chunks reach SettingsMenu, which this
   // composition ... does not use.", and passed again once the edit was
   // reverted.
-  const chunks = [
-    chunk({
-      fileName: 'entry.js',
-      isEntry: true,
-      moduleRenderedExports: {
-        '/repo/packages/react/dist/index.js': ['PlayButton', 'SettingsMenu']
-      }
-    })
-  ];
-  assert.equal(
-    reachedForbiddenModule(chunks, PLAY_ONLY_FORBIDDEN_MODULES),
-    'SettingsMenu'
-  );
+  const entry = chunk({
+    fileName: 'entry.js',
+    isEntry: true,
+    moduleRenderedExports: {
+      '/repo/packages/react/dist/index.js': ['PlayButton', 'SettingsMenu']
+    }
+  });
+  const found = reachedForbiddenModule([entry], PLAY_ONLY_FORBIDDEN_MODULES);
+  assert.equal(found?.name, 'SettingsMenu');
+  assert.equal(found?.chunk, entry);
 });
 
 test('reachedForbiddenModule names a reached slider', () => {
@@ -1197,7 +1198,7 @@ test('reachedForbiddenModule names a reached slider', () => {
     })
   ];
   assert.equal(
-    reachedForbiddenModule(chunks, PLAY_ONLY_FORBIDDEN_MODULES),
+    reachedForbiddenModule(chunks, PLAY_ONLY_FORBIDDEN_MODULES)?.name,
     'VolumeSlider'
   );
 });
@@ -1213,7 +1214,7 @@ test('reachedForbiddenModule names reached captions rendering', () => {
     })
   ];
   assert.equal(
-    reachedForbiddenModule(chunks, PLAY_ONLY_FORBIDDEN_MODULES),
+    reachedForbiddenModule(chunks, PLAY_ONLY_FORBIDDEN_MODULES)?.name,
     'Captions'
   );
 });
@@ -1233,12 +1234,48 @@ test('reachedForbiddenModule names a reached non-native provider by its own pack
     })
   ];
   assert.equal(
-    reachedForbiddenModule(chunks, PLAY_ONLY_FORBIDDEN_MODULES),
+    reachedForbiddenModule(chunks, PLAY_ONLY_FORBIDDEN_MODULES)?.name,
     '@playdeck/provider-youtube'
   );
 });
 
-test("PLAY_ONLY_FORBIDDEN_MODULES' menu and captions names are exactly packages/react/src/index.tsx's own re-export lists for those two files, and its slider names are the right two of transport-controls.tsx's five", async () => {
+// ---- staticImportChain -------------------------------------------------
+
+test('staticImportChain returns just the entry when the target is the entry chunk itself', () => {
+  const graph = [chunk({ fileName: 'entry.js', isEntry: true })];
+  assert.deepEqual(staticImportChain(graph, 'entry.js'), ['entry.js']);
+});
+
+test('staticImportChain returns the shortest path of static imports from entry to target', () => {
+  const graph = [
+    chunk({ fileName: 'entry.js', isEntry: true, imports: ['mid.js'] }),
+    chunk({ fileName: 'mid.js', imports: ['target.js'] }),
+    chunk({ fileName: 'target.js' })
+  ];
+  assert.deepEqual(staticImportChain(graph, 'target.js'), [
+    'entry.js',
+    'mid.js',
+    'target.js'
+  ]);
+});
+
+test('staticImportChain returns undefined when the target is not reached by any static import', () => {
+  const graph = [
+    chunk({ fileName: 'entry.js', isEntry: true, dynamicImports: ['lazy.js'] }),
+    chunk({ fileName: 'lazy.js' })
+  ];
+  assert.equal(staticImportChain(graph, 'lazy.js'), undefined);
+});
+
+test('staticImportChain returns undefined when the graph has no entry chunk', () => {
+  const graph = [chunk({ fileName: 'orphan.js' })];
+  assert.equal(staticImportChain(graph, 'orphan.js'), undefined);
+});
+
+// ---- GUARDABLE_PART_NAMES against packages/react/src/index.tsx's own
+// ---- runtime re-export lists, module by module -----------------------------
+
+test("GUARDABLE_PART_NAMES carries exactly packages/react/src/index.tsx's own runtime re-export lists for every module it names, and names neither Root, Media nor Viewport", async () => {
   const repoRoot = join(scriptsDir, '..');
   const indexSource = await readFile(
     join(repoRoot, 'packages/react/src/index.tsx'),
@@ -1267,54 +1304,149 @@ test("PLAY_ONLY_FORBIDDEN_MODULES' menu and captions names are exactly packages/
       .filter(Boolean);
   };
 
-  const forbiddenNames = new Set(
-    PLAY_ONLY_FORBIDDEN_MODULES.map((entry) => entry.name)
+  const guardable = new Set(GUARDABLE_PART_NAMES);
+  assert.equal(
+    guardable.size,
+    GUARDABLE_PART_NAMES.length,
+    'GUARDABLE_PART_NAMES should name no duplicate'
   );
 
-  const menuExports = runtimeExportsFrom('./settings-menu.js');
-  assert.deepEqual(
-    [...menuExports].sort(),
-    [
+  /** @type {Record<string, string[]>} */
+  const expectedByModule = {
+    './settings-menu.js': [
       'MenuItem',
       'MenuRadioGroup',
       'MenuRadioItem',
       'SettingsMenu',
       'SettingsMenuContent',
       'SettingsMenuTrigger'
-    ].sort()
-  );
-  for (const name of menuExports) assert.ok(forbiddenNames.has(name), name);
+    ],
+    './captions.js': ['Captions', 'CaptionsButton', 'CaptionsMenu'],
+    './quality.js': ['QualityMenu'],
+    './playback-rate.js': ['PlaybackRateMenu'],
+    './chapters.js': ['ChaptersMenu'],
+    './audio-tracks.js': ['AudioTrackMenu'],
+    './transport-controls.js': [
+      'MuteButton',
+      'PlayButton',
+      'SeekSlider',
+      'Time',
+      'VolumeSlider'
+    ],
+    './display-controls.js': [
+      'AirPlayButton',
+      'FullscreenButton',
+      'PipButton',
+      'RemotePlaybackButton'
+    ],
+    './controls.js': ['Controls'],
+    './loading-error.js': [
+      'ActivationButton',
+      'ErrorDisplay',
+      'LoadingIndicator'
+    ]
+  };
 
-  const captionsExports = runtimeExportsFrom('./captions.js');
+  const everyExpectedName = new Set();
+  for (const [modulePath, expectedNames] of Object.entries(expectedByModule)) {
+    const actualNames = runtimeExportsFrom(modulePath);
+    assert.deepEqual(
+      [...actualNames].sort(),
+      [...expectedNames].sort(),
+      modulePath
+    );
+    for (const name of expectedNames) {
+      everyExpectedName.add(name);
+      assert.ok(guardable.has(name), `${name} (from ${modulePath})`);
+    }
+  }
   assert.deepEqual(
-    [...captionsExports].sort(),
-    ['Captions', 'CaptionsButton', 'CaptionsMenu'].sort()
+    [...guardable].sort(),
+    [...everyExpectedName].sort(),
+    'GUARDABLE_PART_NAMES should name exactly the modules this test expects, no more and no less'
   );
-  for (const name of captionsExports) assert.ok(forbiddenNames.has(name), name);
 
-  const transportControlsExports = runtimeExportsFrom(
-    './transport-controls.js'
-  );
-  assert.deepEqual(
-    [...transportControlsExports].sort(),
-    ['MuteButton', 'PlayButton', 'SeekSlider', 'Time', 'VolumeSlider'].sort()
-  );
-  assert.ok(forbiddenNames.has('VolumeSlider'));
-  assert.ok(forbiddenNames.has('SeekSlider'));
-  // The other three -- PlayButton, MuteButton, Time -- are ordinary
-  // controls this row (or the control-bar row) legitimately reaches, and
-  // must stay out of the forbidden list.
-  assert.ok(!forbiddenNames.has('PlayButton'));
-  assert.ok(!forbiddenNames.has('MuteButton'));
-  assert.ok(!forbiddenNames.has('Time'));
+  // Root, Media and Viewport are universal -- every composition needs them,
+  // so forbidding either for any row would be vacuous.
+  assert.ok(!guardable.has('Root'));
+  assert.ok(!guardable.has('Media'));
+  assert.ok(!guardable.has('Viewport'));
 });
 
-test('the play-only row is the only library entry carrying forbiddenModules', () => {
+// ---- the four rows' own forbidden sets against what each fixture renders ---
+
+/**
+ * The `Player.<Part>` names a fixture's whole source renders, minus the icon
+ * components it swaps between (`*Icon`) and the three structural primitives
+ * every row needs (`Root`, `Media`, `Viewport`) -- the part of a fixture's
+ * own JSX this matrix's row-building cares about. Generalizes the
+ * control-bar-only `controlBarParts` helper above to a whole fixture file,
+ * rather than one `<Player.Controls>` block, since three of the four rows
+ * render control parts outside any `Controls` wrapper (or none at all).
+ * @param {string} source
+ * @returns {string[]}
+ */
+const renderedGuardableParts = (source) => {
+  const names = new Set(
+    [...source.matchAll(/<Player\.([A-Za-z]+)/g)].map((match) => match[1])
+  );
+  names.delete('Root');
+  names.delete('Media');
+  names.delete('Viewport');
+  return [...names].filter((name) => !name.endsWith('Icon')).sort();
+};
+
+test("each of the four Playdeck rows' forbiddenModules is forbiddenPartsExcept the parts its own fixture renders", async () => {
+  const repoRoot = join(scriptsDir, '..');
+  /** @type {Record<string, string>} */
+  const entryByRow = {
+    'Playdeck (no parts)': 'tests/compare/entries/playdeck-no-parts.tsx',
+    Playdeck: 'tests/compare/entries/playdeck.tsx',
+    'Playdeck (play-only)': 'tests/compare/entries/playdeck-play-only.tsx',
+    'Playdeck (control bar)': 'tests/compare/entries/playdeck-control-bar.tsx'
+  };
+
+  for (const [rowName, entryPath] of Object.entries(entryByRow)) {
+    const library = libraries.find((candidate) => candidate.name === rowName);
+    assert.ok(
+      library?.forbiddenModules,
+      `${rowName} should carry forbiddenModules`
+    );
+    const source = await readFile(join(repoRoot, entryPath), 'utf8');
+    const usedParts = renderedGuardableParts(source);
+    const expected = forbiddenPartsExcept(usedParts).map((entry) => entry.name);
+    const actual = /** @type {readonly { name: string }[]} */ (
+      library.forbiddenModules
+    ).map((entry) => entry.name);
+    assert.deepEqual([...actual].sort(), [...expected].sort(), rowName);
+  }
+});
+
+test('exactly the four Playdeck rows carry forbiddenModules; no other library row does', () => {
+  const playdeckRowNames = new Set([
+    'Playdeck (no parts)',
+    'Playdeck',
+    'Playdeck (play-only)',
+    'Playdeck (control bar)'
+  ]);
   for (const library of libraries) {
-    if (library.name === 'Playdeck (play-only)') {
-      assert.equal(library.forbiddenModules, PLAY_ONLY_FORBIDDEN_MODULES);
+    if (playdeckRowNames.has(library.name)) {
+      assert.ok(library.forbiddenModules, library.name);
     } else {
       assert.equal(library.forbiddenModules, undefined, library.name);
     }
   }
+});
+
+test('the play-only row keeps its own named export, equal to forbiddenPartsExcept the parts it renders', () => {
+  const library = libraries.find(
+    (candidate) => candidate.name === 'Playdeck (play-only)'
+  );
+  assert.equal(library?.forbiddenModules, PLAY_ONLY_FORBIDDEN_MODULES);
+  assert.deepEqual(
+    PLAY_ONLY_FORBIDDEN_MODULES.map((entry) => entry.name).sort(),
+    forbiddenPartsExcept(['PlayButton', 'Controls'])
+      .map((entry) => entry.name)
+      .sort()
+  );
 });
