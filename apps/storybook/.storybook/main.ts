@@ -88,6 +88,12 @@ const config: StorybookConfig = {
             import.meta.url
           )
         ),
+        '@playdeck/core/time-boundary': fileURLToPath(
+          new URL(
+            '../../../packages/core/src/time-boundary.ts',
+            import.meta.url
+          )
+        ),
         '@playdeck/core': fileURLToPath(
           new URL('../../../packages/core/src/index.ts', import.meta.url)
         ),

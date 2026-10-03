@@ -1,5 +1,4 @@
 import {
-  createTimeBoundary,
   notifySafely,
   type CommandResult,
   type MediaDimensions,
@@ -7,6 +6,7 @@ import {
   type PlayerError,
   type VimeoSource
 } from '@playdeck/core';
+import { createTimeBoundary } from '@playdeck/core/time-boundary';
 import {
   asRecord,
   errorString,

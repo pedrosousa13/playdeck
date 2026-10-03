@@ -1,4 +1,4 @@
-import { createTimeBoundary } from '@playdeck/core';
+import { createTimeBoundary } from '@playdeck/core/time-boundary';
 
 // The fields of the host's options the boundary is resolved from. `loop` is
 // here because the two settings only mean something together: the same end

@@ -1,4 +1,7 @@
-import { createTimeBoundary, type TimeBoundary } from '@playdeck/core';
+import {
+  createTimeBoundary,
+  type TimeBoundary
+} from '@playdeck/core/time-boundary';
 
 // The `[startTime, endTime]` window seam. Aurora expresses a start as the
 // `current-time` attribute and nothing at all as an end, so the end boundary is
