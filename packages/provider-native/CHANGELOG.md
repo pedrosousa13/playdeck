@@ -1,5 +1,41 @@
 # @playdeck/provider-native
 
+## 1.3.0
+
+### Patch Changes
+
+- 3c5e3fb: Follow a native caption track's `load`/`error` lifecycle for its `readiness`
+
+  A native caption/subtitle track's `readiness` follows its `<track>`
+  element's `load`/`error` events: `'loaded'` on `load`, `'error'` on a failed
+  fetch (a 404 or a CORS block), republished only when the value changes. A
+  `src` change on the element drops the track back to the cue-count reading
+  until the new resource's own `load`/`error` arrives. A track whose element
+  has not been discovered keeps the cue-count reading throughout.
+
+- 771c1a9: Publish a `PlayerError` when every native `<source>` candidate fails to load
+
+  A `<source>` child fires `error` on itself, not on the media element, when
+  its candidate fails to load -- a CORS block and a 404 both produce this
+  shape -- so the media element's own `error` listener never runs and
+  `PlayerState.error` stays null while the player sits paused with no loadable
+  source.
+
+  The native provider's attachment listens for `error` on every `<source>`
+  child alongside the media element's own, and publishes a fatal `source`
+  `PlayerError` once `networkState` reaches `NETWORK_NO_SOURCE` -- the
+  browser's own signal that no further candidate remains. The message names
+  `crossOrigin` when it is set, since a host missing CORS headers is the
+  likeliest cause. A candidate that fails while a later one still succeeds
+  publishes nothing, and a `src`-attribute media element with no `<source>`
+  children is unaffected: it already errors on itself.
+
+- Updated dependencies [c63c0d8]
+- Updated dependencies [76a79b6]
+- Updated dependencies [31bae4b]
+- Updated dependencies [0d65932]
+  - @playdeck/core@1.3.0
+
 ## 1.2.0
 
 ### Minor Changes

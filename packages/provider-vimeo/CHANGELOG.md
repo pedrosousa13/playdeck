@@ -1,5 +1,49 @@
 # @playdeck/provider-vimeo
 
+## 1.3.0
+
+### Patch Changes
+
+- 0d65932: Reach the clip-window boundary through a subpath the embed providers import
+
+  `@playdeck/core` gains a third export subpath, `@playdeck/core/time-boundary`,
+  exposing `createTimeBoundary` and its `TimeBoundary` type -- built as its own
+  bundle, the same way `@playdeck/core/thumbnails` and
+  `@playdeck/core/media-session` already are. `createTimeBoundary` and
+  `TimeBoundary` stay exported from `@playdeck/core` itself too, so a direct
+  import needs no rework.
+
+  `@playdeck/provider-vimeo`, `@playdeck/provider-wistia` and
+  `@playdeck/provider-youtube` import `createTimeBoundary` from that subpath
+  rather than from `@playdeck/core`'s main entry. Each provider's own module is
+  reached only through a dynamic `import()` an app's build graph carries for
+  every provider kind at once, regardless of which one a given page's source
+  resolves to, so a bundler that places `@playdeck/core`'s main entry inside
+  that page's eager chunk has to export whatever any sibling provider imports
+  from it -- `createTimeBoundary` included, even for a page composed with no
+  embed provider at all. Importing it through its own subpath instead keeps it
+  out of that eager chunk: a page with no embed provider does not ship it.
+
+- a2f95c7: Report playback progress when the Vimeo SDK sends no playback events
+
+  Some Vimeo videos play in the embed while the SDK reports none of `play`,
+  `playing` or `timeupdate` at all, so `currentTime` reads 0s forever and
+  `play()` never settles even though the embed is visibly advancing.
+
+  After a play request, the adapter waits up to two seconds for a real
+  `timeupdate` before concluding this embed will not fire playback events, then
+  polls `getCurrentTime()` and `getPaused()` every 250ms and publishes the
+  results through the same state the real event would have. The poll stops the
+  moment a real `timeupdate`, `pause` or `ended` event arrives, when it finds
+  the embed paused itself, and on destroy, so a video whose events work as
+  normal is never polled at all.
+
+- Updated dependencies [c63c0d8]
+- Updated dependencies [76a79b6]
+- Updated dependencies [31bae4b]
+- Updated dependencies [0d65932]
+  - @playdeck/core@1.3.0
+
 ## 1.2.0
 
 ### Minor Changes

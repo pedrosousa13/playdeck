@@ -1,5 +1,118 @@
 # @playdeck/provider-youtube
 
+## 1.3.0
+
+### Minor Changes
+
+- 76a79b6: Add `Player.Root`'s `preferredTextTrackLanguage` and `defaultTextTrack` props
+
+  `Player.Root` gains two optional caption props. `preferredTextTrackLanguage`
+  is a BCP 47 language tag: once a source's tracks publish, and again whenever
+  captions turn on without the viewer having picked a track of their own,
+  selection resolves to an exact `TextTrack.language` match, then the same
+  base language (`en` matches `en-GB`), then the provider's own default track,
+  and otherwise the first `captions`/`subtitles` track. `defaultTextTrack`
+  (`'auto'` default, or `'off'`) starts every source, including YouTube, with
+  no track selected. Either prop stops acting the moment the viewer makes
+  their own choice for a source, through a control or `selectTextTrack`, and a
+  new source applies both again.
+
+  `preferredTextTrackLanguage` is checked against a BCP 47 tag's shape
+  (letters, digits and hyphens, up to 35 characters —
+  `isValidTextTrackLanguage`, newly exported from `@playdeck/core`) before it
+  is used for matching or folded into the YouTube embed's `cc_lang_pref` var.
+  A value that fails is ignored outright, exactly as an absent prop is, and a
+  `configuration`-category notice naming the rejected value is published on
+  `PlayerState.error` (`PlayerController.reportRejectedTextTrackLanguage`)
+  instead of being thrown.
+
+  On YouTube, `defaultTextTrack="off"` also writes the embed's own
+  `cc_load_policy=0` player var. This is unverified against a real YouTube
+  player: the platform's docs document `cc_load_policy=1` as forcing captions
+  on, but give `0` no documented meaning beyond matching the var's own
+  absence, so this repo's own coverage of it is a fake iframe API honouring
+  the var by construction, not a measurement of a real embed's response to it.
+
+- be936b4: Add `resolveYouTubePosterUrl`, a pure poster helper for a dormant player
+
+  `@playdeck/provider-youtube` exports `resolveYouTubePosterUrl(source)`. It
+  parses with the same parser `Player.Root`'s `source` prop resolves with,
+  accepts a URL in any form `docs/provider-setup.md`'s YouTube section lists
+  or an explicit `{ type: 'youtube', videoId }` object, and returns the
+  `i.ytimg.com` poster still for it, or `null` for anything else.
+
+  It is synchronous, makes no request and reads no browser global, which is
+  what makes it safe to call before a provider has attached -- including on
+  the server, and including for a `Player.Root` with `loading="interaction"`,
+  where `poster="provider"` cannot resolve because no provider attaches until
+  the viewer's first click.
+
+  The extracted video id is held to YouTube's own 11-character shape, tighter
+  than the detector's own id pattern, so a look-alike host, a `javascript:` or
+  `data:` URL, an id carrying a path or query fragment, and an id of the wrong
+  length all resolve to `null` rather than a URL built from unvalidated input.
+
+### Patch Changes
+
+- 3af7069: Fix a looping viewport-autoplayed YouTube player auto-pausing only on its first exit
+
+  A YouTube loop restart's `PLAYING` state change goes through the same path
+  as a viewer resuming from the platform's own chrome, carrying the
+  `'provider'` origin, and a loop with no start boundary also fires a real
+  `ended` on every iteration of YouTube's own playlist loop. `@playdeck/react`'s
+  ownership rules read any non-`'autoplay'` play as the viewer taking over and
+  drop ownership unconditionally on every `ended`, so a looping YouTube player
+  started by viewport autoplay auto-pauses correctly on its first exit and
+  then never again — it plays on indefinitely once scrolled offscreen, the
+  same shape `@playdeck/provider-native` fixed for its own loop restart.
+
+  A loop restart is the library continuing playback it started, not the
+  viewer's, and neither is the `ended` a platform-driven wrap fires along the
+  way. `boundary.ts`'s `restartFromBoundary` labels the `PLAYING` state change
+  its own deferred `playVideo()` call produces `'system'` — the
+  `PlayerEventOrigin` member `@playdeck/provider-native` already uses for the
+  same shape — and a `PLAYING` or `ended` change YouTube's own platform loop
+  triggers carries the same label, since nothing but that loop can produce
+  either. `@playdeck/react`'s ownership tracker treats both a `'system'` play
+  and a `'system'` ended as no takeover, so a viewport session's ownership
+  survives as many wraps as it crosses however they reach it — a configured
+  `startTime`, an `endTime` boundary, or a plain loop with neither.
+
+- 2bbff3f: Pause the YouTube time poll while the document is hidden
+
+  The 250ms position poll stops outright while the document is hidden, rather
+  than keep running at the browser's throttled rate, and polls once
+  immediately on show, restarting the interval only if playback is still
+  wanted. Playback itself is never paused, and the visibility listener is
+  removed whenever the poll stops wanting to run, including on destroy and on
+  retry.
+
+- 0d65932: Reach the clip-window boundary through a subpath the embed providers import
+
+  `@playdeck/core` gains a third export subpath, `@playdeck/core/time-boundary`,
+  exposing `createTimeBoundary` and its `TimeBoundary` type -- built as its own
+  bundle, the same way `@playdeck/core/thumbnails` and
+  `@playdeck/core/media-session` already are. `createTimeBoundary` and
+  `TimeBoundary` stay exported from `@playdeck/core` itself too, so a direct
+  import needs no rework.
+
+  `@playdeck/provider-vimeo`, `@playdeck/provider-wistia` and
+  `@playdeck/provider-youtube` import `createTimeBoundary` from that subpath
+  rather than from `@playdeck/core`'s main entry. Each provider's own module is
+  reached only through a dynamic `import()` an app's build graph carries for
+  every provider kind at once, regardless of which one a given page's source
+  resolves to, so a bundler that places `@playdeck/core`'s main entry inside
+  that page's eager chunk has to export whatever any sibling provider imports
+  from it -- `createTimeBoundary` included, even for a page composed with no
+  embed provider at all. Importing it through its own subpath instead keeps it
+  out of that eager chunk: a page with no embed provider does not ship it.
+
+- Updated dependencies [c63c0d8]
+- Updated dependencies [76a79b6]
+- Updated dependencies [31bae4b]
+- Updated dependencies [0d65932]
+  - @playdeck/core@1.3.0
+
 ## 1.2.0
 
 ### Minor Changes
