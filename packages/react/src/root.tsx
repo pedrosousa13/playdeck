@@ -9,6 +9,7 @@ import {
   type PlayerSource
 } from '@playdeck/core';
 import { resolvePreferredTextTrack } from './captions.js';
+import { preconnectOriginsFor } from './connection-warm-up.js';
 import { INTERNAL_CONTROLLER } from './internal-controller.js';
 import {
   collectPlayerActions,
@@ -296,6 +297,30 @@ export type RootProps<P extends ConsumerProviders = Record<string, never>> = {
    */
   readonly startTime?: number;
   readonly volume?: number;
+  /**
+   * Opt in to warming the connection to the detected source's provider ahead
+   * of activation. Two things change, both off by default and neither
+   * changing what a `loading: 'eager'` root already does at mount:
+   *
+   * `Player.Root` renders a `preconnect` hint for each of the detected
+   * provider's own third-party origins -- YouTube, Vimeo or Wistia, taken
+   * from the fixed allowlist `docs/third-party-requests.md` documents, never
+   * from a value this prop or `source` supplies. Native and HLS sources carry
+   * no fixed third-party origin, so neither gets a hint. YouTube's and
+   * Vimeo's poster-still CDN hosts (`i.ytimg.com`, `i.vimeocdn.com`) are a
+   * further opt-in on top of this one: they are hinted only when `poster`
+   * is also `'provider'`, never merely because `warmUp` is set, since
+   * resolving that still is itself opt-in.
+   *
+   * Under `loading: 'interaction'`, `Player.ActivationButton` also starts the
+   * provider's own chunk importing on the first pointer-enter or focus it
+   * receives -- never on a touch tap alone, which carries no hover and whose
+   * own focus arrives together with the activating tap -- so the chunk is
+   * already resolving by the time a viewer's click asks for it. Under
+   * `loading: 'viewport'`, where no activation surface exists to hover or
+   * focus, this prop adds only the hints above.
+   */
+  readonly warmUp?: boolean;
 };
 
 // The activation props on their own, for a wrapper that forwards them without
@@ -354,7 +379,8 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
   source,
   startTime,
   preload = 'metadata',
-  volume
+  volume,
+  warmUp = false
 }: RootProps<P>) => {
   const [controller] = useState(() => new PlayerController());
   const [hiddenTransition, setHiddenTransition] = useState<SourceTransition>();
@@ -441,6 +467,16 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
     [source, providers]
   );
   const sourceKeyForRender = sourceKey(detectedSource);
+  // Never read for anything but the hints below -- warming the chunk itself
+  // is `ActivationButton`'s own concern (`loading-error.tsx`), reached
+  // through `warmUp` and `source` on the context value, not through this.
+  // `poster === 'provider'` is passed through as its own opt-in: the poster
+  // CDN hosts `preconnectOriginsFor` can add are reached only when a still is
+  // actually being resolved, never merely because `warmUp` is set.
+  const warmUpOrigins =
+    warmUp && detectedSource.status === 'success'
+      ? preconnectOriginsFor(detectedSource.source.type, poster === 'provider')
+      : [];
   const [sourceTransition, setSourceTransition] = useState<SourceTransition>(
     () => ({ key: sourceKeyForRender })
   );
@@ -1259,7 +1295,8 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
       lastSelectedTextTrackId,
       preferredTextTrackLanguage: validatedPreferredTextTrackLanguage,
       registerMedia,
-      volumeRequest
+      volumeRequest,
+      warmUp
     }),
     [
       activation,
@@ -1268,7 +1305,8 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
       detectedSource,
       registerMedia,
       validatedPreferredTextTrackLanguage,
-      volumeRequest
+      volumeRequest,
+      warmUp
     ]
   );
   // `hiddenTransition === sourceTransition` is unchanged from before this
@@ -1310,6 +1348,9 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
     <PlayerContext.Provider value={value}>
       <PosterContext.Provider value={posterState}>
         <DefaultPosterContext.Provider value={defaultPoster}>
+          {warmUpOrigins.map((origin) => (
+            <link href={origin} key={origin} rel="preconnect" />
+          ))}
           {children}
         </DefaultPosterContext.Provider>
       </PosterContext.Provider>

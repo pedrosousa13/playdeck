@@ -805,6 +805,81 @@ undefined`), and `light` defaults to `false` — so by default this wrapper
   makes no oEmbed request at all, and the request only exists for a caller who
   opts into `light`.
 
+## Connection warm-up
+
+`Player.Root`'s `warmUp` prop is off by default. Off, it adds no request, no
+hint and no change to this document's server-render claims; on, the two
+things below change, both ahead of the attach-time requests the table above
+already describes rather than instead of them -- and the server-render output
+itself changes too, gaining the hint `<link>` elements the first point names.
+
+1. `Player.Root` renders a `preconnect` hint
+   (`<link rel="preconnect" href="…">`) for each of the detected provider's own
+   script and embed origins -- read off a fixed allowlist
+   (`packages/react/src/connection-warm-up.ts`), never derived from `source`.
+   YouTube gets `www.youtube.com` and `www.youtube-nocookie.com`; Vimeo gets
+   `player.vimeo.com`; Wistia gets `fast.wistia.net`, `fast.wistia.com`,
+   `embed.wistia.com`, `embed-ssl.wistia.com` and `embed-fastly.wistia.com` --
+   the same hosts this document's own per-provider table and notes already
+   name for that provider's script and embed requests. Native and HLS sources
+   carry no fixed third-party origin at all, so neither gets a hint. A source
+   on a host that merely resembles one of these (`youtube.com.evil.example`,
+   `notyoutube.com`) gets no hint either: that host fails detection outright,
+   the same way it always has, and never reaches this allowlist with a
+   provider `type` to look up.
+
+   YouTube's and Vimeo's own poster-still CDN hosts -- `i.ytimg.com` and
+   `i.vimeocdn.com` -- are a further opt-in on top of `warmUp` itself: they
+   join the hint list only when `Root`'s own `poster` prop is also
+   `'provider'`, never merely because `warmUp` is set, since resolving that
+   still is itself opt-in. Wistia's poster still shares a host already in its
+   base list above (the same host `player.js` is fetched from), so it carries
+   no separate entry.
+
+2. Under `loading="interaction"`, `Player.ActivationButton` starts the
+   detected provider's own chunk importing -- the same dynamic import
+   `provider-loaders.ts`'s `loadProvider` would make once a click actually
+   attaches -- on the first pointer-enter or focus it receives, never on a
+   touch tap alone and never more than once per instance. Under
+   `loading="viewport"`, where no activation surface exists to hover or focus,
+   this prop adds only the hints above; under `loading="eager"`, the chunk is
+   already importing at mount with or without this prop, so there is nothing
+   left for it to start early.
+
+Neither half makes a request itself: a `preconnect` hint only asks the browser
+to open the connection ahead of time, and warming a chunk only starts the
+module resolving, never the provider's own attach-time request this document
+tracks everywhere else -- the same `activation` transition still gates `when
+each request happens` above, on precisely the same terms.
+
+<!-- example:connection-warm-up -->
+
+```tsx
+import * as Player from '@playdeck/react';
+
+// `warmUp` is off by default, which changes nothing about this player's
+// server-render output. On, as here, it opens a connection to the detected
+// provider's own origins ahead of activation: a `preconnect` hint for
+// YouTube's script and embed hosts in the server-rendered output (the poster
+// CDN host joins only with `poster="provider"`, not set here), and --
+// because this player loads `interaction`ally -- the YouTube chunk's own
+// dynamic import starting on the first hover or keyboard focus
+// `Player.ActivationButton` receives, well before the click that actually
+// activates it.
+const source = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+
+export const WarmedYouTubeClip = () => (
+  <Player.Root loading="interaction" source={source} warmUp>
+    <Player.Viewport>
+      <Player.Media />
+      <Player.ActivationButton aria-label="Play" />
+    </Player.Viewport>
+  </Player.Root>
+);
+```
+
+<!-- /example -->
+
 ## The SRI bargain
 
 Two vendor scripts are injected into the page by Playdeck, and neither carries an
