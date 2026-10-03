@@ -1,7 +1,9 @@
 import { isNotice, type PlayerError } from '@playdeck/core';
+import { warmProviderChunk } from './connection-warm-up.js';
 import { usePlayer, usePlayerState } from './player-context.js';
 import {
   useEffect,
+  useRef,
   useState,
   type ComponentPropsWithRef,
   type CSSProperties,
@@ -40,14 +42,21 @@ export const ActivationButton = ({
   'aria-label': ariaLabel,
   children,
   onClick,
+  onFocus,
+  onPointerEnter,
   style,
   ...props
 }: ActivationButtonProps) => {
-  const { activateFromInteraction, loading } = usePlayer();
+  const { activateFromInteraction, loading, source, warmUp } = usePlayer();
   const { activation, error } = usePlayerState((state) => ({
     activation: state.activation,
     error: state.error
   }));
+  // Guards the dynamic import below to the first hover or focus this
+  // instance ever receives: a module `import()` is itself cached by the
+  // module system, so this is not what stops a second network fetch, it is
+  // what stops a second call into `warmProviderChunk` at all.
+  const warmed = useRef(false);
   if (loading !== 'interaction' || activation === 'ready') return null;
   const isError = activation === 'error';
   const isLoading = activation === 'loading-provider';
@@ -59,6 +68,13 @@ export const ActivationButton = ({
   const canRetry = isError && error?.recoverable !== false;
   const isDisabled = isLoading || (isError && !canRetry);
   const label = ariaLabel ?? (canRetry ? 'Retry loading video' : 'Play video');
+  const warmChunk = () => {
+    if (!warmUp || warmed.current) return;
+    warmed.current = true;
+    warmProviderChunk(
+      source.status === 'success' ? source.source.type : undefined
+    );
+  };
   return (
     <button
       {...props}
@@ -71,6 +87,18 @@ export const ActivationButton = ({
         if (!event.defaultPrevented && !isDisabled) {
           activateFromInteraction();
         }
+      }}
+      onFocus={(event) => {
+        onFocus?.(event);
+        warmChunk();
+      }}
+      onPointerEnter={(event) => {
+        onPointerEnter?.(event);
+        // Never on touch alone: a touch tap carries no hover, and the
+        // Pointer Events spec still fires `pointerenter` with
+        // `pointerType: 'touch'` for the tap itself, right before the click
+        // that would activate anyway -- warming ahead of it buys nothing.
+        if (event.pointerType !== 'touch') warmChunk();
       }}
       style={{ ...activationOverlayStyle, ...style }}
       type="button"

@@ -555,7 +555,27 @@ export const libraries = [
     // gave the main entry's inlined copy and the `./media-session` subpath's
     // own copy two different `WeakMap`s, so a page running both resolved two
     // coordinators over one `navigator.mediaSession`.
-    ceilingKb: 22.75,
+    //
+    // 23350 bytes measured 2026-10-03 -- 22.802734375 KB, 22.80 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 22.75 KB is the opt-in connection warm-up: `Root` now imports
+    // `connection-warm-up.ts` unconditionally (for the `preconnect` hints its
+    // render adds only when a consumer sets `warmUp`), and that module's two
+    // small functions and its three providers' fixed origin lists sit in
+    // every composition's eager graph regardless of whether `warmUp` is
+    // ever set. The whole distance from the last committed figure is this
+    // change's: that figure was 22.56 KB (23105 bytes), measured 2026-10-02
+    // per `results.md` on `main`.
+    //
+    // Measures 22.82 KB (23371 bytes) after gating YouTube's and Vimeo's
+    // poster-still CDN hosts behind `poster === 'provider'` rather than
+    // hinting them unconditionally -- up from 22.80 KB (23350 bytes) the
+    // same day (2026-10-03), per `results.md` on `main` -- which stays
+    // under this ceiling with no raise needed. The growth is the gating
+    // logic itself: a second, smaller origin map and the boolean branch
+    // reading it outweigh the two origins removed from the unconditional
+    // list.
+    ceilingKb: 23,
     // This fixture renders no control part at all (see
     // tests/compare/entries/playdeck-no-parts.tsx's own header) -- every
     // guardable part is forbidden.
@@ -670,7 +690,25 @@ export const libraries = [
     // composition here through `@playdeck/core`. The whole distance from
     // the last committed figure is this change's: that figure was 23.22 KB
     // (23780 bytes), measured per `results.md` on `main`.
-    ceilingKb: 23.5,
+    //
+    // 24162 bytes measured 2026-10-03 -- 23.595703125 KB, 23.60 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 23.5 KB is the opt-in connection warm-up, doubly here: `Root`'s own
+    // unconditional import of `connection-warm-up.ts`, the same change
+    // described on the "no parts" row above, plus this row's own
+    // `ActivationButton` (`loading-error.tsx`) gaining its `onFocus` and
+    // `onPointerEnter` handlers and the `warmed` ref guarding them -- the
+    // one part this fixture renders. Both sit in the eager graph regardless
+    // of whether a consumer ever sets `warmUp`. The whole distance from the
+    // last committed figure is this change's: that figure was 23.26 KB
+    // (23816 bytes), measured 2026-10-02 per `results.md` on `main`.
+    //
+    // Measures 23.62 KB (24191 bytes) after gating YouTube's and Vimeo's
+    // poster-still CDN hosts, the same change described on the "no parts"
+    // row above -- up from 23.60 KB (24162 bytes) the same day
+    // (2026-10-03), per `results.md` on `main` -- which stays under this
+    // ceiling with no raise needed.
+    ceilingKb: 23.75,
     // This fixture renders one `Player.ActivationButton` and nothing else
     // guardable (tests/compare/entries/playdeck.tsx) -- every guardable
     // part except `ActivationButton` is forbidden.
@@ -756,7 +794,23 @@ export const libraries = [
     // comes down with it, to hold the saving. The whole distance from the
     // last committed figure is this change's: that figure was 25.13 KB
     // (25734 bytes), measured per `results.md` on `main`.
-    ceilingKb: 24.75,
+    //
+    // 25364 bytes measured 2026-10-03 -- 24.76953125 KB, 24.77 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 24.75 KB is `Root`'s own unconditional import of
+    // `connection-warm-up.ts`, the same change described on the "no parts"
+    // row above -- this row renders `PlayButton`, not `ActivationButton`, so
+    // only `Root`'s own half of the change reaches it. The whole distance
+    // from the last committed figure is this change's: that figure was
+    // 24.55 KB (25143 bytes), measured 2026-10-02 per `results.md` on
+    // `main`.
+    //
+    // Measures 24.79 KB (25386 bytes) after gating YouTube's and Vimeo's
+    // poster-still CDN hosts, the same change described on the "no parts"
+    // row above -- up from 24.77 KB (25364 bytes) the same day
+    // (2026-10-03), per `results.md` on `main` -- which stays under this
+    // ceiling with no raise needed.
+    ceilingKb: 25,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
@@ -836,7 +890,23 @@ export const libraries = [
     // which this composition's control bar bundles directly. The whole
     // distance from the last committed figure is this change's: that figure
     // was 27.74 KB, measured per `results.md` on `main`.
-    ceilingKb: 28,
+    //
+    // 28830 bytes measured 2026-10-03 -- 28.154296875 KB, 28.15 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 28 KB is the opt-in connection warm-up, doubly here the same way the
+    // "Playdeck" row above describes: `Root`'s own unconditional import of
+    // `connection-warm-up.ts`, plus this composition's own
+    // `ActivationButton` gaining its `onFocus`/`onPointerEnter` handlers and
+    // the `warmed` ref guarding them. The whole distance from the last
+    // committed figure is this change's: that figure was 27.79 KB
+    // (28452 bytes), measured 2026-10-02 per `results.md` on `main`.
+    //
+    // Measures 28.19 KB (28862 bytes) after gating YouTube's and Vimeo's
+    // poster-still CDN hosts, the same change described on the "no parts"
+    // row above -- up from 28.15 KB (28830 bytes) the same day
+    // (2026-10-03), per `results.md` on `main` -- which stays under this
+    // ceiling with no raise needed.
+    ceilingKb: 28.25,
     // This fixture's control bar renders `ActivationButton`, `Controls`,
     // `PlayButton`, `MuteButton`, `VolumeSlider`, `SeekSlider`, `Time` and
     // `FullscreenButton` (tests/compare/entries/playdeck-control-bar.tsx,

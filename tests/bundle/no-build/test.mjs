@@ -238,6 +238,17 @@ try {
   // documents, and the same measurement this fixture already serves these
   // five scripts from, read straight off disk rather than re-fetched.
   //
+  // 117170 bytes measured 2026-10-03 -- 114.4238281250 KB, 114.42 KB to two
+  // places, rounded up to the next 0.25 KB: 114.5 KB. Up from the
+  // 116818-byte figure (114.25 KB) the comment above this one committed the
+  // same day: `Root`'s opt-in `warmUp` prop reads a new module,
+  // `connection-warm-up.ts`, from inside `root.tsx` itself (for the
+  // `preconnect` hints) and from `loading-error.tsx`'s `ActivationButton`
+  // (for the early chunk import) -- both unconditional imports, so the
+  // module's two small functions and its three providers' fixed origin
+  // lists are part of this eager bundle whether or not a consumer ever sets
+  // `warmUp`.
+  //
   // 116818 bytes measured 2026-10-03 -- 114.080078125 KB, 114.08 KB to two
   // places, rounded up to the next 0.25 KB -- the same "round up to the
   // next 0.25 KB" rule `scripts/compare-libraries.mjs` already commits its
@@ -249,7 +260,16 @@ try {
   // 113.96 KB -- the distance is #888 and #889's YouTube-poll and
   // currentTime-state changes, both reached by every composition through
   // `@playdeck/core` and `Root` regardless of provider.
-  const GZIP_EAGER_CEILING_KB = 114.25;
+  //
+  // Measures 114.50 KB (117246 bytes) after gating YouTube's and Vimeo's
+  // poster-still CDN hosts behind `poster === 'provider'` rather than
+  // hinting them unconditionally -- up from 114.42 KB (117170 bytes) the
+  // same day (2026-10-03), per `results.md` on `main` -- which stays at
+  // this ceiling with no raise needed (117246 bytes is 2 bytes under
+  // 117248, the ceiling's own byte value). The growth is the gating logic
+  // itself: a second, smaller origin map and the boolean branch reading it
+  // outweigh the two origins removed from the unconditional list.
+  const GZIP_EAGER_CEILING_KB = 114.5;
   const gzipKb = (bytes) => (bytes / 1024).toFixed(2);
   const scriptBytes = await Promise.all(
     expectedScripts.map((pathname) => readFile(resolveRequest(pathname)))

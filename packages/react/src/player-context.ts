@@ -46,6 +46,12 @@ export type PlayerContextValue = ActivationBindings & {
   // next value on it, neither can read the other's state, and the shortcuts
   // run while no volume control is mounted at all (#271).
   volumeRequest: VolumeRequest;
+  // `Root`'s own `warmUp` prop, threaded through so `ActivationButton`
+  // (`loading-error.tsx`) can decide whether its first pointer-enter or focus
+  // should start the detected provider's chunk importing early -- the half of
+  // the prop that is an activation surface's concern rather than `Root`'s own
+  // render, which is where the `preconnect` hints half is handled instead.
+  warmUp: boolean;
 };
 
 export type PlayerHandle = Pick<

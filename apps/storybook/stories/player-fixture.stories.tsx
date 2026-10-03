@@ -77,6 +77,10 @@ type PlayerFixtureProps = {
   // YouTube-sourced fixture that starts with no caption track selected.
   readonly defaultTextTrack?: Player.RootProps['defaultTextTrack'];
   readonly preferredTextTrackLanguage?: Player.RootProps['preferredTextTrackLanguage'];
+  // `Player.Root`'s own `warmUp` prop, threaded through so
+  // `e2e/connection-warm-up.spec.ts` can measure press-to-playing with it on
+  // against the same fixture with it off.
+  readonly warmUp?: Player.RootProps['warmUp'];
 };
 
 // Tall enough that the player starts fully outside the observer's root even
@@ -313,7 +317,8 @@ const PlayerFixture = ({
   crossOrigin,
   showErrorDisplay,
   defaultTextTrack,
-  preferredTextTrackLanguage
+  preferredTextTrackLanguage,
+  warmUp
 }: PlayerFixtureProps) => {
   const autoplay: Player.RootProps['autoplay'] = autoplayInput ?? false;
   const loading: Player.PlayerLoadingStrategy = loadingInput ?? 'viewport';
@@ -455,6 +460,7 @@ const PlayerFixture = ({
         }}
         source={source}
         startTime={startTime}
+        warmUp={warmUp}
       >
         <Player.Viewport
           data-testid="viewport"
@@ -682,6 +688,22 @@ export const HlsAudioTracks: Story = {
   args: { source: 'hls-audio', engine: 'hls.js' }
 };
 
+// `loading: 'interaction'`, so an activation surface exists for the `warmUp`
+// variant below to hover or focus -- `e2e/connection-warm-up.spec.ts` measures
+// press-to-playing against this pair.
+export const HlsInteraction: Story = {
+  args: { source: 'hls', engine: 'hls.js', loading: 'interaction' }
+};
+
+export const HlsInteractionWarmUp: Story = {
+  args: {
+    source: 'hls',
+    engine: 'hls.js',
+    loading: 'interaction',
+    warmUp: true
+  }
+};
+
 export const LiveHlsJs: Story = {
   args: { source: 'live', engine: 'hls.js' }
 };
@@ -785,6 +807,13 @@ export const InteractionYoutube: Story = {
   args: { loading: 'interaction', activationSource: 'youtube' }
 };
 
+// `warmUp: true` beside the plain `InteractionYoutube` above --
+// `e2e/connection-warm-up.spec.ts` measures press-to-playing against this
+// pair.
+export const InteractionYoutubeWarmUp: Story = {
+  args: { loading: 'interaction', activationSource: 'youtube', warmUp: true }
+};
+
 // #858: `defaultTextTrack="off"`, for `e2e/youtube.spec.ts`'s no-flash
 // coverage against the fake iframe API's own captions-module simulation.
 export const InteractionYoutubeCaptionsOff: Story = {
@@ -811,6 +840,18 @@ export const VimeoInteraction: Story = {
   // embed src, and customControlsAvailability resolving), which since #162
   // only runs when opted in.
   args: { source: 'vimeo', loading: 'interaction', vimeoCustomControls: true }
+};
+
+// `warmUp: true` beside the plain `VimeoInteraction` above --
+// `e2e/connection-warm-up.spec.ts` measures press-to-playing against this
+// pair.
+export const VimeoInteractionWarmUp: Story = {
+  args: {
+    source: 'vimeo',
+    loading: 'interaction',
+    vimeoCustomControls: true,
+    warmUp: true
+  }
 };
 
 export const VimeoViewport: Story = {
