@@ -1,0 +1,20 @@
+{
+  "name": "@playdeck/bundle-media-session",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "test": "node test.mjs"
+  },
+  "dependencies": {
+    "@playdeck/react": "workspace:*",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "vite": "8.3.1"
+  }
+}

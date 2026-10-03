@@ -43,10 +43,11 @@ What backs the word instead is a set of gates this repository fails its own
 build over: the committed per-row ceiling on the four Playdeck compositions
 ("Date and how to re-run" below), which fails `pnpm compare:libraries` and
 `pnpm compare:libraries:check` the moment a row's gzipped size passes it; the
-play-only row's own `PLAY_ONLY_FORBIDDEN_MODULES` check, which fails the same
-two commands if that row's reachable chunks touch a menu primitive, either
-slider, captions rendering, or one of the four named non-native provider
-adapters the check lists (`youtube`, `wistia`, `hls`, `vimeo`); and
+per-row forbidden-module matrix (`forbiddenPartsExcept` in
+`scripts/compare-libraries.mjs`), which fails the same two commands the
+moment any of the four Playdeck rows' reachable chunks touch a control part
+it does not render, or one of the four named non-native provider adapters
+the check lists (`youtube`, `wistia`, `hls`, `vimeo`); and
 `tests/bundle/native-only/test.mjs`, run by `pnpm test:bundle` in a real
 Chromium, which fails if any provider chunk is requested before a consumer
 clicks the activation button. None of the three measures an alternative;
@@ -948,9 +949,12 @@ mechanism to produce, rather than a ceiling that silently tracks whatever the
 row happens to measure. Shrinking a composition back under its existing
 ceiling needs no such edit; only raising the ceiling itself does.
 
-The play-only row carries a second, independent gate: its reachable Vite
-chunks must not reach the menu primitives, either slider, captions rendering,
-or any provider other than native — see `scripts/compare-libraries.mjs`'s
-`PLAY_ONLY_FORBIDDEN_MODULES` for the exact list and where each name was read
-from. That check fails naming the specific module reached, and is unrelated
-to the ceiling above: a composition can breach either, both or neither.
+Each of the four rows also carries a second, independent gate: its reachable
+Vite chunks must not reach a control part the row's own fixture does not
+render, or any provider other than native — see
+`scripts/compare-libraries.mjs`'s `GUARDABLE_PART_NAMES` and
+`forbiddenPartsExcept` for the full guardable list and how each row's own
+forbidden set is built from it. That check fails naming the specific module
+reached and, where one exists, the import chain that reaches it, and is
+unrelated to the ceiling above: a composition can breach either, both or
+neither.

@@ -299,6 +299,28 @@ importers:
         specifier: 19.3.0
         version: 19.3.0(react@19.3.0)
 
+  tests/bundle/media-session:
+    dependencies:
+      '@playdeck/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      react:
+        specifier: 19.3.0
+        version: 19.3.0
+      react-dom:
+        specifier: 19.3.0
+        version: 19.3.0(react@19.3.0)
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.63.0
+        version: 1.63.0
+      '@vitejs/plugin-react':
+        specifier: 6.1.1
+        version: 6.1.1(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+      vite:
+        specifier: 8.3.1
+        version: 8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1)
+
   tests/bundle/native-only:
     dependencies:
       '@playdeck/react':
