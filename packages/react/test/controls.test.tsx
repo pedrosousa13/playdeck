@@ -299,11 +299,24 @@ describe('VolumeSlider', () => {
     expect((slider as HTMLInputElement).value).toBe('0.5');
   });
 
-  test('sets the volume when changed', () => {
+  test('sets the volume when changed', async () => {
     const { spies } = renderWithPlayer(<Player.VolumeSlider />, {
       ...withVolume(available),
       volume: 0.5
     });
+    // `VolumeSlider` mounting starts `volume-request-lazy.ts`'s own dynamic
+    // `import()`; this settles it before the change below, so the command it
+    // issues is observable in the same tick the way it always was once the
+    // binding loaded eagerly. This is the first test in this file to reach
+    // that import, so it is also the one place that awaits the real module
+    // directly, which is the only wait that is reliably not satisfied until
+    // the module is fully resolved -- the resolution this specific import
+    // needs the first time through takes more turns than a bare `act(async
+    // () => {})` waits for, which `await act(async () => {})` alone proved
+    // insufficient for here even though it suffices for every later test in
+    // this file, once the module is already resolved and cached.
+    await import('../src/volume-request');
+    await act(async () => {});
     const slider = screen.getByRole('slider', { name: 'Volume' });
     fireEvent.change(slider, { target: { value: '0.8' } });
     expect(spies.setVolume).toHaveBeenCalledWith(0.8);
@@ -382,6 +395,9 @@ describe('VolumeSlider', () => {
 
   test('keeps every End, Home and End press of a rapid succession', async () => {
     const { spies } = renderWithPlayer(<Player.VolumeSlider />, volumeReady());
+    // Settles `volume-request-lazy.ts`'s own import first -- see "sets the
+    // volume when changed" above.
+    await act(async () => {});
     const slider = screen.getByRole('slider', { name: 'Volume' });
     const settle = holdNextVolume(spies.setVolume);
 
@@ -501,6 +517,9 @@ describe('VolumeSlider', () => {
       <Player.VolumeSlider />,
       volumeReady()
     );
+    // Settles `volume-request-lazy.ts`'s own import first -- see "sets the
+    // volume when changed" above.
+    await act(async () => {});
     const slider = screen.getByRole('slider', { name: 'Volume' });
     const settleNative = holdNextVolume(nativeSpies.setVolume);
 
@@ -532,11 +551,14 @@ describe('VolumeSlider', () => {
     expect(youtube.spies.setVolume).not.toHaveBeenCalledWith(0.8);
   });
 
-  test('shows a volume asked for while muted, not the muted zero', () => {
+  test('shows a volume asked for while muted, not the muted zero', async () => {
     const { spies } = renderWithPlayer(
       <Player.VolumeSlider />,
       volumeReady({ volume: 0.7, muted: true })
     );
+    // Settles `volume-request-lazy.ts`'s own import first -- see "sets the
+    // volume when changed" above.
+    await act(async () => {});
     const slider = screen.getByRole('slider', { name: 'Volume' });
     expect(valueOf(slider)).toBe('0');
     holdNextVolume(spies.setVolume);
@@ -2790,6 +2812,11 @@ describe('Controls container and scoped shortcuts', () => {
       '[data-playdeck-part="volume-slider"]'
     )!;
     region.focus();
+    // `VolumeSlider` mounting starts `volume-request-lazy.ts`'s own dynamic
+    // `import()`; settled here, before the arrow presses below, so the first
+    // one issues a command in the same tick the way it always did once the
+    // binding loaded eagerly.
+    await act(async () => {});
 
     // Each press compounds on the volume the press before it asked for, not on
     // a published volume none of them has caught up with — and every press is
@@ -2859,6 +2886,9 @@ describe('Controls container and scoped shortcuts', () => {
       '[data-playdeck-part="volume-slider"]'
     )!;
     region.focus();
+    // Settles `volume-request-lazy.ts`'s own import first -- see "moves the
+    // volume one step per arrow press" above.
+    await act(async () => {});
 
     // The player publishes nothing between the two presses, so `muted` is
     // still true on the second. Reading the muted branch again there would
@@ -2993,6 +3023,9 @@ describe('Controls container and scoped shortcuts', () => {
       '[data-playdeck-part="volume-slider"]'
     )!;
     region.focus();
+    // Settles `volume-request-lazy.ts`'s own import first -- see "moves the
+    // volume one step per arrow press" above.
+    await act(async () => {});
 
     // Unmuting alone would restore a published zero and leave the press looking
     // dead, so this is the one muted case that moves the volume too.
@@ -3022,6 +3055,9 @@ describe('Controls container and scoped shortcuts', () => {
     const slider = container.querySelector<HTMLInputElement>(
       '[data-playdeck-part="volume-slider"]'
     )!;
+    // Settles `volume-request-lazy.ts`'s own import first -- see "moves the
+    // volume one step per arrow press" above.
+    await act(async () => {});
     // Dragged up off the muted zero to 0.3, which the player has not answered
     // for yet, so the thumb shows 0.3 while `muted` is still true.
     fireEvent.change(slider, { target: { value: '0.3' } });
@@ -3079,7 +3115,16 @@ describe('Controls container and scoped shortcuts', () => {
     // `VolumeSlider` is an optional primitive and the shortcut layer runs
     // without it, so nothing a control renders can be what holds or releases
     // the request. This is the case that makes it player-scoped.
+    //
+    // No `VolumeSlider` is mounted here, so this first press is itself what
+    // starts `volume-request-lazy.ts`'s own dynamic `import()` -- settled by
+    // the `await act` right after it, before the second press, so both
+    // still reach the controller in the order asked for. Without this the
+    // first press's request would still be `pending` when the second
+    // overwrites it, and only the second value would ever reach
+    // `setVolume` once the chunk resolved.
     fireEvent.keyDown(region, { key: 'ArrowUp' });
+    await act(async () => {});
     fireEvent.keyDown(region, { key: 'ArrowUp' });
     await act(async () => {});
     expect(spies.setVolume.mock.calls).toEqual([[0.55], [0.6]]);
@@ -3092,6 +3137,79 @@ describe('Controls container and scoped shortcuts', () => {
     emit({ volume: 0.8 });
     fireEvent.keyDown(region, { key: 'ArrowUp' });
     expect(spies.setVolume).toHaveBeenLastCalledWith(0.85);
+  });
+
+  // The settling `await act` the test above and others in this describe
+  // block use lets the import resolve before the gestures that exercise it
+  // -- what a real page's chunk having already loaded looks like -- but it
+  // also drains the command between presses, so none of those tests still
+  // prove that two presses landing while the first command is still in
+  // flight coalesce into one, the way `optimistic-request-volume.ts`'s own
+  // chain is built to (`createCommandChain`'s own header, "collapsing none
+  // of them" in `VolumeSlider`'s own version of this test). This test holds
+  // a command open deliberately, the same way, to prove the guarantee still
+  // holds once the gesture reaches the chain through
+  // `volume-request-lazy.ts`'s facade and its private copy of the chain,
+  // with no `VolumeSlider` mounted to be what is doing the coalescing.
+  //
+  // Demonstrated red: with `volume-request.ts`'s own `request` bypassing the
+  // chain (`chain.send(volume);` replaced with
+  // `void controller.setVolume(volume);`, issuing a command on every call
+  // instead of coalescing), this printed:
+  //
+  //   AssertionError: expected [ [ 0.55 ], [ 0.6 ], [ 0.65 ] ] to deeply
+  //   equal [ [ 0.55 ], [ 0.6 ] ]
+  //
+  // -- the second press's command went out immediately alongside the
+  // first's, rather than waiting behind it. Restoring the chain returned it
+  // to green.
+  test('coalesces two ArrowUp presses that land while the first command is still in flight, with no volume slider mounted', async () => {
+    const { container, spies } = renderWithPlayer(
+      <Player.Controls>
+        <Player.Time />
+      </Player.Controls>,
+      controlsState()
+    );
+    const region = container.querySelector<HTMLElement>(
+      '[data-playdeck-part="controls"]'
+    )!;
+    region.focus();
+
+    // No `VolumeSlider` is mounted, so this press is itself what starts
+    // `volume-request-lazy.ts`'s own dynamic `import()`. Awaited directly
+    // first -- the same pre-warm "sets the volume when changed" above needs
+    // when this is the first test in a run to reach it, since a bare `act`
+    // is not reliably enough turns for the very first dynamic import this
+    // file resolves -- then settled with `act`, before the two presses
+    // below, so the chain they reach is the real one.
+    fireEvent.keyDown(region, { key: 'ArrowUp' });
+    await import('../src/volume-request');
+    await act(async () => {});
+    expect(spies.setVolume.mock.calls).toEqual([[0.55]]);
+
+    // Held open so the next press below lands while this command is still
+    // outstanding.
+    let settle = (): void => {
+      throw new Error('No volume command is being held.');
+    };
+    spies.setVolume.mockImplementationOnce(
+      () =>
+        new Promise<CommandResult>((resolve) => {
+          settle = () => resolve({ ok: true });
+        })
+    );
+    fireEvent.keyDown(region, { key: 'ArrowUp' });
+    fireEvent.keyDown(region, { key: 'ArrowUp' });
+    // Two more presses, one command still in flight: collapsing into one
+    // superseded value, rather than issuing a command per press, is what
+    // coalescing means. Fewer commands than presses is the proof; the
+    // mutation below breaks exactly this.
+    expect(spies.setVolume.mock.calls).toEqual([[0.55], [0.6]]);
+
+    await act(async () => {
+      settle();
+    });
+    expect(spies.setVolume.mock.calls).toEqual([[0.55], [0.6], [0.65]]);
   });
 
   // ADR-0005 takes the arrow keys off the scrubber's range input and gives them
@@ -3144,14 +3262,17 @@ describe('Controls container and scoped shortcuts', () => {
     expect(spies.seekBy).toHaveBeenLastCalledWith(10);
     fireEvent.keyDown(region, { key: 'j' });
     expect(spies.seekBy).toHaveBeenLastCalledWith(-10);
+    // No `VolumeSlider` is mounted here, so this `ArrowUp` is itself what
+    // starts `volume-request-lazy.ts`'s own dynamic `import()`; settled
+    // before the assertion below, and before the `ArrowDown` that follows.
     fireEvent.keyDown(region, { key: 'ArrowUp' });
+    await act(async () => {});
     expect(spies.setVolume).toHaveBeenLastCalledWith(0.55);
     fireEvent.keyDown(region, { key: 'ArrowDown' });
     // 0.5, not the 0.45 this asserted before #271: the second press compounds
     // on the volume the first one asked for rather than on a published volume
     // that has not caught up, so up-then-down returns the user to where they
-    // started instead of leaving them below it. It also coalesces behind the
-    // command still in flight, so it is issued when that one drains.
+    // started instead of leaving them below it.
     await act(async () => {});
     expect(spies.setVolume).toHaveBeenLastCalledWith(0.5);
     fireEvent.keyDown(region, { key: 'm' });
@@ -3213,6 +3334,11 @@ describe('Controls container and scoped shortcuts', () => {
       '[data-playdeck-part="seek-slider-input"]'
     )!;
     seekInput.focus();
+    // `VolumeSlider` mounting starts `volume-request-lazy.ts`'s own dynamic
+    // `import()`; settled here, before the arrow presses below, so the
+    // first volume press issues a command in the same tick the way it
+    // always did once the binding loaded eagerly.
+    await act(async () => {});
     // preventDefault (a false return) is what makes the input's own stepping
     // inert, so an arrow press means one library-sized jump and nothing else.
     expect(fireEvent.keyDown(seekInput, { key: 'ArrowRight' })).toBe(false);
@@ -3308,12 +3434,15 @@ describe('Controls container and scoped shortcuts', () => {
     expect(spies.seekBy).toHaveBeenLastCalledWith(10);
     fireEvent.keyDown(seekInput, { key: 'j' });
     expect(spies.seekBy).toHaveBeenLastCalledWith(-10);
+    // No `VolumeSlider` is mounted here, so this `ArrowUp` is itself what
+    // starts `volume-request-lazy.ts`'s own dynamic `import()`; settled
+    // before the assertion below, and before the `ArrowDown` that follows.
     fireEvent.keyDown(seekInput, { key: 'ArrowUp' });
+    await act(async () => {});
     expect(spies.setVolume).toHaveBeenLastCalledWith(0.55);
     fireEvent.keyDown(seekInput, { key: 'ArrowDown' });
     // 0.5, not the 0.45 this asserted before #271: the second press compounds
-    // on the volume the first one asked for, and coalesces behind the command
-    // still in flight.
+    // on the volume the first one asked for.
     await act(async () => {});
     expect(spies.setVolume).toHaveBeenLastCalledWith(0.5);
   });
