@@ -1,4 +1,4 @@
-import { createTimeBoundary } from '@playdeck/core';
+import { createTimeBoundary } from '@playdeck/core/time-boundary';
 import {
   playerStates,
   providerEvent,

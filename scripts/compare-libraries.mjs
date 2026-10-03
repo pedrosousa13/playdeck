@@ -391,15 +391,34 @@ const NON_NATIVE_PROVIDER_FORBIDDEN_MODULES = [
 }));
 
 /**
+ * `createTimeBoundary` (`@playdeck/core`'s clip-window boundary), forbidden
+ * for every Playdeck row alike the same way the four non-native providers
+ * above are: none of the four fixtures loads an embed provider, and the
+ * native provider keeps its own separate, inline copy of the same boundary
+ * logic rather than calling this one (`packages/provider-native/src/
+ * playback.ts`'s header says so), so a reachable chunk naming it means a
+ * change elsewhere in the dependency graph pulled it back in rather than
+ * any of these fixtures starting to use it.
+ * @type {readonly { name: string; reachedBy: (chunk: Chunk) => boolean }[]}
+ */
+const CORE_FORBIDDEN_EXPORTS = [
+  {
+    name: 'createTimeBoundary',
+    reachedBy: (/** @type {Chunk} */ chunk) =>
+      reachesExport(chunk, 'createTimeBoundary')
+  }
+];
+
+/**
  * One composition's forbidden-module list: every name in
  * `GUARDABLE_PART_NAMES` the composition does not use, plus the four
- * non-native providers unconditionally. This is the matrix's row-building
- * function -- a row is "every guardable part minus what this fixture
- * renders" rather than a hand-maintained list that can drift from the
- * fixture it describes. `usedPartNames` is read off each fixture's own JSX
- * by `compare-libraries.test.mjs`'s cross-check, the same way
- * `controlBarParts` there already reads the control-bar fixture, so a row
- * declared here and the fixture it is for cannot drift apart silently.
+ * non-native providers and `createTimeBoundary` unconditionally. This is the
+ * matrix's row-building function -- a row is "every guardable part minus
+ * what this fixture renders" rather than a hand-maintained list that can
+ * drift from the fixture it describes. `usedPartNames` is read off each
+ * fixture's own JSX by `compare-libraries.test.mjs`'s cross-check, the same
+ * way `controlBarParts` there already reads the control-bar fixture, so a
+ * row declared here and the fixture it is for cannot drift apart silently.
  * @param {readonly string[]} usedPartNames
  * @returns {readonly { name: string; reachedBy: (chunk: Chunk) => boolean }[]}
  */
@@ -410,7 +429,8 @@ export const forbiddenPartsExcept = (usedPartNames) => {
       name,
       reachedBy: (/** @type {Chunk} */ chunk) => reachesExport(chunk, name)
     })),
-    ...NON_NATIVE_PROVIDER_FORBIDDEN_MODULES
+    ...NON_NATIVE_PROVIDER_FORBIDDEN_MODULES,
+    ...CORE_FORBIDDEN_EXPORTS
   ];
 };
 
@@ -575,7 +595,29 @@ export const libraries = [
     // logic itself: a second, smaller origin map and the boolean branch
     // reading it outweigh the two origins removed from the unconditional
     // list.
-    ceilingKb: 23,
+    //
+    // 23164 bytes measured 2026-10-03 -- 22.62109375 KB, 22.62 KB to two
+    // places, rounded up to the next 0.25 KB. This row drops rather than
+    // grows: the three embed providers (`@playdeck/provider-vimeo`,
+    // `@playdeck/provider-wistia`, `@playdeck/provider-youtube`) now import
+    // `createTimeBoundary` from `@playdeck/core/time-boundary`, built the
+    // same way `./thumbnails` and `./media-session` already are, rather than
+    // from `@playdeck/core`'s main entry. Every one of those three
+    // providers' own dist files sits in this build's graph regardless of
+    // which provider a fixture's source resolves to -- `provider-loaders.ts`
+    // wires up a dynamic `import()` for all five kinds in one place -- so
+    // the boundary's code previously had to be exported from this
+    // composition's own eager chunk (the one `@playdeck/core`'s main entry
+    // got inlined into) to satisfy a cross-chunk import none of those three
+    // provider chunks resolve for this fixture's native-only source. Routed
+    // through its own subpath instead, the boundary's code moves into the
+    // providers' own chunks and leaves this composition's eager graph
+    // entirely. The ceiling comes down with it, to hold the saving rather
+    // than leave the row free to grow back into the headroom the removed
+    // code held. The whole distance from the last committed figure is this
+    // change's: that figure was 22.82 KB (23371 bytes), measured 2026-10-03
+    // per `results.md` on `main`.
+    ceilingKb: 22.75,
     // This fixture renders no control part at all (see
     // tests/compare/entries/playdeck-no-parts.tsx's own header) -- every
     // guardable part is forbidden.
@@ -708,7 +750,18 @@ export const libraries = [
     // row above -- up from 23.60 KB (24162 bytes) the same day
     // (2026-10-03), per `results.md` on `main` -- which stays under this
     // ceiling with no raise needed.
-    ceilingKb: 23.75,
+    //
+    // 23998 bytes measured 2026-10-03 -- 23.435546875 KB, 23.44 KB to two
+    // places, rounded up to the next 0.25 KB. This row drops rather than
+    // grows, the same change described on the "no parts" row above: the
+    // three embed providers now reach `createTimeBoundary` through
+    // `@playdeck/core/time-boundary` rather than through `@playdeck/core`'s
+    // main entry, which this composition's own eager chunk no longer has to
+    // export to satisfy. The ceiling comes down with it, to hold the
+    // saving. The whole distance from the last committed figure is this
+    // change's: that figure was 23.62 KB (24191 bytes), measured 2026-10-03
+    // per `results.md` on `main`.
+    ceilingKb: 23.5,
     // This fixture renders one `Player.ActivationButton` and nothing else
     // guardable (tests/compare/entries/playdeck.tsx) -- every guardable
     // part except `ActivationButton` is forbidden.
@@ -810,7 +863,15 @@ export const libraries = [
     // row above -- up from 24.77 KB (25364 bytes) the same day
     // (2026-10-03), per `results.md` on `main` -- which stays under this
     // ceiling with no raise needed.
-    ceilingKb: 25,
+    //
+    // 25202 bytes measured 2026-10-03 -- 24.611328125 KB, 24.61 KB to two
+    // places, rounded up to the next 0.25 KB. This row drops rather than
+    // grows, the same change described on the "no parts" row above. The
+    // ceiling comes down with it, to hold the saving. The whole distance
+    // from the last committed figure is this change's: that figure was
+    // 24.79 KB (25386 bytes), measured 2026-10-03 per `results.md` on
+    // `main`.
+    ceilingKb: 24.75,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
@@ -906,6 +967,16 @@ export const libraries = [
     // row above -- up from 28.15 KB (28830 bytes) the same day
     // (2026-10-03), per `results.md` on `main` -- which stays under this
     // ceiling with no raise needed.
+    //
+    // 28678 bytes measured 2026-10-03 -- 28.005859375 KB, 28.01 KB to two
+    // places, rounded up to the next 0.25 KB. This row drops rather than
+    // grows, the same change described on the "no parts" row above. The
+    // ceiling stays at 28.25 rather than coming down with it: 28.25 is
+    // already the next 0.25 KB above 28.01, so it was already tight before
+    // this change and holds the new figure with no headroom to close. The
+    // whole distance from the last committed figure is this change's: that
+    // figure was 28.19 KB (28862 bytes), measured 2026-10-03 per
+    // `results.md` on `main`.
     ceilingKb: 28.25,
     // This fixture's control bar renders `ActivationButton`, `Controls`,
     // `PlayButton`, `MuteButton`, `VolumeSlider`, `SeekSlider`, `Time` and

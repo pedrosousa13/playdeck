@@ -1,5 +1,4 @@
 import {
-  createTimeBoundary,
   deriveLiveState,
   isPermittedSourceUrl,
   liveStateEqual,
@@ -13,6 +12,7 @@ import {
   type ProviderStatePatch,
   type WistiaSource
 } from '@playdeck/core';
+import { createTimeBoundary } from '@playdeck/core/time-boundary';
 import {
   asRecord,
   errorString,

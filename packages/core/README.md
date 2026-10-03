@@ -611,6 +611,22 @@ export const unbounded = createTimeBoundary({ startTime: -1, endTime: 0 });
 
 <!-- /example -->
 
+`createTimeBoundary`, and its `TimeBoundary` type, are also reachable at
+`@playdeck/core/time-boundary` — a second entry point carrying them and
+nothing else, built as its own bundle like `@playdeck/core/thumbnails` and
+`@playdeck/core/media-session`. The three embed providers
+(`@playdeck/provider-vimeo`, `@playdeck/provider-wistia`,
+`@playdeck/provider-youtube`) import `createTimeBoundary` from that subpath
+rather than from this package's main entry: each provider's own module
+reaches an app's build graph through a dynamic `import()` that app carries
+for every provider kind at once, so a bundler that places this package's main
+entry inside that app's eager chunk has to export whatever any sibling
+provider imports from it — `createTimeBoundary` included, even on a page
+composed with no embed provider at all. Importing it through its own subpath
+instead keeps it out of that eager chunk. `@playdeck/core` itself keeps
+exporting `createTimeBoundary` and `TimeBoundary` from its main entry, so a
+direct import that does not care changes nothing.
+
 ## Live state
 
 `deriveLiveState` is the one liveness derivation in the workspace, so
