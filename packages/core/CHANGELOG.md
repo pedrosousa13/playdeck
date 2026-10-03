@@ -1,5 +1,98 @@
 # @playdeck/core
 
+## 1.3.0
+
+### Minor Changes
+
+- c63c0d8: Reach Media Session binding through a subpath `Root` imports lazily
+
+  `@playdeck/core` gains a second export subpath, `@playdeck/core/media-session`,
+  exposing `bindMediaSession`, `getMediaSessionCoordinator` and their types --
+  built as its own bundle, the same way `@playdeck/core/thumbnails` already is.
+  Both functions and every type stay exported from `@playdeck/core` itself too,
+  so a direct import needs no rework.
+
+  `@playdeck/react`'s `Root` reaches that subpath through a dynamic `import()`,
+  from inside the effect that binds the session to `navigator.mediaSession`.
+  The import starts right after mount and never on the server or during
+  render, so the module leaves the eager graph a page ships before any
+  provider attaches. An unmount (or a source swap starting the next effect
+  run) ahead of that import settling never binds, so nothing it would have
+  released stays bound.
+
+  The coordinator registry that enforces one coordinator per
+  `navigator.mediaSession` lives on a well-known global rather than this
+  module's own top-level scope, so the main entry's inlined copy and the
+  subpath's own bundled copy -- and two installed copies of `@playdeck/core`
+  entirely -- resolve the same registry for the same session instead of two
+  coordinators unaware of each other.
+
+  Lock-screen behaviour once bound carries over exactly, with no new request
+  before the first play under `eager` or `viewport` loading. The "Playdeck (no
+  parts)" comparison row drops from 23.13 KB to 22.56 KB gzip, with
+  `@playdeck/core/media-session` its own chunk, which a provider-only build
+  downloads only after mount.
+
+- 76a79b6: Add `Player.Root`'s `preferredTextTrackLanguage` and `defaultTextTrack` props
+
+  `Player.Root` gains two optional caption props. `preferredTextTrackLanguage`
+  is a BCP 47 language tag: once a source's tracks publish, and again whenever
+  captions turn on without the viewer having picked a track of their own,
+  selection resolves to an exact `TextTrack.language` match, then the same
+  base language (`en` matches `en-GB`), then the provider's own default track,
+  and otherwise the first `captions`/`subtitles` track. `defaultTextTrack`
+  (`'auto'` default, or `'off'`) starts every source, including YouTube, with
+  no track selected. Either prop stops acting the moment the viewer makes
+  their own choice for a source, through a control or `selectTextTrack`, and a
+  new source applies both again.
+
+  `preferredTextTrackLanguage` is checked against a BCP 47 tag's shape
+  (letters, digits and hyphens, up to 35 characters —
+  `isValidTextTrackLanguage`, newly exported from `@playdeck/core`) before it
+  is used for matching or folded into the YouTube embed's `cc_lang_pref` var.
+  A value that fails is ignored outright, exactly as an absent prop is, and a
+  `configuration`-category notice naming the rejected value is published on
+  `PlayerState.error` (`PlayerController.reportRejectedTextTrackLanguage`)
+  instead of being thrown.
+
+  On YouTube, `defaultTextTrack="off"` also writes the embed's own
+  `cc_load_policy=0` player var. This is unverified against a real YouTube
+  player: the platform's docs document `cc_load_policy=1` as forcing captions
+  on, but give `0` no documented meaning beyond matching the var's own
+  absence, so this repo's own coverage of it is a fake iframe API honouring
+  the var by construction, not a measurement of a real embed's response to it.
+
+- 0d65932: Reach the clip-window boundary through a subpath the embed providers import
+
+  `@playdeck/core` gains a third export subpath, `@playdeck/core/time-boundary`,
+  exposing `createTimeBoundary` and its `TimeBoundary` type -- built as its own
+  bundle, the same way `@playdeck/core/thumbnails` and
+  `@playdeck/core/media-session` already are. `createTimeBoundary` and
+  `TimeBoundary` stay exported from `@playdeck/core` itself too, so a direct
+  import needs no rework.
+
+  `@playdeck/provider-vimeo`, `@playdeck/provider-wistia` and
+  `@playdeck/provider-youtube` import `createTimeBoundary` from that subpath
+  rather than from `@playdeck/core`'s main entry. Each provider's own module is
+  reached only through a dynamic `import()` an app's build graph carries for
+  every provider kind at once, regardless of which one a given page's source
+  resolves to, so a bundler that places `@playdeck/core`'s main entry inside
+  that page's eager chunk has to export whatever any sibling provider imports
+  from it -- `createTimeBoundary` included, even for a page composed with no
+  embed provider at all. Importing it through its own subpath instead keeps it
+  out of that eager chunk: a page with no embed provider does not ship it.
+
+### Patch Changes
+
+- 31bae4b: Keep a held `buffered`/`seekable` array when a patch repeats the same ranges
+
+  `PlayerController` keeps the `buffered`/`seekable` array it already holds
+  when a provider patch reports the same ranges again under a fresh array
+  identity, so a `usePlayerState` selector naming either field re-renders only
+  when a range actually moves. A provider's own poll -- YouTube's 250ms tick
+  is one -- can otherwise allocate a fresh array on every tick regardless of
+  whether anything changed.
+
 ## 1.2.0
 
 ### Minor Changes

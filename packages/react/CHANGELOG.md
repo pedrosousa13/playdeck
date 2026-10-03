@@ -1,5 +1,161 @@
 # @playdeck/react
 
+## 1.3.0
+
+### Minor Changes
+
+- 8a20e86: `Player.Root` gains an opt-in `warmUp` prop, off by default, that reduces
+  click-to-playing latency for an embed provider by starting work ahead of
+  activation.
+
+  Set it and two things change. First, `Root` renders a `preconnect` hint for
+  each of the detected provider's own script and embed origins, read off a
+  fixed allowlist -- YouTube's script and embed hosts; Vimeo's embed host;
+  Wistia's script and CDN hosts -- never derived from the `source` prop itself,
+  so a source on a look-alike host earns no hint. YouTube's and Vimeo's own
+  poster-still CDN hosts join the hint list only as a further opt-in, when
+  `poster="provider"` is also set; Wistia's poster host is already in its base
+  list. Native and HLS sources carry no fixed third-party origin, so neither
+  gets a hint. Second, under `loading="interaction"`, `Player.ActivationButton`
+  starts the detected provider's own chunk importing on the first pointer-enter
+  or focus it receives, never on a touch tap alone and never more than once, so
+  the module is already resolving by the time a viewer's click asks for it.
+  Under `loading="viewport"` this prop adds only the hints, since no activation
+  surface exists there to hover or focus; under `loading="eager"` the chunk is
+  already importing at mount regardless.
+
+  Off by default, server-render output is unchanged; on, it gains the
+  `preconnect` hint links above.
+
+- 76a79b6: Add `Player.Root`'s `preferredTextTrackLanguage` and `defaultTextTrack` props
+
+  `Player.Root` gains two optional caption props. `preferredTextTrackLanguage`
+  is a BCP 47 language tag: once a source's tracks publish, and again whenever
+  captions turn on without the viewer having picked a track of their own,
+  selection resolves to an exact `TextTrack.language` match, then the same
+  base language (`en` matches `en-GB`), then the provider's own default track,
+  and otherwise the first `captions`/`subtitles` track. `defaultTextTrack`
+  (`'auto'` default, or `'off'`) starts every source, including YouTube, with
+  no track selected. Either prop stops acting the moment the viewer makes
+  their own choice for a source, through a control or `selectTextTrack`, and a
+  new source applies both again.
+
+  `preferredTextTrackLanguage` is checked against a BCP 47 tag's shape
+  (letters, digits and hyphens, up to 35 characters —
+  `isValidTextTrackLanguage`, newly exported from `@playdeck/core`) before it
+  is used for matching or folded into the YouTube embed's `cc_lang_pref` var.
+  A value that fails is ignored outright, exactly as an absent prop is, and a
+  `configuration`-category notice naming the rejected value is published on
+  `PlayerState.error` (`PlayerController.reportRejectedTextTrackLanguage`)
+  instead of being thrown.
+
+  On YouTube, `defaultTextTrack="off"` also writes the embed's own
+  `cc_load_policy=0` player var. This is unverified against a real YouTube
+  player: the platform's docs document `cc_load_policy=1` as forcing captions
+  on, but give `0` no documented meaning beyond matching the var's own
+  absence, so this repo's own coverage of it is a fake iframe API honouring
+  the var by construction, not a measurement of a real embed's response to it.
+
+### Patch Changes
+
+- c63c0d8: Reach Media Session binding through a subpath `Root` imports lazily
+
+  `@playdeck/core` gains a second export subpath, `@playdeck/core/media-session`,
+  exposing `bindMediaSession`, `getMediaSessionCoordinator` and their types --
+  built as its own bundle, the same way `@playdeck/core/thumbnails` already is.
+  Both functions and every type stay exported from `@playdeck/core` itself too,
+  so a direct import needs no rework.
+
+  `@playdeck/react`'s `Root` reaches that subpath through a dynamic `import()`,
+  from inside the effect that binds the session to `navigator.mediaSession`.
+  The import starts right after mount and never on the server or during
+  render, so the module leaves the eager graph a page ships before any
+  provider attaches. An unmount (or a source swap starting the next effect
+  run) ahead of that import settling never binds, so nothing it would have
+  released stays bound.
+
+  The coordinator registry that enforces one coordinator per
+  `navigator.mediaSession` lives on a well-known global rather than this
+  module's own top-level scope, so the main entry's inlined copy and the
+  subpath's own bundled copy -- and two installed copies of `@playdeck/core`
+  entirely -- resolve the same registry for the same session instead of two
+  coordinators unaware of each other.
+
+  Lock-screen behaviour once bound carries over exactly, with no new request
+  before the first play under `eager` or `viewport` loading. The "Playdeck (no
+  parts)" comparison row drops from 23.13 KB to 22.56 KB gzip, with
+  `@playdeck/core/media-session` its own chunk, which a provider-only build
+  downloads only after mount.
+
+- a15710b: Load the volume-request binding through a dynamic import `Root` resolves lazily
+
+  `Root` reaches `createVolumeRequest` (`volume-request.ts`) through a dynamic
+  `import()` (`volume-request-lazy.ts`) rather than from its own `useState`
+  initializer, resolved the first time `VolumeSlider`'s own subscription or the
+  `Controls` shortcut layer's volume keys actually ask for it. A page that
+  renders no volume-reading part never downloads the binding or its own
+  private copy of the coalescing chain, `optimistic-request-volume.ts` --
+  `SeekSlider` keeps its own, unrelated copy, `optimistic-request.ts`, which a
+  page rendering it downloads regardless of whether it also renders a
+  volume-reading part.
+
+  A volume request made before the import resolves is never lost: the facade
+  records it and shows it at once, then replays it through the real binding's
+  own command chain once the module arrives, so the control a viewer is
+  looking at and the command the player eventually receives always agree. A
+  chunk that fails to load drops that request rather than hold it forever, so
+  the control falls back to the player's own reported volume, and the next
+  gesture tries the import again. `PlayerContextValue.volumeRequest`'s shape
+  and timing contract are otherwise unchanged -- it is internal, so no public
+  API moves.
+
+  No new request before the first play, no change to server rendering or
+  hydration. The "Playdeck (no parts)" comparison row drops from 22.62 KB to
+  22.42 KB gzip.
+
+- 3af7069: Fix a looping viewport-autoplayed YouTube player auto-pausing only on its first exit
+
+  A YouTube loop restart's `PLAYING` state change goes through the same path
+  as a viewer resuming from the platform's own chrome, carrying the
+  `'provider'` origin, and a loop with no start boundary also fires a real
+  `ended` on every iteration of YouTube's own playlist loop. `@playdeck/react`'s
+  ownership rules read any non-`'autoplay'` play as the viewer taking over and
+  drop ownership unconditionally on every `ended`, so a looping YouTube player
+  started by viewport autoplay auto-pauses correctly on its first exit and
+  then never again — it plays on indefinitely once scrolled offscreen, the
+  same shape `@playdeck/provider-native` fixed for its own loop restart.
+
+  A loop restart is the library continuing playback it started, not the
+  viewer's, and neither is the `ended` a platform-driven wrap fires along the
+  way. `boundary.ts`'s `restartFromBoundary` labels the `PLAYING` state change
+  its own deferred `playVideo()` call produces `'system'` — the
+  `PlayerEventOrigin` member `@playdeck/provider-native` already uses for the
+  same shape — and a `PLAYING` or `ended` change YouTube's own platform loop
+  triggers carries the same label, since nothing but that loop can produce
+  either. `@playdeck/react`'s ownership tracker treats both a `'system'` play
+  and a `'system'` ended as no takeover, so a viewport session's ownership
+  survives as many wraps as it crosses however they reach it — a configured
+  `startTime`, an `endTime` boundary, or a plain loop with neither.
+
+- ab5178a: `SeekSlider` measures its track at most once per animation frame while the pointer hovers or drags. A burst of `pointermove` events sharing a frame reads one cached rect instead of forcing a fresh layout per event; the thumbnail preview and seek position stay exact for every event.
+- Updated dependencies [620604b]
+- Updated dependencies [c63c0d8]
+- Updated dependencies [3c5e3fb]
+- Updated dependencies [771c1a9]
+- Updated dependencies [3af7069]
+- Updated dependencies [2bbff3f]
+- Updated dependencies [76a79b6]
+- Updated dependencies [31bae4b]
+- Updated dependencies [0d65932]
+- Updated dependencies [a2f95c7]
+- Updated dependencies [be936b4]
+  - @playdeck/provider-hls@1.3.0
+  - @playdeck/core@1.3.0
+  - @playdeck/provider-native@1.3.0
+  - @playdeck/provider-youtube@1.3.0
+  - @playdeck/provider-vimeo@1.3.0
+  - @playdeck/provider-wistia@1.3.0
+
 ## 1.2.0
 
 ### Minor Changes

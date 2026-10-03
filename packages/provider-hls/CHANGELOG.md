@@ -1,5 +1,19 @@
 # @playdeck/provider-hls
 
+## 1.3.0
+
+### Patch Changes
+
+- 620604b: `@playdeck/provider-hls` requires hls.js 1.7.3.
+- Updated dependencies [c63c0d8]
+- Updated dependencies [3c5e3fb]
+- Updated dependencies [771c1a9]
+- Updated dependencies [76a79b6]
+- Updated dependencies [31bae4b]
+- Updated dependencies [0d65932]
+  - @playdeck/core@1.3.0
+  - @playdeck/provider-native@1.3.0
+
 ## 1.2.0
 
 ### Minor Changes
