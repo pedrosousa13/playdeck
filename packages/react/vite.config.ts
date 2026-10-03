@@ -21,14 +21,16 @@ export default defineConfig({
         '@playdeck/provider-youtube'
       ],
       output: {
-        // The one chunk this build emits beside the entry is the thumbnail
-        // preview `SeekSlider` loads on demand (#727). Named rather than
-        // content-hashed, on vite.browser.config.ts's reasoning for its own
-        // chunk names: a hash exists to let a long-lived URL swap in new
-        // bytes, and nothing versions this file but the package it ships in.
-        // A name is also what lets something else say which file it means --
-        // `tests/compare/features.mjs`'s thumbnail anchor reads this one by
-        // path.
+        // Two chunks beside the entry: the thumbnail preview `SeekSlider`
+        // loads on demand (#727), and the volume-request binding
+        // `VolumeSlider`/the `Controls` shortcut layer load on demand
+        // (`volume-request-lazy.ts`). Named rather than content-hashed, on
+        // vite.browser.config.ts's reasoning for its own chunk names: a hash
+        // exists to let a long-lived URL swap in new bytes, and nothing
+        // versions these files but the package they ship in. A name is also
+        // what lets something else say which file it means --
+        // `tests/compare/features.mjs`'s thumbnail anchor reads one of them
+        // by path.
         chunkFileNames: '[name].js'
       }
     },

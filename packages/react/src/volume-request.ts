@@ -3,12 +3,14 @@ import {
   createCommandChain,
   requestAnswered,
   ECHO_DEADLINE_MS
-} from './optimistic-request.js';
+} from './optimistic-request-volume.js';
 
 // The volume the user last asked for, held until the media element publishes a
 // volume that answers it, and the command traffic that asks for it coalesced.
 // `optimistic-request.ts` explains why any of that is needed; this is the
-// volume binding onto it.
+// volume binding onto it. Imported from `optimistic-request-volume.ts`, a
+// private copy rather than the module `SeekSlider` imports directly --
+// that file's own header says why the copy exists.
 //
 // It is player-scoped rather than kept in a control, because two siblings
 // consume the same request and neither can read the other's React state:

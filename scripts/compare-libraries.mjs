@@ -410,15 +410,68 @@ const CORE_FORBIDDEN_EXPORTS = [
 ];
 
 /**
+ * `createVolumeRequest` (`@playdeck/react`'s own volume-request binding),
+ * forbidden for every Playdeck row alike on the same reasoning as
+ * `CORE_FORBIDDEN_EXPORTS` above: `root.tsx` resolves it through a dynamic
+ * `import()` (`volume-request-lazy.ts`) the first time `VolumeSlider` or the
+ * `Controls` shortcut layer's volume keys actually ask for it, so none of
+ * the four fixtures here -- none of which interacts with the player -- ever
+ * resolves it, whether or not a fixture renders a volume-reading part. A
+ * reachable chunk naming it means a change elsewhere put the binding back on
+ * `Root`'s own eager path rather than any of these fixtures starting to
+ * trigger it.
+ *
+ * Demonstrated red: this package's own build folds `volume-request.ts` back
+ * into the single eager `dist/index.js` the moment anything statically
+ * imports it alongside `volume-request-lazy.ts`'s dynamic one -- confirmed by
+ * restoring `Root`'s old eager call, and separately by adding a throwaway
+ * static reference from `transport-controls.tsx` (always in the eager
+ * graph) -- which the ceiling catches but `reachesExport` cannot, since the
+ * chunk this check reads (`dist/volume-request.js`) no longer exists
+ * separately to be named. The shape this check exists for is a *published
+ * subpath staying split* while something marks it reachable regardless --
+ * matching how `createTimeBoundary`'s own chunk stayed separate from
+ * `@playdeck/core`'s main entry while a cross-chunk import forced it to be
+ * re-exported from there. Reproduced directly: with `requiredChunk` on the
+ * "no parts" row temporarily extended to also match
+ * `chunk.fileName.includes('volume-request')` -- i.e., with the still-split
+ * chunk forced into the reachable set the way a future `requiredChunk`
+ * change mistakenly could -- `node scripts/compare-libraries.mjs` printed:
+ *
+ *   Playdeck (no parts)'s reachable chunks reach createVolumeRequest, which
+ *   this composition (core + native provider, no control parts) does not
+ *   use.
+ *
+ * Reverting the `requiredChunk` change returned the check to
+ * "docs/comparison/results.md already matches a fresh run".
+ * @type {readonly { name: string; reachedBy: (chunk: Chunk) => boolean }[]}
+ */
+const REACT_OWN_FORBIDDEN_EXPORTS = [
+  {
+    name: 'createVolumeRequest',
+    reachedBy: (/** @type {Chunk} */ chunk) =>
+      reachesExport(chunk, 'createVolumeRequest')
+  }
+];
+
+/**
  * One composition's forbidden-module list: every name in
  * `GUARDABLE_PART_NAMES` the composition does not use, plus the four
- * non-native providers and `createTimeBoundary` unconditionally. This is the
- * matrix's row-building function -- a row is "every guardable part minus
- * what this fixture renders" rather than a hand-maintained list that can
- * drift from the fixture it describes. `usedPartNames` is read off each
- * fixture's own JSX by `compare-libraries.test.mjs`'s cross-check, the same
- * way `controlBarParts` there already reads the control-bar fixture, so a
- * row declared here and the fixture it is for cannot drift apart silently.
+ * non-native providers, `createTimeBoundary` and `createVolumeRequest`
+ * unconditionally. This is the matrix's row-building function -- a row is
+ * "every guardable part minus what this fixture renders" rather than a
+ * hand-maintained list that can drift from the fixture it describes.
+ * `usedPartNames` is read off each fixture's own JSX by
+ * `compare-libraries.test.mjs`'s cross-check, the same way `controlBarParts`
+ * there already reads the control-bar fixture, so a row declared here and
+ * the fixture it is for cannot drift apart silently.
+ *
+ * `createVolumeRequest` is unconditional even on the control-bar row, which
+ * does render `VolumeSlider` -- unlike a guardable part, it is never
+ * resolved by this harness at all: none of these fixtures interacts with the
+ * player, and `volume-request-lazy.ts` resolves the binding only once a
+ * mounted part or the shortcut layer actually asks for it, which an inert
+ * build graph never does.
  * @param {readonly string[]} usedPartNames
  * @returns {readonly { name: string; reachedBy: (chunk: Chunk) => boolean }[]}
  */
@@ -430,7 +483,8 @@ export const forbiddenPartsExcept = (usedPartNames) => {
       reachedBy: (/** @type {Chunk} */ chunk) => reachesExport(chunk, name)
     })),
     ...NON_NATIVE_PROVIDER_FORBIDDEN_MODULES,
-    ...CORE_FORBIDDEN_EXPORTS
+    ...CORE_FORBIDDEN_EXPORTS,
+    ...REACT_OWN_FORBIDDEN_EXPORTS
   ];
 };
 
@@ -617,7 +671,30 @@ export const libraries = [
     // code held. The whole distance from the last committed figure is this
     // change's: that figure was 22.82 KB (23371 bytes), measured 2026-10-03
     // per `results.md` on `main`.
-    ceilingKb: 22.75,
+    //
+    // 22929 bytes measured 2026-10-03 -- 22.3916015625 KB, 22.39 KB to two
+    // places, rounded up to the next 0.25 KB. This row drops rather than
+    // grows: `createVolumeRequest` (`volume-request.ts`) now reaches this
+    // composition only through a dynamic `import()`
+    // (`volume-request-lazy.ts`), resolved the first time `VolumeSlider` or
+    // the `Controls` shortcut layer's volume keys ask for it rather than on
+    // every `Root` mount -- which this fixture, rendering no control part at
+    // all, never does. `optimistic-request.ts`'s coalescing chain, reachable
+    // only through `volume-request.ts` for this fixture (it renders no
+    // `SeekSlider` either), leaves the eager graph with it. The ceiling comes
+    // down with it, to hold the saving. The whole distance from the last
+    // committed figure is this issue's: that figure was 22.62 KB
+    // (23164 bytes), measured 2026-10-03 per `results.md` on `main`.
+    //
+    // Measures 22.42 KB (22951 bytes) after `volume-request-lazy.ts` gained
+    // a `live` flag (gating a late resolution after `Root` unmounts) and a
+    // retry reset in its `.catch()` (so a failed import does not strand the
+    // facade on its first attempt) -- up from 22.39 KB (22929 bytes) the
+    // same day (2026-10-03), per `results.md` on `main` -- which stays
+    // under this ceiling with no raise needed. Both additions are small and
+    // live in the facade itself, which this fixture's `Root` always
+    // imports eagerly regardless of composition.
+    ceilingKb: 22.5,
     // This fixture renders no control part at all (see
     // tests/compare/entries/playdeck-no-parts.tsx's own header) -- every
     // guardable part is forbidden.
@@ -761,7 +838,22 @@ export const libraries = [
     // saving. The whole distance from the last committed figure is this
     // change's: that figure was 23.62 KB (24191 bytes), measured 2026-10-03
     // per `results.md` on `main`.
-    ceilingKb: 23.5,
+    //
+    // 23767 bytes measured 2026-10-03 -- 23.2099609375 KB, 23.21 KB to two
+    // places, rounded up to the next 0.25 KB. This row drops rather than
+    // grows, the same change described on the "no parts" row above: this
+    // fixture renders one `ActivationButton` and nothing that reaches
+    // `volume-request.ts`, so both it and `optimistic-request.ts`'s chain
+    // leave the eager graph the same way. The ceiling comes down with it, to
+    // hold the saving. The whole distance from the last committed figure is
+    // this issue's: that figure was 23.44 KB (23998 bytes), measured
+    // 2026-10-03 per `results.md` on `main`.
+    //
+    // Measures 23.24 KB (23793 bytes) after the same `live`-flag and retry
+    // additions described on the "no parts" row above -- up from 23.21 KB
+    // (23767 bytes) the same day (2026-10-03), per `results.md` on `main`
+    // -- which stays under this ceiling with no raise needed.
+    ceilingKb: 23.25,
     // This fixture renders one `Player.ActivationButton` and nothing else
     // guardable (tests/compare/entries/playdeck.tsx) -- every guardable
     // part except `ActivationButton` is forbidden.
@@ -871,7 +963,22 @@ export const libraries = [
     // from the last committed figure is this change's: that figure was
     // 24.79 KB (25386 bytes), measured 2026-10-03 per `results.md` on
     // `main`.
-    ceilingKb: 24.75,
+    //
+    // 24949 bytes measured 2026-10-03 -- 24.3642578125 KB, 24.36 KB to two
+    // places, rounded up to the next 0.25 KB. This row drops rather than
+    // grows, the same change described on the "no parts" row above: this
+    // fixture's one control (`PlayButton`, wrapped in `Controls`) reaches
+    // neither `volume-request.ts` nor `optimistic-request.ts`'s chain, so
+    // both leave the eager graph. The ceiling comes down with it, to hold
+    // the saving. The whole distance from the last committed figure is this
+    // issue's: that figure was 24.61 KB (25202 bytes), measured 2026-10-03
+    // per `results.md` on `main`.
+    //
+    // Measures 24.39 KB (24975 bytes) after the same `live`-flag and retry
+    // additions described on the "no parts" row above -- up from 24.36 KB
+    // (24949 bytes) the same day (2026-10-03), per `results.md` on `main`
+    // -- which stays under this ceiling with no raise needed.
+    ceilingKb: 24.5,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
@@ -977,6 +1084,39 @@ export const libraries = [
     // whole distance from the last committed figure is this change's: that
     // figure was 28.19 KB (28862 bytes), measured 2026-10-03 per
     // `results.md` on `main`.
+    //
+    // 28669 bytes measured 2026-10-03 -- 27.9990234375 KB, 28.00 KB to two
+    // places, rounded up to the next 0.25 KB: 28.00 KB. This fixture's
+    // control bar renders both `VolumeSlider` and `SeekSlider`, so
+    // `optimistic-request.ts`'s coalescing chain was already in this row's
+    // eager graph through `SeekSlider`'s own `useSeekPreview`, unconditionally,
+    // before and after this change -- what moved is that `volume-request.ts`
+    // now imports a private copy of that chain, `optimistic-request-volume.ts`
+    // (see that file's own header), instead of the module `SeekSlider`
+    // imports. An intermediate version of this change routed both through one
+    // shared module instead, which a bundler reached from both a static site
+    // (`SeekSlider`) and a dynamic one (`volume-request.ts`'s own
+    // `import()`) factors into its own extra chunk -- `gzipBytes` sums each
+    // reachable chunk's own gzip separately (the file header's own "how the
+    // total is added" section), so that extra chunk cost this row a little of
+    // the compression the single inlined copy used to share, 28715 bytes
+    // (28.04 KB) in that intermediate version, still the figure this ceiling
+    // was committed to hold. Duplicating the module outright instead of
+    // sharing it removes that extra chunk, and removes the cross-chunk
+    // overhead with it: this row ends 46 bytes under where it stood before
+    // any of this issue's work (28678 bytes, 28.01 KB, measured 2026-10-03
+    // per `results.md` on `main`), not merely back to even. The ceiling comes
+    // down to meet it rather than stay at the wider figure the intermediate
+    // version needed.
+    //
+    // 28688 bytes measured 2026-10-03 -- 28.015625 KB, 28.02 KB to two
+    // places, rounded up to the next 0.25 KB: 28.25 KB. Up from 28.00 KB
+    // (28669 bytes) the same day: `volume-request-lazy.ts` gained a `live`
+    // flag and a retry reset in its `.catch()`, the same additions
+    // described on the "no parts" row above, which this row's `Root` reaches
+    // eagerly the same way every row's does regardless of composition. 28.00
+    // KB had no headroom left to absorb this, so the ceiling moves to the
+    // next 0.25 KB bracket up.
     ceilingKb: 28.25,
     // This fixture's control bar renders `ActivationButton`, `Controls`,
     // `PlayButton`, `MuteButton`, `VolumeSlider`, `SeekSlider`, `Time` and

@@ -1,20 +1,21 @@
 import type { CommandResult } from '@playdeck/core';
 
-// `optimistic-request-volume.ts` carries a second, identical copy of
-// everything below the marker a little further down, for `volume-request.ts`
-// alone. `volume-request.ts` reaches this module's exports only through a
-// dynamic `import()` (`volume-request-lazy.ts`), while `SeekSlider`
-// (`transport-controls.tsx`) reaches this file statically -- a module
-// reached from both a static and a dynamic call site is exactly what a
-// bundler factors into its own extra chunk, which cost every page rendering
-// `SeekSlider` a sixth eager request even where it never rendered a
-// volume-reading part (confirmed against the no-build entry, which has no
-// bundler of its own to tree-shake the duplicate back out). Keeping two
-// copies instead costs a page that actually loads `volume-request.ts`'s own
-// chunk a few hundred duplicated gzip bytes, never an extra request.
-// `test/optimistic-request-volume-drift.test.ts` fails if the two copies'
-// code -- everything from the marker below to the end of the file -- ever
-// drifts apart; keep them identical past that line.
+// A private copy of `optimistic-request.ts`
+// (`packages/react/src/optimistic-request.ts`), which `transport-controls.tsx`'s
+// `SeekSlider` keeps importing directly and unchanged. This file exists only
+// so `volume-request.ts` can import the same coalescing chain without
+// sharing a module with `SeekSlider`'s own static import of it: a module
+// reached from both a static call site (`SeekSlider`) and a dynamic one
+// (`volume-request-lazy.ts`'s `import()` of `volume-request.ts`) is exactly
+// what a bundler factors into its own extra chunk, which cost every page
+// rendering `SeekSlider` a sixth eager request even where it never rendered
+// a volume-reading part (confirmed against the no-build entry, which has no
+// bundler of its own to tree-shake the duplicate back out). Duplicating the
+// whole module instead costs a page that actually loads this file's own
+// chunk a few hundred extra gzip bytes, never an extra request.
+// `test/optimistic-request-volume-drift.test.ts` fails if this copy's code
+// -- everything from the marker below to the end of the file -- ever drifts
+// from `optimistic-request.ts`'s own; keep them identical past that line.
 // ---- identical with its sibling copy below this line ----
 
 // The optimistic-request policy the sliders share: the value the user last

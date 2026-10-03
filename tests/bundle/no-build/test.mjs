@@ -213,6 +213,14 @@ try {
   // side of: a bundler that tree-shakes an export nothing names drops this
   // chunk's weight from the page that never needed it, which this no-bundler
   // entry cannot do for itself.
+  //
+  // `assets/volume-request.js` never joins this list: this fixture renders
+  // no volume-reading part, and `volume-request.ts` imports its own private
+  // copy of the coalescing chain (`optimistic-request-volume.ts`, see that
+  // file's own header) rather than the module `SeekSlider` shares with every
+  // other eager script here -- so nothing ties the two chunks together, and
+  // a page with no `VolumeSlider`, `MuteButton` or volume-reading `Controls`
+  // shortcut never requests the volume-request chunk at all.
   const expectedScripts = [
     '/assets/media-session.js',
     '/browser.js',
@@ -269,6 +277,29 @@ try {
   // 117248, the ceiling's own byte value). The growth is the gating logic
   // itself: a second, smaller origin map and the boolean branch reading it
   // outweigh the two origins removed from the unconditional list.
+  //
+  // 117052 bytes measured 2026-10-03 -- 114.30859375 KB, 114.31 KB to two
+  // places, rounded up to the next 0.25 KB: 114.5 KB, unchanged from the
+  // committed figure two blocks above. This row drops rather than grows: an
+  // intermediate change briefly split `optimistic-request.ts`'s coalescing
+  // chain into a sixth eager script, `assets/optimistic-request.js`, shared
+  // between this entry's own eager `SeekSlider` (`transport-controls.tsx`)
+  // and the volume-request binding `VolumeSlider`/the `Controls` shortcut
+  // layer load behind their own dynamic `import()` -- one more request for
+  // every page rendering `SeekSlider`, this fixture included, regardless of
+  // whether it also rendered a volume-reading part. `volume-request.ts`
+  // imports a private copy of that chain instead
+  // (`optimistic-request-volume.ts`, see its own header for why), so nothing
+  // ties `SeekSlider`'s eager copy to the dynamically-loaded one and the
+  // sixth script never arrives at all. The whole distance from the last
+  // committed figure is this fix's own: that figure was 114.50 KB
+  // (117246 bytes), measured 2026-10-03 per `results.md` on `main`.
+  //
+  // Measures 114.34 KB (117081 bytes) after `volume-request-lazy.ts` gained
+  // a `live` flag and a retry reset in its `.catch()`, the same additions
+  // described in `scripts/compare-libraries.mjs`'s own rows -- up from
+  // 114.31 KB (117052 bytes) the same day (2026-10-03), per `results.md` on
+  // `main` -- which stays under this ceiling with no raise needed.
   const GZIP_EAGER_CEILING_KB = 114.5;
   const gzipKb = (bytes) => (bytes / 1024).toFixed(2);
   const scriptBytes = await Promise.all(

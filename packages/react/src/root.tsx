@@ -30,7 +30,7 @@ import {
   type SuppliedSource
 } from './use-activation.js';
 import { sourceKey } from './viewport-media.js';
-import { createVolumeRequest } from './volume-request.js';
+import { createLazyVolumeRequest } from './volume-request-lazy.js';
 import {
   useCallback,
   useEffect,
@@ -1283,7 +1283,19 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
   // second reason on top of the one above: it is a store, so a render React
   // discards would leave a release behind that never committed, and the control
   // and the store would disagree from then on.
-  const [volumeRequest] = useState(() => createVolumeRequest(controller));
+  //
+  // `createLazyVolumeRequest` (`volume-request-lazy.ts`) hands back the same
+  // shape `createVolumeRequest` always has, wired to resolve the heavier
+  // module behind it -- `optimistic-request-volume.ts`'s coalescing chain
+  // included, a private copy of `optimistic-request.ts` rather than the
+  // module `SeekSlider` shares (that file's own header says why) -- only
+  // once `VolumeSlider` or the `Controls` shortcut layer's volume keys
+  // actually ask for it, the same way `@playdeck/core/media-session`'s own
+  // dynamic `import()` below keeps that binding off a page that renders no
+  // volume-reading part at all. This effect itself never triggers that
+  // import: it runs on every mount regardless of which parts render, and
+  // starting the import from it would put the cost back on every page.
+  const [volumeRequest] = useState(() => createLazyVolumeRequest(controller));
   useEffect(() => volumeRequest.observe(), [volumeRequest]);
 
   const value = useMemo(
