@@ -27,7 +27,6 @@ import { createServer } from 'node:http';
 import {
   copyFileSync,
   cpSync,
-  existsSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -35,7 +34,7 @@ import {
 } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { extname, join, posix } from 'node:path';
+import { extname, join } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 import { clientBoundaryProblems } from './client-boundary.mjs';
 import { guardProblems } from './esm-only-guard.mjs';
@@ -45,7 +44,12 @@ import {
 } from './packaging-fixture.mjs';
 import { resolutionModes, resolutionProblems } from './resolution-modes.mjs';
 import { changelogProblems, shippedChangelog } from './shipped-changelog.mjs';
-import { publishablePackages } from './workspace-packages.mjs';
+import { unreachableLinks } from './tarball-links.mjs';
+import {
+  codePackages,
+  DOCS_PACKAGE,
+  publishablePackages
+} from './workspace-packages.mjs';
 
 const console = globalThis.console;
 const process = globalThis.process;
@@ -108,109 +112,44 @@ const readTarballFile = (tarball, entry) =>
     encoding: 'utf8'
   });
 
-// The link targets a markdown source names, in the three forms these documents
-// use: inline `](target)`, a reference definition (which CommonMark lets sit
-// under up to three spaces of indentation, and one inside a list item is
-// indented), and the `href`/`src` attributes of the raw HTML that is legal in
-// markdown and that GitHub renders. Angle brackets are stripped, and a title
-// after the target is left behind by stopping at the first space. Fenced code
-// blocks are removed before any of that, so a link written as an example is not
-// read as a link.
-//
-// What it does not see, stated rather than implied, because this gate is the
-// only thing standing between a shipped README and an unreachable link: an
-// inline target containing parentheses, and a reference definition whose target
-// is written `<with spaces>`. What it over-reads: a target inside an inline
-// code span, or inside a code block indented by four spaces rather than fenced.
+// `@playdeck/docs` ships markdown and nothing else, so none of the code checks
+// below apply to it -- no export map, no ESM-only guard, nothing for publint,
+// attw or the fixture to resolve. What does apply is what any tarball here is
+// held to about its documents: every link in them reaches something, and the
+// changelog names the version packed. Plus the one rule that is its own: the
+// contract deck.cool's site reads it under allows markdown, `nav.json`,
+// `assets/` and the manifest, and a file outside those is a mistake in
+// `files` -- except `LICENSE`, which `pnpm pack` and so `pnpm publish` copy in
+// from the repository root for a package that has none of its own, as npm adds
+// one to every package. scripts/docs-package.test.mjs holds the contract
+// itself.
 /**
- * @param {string} source
- * @returns {string[]}
+ * @param {string} tarball
+ * @param {string} version
  */
-const linkTargets = (source) => {
-  // A fence opens on a run of three or more backticks or tildes and closes on
-  // the next run of the same character, so the run itself is what pairs them.
-  const prose = source.replace(
-    /^ {0,3}(`{3,}|~{3,})[\s\S]*?^ {0,3}\1[^\n]*$/gm,
-    ''
-  );
-
+const docsTarballProblems = (tarball, version) => {
+  const entries = tarballEntries(tarball);
   return [
-    ...[...prose.matchAll(/\]\(\s*([^()\s]+)/g)],
-    ...[...prose.matchAll(/^ {0,3}\[[^\]]+\]:\s*(\S+)/gm)],
-    ...[...prose.matchAll(/\b(?:href|src)\s*=\s*["']?([^"'>\s]+)/gi)]
-  ].map(([, target]) => target.replace(/^<|>$/g, ''));
-};
-
-// Where a link that names this repository by url has to resolve. The url is
-// absolute, so the path after it is repo-relative and is checked against the
-// working tree rather than against the tarball -- which is why this reaches for
-// `repoRoot` in the middle of a function that is otherwise reading tarball
-// entries. Nothing here touches the network: a url on any other host is not
-// checked at all, and a broken one there is not something a local gate can see.
-//
-// `apps/site/src/content.config.ts` holds the second copy of this url, built
-// there out of each package's own `repository` field and a `branch` constant,
-// and the two have to agree. They are not one exported value because they are
-// not one shape -- that side needs a url per package, this side needs a single
-// prefix to match against -- so the agreement is kept by these two comments.
-// Change the branch on either side alone and nothing fails: the site rewrites
-// into a url this gate no longer recognises, and every link of that shape stops
-// being checked rather than starting to fail.
-const repositoryBlobUrl = 'https://github.com/pedrosousa13/playdeck/blob/main/';
-
-// A relative link resolves against wherever its file landed, and for a consumer
-// that is `node_modules` rather than this repository. One that climbs out of the
-// package root, or that names a path the tarball does not carry, resolves to
-// nothing there. npmjs.com is where that breakage is invisible: npm's renderer
-// rewrites relative links through `repository.directory`, so the package page
-// keeps working while the installed file does not, and nobody reading the page
-// learns anything is wrong. Shipped documents name the repository by url
-// instead, which moves the risk from a link that cannot resolve to a path that
-// might not exist -- so both are checked here.
-/**
- * @param {string} entry
- * @param {string} source
- * @param {readonly string[]} entries
- */
-const unreachableLinks = (entry, source, entries) => {
-  const dir = entry.includes('/') ? entry.replace(/\/[^/]*$/, '') : '';
-  /** @type {string[]} */
-  const problems = [];
-
-  for (const target of linkTargets(source)) {
-    if (target.startsWith(repositoryBlobUrl)) {
-      const path = target.slice(repositoryBlobUrl.length).replace(/#.*$/, '');
-      if (!existsSync(join(repoRoot, path))) {
-        problems.push(
-          `${entry} links to ${target}, which is not a path in this repository`
-        );
-      }
-      continue;
-    }
-
-    // A fragment, a scheme (`https:`, `mailto:`) and a protocol-relative url
-    // are each resolved by something other than the file's own location.
-    if (
-      target.startsWith('#') ||
-      target.startsWith('//') ||
-      /^[a-z][a-z0-9+.-]*:/i.test(target)
-    ) {
-      continue;
-    }
-    const path = posix.normalize(
-      posix.join(dir, target.replace(/[#?].*$/, ''))
-    );
-    if (path === '..' || path.startsWith('../')) {
-      problems.push(`${entry} links to ${target}, which escapes the package`);
-    } else if (
-      !entries.includes(path) &&
-      !entries.some((name) => name.startsWith(`${path}/`))
-    ) {
-      problems.push(`${entry} links to ${target}, which is not in the tarball`);
-    }
-  }
-
-  return problems;
+    ...entries
+      .filter(
+        (entry) =>
+          !entry.endsWith('.md') &&
+          entry !== 'nav.json' &&
+          entry !== 'package.json' &&
+          entry !== 'LICENSE' &&
+          !entry.startsWith('assets/')
+      )
+      .map(
+        (entry) =>
+          `ships ${entry}, which is not markdown, nav.json, assets/ or its manifest`
+      ),
+    ...entries
+      .filter((entry) => entry.endsWith('.md'))
+      .flatMap((entry) =>
+        unreachableLinks(entry, readTarballFile(tarball, entry), entries)
+      ),
+    ...changelogProblems(shippedChangelog(tarball), version)
+  ];
 };
 
 // What ships is what the `files` field lets through, and that is a coarser
@@ -315,10 +254,12 @@ const tarballProblems = (tarball, version) => {
 };
 
 async function main() {
-  // 1. Discover every publishable (non-private) workspace package.
-  const packages = publishablePackages(repoRoot);
+  // 1. Discover every publishable (non-private) workspace package that ships
+  // code. `@playdeck/docs` ships markdown only, and its own gate is
+  // scripts/docs-package.test.mjs.
+  const packages = codePackages(repoRoot);
   console.log(
-    `Discovered ${packages.length} publishable package(s): ${packages
+    `Discovered ${packages.length} publishable code package(s): ${packages
       .map((pkg) => pkg.name)
       .join(', ')}`
   );
@@ -416,6 +357,30 @@ async function main() {
       ) {
         failures.push(`attw failed for ${pkg.name}`);
       }
+    }
+
+    // 3b. The docs package: packed and checked as the markdown it is.
+    for (const pkg of publishablePackages(repoRoot).filter(
+      (candidate) => candidate.name === DOCS_PACKAGE
+    )) {
+      console.log(`\n--- Packing ${pkg.name} ---`);
+      run('pnpm', [
+        '--filter',
+        pkg.name,
+        'pack',
+        '--pack-destination',
+        tarballDir
+      ]);
+      console.log(`\n--- tarball contents: ${pkg.name} ---`);
+      const docsProblems = docsTarballProblems(
+        join(tarballDir, tarballFileName(pkg.name, pkg.version)),
+        pkg.version
+      );
+      for (const problem of docsProblems) {
+        console.error(`${pkg.name} ${problem}`);
+        failures.push(`${pkg.name} ${problem}`);
+      }
+      if (docsProblems.length === 0) console.log('ok');
     }
 
     if (failures.length > 0) {

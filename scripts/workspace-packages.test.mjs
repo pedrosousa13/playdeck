@@ -15,6 +15,7 @@ import { fileURLToPath, URL } from 'node:url';
 import {
   publishableBaseline,
   publishablePackages,
+  selectCodePackages,
   selectPublishable,
   workspaceProjects
 } from './workspace-packages.mjs';
@@ -184,5 +185,31 @@ test('refuses a listing with nothing publishable in it', () => {
   assert.throws(
     () => selectPublishable([{ name: 'playdeck', path: '/w', private: true }]),
     /No publishable workspace packages were discovered/
+  );
+});
+
+// The docs package is publishable -- released and tagged with the rest -- and
+// ships no code, so the gates that pack, resolve or render code leave it out.
+// A listing rather than this workspace, so the rule is held on a tree that has
+// a docs package whether or not this one does yet.
+test('the code packages are the publishable ones but the docs package', () => {
+  const publishable = selectPublishable([
+    { name: 'playdeck', path: '/w', private: true },
+    {
+      name: '@playdeck/core',
+      version: '1.0.0',
+      path: '/w/packages/core',
+      private: false
+    },
+    {
+      name: '@playdeck/docs',
+      version: '1.0.0',
+      path: '/w/packages/docs',
+      private: false
+    }
+  ]);
+  assert.deepEqual(
+    selectCodePackages(publishable).map((entry) => entry.name),
+    ['@playdeck/core']
   );
 });

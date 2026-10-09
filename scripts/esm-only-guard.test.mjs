@@ -15,10 +15,10 @@ import test from 'node:test';
 import { fileURLToPath, URL } from 'node:url';
 import { guardProblems, guardRuntime, guardTypes } from './esm-only-guard.mjs';
 import { supportedResolutionModes } from './resolution-modes.mjs';
-import { publishablePackages } from './workspace-packages.mjs';
+import { codePackages } from './workspace-packages.mjs';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
-const packages = publishablePackages(repoRoot);
+const packages = codePackages(repoRoot);
 
 /**
  * A consumer's `node_modules` holding every publishable package as it would
