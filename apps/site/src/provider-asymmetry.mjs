@@ -277,32 +277,35 @@ const ownMaterial = (markdown, preambleBlocks) =>
  *
  * @param {string} source the whole of `docs/provider-setup.md`
  * @param {string} repoRoot
+ * @param {(dir: string, fragment?: string) => string} [referenceHref] handed on to `providerDocuments`
  * @returns {{
  *   questions: readonly string[];
  *   providers: readonly ProviderTruth[];
  * }}
  */
-export const providerAsymmetry = (source, repoRoot) => {
+export const providerAsymmetry = (source, repoRoot, referenceHref) => {
   const preambleBlocks = source
     .split(/^## /m)[0]
     .replace(/^# .+\n+/, '')
     .trim()
     .split('\n\n').length;
 
-  const providers = providerDocuments(source, repoRoot).map((document) => {
-    const blocks = ownMaterial(document.markdown, preambleBlocks);
-    if (blocks.length === 0) {
-      throw new Error(
-        `${PROVIDER_SETUP_DOC} left "${document.title}" with no material of its own once the shared sections were removed, so the landing page's provider comparison has nothing to read. This is src/provider-pages.mjs's slicing seen from the other side — check PROVIDERS there first.`
-      );
+  const providers = providerDocuments(source, repoRoot, referenceHref).map(
+    (document) => {
+      const blocks = ownMaterial(document.markdown, preambleBlocks);
+      if (blocks.length === 0) {
+        throw new Error(
+          `${PROVIDER_SETUP_DOC} left "${document.title}" with no material of its own once the shared sections were removed, so the landing page's provider comparison has nothing to read. This is src/provider-pages.mjs's slicing seen from the other side — check PROVIDERS there first.`
+        );
+      }
+      return {
+        slug: document.slug,
+        title: document.title,
+        packages: document.packages,
+        readings: FACTS.map((fact) => fact.read(blocks))
+      };
     }
-    return {
-      slug: document.slug,
-      title: document.title,
-      packages: document.packages,
-      readings: FACTS.map((fact) => fact.read(blocks))
-    };
-  });
+  );
 
   return { questions: FACTS.map((fact) => fact.question), providers };
 };

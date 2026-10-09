@@ -65,7 +65,10 @@
 import { readFileSync } from 'node:fs';
 import { join, posix } from 'node:path';
 import { publishablePackages } from '../../../scripts/workspace-packages.mjs';
-import { referencePackageDirs } from './reference-packages.mjs';
+import {
+  referencePackageDirs,
+  siteReferenceHref
+} from './reference-packages.mjs';
 
 /** Where the three source documents live, relative to the repository root. */
 export const COMPARISON_DIR = 'docs/comparison';
@@ -175,10 +178,10 @@ const demoteHeadings = (markdown) => {
  * See the header comment's "Links" section for the three cases.
  *
  * @param {string} target
- * @param {{ blob: string; pages: ReadonlySet<string> }} context
+ * @param {{ blob: string; pages: ReadonlySet<string>; referenceHref: (dir: string, fragment?: string) => string }} context
  * @returns {string}
  */
-const rewriteTarget = (target, { blob, pages }) => {
+const rewriteTarget = (target, { blob, pages, referenceHref }) => {
   if (
     target.startsWith('#') ||
     target.startsWith('/') ||
@@ -198,7 +201,7 @@ const rewriteTarget = (target, { blob, pages }) => {
 
   const pkg = /^packages\/([^/]+)(?:\/README\.md)?$/.exec(resolved);
   if (pkg !== null && pages.has(pkg[1])) {
-    return `${import.meta.env.BASE_URL}reference/${pkg[1]}/`;
+    return referenceHref(pkg[1]);
   }
 
   return `${blob}${resolved}${fragment === '' ? '' : `#${fragment}`}`;
@@ -213,7 +216,7 @@ const rewriteTarget = (target, { blob, pages }) => {
  * not to need it yet.
  *
  * @param {string} markdown
- * @param {{ blob: string; pages: ReadonlySet<string> }} context
+ * @param {{ blob: string; pages: ReadonlySet<string>; referenceHref: (dir: string, fragment?: string) => string }} context
  * @returns {string}
  */
 const rewriteLinks = (markdown, context) => {
@@ -239,12 +242,18 @@ const rewriteLinks = (markdown, context) => {
  * The guide, composed from the three source documents on disk.
  *
  * @param {string} repoRoot
+ * @param {(dir: string, fragment?: string) => string} [referenceHref] where a
+ *   package's reference page is; this site's own route unless handed another
  * @returns {{ title: string; markdown: string }}
  */
-export const comparisonDocument = (repoRoot) => {
+export const comparisonDocument = (
+  repoRoot,
+  referenceHref = siteReferenceHref
+) => {
   const context = {
     blob: repositoryBlobUrl(repoRoot),
-    pages: new Set(referencePackageDirs(repoRoot))
+    pages: new Set(referencePackageDirs(repoRoot)),
+    referenceHref
   };
 
   const sections = DOCUMENTS.map(({ file, anchor }) => {

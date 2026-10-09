@@ -1,0 +1,1031 @@
+---
+title: "@playdeck/react"
+description: "Headless, composable React 19 media player primitives with capability-aware providers."
+---
+
+Headless, composable React 19 media-player primitives with one API across
+native MP4/WebM, HLS, YouTube, Vimeo and Wistia. No CSS is imported by the
+primitives, and every control is capability-gated: a control whose command the
+active provider cannot honour renders nothing rather than rendering disabled.
+One deliberate, named exception: `LiveIndicator` is an indicator rather than a
+control, so where its `liveEdge` command is unavailable it stays mounted as a
+non-interactive `disabled` badge instead of vanishing — being live is true
+regardless of whether a seek-to-edge command exists. See the docstring above
+`LiveIndicator` for the reasoning.
+
+```sh
+pnpm add @playdeck/react
+```
+
+React 19 is a peer dependency, and only React 19 — the range is `>=19 <20`, so
+a React 18 or React 20 project cannot install this package. Provider packages
+are pulled in as dependencies but loaded lazily — a consumer playing only MP4
+ships no YouTube, Vimeo, Wistia or hls.js code in its initial graph, and makes
+no provider network requests.
+
+This package's entry carries a `'use client'` directive, so a React Server
+Component can import these primitives and render them directly, with no wrapper
+of your own to hold the boundary. It is still a boundary: the props a server
+component hands across it are serialised, so a function prop — a `renderCue`, an
+`onVolumeChange` — belongs on a component of yours that carries the directive
+itself.
+
+`@playdeck/core` and the provider packages import no React API and carry no
+directive; server code can call `detectSource` and the rest of that surface
+without a boundary at all.
+
+The guides at [playdeck.video/guides](../guides/index.md) carry the
+full styling contract ([**Contract**](../guides/contract.md)),
+the caption guidance ([**Captions**](../guides/captions.md)),
+the quality-selection guidance ([**Quality**](../guides/quality.md)),
+the playback-rate guidance ([**Playback rate**](../guides/playback-rate.md)),
+the chapters guidance ([**Chapters**](../guides/chapters.md)),
+the audio-track guidance ([**Audio tracks**](../guides/audio-tracks.md))
+and the live-playback guidance ([**Live**](../guides/live.md)).
+Every primitive below is also staged, running, in this repository's Storybook
+workbench, which is a development tool rather than a published surface.
+
+## Usage
+
+```tsx
+import * as Player from '@playdeck/react';
+
+export const Clip = () => (
+  <Player.Root source="https://example.com/clip.mp4">
+    <Player.Viewport>
+      <Player.Media
+        textTracks={[
+          { src: '/captions.en.vtt', srcLang: 'en', label: 'English' }
+        ]}
+      />
+      <Player.Poster>
+        <Player.PosterImage alt="" src="/poster.jpg" />
+      </Player.Poster>
+      <Player.Captions />
+      <Player.Controls>
+        <Player.PlayButton />
+        <Player.MuteButton />
+        <Player.VolumeSlider />
+        <Player.SeekSlider />
+        <Player.Time type="current" />
+        <Player.Time type="duration" />
+        <Player.CaptionsButton />
+        <Player.PipButton />
+        {/* Renders only where there is somewhere to cast to. */}
+        <Player.AirPlayButton />
+        {/* Renders only where a Remote Playback API device is reachable. */}
+        <Player.RemotePlaybackButton />
+        <Player.FullscreenButton />
+      </Player.Controls>
+    </Player.Viewport>
+  </Player.Root>
+);
+```
+
+`source` takes the same input as `detectSource` — a URL string, or an explicit
+`{ type: 'hls' | 'video' | 'youtube' | 'vimeo' | 'wistia', ... }` object. See
+[Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md) for which URL forms each provider
+accepts, which it refuses, and what each provider's `providerOptions` are.
+
+`textTracks` is a prop on `Player.Media`, not on `Player.Root`. It takes an
+array of `{ src, srcLang, label, kind?, default? }`, where `kind` is
+`'captions'` or `'subtitles'` and `default` selects that track on load. Tracks
+you supply this way reach native playback and the HLS provider's native engine;
+everywhere else only the captions a provider discovers for itself are
+available. Selection, discovery and what `Player.Captions` renders are covered
+in [**Captions**](../guides/captions.md).
+
+`Player.Captions` draws the active cues only where the provider hands caption
+rendering over, and renders nothing otherwise — where the provider paints its
+own captions there is nothing for it to add. `renderCue` replaces what it draws
+for each cue:
+
+```ts
+renderCue?: (cue: TextCue) => ReactNode;
+// TextCue: { id: string | null; startTime: number; endTime: number; text: string }
+```
+
+A cue is stripped to those four fields before it reaches your function, so no
+provider-specific field leaks into consumer code. Supplying `renderCue` also
+drops the default styling from each cue's own box, leaving its appearance to
+you; the overlay that positions the cues keeps its own. Reach for it when the
+`--playdeck-caption-*` tokens do not go far enough, or to render a cue as
+something other than a run of text. The default splits `text` on newlines into
+one `caption-line` part per line.
+
+`captionRenderer` on `Player.Root` chooses which side draws the cues, and
+defaults to `'custom'`: the provider hands its cues to Playdeck and
+`Player.Captions` paints them. `'native'` asks the provider to draw its own
+captions instead — a request rather than a setting, because what a provider has
+to hand them to differs. The answer is `state.captionRendering`, and that is
+what `Player.Captions` follows: it draws while that reads `custom` and renders
+nothing otherwise, whatever the prop says.
+
+What the request can reach differs by what is playing. Where the browser holds
+the media itself, asking for `'native'` puts the selected track back into its
+hands and the state reads `native` while a track is selected. Where an embed
+paints cues inside its own frame, the state reads `provider` and the prop
+changes nothing — there is no second surface to hand them to. Where a provider
+parses cues itself without a native seam, the request lands and the state
+honestly stays `custom`. In every case the state reports what is really
+drawing, not what was asked for.
+
+`unavailable` is the answer before anything has reported otherwise. A source
+whose provider found no caption tracks reads that way, and so does one whose
+provider has no caption seam at all — it is the value the state starts at, so
+nothing having patched it and nothing being there are indistinguishable from
+outside.
+
+Two more `Player.Root` props choose a caption track without a consumer calling
+`selectTextTrack` itself: `preferredTextTrackLanguage?: string` and
+`defaultTextTrack?: 'auto' | 'off'`. `preferredTextTrackLanguage` is a BCP 47
+language tag; once a source's tracks publish, and again whenever captions turn
+on without the viewer having picked a track of their own, selection resolves
+in this order — an exact `TextTrack.language` match, then the same base
+language (`en` matches `en-GB`), then the provider's own default track if it
+has one, and otherwise the first `captions`/`subtitles` track. Matching is
+case-insensitive, and a track whose `language` is `null` never matches either
+language step (it remains eligible for the two fallback steps). `defaultTextTrack`
+defaults to `'auto'`, which leaves that resolution — and, with neither prop
+set, the provider's own initial pick — alone; `'off'` starts every source,
+YouTube included, with no track selected. Either prop stops acting the moment
+the viewer makes their own choice, through a control or `selectTextTrack`, for
+that source; a new source applies both again.
+
+`preferredTextTrackLanguage` is checked against a BCP 47 tag's shape (letters,
+digits and hyphens, up to 35 characters) before it is used anywhere. A value
+that fails is ignored outright — selection behaves exactly as if the prop were
+absent — and a `configuration`-category notice naming the rejected value is
+published on `PlayerState.error` instead of being thrown.
+
+On YouTube, `defaultTextTrack="off"` also writes the embed's own
+`cc_load_policy=0` player var, so a default caption track is never requested
+in the first place. This has not been verified against a real YouTube player:
+YouTube's own docs document `cc_load_policy=1` as forcing captions on, but
+give `0` no documented meaning beyond matching the var's own absence, so this
+repo's coverage of it is a fake iframe API honouring the var by construction,
+not a measurement of real YouTube's response to it.
+
+Optional stylesheet with the default look:
+
+```ts
+import '@playdeck/react/theme.css';
+```
+
+## Reading state and issuing commands
+
+```tsx
+import * as Player from '@playdeck/react';
+
+// `usePlayerState` takes a selector and re-renders only when the selected
+// value changes — not on every time update.
+export const PlaybackLabel = () => {
+  const playback = Player.usePlayerState((state) => state.playback);
+  return <span>{playback}</span>;
+};
+
+// Commands are answered: `whenReady` tells you when one will land, instead of
+// issuing it and hoping.
+export const SlowMotionButton = () => {
+  const actions = Player.usePlayerActions();
+  return (
+    <button
+      onClick={async () => {
+        if (await actions.whenReady()) await actions.setPlaybackRate(0.75);
+      }}
+    >
+      0.75×
+    </button>
+  );
+};
+
+// The cues active right now, for rendering captions yourself.
+export const CueText = () => {
+  const cues = Player.useActiveCues();
+  return <p>{cues.map((cue) => cue.text).join(' ')}</p>;
+};
+```
+
+`usePlayerState` takes a selector and re-renders only when the selected value
+changes. `Player.Root` also accepts a `ref`, which receives a `PlayerHandle`
+carrying the same commands plus `getState`, `subscribe` and `on`.
+
+The commands that ask a provider to do something resolve a `CommandResult` —
+`{ ok: true }`, or `{ ok: false, reason }` with an optional `PlayerError` behind
+it. Not every member is one: `whenReady` answers a `boolean`,
+`setCaptionRenderer` records a preference and returns nothing, and
+`activateFromInteraction` starts a player rather than issuing a command.
+
+That result is the only place the answer lives, because nothing is queued and
+replayed once the player catches up: a `reason` of `not-ready` means the call
+did nothing and the caller has to ask again, which is what `whenReady` is for.
+The `reason` vocabulary and the capability contract are shared with the
+controller and are documented in
+[@playdeck/core](./core.md).
+
+`seekBy` moves the playhead by an offset in seconds — negative back, positive
+forward. It is not sugar for `seekTo(currentTime + offset)`: the offset is added
+to the position the provider itself holds when the command reaches it, so it
+does not inherit the lag between a provider's real position and the
+`currentTime` a render last read. Every provider clamps the target into the same
+window `seekTo` lands in, so overshooting either end of the media is not itself
+a failure — the seek lands on the boundary. An offset that is not finite is a
+failure, answered `provider-error` without the playhead moving. This is the
+command behind `Controls`' arrow, `j`/`l` and `PageUp`/`PageDown` bindings, and
+behind `Gestures`' `seekOffset`.
+
+`toggleMuted` reads the muted state the player is in and issues `mute` or
+`unmute` accordingly, resolving whatever that one command resolved — so a `false`
+result is the mute or the unmute failing, not the toggle. It writes no volume of
+its own, which is why unmuting a player whose published volume is `0` leaves it
+silent; the arrow-key handling described under `Controls` is a deliberate
+exception layered on top, not what the command does.
+
+`activateFromInteraction` is on both surfaces and is not a `PlayerController`
+method, which is worth saying because it is where a reader looks for it first.
+It starts a player that `loading="interaction"` has left dormant — nothing
+fetched, no provider network request made — and `PlayerController` has no
+concept of that dormancy: only the activation `Player.Root` runs has one.
+That dormancy is also why `poster="provider"` never shows anything before the
+click: it resolves from the attached provider, and nothing attaches here
+until one. See
+[A poster before the provider attaches](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md#a-poster-before-the-provider-attaches)
+in Provider setup for a poster that does not need the wait — a pure helper for
+YouTube, and the build-time pattern for Vimeo and Wistia.
+Joining it to the handle is what lets an external control surface drive
+activation through the ref it already holds, without the controller growing an
+activation concern of its own. It returns `void` rather than a `CommandResult`,
+because it starts a player rather than issuing a command; what became of the
+activation is read from `state.activation` and `state.error`.
+
+Calling it on a dormant root arms the player and queues one play, so the
+provider loads and playback begins from that single call —
+`Player.ActivationButton` is the bundled way to make that call, not the only one.
+Where the activation is in its `error` state it is a retry instead: the provider
+is discarded and the load re-armed. It refuses an error the state reports as
+`recoverable: false`, exactly as `ActivationButton` does, so a direct call and a
+click turn down the same errors.
+
+Everything else is a silent no-op, which is the shape an external controller
+that calls it unconditionally before `play()` needs: a root that is not
+`loading="interaction"`, a `source` that was refused, the
+`loading="interaction"` with autoplay pairing the library treats as a
+configuration conflict, and a player that has already activated all leave it
+doing nothing rather than restarting or throwing. Calling it moves the root to
+`eligible` at once, but a provider is not attached yet, so a `play()` issued
+straight after resolves `{ ok: false, reason: 'not-ready' }` and is dropped
+rather than queued — nothing is replayed here either — so that pair costs
+exactly one play once the provider attaches.
+
+## Volume, muting and playback rate
+
+Each playback preference is either yours to hold or the player's.
+`muted`, `volume` and `playbackRate` are the controlled props: pass one and the
+player is pinned to that value, and moving it is yours to do. `defaultMuted`,
+`defaultVolume` and `defaultPlaybackRate` are the uncontrolled form — a
+starting value the player then owns, which is what opening muted, or opening
+quiet, costs when you have no reason to hold the state yourself.
+
+| uncontrolled          | controlled     | starting value |
+| --------------------- | -------------- | -------------- |
+| `defaultMuted`        | `muted`        | `false`        |
+| `defaultVolume`       | `volume`       | `1`            |
+| `defaultPlaybackRate` | `playbackRate` | `1`            |
+
+Each row is decided on its own, so a player can be controlled on one preference
+and uncontrolled on another. Within a row the controlled prop wins outright
+wherever it holds a value: the `default*` beside it is never consulted, and it
+is not a fallback for a controlled prop that is momentarily `undefined`, since
+an `undefined` there is the whole row going uncontrolled.
+
+A `default*` is read on the first render and never again, the same as React's
+own uncontrolled inputs. What it seeds is the first media that attaches; from
+there the value the provider last confirmed is what carries forward, through a
+source change and through a provider re-attach, rather than the default being
+applied a second time. Handing a controlled prop back likewise leaves the
+player on the value it currently holds rather than returning it to the default.
+A starting volume is clamped into `0`–`1`. A volume that is not finite is not
+applied at all, and neither is a playback rate unless it is finite and greater
+than zero.
+
+`onMutedChange`, `onVolumeChange` and `onPlaybackRateChange` report the value
+the provider confirmed rather than the one that was asked for, which is why
+they are worth reading even where you issued the change yourself. They fire
+whatever moved the player — a bundled control, a `usePlayerActions` or
+`PlayerHandle` command, the provider's own chrome under `controls`, the
+platform moving the media by itself.
+
+What they suppress is the echo: a change `Player.Root` issued to satisfy a
+controlled prop is not reported back, so a controlled player is not called with
+the value it was just handed. A starting value the provider agrees with is not
+announced either. Neither rule is a guarantee that no callback ever arrives
+unbidden, because both compare against what was asked for — a provider that
+confirms something else answers with a genuine change. A controlled `volume`
+outside `0`–`1` is the reachable case: it travels to the provider as given, and
+the value that comes back is the clamped one.
+
+That makes them the other half of a controlled player. A change arriving from
+anywhere but the prop is reported and then reconciled back to the prop's value,
+so a controlled player whose callback updates no state snaps its viewer back
+every time they touch the control. Under the uncontrolled form the callback
+observes only — the player keeps the new value with or without it. Each is read
+through a ref as `Player.Root` renders, so an inline arrow function
+re-subscribes nothing.
+
+## Media Session
+
+`Player.Root` binds itself to the browser's Media Session, so a player composed
+from these primitives reaches the platform's own media surface — lock screen,
+notification shade, hardware keys — without a consumer calling anything.
+`mediaMetadata` is what it publishes there: an optional
+`{ title, artist, album, artwork }`, where `artwork` is a list of
+`{ src, sizes?, type? }`. Nothing is read off the source to fill it, so passing
+none publishes none rather than a guess, and changing the prop on a mounted
+player replaces what that player publishes. Where the browser exposes no
+`navigator.mediaSession` there is nothing to bind and the prop does nothing.
+
+That surface is shared by every player on the page, and the arbitration over
+it — which root owns it, when ownership moves, and which of the platform's
+actions are routed back into playback — belongs to `bindMediaSession` and is
+documented under
+[Media Session](./core.md#media-session)
+in `@playdeck/core`. `Player.Root` makes that call for you, and `mediaMetadata`
+is both its seed and its setter; what the platform shows is still whatever the
+root owning the surface published last.
+
+An artwork `src` is a consumer-supplied URL, so the allowlist can refuse one.
+What that publishes is
+[A URL prop the allowlist refused](./core.md#a-url-prop-the-allowlist-refused),
+also in `@playdeck/core`.
+
+## Exports
+
+### Structure
+
+`Root`, `Viewport`, `Media`, `Poster`, `PosterImage`, `ActivationButton`,
+`LoadingIndicator`, `ErrorDisplay`, `Captions`, `Gestures`, `LiveIndicator`.
+
+Each overlay renders only when its own state calls for it — nothing is drawn
+disabled, with one exception: `LiveIndicator` stays mounted where its
+`liveEdge` capability is unavailable, as a disabled badge rather than an
+active button, for the reason given beside the capability-gating rule above
+(see the comment in the example below). `LiveIndicator`'s data attributes,
+`PlayerState.live` and which providers can report it are covered in
+[**Live**](../guides/live.md):
+
+```tsx
+import * as Player from '@playdeck/react';
+
+// The overlay layers, in the order they stack inside a Viewport. Each renders
+// only when its own state says it should: no disabled-looking placeholders,
+// with one exception noted below.
+export const Overlays = () => (
+  <Player.Viewport>
+    <Player.Poster>
+      <Player.PosterImage alt="" src="/poster.jpg" />
+    </Player.Poster>
+    <Player.Media />
+    {/* Deferred loading: the button activates the player on first interaction. */}
+    <Player.ActivationButton aria-label="Play" />
+    <Player.LoadingIndicator />
+    <Player.Captions />
+    {/* Renders only on a live source -- nothing while `state.live` is null.
+        The one exception to "no disabled-looking placeholders" above: where
+        the provider cannot seek to the live edge it stays mounted as a
+        disabled badge, because being live is true whether or not that
+        command exists. Where the provider can, it is an active button. */}
+    <Player.LiveIndicator />
+    <Player.Gestures
+      seekOffset={10}
+      onSeek={(direction, offset) => console.log(direction, offset)}
+    />
+    {/* `retry` is null when the error cannot be retried — absent, not
+        disabled. */}
+    <Player.ErrorDisplay>
+      {({ error, retry }) => (
+        <div role="alert">
+          {error.message}
+          {retry ? <button onClick={retry}>Retry</button> : null}
+        </div>
+      )}
+    </Player.ErrorDisplay>
+  </Player.Viewport>
+);
+
+// `Poster` accepts a URL string, an image-props object, or your own element.
+// `normalizePoster` is the same resolution the primitive performs.
+export const poster = Player.normalizePoster('/poster.jpg');
+```
+
+### Controls
+
+`PlayButton`, `MuteButton`, `VolumeSlider`, `SeekSlider`, `Time`,
+`FullscreenButton`, `PipButton`, `AirPlayButton`, `RemotePlaybackButton`,
+`CaptionsButton`, `Controls`.
+
+#### Presentation and casting
+
+`FullscreenButton`, `PipButton`, `AirPlayButton` and `RemotePlaybackButton`
+each read one entry of `state.capabilities` — `fullscreen`, `pictureInPicture`,
+`airPlay` and `remotePlayback` — and render only while that entry says
+`available`. An `unknown` entry renders nothing either: a capability still
+being decided is not a reason to put a control on screen and then withdraw it.
+
+`RemotePlaybackButton` opens the browser's own Remote Playback picker — the
+standards-based route to Chromecast and other receivers, reached through the
+media element's `remote` object rather than the Cast SDK — and is `available`
+only once that element reports a device actually reachable on the network.
+
+Driving those presentations without the buttons means doing that gate yourself.
+The commands are on `PlayerHandle` and on `usePlayerActions`, as the request and
+exit pairs `requestFullscreen`/`exitFullscreen` and
+`requestPictureInPicture`/`exitPictureInPicture`. The built-in buttons choose
+which half of a pair to send from `state.fullscreen` and
+`state.pictureInPicture`, and that choice is exactly what you take over.
+`showAirPlayPicker` and `showRemotePlaybackPicker` have no exit twin and are
+not toggles: each opens its platform's own route picker, and which device the
+viewer picked — or whether they picked one at all — is never reported back,
+which is why neither button carries state of its own. `remotePlayback`'s
+connection state is published separately, as `PlayerState.remotePlayback`, for
+a consumer who wants to render it.
+
+Calling one past its gate is answered rather than thrown, and the
+`CommandResult` says which gate it met. `not-ready` is a command that arrived
+before a provider was attached and ready to take it. `unsupported` is the active
+provider having no such command to give: an embed exposes only what its own SDK
+offers, so some wire no picture-in-picture at all, and the AirPlay and
+remote-playback pickers are wired only by the adapters that drive a media
+element directly, and then only where that element exposes them. `blocked` is a
+permissions policy or a media-element attribute refusing it, and carries the
+`PlayerError` that names which. So the capability answers whether to offer a
+control, and the result answers what became of a command once it was issued.
+
+#### Accessible names
+
+Every interactive control ships a built-in English `aria-label`, and **an
+`aria-label` you pass always wins over it**. The built-in is a fallback, never an
+override, so `<Player.PlayButton aria-label="Reproducir" />` and
+`<Player.SeekSlider aria-label="Buscar" />` do the same thing for the same
+reason. Playdeck carries no message catalogue and no locale handling; this prop
+is how you supply your own strings. (`Time` and `Controls` are not interactive
+and carry no name of their own.)
+
+**A button's visible text is separate, and you own that too.** The buttons fall
+back to rendering their own English wording as their children, so naming a
+button without also passing `children` leaves the two disagreeing — a
+`<Player.PlayButton aria-label="Reproducir" />` reads "Reproducir" to a screen
+reader and "Play" on screen. That is a WCAG 2.5.3 _Label in Name_ failure for
+anyone driving the control by voice. Pass both, or pass an icon as `children`
+and let the name stand alone.
+
+Where a control's own label changes with its state — play/pause, mute/unmute,
+captions on/off, the fullscreen and picture-in-picture toggles, and
+`LiveIndicator`'s "Live"/"Go to live" — **one name you supply holds in every
+state.** The library does not reassert its own wording in one state and keep
+yours in the other: naming the control is yours from the first prop onwards,
+so pick a name that reads correctly in both, or drive it yourself from
+`usePlayerState`.
+
+`SeekSlider` is the one control whose props are the wrapper `<div>`'s rather
+than the interactive element's, because it renders buffered geometry around the
+input. `aria-label` is the single exception, and is forwarded onto the inner
+`<input type="range">` — the element that carries the slider role and the one a
+screen reader announces. Everything else you pass stays on the wrapper, where
+`className`, `style` and `data-*` belong.
+
+`inputProps` is the escape hatch onto that inner input, for the props that have
+nowhere else to go: `step`, `disabled`, `id`/`name`, `onChange`, its own
+`style`, `data-*`. It is the more specific of the two, so
+`inputProps['aria-label']` outranks a top-level `aria-label`, which outranks the
+built-in `"Seek"`. Playdeck keeps ownership of the controlled attributes —
+`value`, `min`, `max`, `type`, `aria-valuetext`, `aria-disabled` — so those
+cannot be overridden. An `onChange` you pass is chained after the seek rather
+than replacing it, and an `aria-describedby` you pass is composed with the
+buffered-progress description rather than replacing it.
+
+`thumbnails` takes the URL of a WebVTT file whose cues carry an image URL with
+a `#xywh=` sprite-region fragment — the convention Vidstack, Media Chrome and
+Video.js all read, so an existing sprite-generation pipeline needs no change.
+The file is fetched once, lazily, on the first hover or the first keyboard
+focus of the input — never at mount — and, once loaded, `SeekSlider` renders a
+`thumbnail` part cropped to the cue for the pointer or focus position, above
+the track. Without the prop, nothing extra renders. A relative cue image
+URL — the ordinary output of a sprite generator — resolves against the VTT
+file's own final address, not the page's, before it ever reaches the
+allowlist below, so the allowlist judges the same address the `<img>` will
+actually request
+(`@playdeck/core`'s [`parseThumbnailCues`](./core.md#thumbnail-preview)).
+Every cue's image URL passes through the same allowlist every other URL in
+the player does; a refused `thumbnails` URL or a refused cue image publishes
+the same
+[A URL prop the allowlist refused](./core.md#a-url-prop-the-allowlist-refused)
+notice `mediaMetadata`'s artwork does. The part's name and its `data-state`
+values are documented in the
+[**Contract**](../guides/contract.md) guide.
+
+The preview is code you pay for only when you ask for it. The cue fetch, the
+cue lookup, the crop geometry and the `thumbnail` part all live in a module
+`SeekSlider` imports through a dynamic `import()`, started when the prop is
+present, so a seek slider without it downloads none of them — the same trade
+`Player.Root` makes for provider adapters. The part therefore appears once
+that module has loaded rather than in the same frame as the slider; it is
+absolutely positioned and starts hidden, so nothing moves when it does, and a
+hover or focus that happens first is previewed as soon as it arrives.
+
+`Time` takes a `type` of `current` (the default), `duration` or `remaining`.
+`remaining` counts down from the duration and carries a leading minus for as
+long as any remainder is left — `-1:23`, and still `-0:00` through the last
+second before the end. Only an exhausted remainder reads `0:00`. Each instance
+carries `data-time-type`, so the three are styleable apart.
+
+On a live source, `current` reports distance from the live edge rather than
+elapsed time: a negative offset while playback is behind it — `-0:42` — and
+the word `LIVE` once it is within the edge's tolerance. `liveLabel` sets that
+word, for a consumer translating the interface; it defaults to `LIVE`.
+`duration` has no total to report on a live source and so renders no time at
+all, leaving the `data-state="untimed"` hook below in its place.
+
+`data-state="untimed"` marks a `Time` on a source with no duration to measure
+against — a live stream, or one whose duration has not arrived yet. It marks all
+three types, `current` included, because it describes the source rather than the
+instance. What differs is the element. `duration` and `remaining` have no time
+to mark up there, so each becomes a `<span>` — keyed on the source being
+untimed, not on the text coming out empty, so one given `children` is still a
+`<span>` and still displays them. Given none it renders nothing: the library
+draws no placeholder of its own, because a `0:00` there would state a
+zero-length video rather than an unmeasured one. `current` still has an elapsed
+time to show, so it stays a `<time>`. Pair the state with
+`data-time-type` to hang a `LIVE` badge or an em dash off the right one — the
+state alone also matches the running `current` beside it.
+
+`Controls` is a focusable region that owns the media keyboard shortcuts: Space
+and `k` toggle playback, `ArrowLeft`/`ArrowRight` seek 5s back and forward,
+`j`/`PageDown` seek 10s back and `l`/`PageUp` 10s forward, `ArrowUp`/`ArrowDown`
+move the volume by 0.05, and `m`, `f` and `c` toggle muted, fullscreen and
+captions. Every binding except `togglePlayback` is gated on the capability its
+command needs, and an unavailable one is inert — the key acts on nothing and
+keeps none of it, so it is left to the page. `togglePlayback` is ungated,
+because there is no playback capability to gate on: Space and `k` are taken on
+every provider, subject only to the target rules below. The layer fires only
+while focus is inside the region; `global` attaches the same map to the
+document instead.
+
+While the player is muted the volume arrows act on the muted zero the control
+is showing rather than on the published volume behind it: `ArrowUp` unmutes and
+restores that published level unchanged — stepping to 0.05 only where the
+published volume is itself 0, which unmuting alone would leave silent — and
+`ArrowDown` does nothing, because the player is already silent. `ArrowDown`
+still keeps the key. The thumb moves to the restored level at once, while the
+player is still muted, so the next press compounds on it: muted at 0.5,
+`ArrowUp` `ArrowUp` lands on 0.55. Both arrows do step a change the player has
+not answered yet, because that is what the thumb is showing: muted and dragged
+to 0.3, `ArrowDown` moves to 0.25. `VolumeSlider`'s own pointer, `Home` and `End`
+changes are unaffected: those start from the zero on screen, so moving one up
+unmutes at the value the user chose.
+
+The region owns those keys wherever focus sits inside it, a focused
+`<input type="range">` included, so the arrows seek and adjust volume at the
+same distances on `SeekSlider` and `VolumeSlider` as off them — see
+[ADR-0005](https://github.com/pedrosousa13/playdeck/blob/main/docs/adr/0005-the-shortcut-layer-owns-its-keys-on-a-range-input.md).
+Text entry (a text `<input>`, `<textarea>`, `<select>` or content-editable
+region) still swallows every key, and a focused button, link or checkbox keeps
+Space and `Enter` for itself.
+
+In `global` mode, an arrow key leaves a widget outside the player alone when
+that widget answers arrows itself: a native radio or range input, or anything
+inside an element carrying one of the WAI-ARIA composite-widget roles that
+navigate with arrows — `radiogroup`, `tablist`, `slider`, `spinbutton`,
+`listbox`, `menu`, `menubar`, `tree`, `treegrid`, `grid` or `toolbar`. Neither
+the bound shortcut nor `preventDefault()` runs there, so a radio group, a
+tab strip or a slider elsewhere on the page keeps its own roving-focus
+navigation instead of losing it to volume or seek. The exemption only ever
+applies outside the player: `Player.Viewport`'s own DOM node where the
+region renders inside one, this region's own node otherwise. An arrow key
+still belongs to the layer wherever focus sits inside that boundary, its own
+sliders included and a consumer's own control composed elsewhere in the same
+viewport included, and still fires normally on any other page content.
+
+`PageUp` and `PageDown` are in-region only in `global` mode: outside that same
+boundary the layer does not handle either key and does not call
+`preventDefault()`, on any target — `<body>`, a plain scrollable element, a
+`grid` or `tablist`, or anything else — so the page keeps its own paging.
+Unlike the arrow exemption above, this one does not check what the target is;
+native paging outranks the shortcut everywhere outside the player. The rule
+follows the two keys themselves rather than the actions bound to them, so
+`shortcuts={{ seekForwardLarge: 'l', toggleFullscreen: 'PageUp' }}` — which
+frees `PageUp` from the default `seekForwardLarge` binding before handing it
+to `toggleFullscreen` — keeps that in-region-only behaviour for the rebound
+key: outside the boundary it still does nothing, and inside it it toggles
+fullscreen instead of seeking. `PageUp`/`PageDown` at their defaults seek
+inside the boundary exactly as described above, and scoped mode is unchanged
+either way.
+
+`shortcuts` controls the layer. `shortcuts={false}` turns it off entirely — in
+`global` mode no `document` listener is attached at all. An object is a partial
+override map of action to a `KeyboardEvent.key` value, an array of them, or
+`null` to suppress that one binding; every action it does not name keeps its
+default, so moving one key never means restating the map. Both forms behave the
+same in either scoping mode. WCAG 2.1.4 Character Key Shortcuts requires that
+of `global` mode, whose keys are live wherever focus is on the page; the
+region-scoped default conforms through the active-on-focus exception.
+
+`shortcuts={{ seekBackward: null, seekForward: null }}` suppresses the two seek
+bindings and hands the arrows back to whatever native control has focus.
+`ShortcutAction` names the ten actions and `ShortcutBindings` is the map type.
+Hoist the object or `useMemo` it: a fresh literal on every render re-attaches
+the global listener.
+
+### Menus
+
+`SettingsMenu`, `SettingsMenuTrigger`, `SettingsMenuContent`, `MenuItem`,
+`MenuRadioGroup`, `MenuRadioItem`, `CaptionsMenu`, `QualityMenu`,
+`PlaybackRateMenu`, `ChaptersMenu`, `AudioTrackMenu`.
+
+`SettingsMenu` and the menu parts are also the building blocks the reference
+example below composes quality and playback rate from by hand, alongside one
+another, for a consumer who wants both under one trigger. `QualityMenu`,
+`PlaybackRateMenu` and `ChaptersMenu` are the standalone primitives for a
+consumer who wants one on its own, the same way `CaptionsMenu` is for
+captions — covered in [**Quality**](../guides/quality.md),
+[**Playback rate**](../guides/playback-rate.md) and
+[**Chapters**](../guides/chapters.md). `AudioTrackMenu` is
+the same shape for `state.audioTracks`, covered in
+[**Audio tracks**](../guides/audio-tracks.md). It lists a
+rung per published track and marks whichever one carries `active: true`.
+There is no "Auto" row and no sibling selection field, since an audio track
+carries its own selection (see the **Audio track** glossary entry in
+`CONTEXT.md`).
+
+```tsx
+import * as Player from '@playdeck/react';
+
+/**
+ * The label a quality rung prints: its height. Not a promise the *library*
+ * makes about every provider -- `PlayerQuality`'s `height` field is nullable
+ * -- so the rung's own id stands in for the one entry that carries none. The
+ * bitrate is not printed here; the stats readout under the player already
+ * shows it.
+ */
+const qualityLabel = (quality: {
+  readonly id: string;
+  readonly height: number | null;
+}): string => (quality.height === null ? quality.id : `${quality.height}p`);
+
+// A settings menu built from the menu parts: quality, then playback rate.
+// `SettingsMenu` owns the open state and returns focus to the trigger on
+// every close path.
+export const RateMenu = () => {
+  const actions = Player.usePlayerActions();
+  const { rate, qualityStatus, qualities, selectedQualityId } =
+    Player.usePlayerState((state) => ({
+      rate: state.playbackRate,
+      qualityStatus: state.capabilities.selectQuality.status,
+      qualities: state.qualities,
+      selectedQualityId: state.selectedQualityId
+    }));
+
+  return (
+    <Player.SettingsMenu>
+      <Player.SettingsMenuTrigger aria-label="Settings" />
+      <Player.SettingsMenuContent>
+        {/* Gated the same way the library gates its own controls: absent
+            where the provider will not honour `selectQuality`, never present
+            and empty -- a source with no ladder to choose from (YouTube)
+            prints no group at all. */}
+        {qualityStatus === 'available' && qualities.length > 0 && (
+          <Player.MenuRadioGroup
+            aria-label="Quality"
+            value={selectedQualityId ?? ''}
+            onValueChange={(value) =>
+              void actions.selectQuality(value === '' ? null : value)
+            }
+          >
+            <Player.MenuRadioItem value="">Auto</Player.MenuRadioItem>
+            {qualities.map((quality) => (
+              <Player.MenuRadioItem key={quality.id} value={quality.id}>
+                {qualityLabel(quality)}
+              </Player.MenuRadioItem>
+            ))}
+          </Player.MenuRadioGroup>
+        )}
+        <Player.MenuRadioGroup
+          value={String(rate)}
+          onValueChange={(value) => void actions.setPlaybackRate(Number(value))}
+        >
+          {[0.5, 1, 1.5, 2].map((option) => (
+            <Player.MenuRadioItem key={option} value={String(option)}>
+              {option}×
+            </Player.MenuRadioItem>
+          ))}
+        </Player.MenuRadioGroup>
+        <Player.MenuItem onSelect={() => void actions.seekTo(0)}>
+          Restart
+        </Player.MenuItem>
+      </Player.SettingsMenuContent>
+    </Player.SettingsMenu>
+  );
+};
+
+// The caption track list, already wired to the player's own tracks.
+export const Captions = () => <Player.CaptionsMenu />;
+
+// The quality ladder, already wired to the player's own qualities. `RateMenu`
+// above still composes a quality group by hand alongside playback rate, for
+// a consumer who wants both under one trigger; this is the standalone
+// primitive for a consumer who wants quality on its own.
+export const Quality = () => <Player.QualityMenu />;
+
+// The rate ladder, already wired to the player's own playbackRate. `RateMenu`
+// above still composes a rate group by hand alongside quality, for a
+// consumer who wants both under one trigger; this is the standalone
+// primitive for a consumer who wants playback rate on its own.
+export const Rate = () => <Player.PlaybackRateMenu />;
+
+// The chapter list, already wired to the player's own chapters and current
+// playback position. Unlike `Quality` and `Rate`, `RateMenu` above has no
+// hand-composed chapters group alongside it -- this is the only way this
+// package exposes chapters navigation.
+export const Chapters = () => <Player.ChaptersMenu />;
+
+// The audio-track list, already wired to the player's own tracks and marking
+// whichever one is active. Unlike `Quality` and `Rate`, `RateMenu` above has
+// no hand-composed audio-track group alongside it -- this is the only way
+// this package exposes audio-track selection.
+export const AudioTracks = () => <Player.AudioTrackMenu />;
+```
+
+### Hooks
+
+`usePlayerState`, `usePlayerActions`, `useActiveCues`.
+
+### Helpers and types
+
+`normalizePoster` resolves the `PosterInput` union (`string`,
+`ResponsivePoster`, or a custom element) into the `NormalizedPoster` shape
+`Poster` renders — exported so a consumer building its own poster layer resolves
+it the same way.
+
+Every component has a matching props type (`RootProps`, `MediaProps`,
+`SeekSliderProps`, `MenuItemProps`, …), plus `PlayerHandle`, `PlayerActions`,
+`PlayerActivationProps`, `PosterInput`, `ResponsivePoster`, `NormalizedPoster`,
+`ErrorDisplayRenderProps`, `ShortcutAction`, `ShortcutBindings`. The icons below
+share one type, `IconProps`, rather than carrying an identical alias each.
+
+`PlayerHandle` is what a `ref` on `Player.Root` receives, and `PlayerActions` is
+that same type with the read side (`getState`, `subscribe`, `on`) removed — it
+is what `usePlayerActions` returns. Both are derived from the one action list
+rather than written out twice, so a command reachable through the hook is
+reachable through the ref and answers the same way.
+
+### Icons
+
+```tsx
+import {
+  AirPlayIcon,
+  CaptionsIcon,
+  CheckIcon,
+  FullscreenEnterIcon,
+  FullscreenExitIcon,
+  MutedIcon,
+  PauseIcon,
+  PipEnterIcon,
+  PipExitIcon,
+  PlayButton,
+  PlayIcon,
+  ReplayIcon,
+  SeekBackwardIcon,
+  SeekForwardIcon,
+  SettingsIcon,
+  VolumeHighIcon,
+  VolumeLowIcon
+} from '@playdeck/react';
+
+// Every icon is an optional named export that tree-shakes out when unused, so
+// importing one costs you only that one.
+export const icons = [
+  PlayIcon,
+  PauseIcon,
+  ReplayIcon,
+  VolumeHighIcon,
+  VolumeLowIcon,
+  MutedIcon,
+  SeekForwardIcon,
+  SeekBackwardIcon,
+  FullscreenEnterIcon,
+  FullscreenExitIcon,
+  PipEnterIcon,
+  PipExitIcon,
+  AirPlayIcon,
+  CaptionsIcon,
+  SettingsIcon,
+  CheckIcon
+];
+
+// Icons are decorative (`aria-hidden`), sized in `em`, and coloured by
+// `currentColor` — a control passing one keeps its own accessible name.
+export const CustomPlayButton = () => (
+  <PlayButton>
+    <PlayIcon />
+  </PlayButton>
+);
+```
+
+## Styling
+
+Every primitive exposes `data-playdeck-part` (its stable name), `data-state` (its
+derived state) and, on provider-bound controls, `data-provider`. Style and query
+against those rather than internal class names. Geometry a primitive sets on
+itself is a default your `style` prop overrides; state-derived properties are
+the primitive's own. The full contract is at
+[**Contract**](../guides/contract.md).
+
+## Theming
+
+Both shipped stylesheets are opt-in — the primitive parts import no CSS of
+their own, and nothing below changes that. Every visual value either
+stylesheet reads is a CSS custom property, read as `var(--name, default)` and
+never required to be set, which is what the [**Theme**](../guides/theme.md)
+guide's starter theme builds on. This is that contract, versioned alongside
+this package: every token's name, default, and which parts read it, checked
+against the rules in `theme.css`, `docked.css` and every primitive in
+`packages/react/src` by `test/tokens.contract.test.ts` on every run.
+
+Two things that check does not cover. The scan finds a token only where a rule
+reads it with `var(--name, ...)`; a token a rule only _declares_ with a
+literal — the way `theme.css`'s phone-width block sets
+`--playdeck-control-size` and its siblings — is invisible to it, so a future
+phone-only token could ship with no row here and this test still green. And
+the table's **Role** column is prose the test never reads at all: unlike
+Default and Parts, it can go stale with nothing to catch it.
+
+`--playdeck-media-aspect-ratio` is deliberately **not** in the table below. It
+runs the opposite direction to everything here — Playdeck writes it, a
+consumer reads it — so it is an output, not a token, and is documented with the
+library's other outputs on the [**Contract**](../guides/contract.md)
+page.
+
+The default below is `theme.css`'s own. `docked.css` reads the same token
+names, but its surface is a light card rather than a dark scrim, so most of
+its colours carry a second default of their own — see `packages/react/docked.css`'s
+header comment for docked's, including its `prefers-color-scheme: dark` pair.
+One token, `--playdeck-color-hairline`, exists only there: `theme.css` neither
+reads it nor needs it, since its scrim already supplies the edges a flat
+surface has to draw itself.
+
+A `*` under Parts means every part: `--playdeck-color-focus` outlines whichever
+part currently has focus, and `--playdeck-control-icon-size` sizes the `svg`
+inside whichever part renders one.
+
+| Group      | Token                                   | Role                                                                                                                                                                                                                                                                                            | Default                                                                                                                                                           | Parts                                                                                                                                                                                                                                     |
+| ---------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Color      | `--playdeck-color-surface`              | Solid fill behind an overlay or menu                                                                                                                                                                                                                                                            | `rgb(0 0 0 / 0.72)`                                                                                                                                               | `activation`, `controls`, `error`, `settings-menu`, `thumbnail`, `viewport`                                                                                                                                                               |
+| Color      | `--playdeck-color-on-surface`           | Ink colour over a surface                                                                                                                                                                                                                                                                       | `#fff`                                                                                                                                                            | `activation`, `airplay-button`, `captions-button`, `controls`, `error`, `error-retry`, `fullscreen-button`, `live`, `loading-indicator`, `mute-button`, `pip-button`, `play-button`, `settings-menu`, `settings-menu-trigger`, `viewport` |
+| Color      | `--playdeck-color-accent`               | Brand/accent fill — a slider's played span, progress fill and thumb                                                                                                                                                                                                                             | `#3ea6ff`                                                                                                                                                         | `seek-progress`, `seek-slider-input`, `volume-slider`                                                                                                                                                                                     |
+| Color      | `--playdeck-color-accent-tint`          | The lighter end of the seek fill's gradient                                                                                                                                                                                                                                                     | `#9dd0ff`                                                                                                                                                         | `seek-progress`                                                                                                                                                                                                                           |
+| Color      | `--playdeck-color-track`                | A slider's unfilled track                                                                                                                                                                                                                                                                       | `rgb(255 255 255 / 0.36)`                                                                                                                                         | `seek-buffered`, `seek-slider-input`, `volume-slider`                                                                                                                                                                                     |
+| Color      | `--playdeck-color-buffered`             | A slider's loaded-range indicator                                                                                                                                                                                                                                                               | `rgb(255 255 255 / 0.7)`                                                                                                                                          | `seek-buffered-range`                                                                                                                                                                                                                     |
+| Color      | `--playdeck-color-thumb-ring`           | The ring drawn around a slider's thumb                                                                                                                                                                                                                                                          | `#000`                                                                                                                                                            | `seek-slider-input`, `volume-slider`                                                                                                                                                                                                      |
+| Color      | `--playdeck-color-focus`                | The `:focus-visible` outline                                                                                                                                                                                                                                                                    | `#fff`                                                                                                                                                            | `*`                                                                                                                                                                                                                                       |
+| Color      | `--playdeck-color-backdrop`             | The viewport's own background, behind the media                                                                                                                                                                                                                                                 | `#000`                                                                                                                                                            | `media`, `viewport`                                                                                                                                                                                                                       |
+| Color      | `--playdeck-color-duration`             | The dimmed ink of the duration `Time`                                                                                                                                                                                                                                                           | `rgb(255 255 255 / 0.64)`                                                                                                                                         | `time`                                                                                                                                                                                                                                    |
+| Color      | `--playdeck-color-hairline`             | `docked.css`'s own 1px rule between the bar and the picture, and its menus' borders                                                                                                                                                                                                             | `#d9d9d6` (`docked.css` only — `theme.css` never reads it)                                                                                                        | `activation`, `controls`, `settings-menu`, `thumbnail`                                                                                                                                                                                    |
+| Typography | `--playdeck-font-family`                | The font stack                                                                                                                                                                                                                                                                                  | `system-ui, -apple-system, 'Segoe UI', roboto, helvetica, arial, sans-serif`                                                                                      | `viewport`                                                                                                                                                                                                                                |
+| Typography | `--playdeck-font-size`                  | Body text size                                                                                                                                                                                                                                                                                  | `0.875rem`                                                                                                                                                        | `error-message`, `menu-item`, `menu-radio-item`                                                                                                                                                                                           |
+| Typography | `--playdeck-font-size-small`            | Small text size, used by the time readout                                                                                                                                                                                                                                                       | `0.8125rem`                                                                                                                                                       | `time`                                                                                                                                                                                                                                    |
+| Typography | `--playdeck-line-height`                | Line height for wrapped text                                                                                                                                                                                                                                                                    | `1.4`                                                                                                                                                             | `caption-cue`, `error-message`                                                                                                                                                                                                            |
+| Spacing    | `--playdeck-space-1`                    | The smallest spacing step                                                                                                                                                                                                                                                                       | `0.25rem`                                                                                                                                                         | `controls`, `error-retry`, `settings-menu`, `time`                                                                                                                                                                                        |
+| Spacing    | `--playdeck-space-2`                    | The base spacing step                                                                                                                                                                                                                                                                           | `0.5rem`                                                                                                                                                          | `controls`, `error`, `menu-item`, `menu-radio-item`, `settings-menu`, `time`                                                                                                                                                              |
+| Spacing    | `--playdeck-space-3`                    | The larger spacing step                                                                                                                                                                                                                                                                         | `0.75rem`                                                                                                                                                         | `activation`, `error`, `error-retry`                                                                                                                                                                                                      |
+| Shape      | `--playdeck-radius`                     | Corner radius for a control-sized box. `theme.css` itself is inconsistent here: the button-shaped controls among the parts listed read it with a `0.625rem` fallback rather than the `0.375rem` every other listed part reads — a pre-existing mismatch between those rules, not a second token | `0.375rem` (`0.625rem` for `airplay-button`, `captions-button`, `fullscreen-button`, `live`, `mute-button`, `pip-button`, `play-button`, `settings-menu-trigger`) | `airplay-button`, `captions-button`, `error-retry`, `fullscreen-button`, `live`, `menu-item`, `menu-radio-item`, `mute-button`, `pip-button`, `play-button`, `settings-menu-trigger`                                                      |
+| Shape      | `--playdeck-radius-large`               | Corner radius for a card or menu                                                                                                                                                                                                                                                                | `0.5rem`                                                                                                                                                          | `error`, `settings-menu`, `thumbnail`                                                                                                                                                                                                     |
+| Controls   | `--playdeck-control-size`               | A button-shaped control's own square size                                                                                                                                                                                                                                                       | `2.75rem`                                                                                                                                                         | `airplay-button`, `captions-button`, `fullscreen-button`, `live`, `menu-item`, `menu-radio-item`, `mute-button`, `pip-button`, `play-button`, `settings-menu-trigger`                                                                     |
+| Controls   | `--playdeck-control-min-size`           | The 44px touch-target floor, read by the primitives directly and independent of the size above                                                                                                                                                                                                  | `2.75rem`                                                                                                                                                         | `airplay-button`, `captions-button`, `error-retry`, `fullscreen-button`, `live`, `menu-item`, `menu-radio-item`, `mute-button`, `pip-button`, `play-button`, `remote-playback-button`, `settings-menu-trigger`, `volume-slider`           |
+| Controls   | `--playdeck-control-icon-size`          | An icon's size inside a control                                                                                                                                                                                                                                                                 | `1.25rem`                                                                                                                                                         | `*`, `menu-radio-indicator`                                                                                                                                                                                                               |
+| Controls   | `--playdeck-control-hover`              | A control's hover fill                                                                                                                                                                                                                                                                          | `rgb(255 255 255 / 0.12)`                                                                                                                                         | `airplay-button`, `captions-button`, `fullscreen-button`, `menu-item`, `menu-radio-item`, `mute-button`, `pip-button`, `play-button`, `settings-menu-trigger`                                                                             |
+| Controls   | `--playdeck-control-pressed`            | A control's pressed fill                                                                                                                                                                                                                                                                        | `rgb(255 255 255 / 0.2)`                                                                                                                                          | `airplay-button`, `captions-button`, `fullscreen-button`, `mute-button`, `pip-button`, `play-button`, `settings-menu-trigger`                                                                                                             |
+| Controls   | `--playdeck-slider-thickness`           | A slider track's thickness                                                                                                                                                                                                                                                                      | `0.375rem`                                                                                                                                                        | `seek-buffered`, `seek-slider-input`, `volume-slider`                                                                                                                                                                                     |
+| Controls   | `--playdeck-seek-slider-min-block-size` | The seek slider's own touch-target floor, independent of the button floor above                                                                                                                                                                                                                 | `2.75rem`                                                                                                                                                         | `seek-slider`, `seek-slider-input`                                                                                                                                                                                                        |
+| Activation | `--playdeck-activation-size`            | The activation badge's floor size                                                                                                                                                                                                                                                               | `4rem`                                                                                                                                                            | `activation`                                                                                                                                                                                                                              |
+| Activation | `--playdeck-activation-fill`            | The activation badge's background. Declared by each stylesheet on the part itself, not only read — see below                                                                                                                                                                                    | `transparent`                                                                                                                                                     | `activation`                                                                                                                                                                                                                              |
+| Activation | `--playdeck-activation-border`          | The activation badge's border. Declared by each stylesheet on the part itself, not only read — see below                                                                                                                                                                                        | `0`                                                                                                                                                               | `activation`                                                                                                                                                                                                                              |
+| Overlays   | `--playdeck-overlay-opacity`            | The control surface's opacity — visibility only. The bar stays interactive at any value, including `0`; a theme hiding it must pair `pointer-events: none` itself, the way `theme.css`'s own idle auto-hide rule does                                                                           | `1`                                                                                                                                                               | `controls`                                                                                                                                                                                                                                |
+| Overlays   | `--playdeck-overlay-scrim`              | The gradient behind the control surface                                                                                                                                                                                                                                                         | `linear-gradient(to top, rgb(0 0 0 / 0.78), rgb(0 0 0 / 0) 65%)`                                                                                                  | `controls`                                                                                                                                                                                                                                |
+| Motion     | `--playdeck-transition-duration`        | Opacity transition duration                                                                                                                                                                                                                                                                     | `150ms`                                                                                                                                                           | `activation`, `controls`, `mute-button`, `thumbnail`, `volume-slider`                                                                                                                                                                     |
+| Motion     | `--playdeck-transition-easing`          | Opacity transition easing                                                                                                                                                                                                                                                                       | `ease`                                                                                                                                                            | `activation`, `controls`, `mute-button`, `thumbnail`, `volume-slider`                                                                                                                                                                     |
+| Safe area  | `--playdeck-safe-bottom`                | Extra bottom inset for a device safe area                                                                                                                                                                                                                                                       | `env(safe-area-inset-bottom, 0px)`                                                                                                                                | `controls`, `settings-menu`                                                                                                                                                                                                               |
+| Safe area  | `--playdeck-safe-left`                  | Extra left inset for a device safe area                                                                                                                                                                                                                                                         | `env(safe-area-inset-left, 0px)`                                                                                                                                  | `controls`                                                                                                                                                                                                                                |
+| Safe area  | `--playdeck-safe-right`                 | Extra right inset for a device safe area                                                                                                                                                                                                                                                        | `env(safe-area-inset-right, 0px)`                                                                                                                                 | `controls`                                                                                                                                                                                                                                |
+| Poster     | `--playdeck-poster-fit`                 | The poster image's `object-fit`, read by `PosterImage` directly                                                                                                                                                                                                                                 | `cover`                                                                                                                                                           | `poster-image`                                                                                                                                                                                                                            |
+| Poster     | `--playdeck-poster-position`            | The poster image's `object-position`, read by `PosterImage` directly                                                                                                                                                                                                                            | `center`                                                                                                                                                          | `poster-image`                                                                                                                                                                                                                            |
+| Captions   | `--playdeck-caption-font-size`          | A cue's text size, read by `Captions` directly                                                                                                                                                                                                                                                  | `1.05rem`                                                                                                                                                         | `caption-cue`                                                                                                                                                                                                                             |
+| Captions   | `--playdeck-caption-color`              | A cue's text colour, read by `Captions` directly                                                                                                                                                                                                                                                | `#fff`                                                                                                                                                            | `caption-cue`                                                                                                                                                                                                                             |
+| Captions   | `--playdeck-caption-background`         | A cue's text box background, read by `Captions` directly                                                                                                                                                                                                                                        | `rgba(0, 0, 0, 0.75)`                                                                                                                                             | `caption-cue`                                                                                                                                                                                                                             |
+| Captions   | `--playdeck-caption-edge`               | A cue's text edge, a `text-shadow` value, read by `Captions` directly                                                                                                                                                                                                                           | `none`                                                                                                                                                            | `caption-cue`                                                                                                                                                                                                                             |
+
+**`--playdeck-activation-fill` and `--playdeck-activation-border` are declared,
+not only read.** `ActivationButton` reads them inline, with the fallbacks
+above, so a bare player carrying no stylesheet at all never paints the user
+agent's own button face over its poster. Both shipped stylesheets then
+_declare_ the pair on `[data-playdeck-part='activation']` — `theme.css` sets
+the fill to `var(--playdeck-color-surface, rgb(0 0 0 / 0.72))` and the border
+to `0`; `docked.css` sets the fill to `var(--playdeck-color-surface, #f4f4f2)`
+and the border to `1px solid var(--playdeck-color-hairline, #d9d9d6)` (its own
+dark pair in its `prefers-color-scheme: dark` block). A declaration always
+wins over an inherited value, which is what lets a value you set on the part
+itself still beat either stylesheet's: set them there, not on an ancestor.
+
+**`--playdeck-control-min-size` and `--playdeck-seek-slider-min-block-size` are
+themselves the floor value, not a clamp on something else.** Both are read
+directly by the primitives they size (`controlTargetStyle` in
+`loading-error.tsx`; the constant beside `SeekSlider` in
+`transport-controls.tsx`) as the `min-width`/`min-height` itself, rather than by
+either stylesheet, so a headless player with no stylesheet imported gets the
+44px minimum — WCAG 2.2 SC 2.5.5 _Target Size (Enhanced)_ — from their
+`2.75rem` fallback alone. `--playdeck-control-size` moves a button's own size
+and _is_ what these floors clamp: a value set for it alone cannot shrink a
+control below whatever the floor token currently resolves to. The floor
+tokens themselves are not clamped — a value set for either is obeyed
+outright. Both shipped stylesheets' `48rem` phone query still shrinks
+`--playdeck-control-size` to `2.5rem` (40px, the visual button box), but
+neither query sets either floor token any more, so `min-width`/`min-height`
+hold every button and the seek row at the locked `2.75rem` regardless. So the
+44px minimum holds for a bare, unstyled player, and holds equally once either
+shipped stylesheet is imported and the viewport narrows — which is precisely
+where a touch target matters most.
+
+## Browser support
+
+Chrome and Edge 99, Firefox 97, Safari and iOS Safari 15.4.
+
+The floor comes from `theme.css`, which uses `@layer`; the built JavaScript needs
+nothing above Safari 14.1. Importing the stylesheet is what raises the
+requirement, so a headless consumer is bound only by the JavaScript floor.
+
+`test/theme.test.ts` freezes the stylesheet's CSS feature inventory, so a newer
+feature fails the build rather than silently moving this number.
+
+## No-build usage
+
+`@playdeck/react/browser` is a second entry for a consumer with a plain HTML
+page and a `<script type="module">` tag — no bundler, no package manager.
+React 19 ships no UMD and no ESM build of its own, so there is no
+script-tag-loadable React for an import map to point at; this entry bundles
+React, ReactDOM and the JSX runtime instead of leaving them external, and
+re-exports `createElement` and `createRoot` alongside the usual primitives so
+a page with nothing but a `<script>` tag can build a tree with no JSX and
+mount it.
+
+Only the native provider ships in this bundle — HLS, YouTube, Vimeo and Wistia
+stay external, exactly as they are for the default entry. Carrying every
+provider would put hls.js and `@vimeo/player` inside this package's own
+tarball, downloaded by every consumer whether or not they load this entry.
+`Player.Media` and a native source (an MP4 or WebM URL) work through this
+entry; an HLS, YouTube, Vimeo or Wistia source fails at the point of use with
+an unresolved import, and needs the default entry and a bundler instead.
+
+```ts
+import {
+  Controls,
+  createElement,
+  createRoot,
+  FullscreenButton,
+  Media,
+  PlayButton,
+  Root,
+  SeekSlider,
+  Time,
+  Viewport
+} from '@playdeck/react/browser';
+
+// `createElement` in place of JSX -- a page with nothing but a `<script>` tag
+// has no compiler to turn JSX into this for it. Only `Media` and native
+// sources work through this entry; see the paragraph above for why.
+const player = createElement(Root, {
+  source: 'https://example.com/clip.mp4',
+  children: createElement(
+    Viewport,
+    null,
+    createElement(Media, null),
+    createElement(
+      Controls,
+      null,
+      createElement(PlayButton, null),
+      createElement(SeekSlider, null),
+      createElement(Time, { type: 'current' }),
+      createElement(FullscreenButton, null)
+    )
+  )
+});
+
+const container = document.getElementById('root');
+if (!container) throw new Error('#root is missing from the page');
+createRoot(container).render(player);
+```
+
+A page loading `@playdeck/react/browser` this way still needs the file itself
+served from somewhere — from `node_modules` after `pnpm add @playdeck/react`,
+or from a CDN that mirrors npm.
+
+## License
+
+[MIT](https://github.com/pedrosousa13/playdeck/blob/main/packages/react/LICENSE).

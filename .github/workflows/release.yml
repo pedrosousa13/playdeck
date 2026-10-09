@@ -283,6 +283,13 @@ jobs:
       # publisher configured on each of the seven packages
       # (`pedrosousa13` / `playdeck` / `release.yml`, no environment).
       #
+      # An eighth, `@playdeck/docs`, is published by this same step and needs
+      # the same trusted publisher before its first release. npm sets one up in
+      # a package's settings, so a name that is not on the registry yet has no
+      # settings to set it in: publish `@playdeck/docs` once by hand, then add
+      # the publisher, before the release that would otherwise fail here
+      # unauthenticated.
+      #
       # **The dry run cannot prove any of that.** npm never calls libnpmpublish
       # under `--dry-run`, so it never requests an OIDC token -- established on
       # #229, where an authenticated dry run passed and told us nothing. Under
@@ -292,6 +299,71 @@ jobs:
       - name: Publish (dry run)
         if: inputs.dry_run
         run: pnpm publish -r --access public --provenance --no-git-checks --dry-run
+      #
+      # `--report-summary` writes `pnpm-publish-summary.json` at the workspace
+      # root, listing `{ name, version }` for each package this run actually
+      # published -- and an empty list when every version was already on the
+      # registry. The step after this reads it.
       - name: Publish
         if: inputs.dry_run == false
-        run: pnpm publish -r --access public --provenance --no-git-checks
+        run: pnpm publish -r --access public --provenance --no-git-checks --report-summary
+
+      # deck.cool's site builds playdeck's pages from `@playdeck/docs`, and
+      # bumps it when told a release happened (see "Releasing a deck" in
+      # pedrosousa13/deck-cool's AGENTS.md). It is told only when this run
+      # published `@playdeck/react`: a re-run that found every version already
+      # on the registry publishes nothing, and must not announce a release.
+      # `@playdeck/docs` is in `@playdeck/react`'s fixed group, so the version
+      # is one both carry, and `pnpm publish -r` fails the step above -- and so
+      # skips this one -- if either did not make it.
+      #
+      # A prerelease (`pnpm prerelease:enter`) is published but not announced:
+      # deck.cool accepts `MAJOR.MINOR.PATCH` only, and would refuse it.
+      - name: Read what was published
+        id: published
+        if: inputs.dry_run == false
+        run: |
+          node -e '
+            const { publishedPackages } = JSON.parse(
+              require("node:fs").readFileSync("pnpm-publish-summary.json", "utf8")
+            );
+            const react = publishedPackages.find(
+              (pkg) => pkg.name === "@playdeck/react"
+            );
+            const version = react && /^[0-9]+\.[0-9]+\.[0-9]+$/.test(react.version)
+              ? react.version
+              : "";
+            console.log(
+              version === ""
+                ? "@playdeck/react was not published as a release; deck.cool is not told."
+                : "@playdeck/react@" + version + " was published; telling deck.cool."
+            );
+            require("node:fs").appendFileSync(
+              process.env.GITHUB_OUTPUT,
+              "version=" + version + "\n"
+            );
+          '
+
+      # A token for one repository and one permission, from the
+      # deck-cool-releases App, pinned by SHA like every action that holds a
+      # credential. `DECK_APP_ID` and `DECK_APP_PRIVATE_KEY` are this repo's.
+      - name: Get a token from the deck-cool-releases App
+        id: app
+        if: steps.published.outputs.version != ''
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.DECK_APP_ID }}
+          private-key: ${{ secrets.DECK_APP_PRIVATE_KEY }}
+          owner: pedrosousa13
+          repositories: deck-cool
+          permission-contents: write
+      - name: Tell deck-cool
+        if: steps.published.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          VERSION: ${{ steps.published.outputs.version }}
+        run: |
+          gh api repos/pedrosousa13/deck-cool/dispatches \
+            -f event_type=deck-released \
+            -f "client_payload[deck]=playdeck" \
+            -f "client_payload[version]=${VERSION}"

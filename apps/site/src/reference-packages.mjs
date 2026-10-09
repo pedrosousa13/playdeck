@@ -30,7 +30,6 @@
  * note in `apps/site/tsconfig.json`.
  */
 
-import { getCollection } from 'astro:content';
 import { readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { codePackages } from '../../../scripts/workspace-packages.mjs';
@@ -55,6 +54,10 @@ import { codePackages } from '../../../scripts/workspace-packages.mjs';
  * @returns {Promise<ReferencePackage[]>}
  */
 export const referencePackages = async () => {
+  // Imported here rather than at the top, so that `scripts/docs-package.mjs`
+  // can load this module's other exports under plain Node, where the virtual
+  // module does not exist.
+  const { getCollection } = await import('astro:content');
   const readmes = new Map(
     (await getCollection('reference')).map((entry) => [entry.id, entry])
   );
@@ -104,3 +107,21 @@ export const referencePackages = async () => {
  */
 export const referencePackageDirs = (repoRoot) =>
   codePackages(repoRoot).map((pkg) => basename(pkg.path));
+
+/**
+ * The address of a package's reference page on this site, with an optional
+ * `#fragment`. Through `import.meta.env.BASE_URL`, which is what Astro fills
+ * the configured `base` into, and never as a literal `/reference/` (#435).
+ *
+ * The document modules that link a package to its reference page take this
+ * as a default they can be handed something else in place of:
+ * `scripts/docs-package.mjs` passes the relative `.md` link the docs contract
+ * asks for, and runs under plain Node, where `import.meta.env` does not exist
+ * and so this is never called.
+ *
+ * @param {string} dir
+ * @param {string} [fragment]
+ * @returns {string}
+ */
+export const siteReferenceHref = (dir, fragment = '') =>
+  `${import.meta.env.BASE_URL}reference/${dir}/${fragment}`;

@@ -1,0 +1,1449 @@
+---
+title: "React video library comparison"
+description: "How Playdeck compares with other React video libraries: the measured figures, the features, and the method behind both."
+---
+
+## React video library comparison: measured figures
+
+Measured 2026-10-03 on Node v22.23.2, Vite 8.3.1, esbuild
+0.28.2, from `tests/compare`'s pinned installs. React, ReactDOM
+and the JSX runtime are marked external for every library alike and excluded
+from every figure below. "Gzipped (Vite)" and "Gzipped (esbuild)" are each the
+sum of each reachable chunk's own gzip size from that bundler's own build, not
+one gzip of their concatenation -- see `scripts/compare-libraries.mjs`'s
+header for why, and its "What is measured" entry in `docs/comparison/method.md`
+for what the two bundlers agreeing, or not, is evidence of. "Delta" is
+esbuild's figure relative to Vite's, signed and rounded to one decimal.
+"Not counted" is the chunks the Vite build produced but this fixture's fixed
+inputs cannot reach, gzipped the same way -- see
+`docs/comparison/method.md` for what each library's excluded chunks are.
+
+| Library                | Version     | Composition measured                                                               | Gzipped (Vite) | Gzipped (esbuild) | Delta  | Not counted          |
+| ---------------------- | ----------- | ---------------------------------------------------------------------------------- | -------------- | ----------------- | ------ | -------------------- |
+| Playdeck (no parts)    | 1.3.0       | core + native provider, no control parts                                           | 22.41 KB       | 23.31 KB          | +4.0%  | 10 chunks, 317.08 KB |
+| Playdeck               | 1.3.0       | core + primitives + native provider                                                | 23.24 KB       | 24.08 KB          | +3.6%  | 10 chunks, 317.05 KB |
+| Playdeck (play-only)   | 1.3.0       | core + primitives + native provider + one control (PlayButton)                     | 24.39 KB       | 25.37 KB          | +4.0%  | 10 chunks, 317.08 KB |
+| Playdeck (control bar) | 1.3.0       | core + primitives + native provider + control bar (5 of Media Chrome's 7 controls) | 28.02 KB       | 29.00 KB          | +3.5%  | 11 chunks, 319.30 KB |
+| react-player           | 3.4.0       | default export, `controls`, html5 fallback player                                  | 2.97 KB        | 2.40 KB           | -19.2% | 13 chunks, 727.65 KB |
+| Vidstack               | 1.15.6      | MediaPlayer + MediaProvider + DefaultVideoLayout                                   | 89.67 KB       | 91.83 KB          | +2.4%  | 13 chunks, 22.02 KB  |
+| Media Chrome           | 4.19.2      | MediaController + a 7-button control bar                                           | 41.82 KB       | 43.70 KB          | +4.5%  | 0                    |
+| Video.js               | 8.24.1      | videojs() with `controls: true`, hand-wrapped                                      | 199.52 KB      | 205.90 KB         | +3.2%  | 0                    |
+| Video.js 10 (rc)       | 10.0.0-rc.4 | VideoPlayer + VideoSkin + Video (`@videojs/react/video` preset)                    | 67.14 KB       | 73.46 KB          | +9.4%  | 0                    |
+
+Regenerate with `pnpm compare:libraries` -- run `pnpm build` first; a
+stale `dist/` changes Playdeck's rows and nothing else. The date above
+records when this file was last regenerated; `pnpm compare:libraries:check`
+does not police how old it is, only whether the figures, versions and
+compositions below still match a fresh run. Re-run the command above to
+bring the date current.
+
+## React video library comparison: features
+
+This table is **sourced and checked, not measured**: unlike
+`docs/comparison/results.md`, which puts every library through the same
+bundler and reads a number back, nothing here comes out of a build. Every cell
+is a claim `tests/compare/features.mjs` makes in writing, anchored to
+something this script re-verifies against the installed package on every run
+-- an export, a line in a shipped file, a type declaration, a `package.json`
+field, a token found in none of the files a glob matches across the package,
+or importing the package in plain Node with no DOM globals. A claim whose
+anchor no longer holds fails `pnpm compare:features:check` rather than
+sitting here stale.
+
+A cell reads `yes` where the library ships a ready-made UI part for that
+axis, `partial` where it exposes the axis in its own API or state with no UI
+part to drive it, `no` where it does neither, `plugin` where a documented
+plugin outside the package is the answer, and `n/a` where the axis cannot
+apply to that library at all. A status never encodes which of a library's
+providers can do the thing -- a YouTube iframe cannot enter picture-in-picture
+under any of these libraries -- so that limit is written in the footnote
+instead, for every column alike. `docs/comparison/method.md`'s "Features"
+section has the full rule.
+
+Measured 2026-10-03 against `tests/compare`'s pinned installs:
+`Playdeck` 1.3.0, `react-player` 3.4.0, `Vidstack` 1.15.6, `Media Chrome` 4.19.2, `Video.js` 8.24.1, `Video.js 10 (rc)` 10.0.0-rc.4.
+
+| Axis                                                | Playdeck      | react-player  | Vidstack      | Media Chrome  | Video.js     | Video.js 10 (rc) |
+| --------------------------------------------------- | ------------- | ------------- | ------------- | ------------- | ------------ | ---------------- |
+| Captions / text tracks                              | yes[^1]       | partial[^2]   | yes[^3]       | yes[^4]       | yes[^5]      | yes[^6]          |
+| Quality selection                                   | yes[^7]       | no[^8]        | yes[^9]       | yes[^10]      | partial[^11] | yes[^12]         |
+| Playback rate                                       | yes[^13]      | plugin[^14]   | yes[^15]      | yes[^16]      | yes[^17]     | yes[^18]         |
+| Picture-in-picture                                  | yes[^19]      | partial[^20]  | yes[^21]      | yes[^22]      | yes[^23]     | yes[^24]         |
+| Fullscreen                                          | yes[^25]      | plugin[^26]   | yes[^27]      | yes[^28]      | yes[^29]     | yes[^30]         |
+| AirPlay                                             | yes[^31]      | no[^32]       | yes[^33]      | yes[^34]      | plugin[^35]  | yes[^36]         |
+| Chromecast / Google Cast                            | yes[^37]      | no[^38]       | yes[^39]      | yes[^40]      | plugin[^41]  | yes[^42]         |
+| Keyboard operation                                  | yes[^43]      | plugin[^44]   | yes[^45]      | yes[^46]      | yes[^47]     | yes[^48]         |
+| Screen-reader labelling                             | yes[^49]      | partial[^50]  | yes[^51]      | yes[^52]      | yes[^53]     | yes[^54]         |
+| DRM / EME                                           | no[^55]       | no[^56]       | no[^57]       | no[^58]       | plugin[^59]  | yes[^60]         |
+| HLS                                                 | yes[^61]      | yes[^62]      | yes[^63]      | plugin[^64]   | yes[^65]     | yes[^66]         |
+| DASH                                                | no[^67]       | yes[^68]      | yes[^69]      | plugin[^70]   | yes[^71]     | plugin[^72]      |
+| Live streaming                                      | partial[^73]  | no[^74]       | yes[^75]      | yes[^76]      | yes[^77]     | yes[^78]         |
+| YouTube                                             | yes[^79]      | yes[^80]      | yes[^81]      | plugin[^82]   | plugin[^83]  | plugin[^84]      |
+| Vimeo                                               | yes[^85]      | yes[^86]      | yes[^87]      | plugin[^88]   | plugin[^89]  | plugin[^90]      |
+| Wistia                                              | yes[^91]      | yes[^92]      | no[^93]       | plugin[^94]   | no[^95]      | plugin[^96]      |
+| Other hosted providers (named)                      | partial[^97]  | yes[^98]      | no[^99]       | plugin[^100]  | no[^101]     | plugin[^102]     |
+| Audio tracks                                        | yes[^103]     | no[^104]      | yes[^105]     | yes[^106]     | yes[^107]    | yes[^108]        |
+| Chapters                                            | yes[^109]     | no[^110]      | yes[^111]     | partial[^112] | yes[^113]    | yes[^114]        |
+| Thumbnails / preview on seek                        | yes[^115]     | no[^116]      | yes[^117]     | yes[^118]     | plugin[^119] | yes[^120]        |
+| Playlists                                           | no[^121]      | no[^122]      | no[^123]      | no[^124]      | plugin[^125] | no[^126]         |
+| Ads / IMA                                           | no[^127]      | no[^128]      | no[^129]      | no[^130]      | plugin[^131] | no[^132]         |
+| Analytics hooks                                     | no[^133]      | no[^134]      | no[^135]      | no[^136]      | plugin[^137] | plugin[^138]     |
+| Plugin system                                       | partial[^139] | yes[^140]     | no[^141]      | no[^142]      | yes[^143]    | no[^144]         |
+| Shipped skin / theme                                | yes[^145]     | no[^146]      | yes[^147]     | no[^148]      | yes[^149]    | yes[^150]        |
+| Headless, independently composable parts            | yes[^151]     | no[^152]      | yes[^153]     | yes[^154]     | no[^155]     | yes[^156]        |
+| Requires an external stylesheet for usable controls | no[^157]      | no[^158]      | yes[^159]     | no[^160]      | yes[^161]    | yes[^162]        |
+| Lazy / deferred provider loading                    | yes[^163]     | yes[^164]     | yes[^165]     | n/a[^166]     | no[^167]     | no[^168]         |
+| React version supported                             | yes[^169]     | yes[^170]     | yes[^171]     | partial[^172] | no[^173]     | yes[^174]        |
+| Imports on a server (no DOM globals)                | yes[^175]     | yes[^176]     | yes[^177]     | yes[^178]     | yes[^179]    | yes[^180]        |
+| TypeScript types shipped                            | yes[^181]     | yes[^182]     | yes[^183]     | yes[^184]     | yes[^185]    | yes[^186]        |
+| ESM/CJS (dual build)                                | partial[^187] | partial[^188] | partial[^189] | yes[^190]     | yes[^191]    | partial[^192]    |
+
+[^1]: **Captions / text tracks — Playdeck**: yes. mechanical check: `@playdeck/react` exports `CaptionsButton`. Source: packages/react/README.md
+
+[^2]: **Captions / text tracks — react-player**: partial. Captions render only through a native `<track>` child and the browser's own control UI; react-player draws no captions button itself. mechanical check: `react-player`'s `README.md` includes `kind="subtitles"`. Source: react-player 3.4.0, node_modules/react-player/README.md (installed package)
+
+[^3]: **Captions / text tracks — Vidstack**: yes. mechanical check: `@vidstack/react` exports `CaptionButton`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
+
+[^4]: **Captions / text tracks — Media Chrome**: yes. mechanical check: `media-chrome/react` exports `MediaCaptionsButton`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
+
+[^5]: **Captions / text tracks — Video.js**: yes. mechanical check: `video.js`'s `dist/video.es.js` includes `registerComponent('CaptionsButton'`. Source: video.js 8.24.0, node_modules/video.js/dist/video.es.js (installed package)
+
+[^6]: **Captions / text tracks — Video.js 10 (rc)**: yes. mechanical check: `@videojs/react` exports `CaptionsButton`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
+
+[^7]: **Quality selection — Playdeck**: yes. mechanical check: `@playdeck/react` exports `QualityMenu`. Source: packages/react/README.md
+
+[^8]: **Quality selection — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `Quality`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
+
+[^9]: **Quality selection — Vidstack**: yes. mechanical check: `@vidstack/react`'s `prod/player/vidstack-default-components.js` includes `DefaultQualityMenu`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/player/vidstack-default-components.js (installed package)
+
+[^10]: **Quality selection — Media Chrome**: yes. mechanical check: `media-chrome/react/menu` exports `MediaRenditionMenu`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
+
+[^11]: **Quality selection — Video.js**: partial. The `qualityLevels()` API and `QualityLevelList` ship in core with no default UI button. A documented UI plugin exists (`videojs-http-source-selector`, npm `repository` github.com/jfujita/videojs-http-source-selector, third-party); the status reads the core API rather than that plugin. mechanical check: `video.js`'s `dist/video.es.js` includes `videojs.registerPlugin('qualityLevels'`. Source: video.js 8.24.0, node_modules/video.js/dist/video.es.js (installed package)
+
+[^12]: **Quality selection — Video.js 10 (rc)**: yes. mechanical check: `@videojs/react` exports `QualityRadioGroup`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
+
+[^13]: **Playback rate — Playdeck**: yes. mechanical check: `@playdeck/react` exports `PlaybackRateMenu`. Source: packages/react/README.md
+
+[^14]: **Playback rate — react-player**: plugin. A `playbackRate` prop sets the rate (`dist/types.d.ts`); no playback-rate control ships in react-player's own code, and its README's "Custom player controls" section composes `<MediaPlaybackRateButton>` for one. Provider limit, not a status: the same README says the prop is "Only supported by YouTube, Wistia, and file paths". Plugin `media-chrome`: npm `repository` github.com/muxinc/media-chrome, third-party. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `PlaybackRateButton`. Source: react-player 3.4.0, node_modules/react-player/README.md (installed package), its "Custom player controls" section, which composes Media Chrome parts around a `<ReactPlayer slot="media">`
+
+[^15]: **Playback rate — Vidstack**: yes. mechanical check: `@vidstack/react`'s `prod/player/vidstack-default-components.js` includes `DefaultSpeedMenu`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/player/vidstack-default-components.js (installed package)
+
+[^16]: **Playback rate — Media Chrome**: yes. mechanical check: `media-chrome/react` exports `MediaPlaybackRateButton`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
+
+[^17]: **Playback rate — Video.js**: yes. mechanical check: `video.js`'s `dist/video.es.js` includes `registerComponent('PlaybackRateMenuButton'`. Source: video.js 8.24.0, node_modules/video.js/dist/video.es.js (installed package)
+
+[^18]: **Playback rate — Video.js 10 (rc)**: yes. mechanical check: `@videojs/react` exports `PlaybackRateButton`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
+
+[^19]: **Picture-in-picture — Playdeck**: yes. Provider limit, not a status: Playdeck's YouTube adapter reports this capability as provider-unavailable (`packages/provider-youtube/src/adapter-values.ts`), as an embedded player would under any library here. mechanical check: `@playdeck/react` exports `PipButton`. Source: packages/react/README.md
+
+[^20]: **Picture-in-picture — react-player**: partial. A `pip` prop enters and leaves picture-in-picture; no picture-in-picture control of react-player's own ships. Provider limit, not a status: its own README says it is "Only available when playing file URLs in certain browsers". mechanical check: `react-player`'s `dist/types.d.ts` includes `pip?: boolean;`. Source: react-player 3.4.0, node_modules/react-player/dist/types.d.ts (installed package)
+
+[^21]: **Picture-in-picture — Vidstack**: yes. Provider limit, not a status: Vidstack publishes this as provider-dependent player state, which an embedded provider leaves unset. mechanical check: `@vidstack/react` exports `PIPButton`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
+
+[^22]: **Picture-in-picture — Media Chrome**: yes. mechanical check: `media-chrome/react` exports `MediaPipButton`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
+
+[^23]: **Picture-in-picture — Video.js**: yes. mechanical check: `video.js`'s `dist/video.es.js` includes `registerComponent('PictureInPictureToggle'`. Source: video.js 8.24.0, node_modules/video.js/dist/video.es.js (installed package)
+
+[^24]: **Picture-in-picture — Video.js 10 (rc)**: yes. mechanical check: `@videojs/react` exports `PiPButton`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
+
+[^25]: **Fullscreen — Playdeck**: yes. mechanical check: `@playdeck/react` exports `FullscreenButton`. Source: packages/react/README.md
+
+[^26]: **Fullscreen — react-player**: plugin. No fullscreen prop, method or button in its own shipped code; its README's "Custom player controls" section composes `<MediaFullscreenButton>` for one. Without that, a fullscreen button appears only when the native `<video controls>` or an iframe provider (YouTube, Vimeo) supplies its own. Plugin `media-chrome`: npm `repository` github.com/muxinc/media-chrome, third-party. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `fullscreen`. Source: react-player 3.4.0, node_modules/react-player/README.md (installed package), its "Custom player controls" section, which composes Media Chrome parts around a `<ReactPlayer slot="media">`
+
+[^27]: **Fullscreen — Vidstack**: yes. mechanical check: `@vidstack/react` exports `FullscreenButton`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
+
+[^28]: **Fullscreen — Media Chrome**: yes. mechanical check: `media-chrome/react` exports `MediaFullscreenButton`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
+
+[^29]: **Fullscreen — Video.js**: yes. mechanical check: `video.js`'s `dist/video.es.js` includes `registerComponent('FullscreenToggle'`. Source: video.js 8.24.0, node_modules/video.js/dist/video.es.js (installed package)
+
+[^30]: **Fullscreen — Video.js 10 (rc)**: yes. mechanical check: `@videojs/react` exports `FullscreenButton`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
+
+[^31]: **AirPlay — Playdeck**: yes. Provider limit, not a status: Playdeck's YouTube adapter reports this capability as provider-unavailable (`packages/provider-youtube/src/adapter-values.ts`), as an embedded player would under any library here. mechanical check: `@playdeck/react` exports `AirPlayButton`. Source: packages/react/README.md
+
+[^32]: **AirPlay — react-player**: no. Searched for `irplay`, which catches `airplay`, `Airplay` and `AirPlay` alike. Ships `disableRemotePlayback` (opts out of the browser's own remote-playback picker) but no AirPlay-specific API of its own. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `irplay`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
+
+[^33]: **AirPlay — Vidstack**: yes. mechanical check: `@vidstack/react` exports `AirPlayButton`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
+
+[^34]: **AirPlay — Media Chrome**: yes. mechanical check: `media-chrome/react` exports `MediaAirplayButton`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
+
+[^35]: **AirPlay — Video.js**: plugin. Searched for `AirPlay` rather than the broader `irplay` used in the react-player column: this bundle's only lower-case `airplay` string is inside the word `Fairplay`, a DRM key system, not an AirPlay control. No AirPlay button in core. Plugin `videojs-airplay`: npm `repository` github.com/jgubman/videojs-airplay, third-party. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `AirPlay`. Source: [registry.npmjs.org/videojs-airplay](https://registry.npmjs.org/videojs-airplay)
+
+[^36]: **AirPlay — Video.js 10 (rc)**: yes. mechanical check: `@videojs/react` exports `AirPlayButton`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
+
+[^37]: **Chromecast / Google Cast — Playdeck**: yes. Reached through the standards-based Remote Playback API (the media element's `remote` object, `capabilities.remotePlayback`/`showRemotePlaybackPicker()`), explicitly not the Cast SDK: no sender script, no receiver page. That SDK route remains unshipped and is possible later as an external provider. mechanical check: `@playdeck/react` exports `RemotePlaybackButton`. Source: packages/react/README.md
+
+[^38]: **Chromecast / Google Cast — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `Cast`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
+
+[^39]: **Chromecast / Google Cast — Vidstack**: yes. mechanical check: `@vidstack/react` exports `GoogleCastButton`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
+
+[^40]: **Chromecast / Google Cast — Media Chrome**: yes. mechanical check: `media-chrome/react` exports `MediaCastButton`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
+
+[^41]: **Chromecast / Google Cast — Video.js**: plugin. Searched for `CastButton` rather than the broader `Cast` used in the Playdeck column: this bundle's only `Chromecast` string is `IS_CHROMECAST_RECEIVER`, a receiver-context flag, which is not a sender button. Plugin `videojs-chromecast`: npm `repository` github.com/benjipott/video.js-chromecast, third-party. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `CastButton`. Source: [registry.npmjs.org/videojs-chromecast](https://registry.npmjs.org/videojs-chromecast)
+
+[^42]: **Chromecast / Google Cast — Video.js 10 (rc)**: yes. mechanical check: `@videojs/react` exports `CastButton`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
+
+[^43]: **Keyboard operation — Playdeck**: yes. mechanical check: `@playdeck/react`'s `dist/index.js` includes `ArrowLeft`. Source: packages/react/README.md ("Controls is a focusable region that owns the media keyboard shortcuts")
+
+[^44]: **Keyboard operation — react-player**: plugin. No media keyboard handling in its own shipped code (`dist/Preview.js` binds `onKeyDown` for the `light`-mode preview button alone); its README's "Custom player controls" section composes `<MediaController>`, which owns the media hotkeys (`hotkeys`, `nohotkeys` and `keydown` in media-chrome's `dist/media-controller.js`). Without it, keyboard operation comes from the native `<video controls>` or an iframe provider's own player. Plugin `media-chrome`: npm `repository` github.com/muxinc/media-chrome, third-party. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `keyboard`. Source: react-player 3.4.0, node_modules/react-player/README.md (installed package), its "Custom player controls" section, which composes Media Chrome parts around a `<ReactPlayer slot="media">`
+
+[^45]: **Keyboard operation — Vidstack**: yes. mechanical check: `@vidstack/react` exports `MEDIA_KEY_SHORTCUTS`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
+
+[^46]: **Keyboard operation — Media Chrome**: yes. mechanical check: `media-chrome/react` exports `MediaKeyboardShortcutsDialog`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
+
+[^47]: **Keyboard operation — Video.js**: yes. mechanical check: `video.js`'s `dist/video.es.js` includes `'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'`. Source: video.js 8.24.0, node_modules/video.js/dist/video.es.js (installed package)
+
+[^48]: **Keyboard operation — Video.js 10 (rc)**: yes. mechanical check: `@videojs/react` exports `Hotkey`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
+
+[^49]: **Screen-reader labelling — Playdeck**: yes. mechanical check: `@playdeck/react`'s `dist/index.js` includes `aria-label`. Source: packages/react/README.md
+
+[^50]: **Screen-reader labelling — react-player**: partial. Only the `light`-mode preview button carries an authored `previewAriaLabel`; the native control set otherwise supplies its own accessible names. Not `plugin`, unlike the fullscreen, playback-rate and keyboard rows: react-player authors one label of its own, so the answer is not only a plugin. mechanical check: `react-player`'s `dist/types.d.ts` includes `previewAriaLabel?: string;`. Source: react-player 3.4.0, node_modules/react-player/dist/types.d.ts (installed package)
+
+[^51]: **Screen-reader labelling — Vidstack**: yes. mechanical check: `@vidstack/react`'s `prod/player/vidstack-default-components.js` includes `aria-label`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/player/vidstack-default-components.js (installed package)
+
+[^52]: **Screen-reader labelling — Media Chrome**: yes. mechanical check: `media-chrome`'s `dist/media-play-button.js` includes `aria-label`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
+
+[^53]: **Screen-reader labelling — Video.js**: yes. mechanical check: `video.js`'s `dist/video.es.js` includes `controlText_`. Source: video.js 8.24.0, node_modules/video.js/dist/video.es.js (installed package)
+
+[^54]: **Screen-reader labelling — Video.js 10 (rc)**: yes. mechanical check: `@videojs/react`'s `dist/default/player/container.js` includes `aria-label`. Source: @videojs/react 10.0.0-rc.4, every `.js` and `.d.ts` file in node_modules/@videojs/react and in the five `@videojs/*` packages it depends on (installed packages)
+
+[^55]: **DRM / EME — Playdeck**: no. mechanical check: no file of `@playdeck/core` and `@playdeck/react` matching `**/*.js` or `**/*.d.ts` contains `requestMediaKeySystemAccess`. Source: packages/core and packages/react, every `.js` and `.d.ts` file each ships under `dist/` after `pnpm build`
+
+[^56]: **DRM / EME — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `requestMediaKeySystemAccess`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
+
+[^57]: **DRM / EME — Vidstack**: no. mechanical check: no file of `@vidstack/react` matching `**/*.js` or `**/*.d.ts` contains `requestMediaKeySystemAccess`. Source: @vidstack/react 1.15.6, every `.js` and `.d.ts` file in node_modules/@vidstack/react (installed package)
+
+[^58]: **DRM / EME — Media Chrome**: no. mechanical check: no file of `media-chrome` matching `**/*.js` or `**/*.d.ts` contains `requestMediaKeySystemAccess`. Source: media-chrome 4.19.2, every `.js` and `.d.ts` file in node_modules/media-chrome (installed package)
+
+[^59]: **DRM / EME — Video.js**: plugin. Core has no EME call of its own. Plugin `videojs-contrib-eme`: its published npm manifest declares no `repository` field, so no owner is recorded here. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `requestMediaKeySystemAccess`. Source: [registry.npmjs.org/videojs-contrib-eme](https://registry.npmjs.org/videojs-contrib-eme)
+
+[^60]: **DRM / EME — Video.js 10 (rc)**: yes. A `source.drm` map of EME key-system ids on `ShakaVideo` and `HlsjsVideo`; the key-system constants (`KeySystems`) are re-exported by `@videojs/react` from `@videojs/media`, whose `dist/default/core/drm.js` implements them. The playback engine behind it (shaka-player, hls.js) is the consumer's own install. mechanical check: `@videojs/react`'s `docs/reference/components/shaka-video.md` includes `source.drm`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/docs (the package ships its own documentation) (`reference/components/shaka-video.md`, "Protected content")
+
+[^61]: **HLS — Playdeck**: yes. mechanical check: `@playdeck/core`'s `dist/types.d.ts` includes `HlsSource`. Source: packages/core/dist/types.d.ts (`PlayerSource`); packages/provider-hls
+
+[^62]: **HLS — react-player**: yes. mechanical check: `react-player`'s `dist/players.js` includes `canPlay: canPlay.hls`. Source: react-player 3.4.0, node_modules/react-player/dist/players.js (lazy `hls-video-element`)
+
+[^63]: **HLS — Vidstack**: yes. mechanical check: `@vidstack/react` exports `HLSProviderLoader`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
+
+[^64]: **HLS — Media Chrome**: plugin. No provider or engine module of its own; the documented compatible element is `<hls-video>`. Plugin `hls-video-element`: npm `repository` github.com/muxinc/media-elements, org-published. mechanical check: no file of `media-chrome` matching `**/*.js` or `**/*.d.ts` contains `hls`. Source: [media-chrome.org/docs/en/media-element](https://www.media-chrome.org/docs/en/media-element#compatible-media-elements)
+
+[^65]: **HLS — Video.js**: yes. mechanical check: `video.js`'s `dist/video.es.js` includes `videojs-http-streaming`. Source: video.js 8.24.0, node_modules/video.js/dist/video.es.js (installed package)
+
+[^66]: **HLS — Video.js 10 (rc)**: yes. mechanical check: `@videojs/react/media/hls-video` exports `HlsVideo`. Source: @videojs/react 10.0.0-rc.4, every `.js` and `.d.ts` file in node_modules/@videojs/react and in the five `@videojs/*` packages it depends on (installed packages)
+
+[^67]: **DASH — Playdeck**: no. Searched for `createDashProvider` rather than the bare word: `@playdeck/react/browser` bundles React and ReactDOM, whose own SVG attribute table carries `stroke-dasharray`/`stroke-dashoffset`, so the bare word no longer holds vacuously true the way it does for every other library here. Every existing provider exports a `create<Name>Provider` factory (`createHlsProvider`, `createNativeProvider`, `createVimeoProvider`, `createWistiaProvider`, `createYouTubeProvider`); a DASH provider would be the same shape. `PlayerSource` is a closed union of `string | VideoFileSource | HlsSource | YouTubeSource | VimeoSource | WistiaSource` (packages/core/dist/types.d.ts); `.out-of-scope/dash.md` records the decision. mechanical check: no file of `@playdeck/core` and `@playdeck/react` matching `**/*.js` or `**/*.d.ts` contains `createDashProvider`. Source: packages/core and packages/react, every `.js` and `.d.ts` file each ships under `dist/` after `pnpm build`
+
+[^68]: **DASH — react-player**: yes. mechanical check: `react-player`'s `dist/players.js` includes `canPlay: canPlay.dash`. Source: react-player 3.4.0, node_modules/react-player/dist/players.js (lazy `dash-video-element`)
+
+[^69]: **DASH — Vidstack**: yes. mechanical check: `@vidstack/react` exports `DASHProviderLoader`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
+
+[^70]: **DASH — Media Chrome**: plugin. Searched for `DashVideo` rather than the bare word: the package's only `dash` strings are its own `dashedToCamel` helper. No provider or engine module of its own; the documented compatible element is `<dash-video>`. Plugin `dash-video-element`: npm `repository` github.com/muxinc/media-elements, org-published. mechanical check: no file of `media-chrome` matching `**/*.js` or `**/*.d.ts` contains `DashVideo`. Source: [media-chrome.org/docs/en/media-element](https://www.media-chrome.org/docs/en/media-element#compatible-media-elements)
+
+[^71]: **DASH — Video.js**: yes. mechanical check: `video.js`'s `dist/video.es.js` includes `mpd-parser`. Source: video.js 8.24.0, node_modules/video.js/dist/video.es.js (installed package)
+
+[^72]: **DASH — Video.js 10 (rc)**: plugin. Changed since `10.0.0-beta.32`: `DashVideo` is still exported from `@videojs/react/media/dash-video`, but that adapter now imports `@videojs/dash-video`, a package `@videojs/react`'s own `peerDependenciesMeta` marks optional and this pinned install does not add, so importing the subpath throws rather than exporting the component. Plugin `@videojs/dash-video`: npm `repository` github.com/videojs/v10, org-published. mechanical check: `@videojs/react`'s `docs/reference/components/dash-video.md` includes `pnpm add @videojs/dash-video`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/docs (the package ships its own documentation) (`reference/components/dash-video.md`, "Import")
+
+[^73]: **Live streaming — Playdeck**: partial. `LiveIndicator` renders a non-interactive live/DVR-edge badge (`data-state` at-edge/behind-edge), derived from `PlayerState.live`; it ships no seek-to-live-edge control of its own (tracked separately). mechanical check: `@playdeck/react` exports `LiveIndicator`. Source: packages/react/README.md
+
+[^74]: **Live streaming — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `isLive`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
+
+[^75]: **Live streaming — Vidstack**: yes. mechanical check: `@vidstack/react` exports `LiveButton`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
+
+[^76]: **Live streaming — Media Chrome**: yes. mechanical check: `media-chrome/react` exports `MediaLiveButton`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
+
+[^77]: **Live streaming — Video.js**: yes. mechanical check: `video.js`'s `dist/video.es.js` includes `seekToLive`. Source: video.js 8.24.0, node_modules/video.js/dist/video.es.js (installed package)
+
+[^78]: **Live streaming — Video.js 10 (rc)**: yes. mechanical check: `@videojs/react` exports `LiveButton`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
+
+[^79]: **YouTube — Playdeck**: yes. mechanical check: `@playdeck/core`'s `dist/types.d.ts` includes `YouTubeSource`. Source: packages/core/dist/types.d.ts (`PlayerSource`); packages/provider-youtube
+
+[^80]: **YouTube — react-player**: yes. mechanical check: `react-player`'s `dist/players.js` includes `canPlay: canPlay.youtube`. Source: react-player 3.4.0, node_modules/react-player/dist/players.js (lazy `youtube-video-element`)
+
+[^81]: **YouTube — Vidstack**: yes. mechanical check: `@vidstack/react` exports `YouTubeProviderLoader`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
+
+[^82]: **YouTube — Media Chrome**: plugin. No provider module of its own; the documented compatible element is `<youtube-video>`. Plugin `youtube-video-element`: npm `repository` github.com/muxinc/media-elements, org-published. mechanical check: no file of `media-chrome` matching `**/*.js` or `**/*.d.ts` contains `youtube`. Source: [media-chrome.org/docs/en/media-element](https://www.media-chrome.org/docs/en/media-element#compatible-media-elements)
+
+[^83]: **YouTube — Video.js**: plugin. No YouTube tech in core. Plugin `videojs-youtube`: npm `repository` github.com/videojs/videojs-youtube, org-published. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `youtube`. Source: [registry.npmjs.org/videojs-youtube](https://registry.npmjs.org/videojs-youtube)
+
+[^84]: **YouTube — Video.js 10 (rc)**: plugin. Changed since `10.0.0-beta.32`: `YouTubeVideo` is still exported from `@videojs/react/media/youtube-video`, but that adapter now imports `@videojs/youtube-video`, a package `@videojs/react`'s own `peerDependenciesMeta` marks optional and this pinned install does not add, so importing the subpath throws rather than exporting the component. Plugin `@videojs/youtube-video`: npm `repository` github.com/videojs/v10, org-published. mechanical check: `@videojs/react`'s `docs/reference/components/youtube-video.md` includes `pnpm add @videojs/youtube-video`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/docs (the package ships its own documentation) (`reference/components/youtube-video.md`, "Import")
+
+[^85]: **Vimeo — Playdeck**: yes. mechanical check: `@playdeck/core`'s `dist/types.d.ts` includes `VimeoSource`. Source: packages/core/dist/types.d.ts (`PlayerSource`); packages/provider-vimeo
+
+[^86]: **Vimeo — react-player**: yes. mechanical check: `react-player`'s `dist/players.js` includes `canPlay: canPlay.vimeo`. Source: react-player 3.4.0, node_modules/react-player/dist/players.js (lazy `vimeo-video-element`)
+
+[^87]: **Vimeo — Vidstack**: yes. mechanical check: `@vidstack/react` exports `VimeoProviderLoader`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
+
+[^88]: **Vimeo — Media Chrome**: plugin. No provider module of its own; the documented compatible element is `<vimeo-video>`. Plugin `vimeo-video-element`: npm `repository` github.com/muxinc/media-elements, org-published. mechanical check: no file of `media-chrome` matching `**/*.js` or `**/*.d.ts` contains `vimeo`. Source: [media-chrome.org/docs/en/media-element](https://www.media-chrome.org/docs/en/media-element#compatible-media-elements)
+
+[^89]: **Vimeo — Video.js**: plugin. No Vimeo tech in core. Plugin `videojs-vimeo`: npm `repository` github.com/eXon/videojs-vimeo, third-party. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `vimeo`. Source: [registry.npmjs.org/videojs-vimeo](https://registry.npmjs.org/videojs-vimeo)
+
+[^90]: **Vimeo — Video.js 10 (rc)**: plugin. Changed since `10.0.0-beta.32`: `VimeoVideo` is still exported from `@videojs/react/media/vimeo-video`, but that adapter now imports `@videojs/vimeo-video`, a package `@videojs/react`'s own `peerDependenciesMeta` marks optional and this pinned install does not add, so importing the subpath throws rather than exporting the component. Plugin `@videojs/vimeo-video`: npm `repository` github.com/videojs/v10, org-published. mechanical check: `@videojs/react`'s `docs/reference/components/vimeo-video.md` includes `pnpm add @videojs/vimeo-video`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/docs (the package ships its own documentation) (`reference/components/vimeo-video.md`, "Import")
+
+[^91]: **Wistia — Playdeck**: yes. mechanical check: `@playdeck/core`'s `dist/types.d.ts` includes `WistiaSource`. Source: packages/core/dist/types.d.ts (`PlayerSource`); packages/provider-wistia
+
+[^92]: **Wistia — react-player**: yes. mechanical check: `react-player`'s `dist/players.js` includes `canPlay: canPlay.wistia`. Source: react-player 3.4.0, node_modules/react-player/dist/players.js
+
+[^93]: **Wistia — Vidstack**: no. Searched for `istia`, which catches both `wistia` and `Wistia`; the same token is used in the Video.js column. mechanical check: no file of `@vidstack/react` matching `**/*.js` or `**/*.d.ts` contains `istia`. Source: @vidstack/react 1.15.6, every `.js` and `.d.ts` file in node_modules/@vidstack/react (installed package)
+
+[^94]: **Wistia — Media Chrome**: plugin. No provider module of its own; the documented compatible element is `<wistia-video>`. Plugin `wistia-video-element`: npm `repository` github.com/muxinc/media-elements, org-published. mechanical check: no file of `media-chrome` matching `**/*.js` or `**/*.d.ts` contains `wistia`. Source: [media-chrome.org/docs/en/media-element](https://www.media-chrome.org/docs/en/media-element#compatible-media-elements)
+
+[^95]: **Wistia — Video.js**: no. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `istia`. Source: video.js 8.24.0, every `.js` and `.d.ts` file in node_modules/video.js (installed package)
+
+[^96]: **Wistia — Video.js 10 (rc)**: plugin. New since `10.0.0-beta.32`, which shipped no Wistia adapter at all (every file of `@videojs/react` and the five engine packages it then depended on was searched and none contained `istia`). `10.0.0-rc.4` adds `WistiaVideo` at `@videojs/react/media/wistia-video`, whose adapter imports the optional peer `@videojs/wistia-video`, not installed by this pinned fixture. Plugin `@videojs/wistia-video`: npm `repository` github.com/videojs/v10, org-published. mechanical check: `@videojs/react`'s `docs/reference/components/wistia-video.md` includes `pnpm add @videojs/wistia-video`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/docs (the package ships its own documentation) (`reference/components/wistia-video.md`, "Import")
+
+[^97]: **Other hosted providers (named) — Playdeck**: partial. No named hosted platform ships in the box, but `Player.Root`'s `providers` prop lets a consumer register one of their own: a `detect`/`load` pair keyed by the source-kind name, tried once the five built-in kinds fail to detect a URL. Shipping an actual Twitch/Mux/etc. adapter through it is left to the consumer or a separate package. mechanical check: `@playdeck/react`'s `dist/root.d.ts` includes `readonly providers?: P;`. Source: packages/react/dist/root.d.ts (`RootProps.providers`)
+
+[^98]: **Other hosted providers (named) — react-player**: yes. Mux, Twitch, TikTok and Spotify each have their own `Config` key and a lazy-loaded provider. mechanical check: `react-player`'s `dist/types.d.ts` includes `mux?: Record<string, unknown>;`. Source: react-player 3.4.0, node_modules/react-player/dist/types.d.ts (installed package)
+
+[^99]: **Other hosted providers (named) — Vidstack**: no. Providers beyond HLS/DASH/YouTube/Vimeo/audio/video are not hosted platforms (e.g. a Remotion render provider). mechanical check: no file of `@vidstack/react` matching `**/*.js` or `**/*.d.ts` contains `Twitch`. Source: @vidstack/react 1.15.6, every `.js` and `.d.ts` file in node_modules/@vidstack/react (installed package)
+
+[^100]: **Other hosted providers (named) — Media Chrome**: plugin. The docs page lists 11 compatible elements. Beyond the HLS, DASH, YouTube, Vimeo and Wistia rows above, they are `<cloudflare-video>`, `<jwplayer-video>`, `<mux-video>`, `<shaka-video>`, `<spotify-audio>` and `<videojs-video>`. Plugin `cloudflare-video-element`: npm `repository` github.com/muxinc/media-elements, org-published. mechanical check: no file of `media-chrome` matching `**/*.js` or `**/*.d.ts` contains `cloudflare`. Source: [media-chrome.org/docs/en/media-element](https://www.media-chrome.org/docs/en/media-element#compatible-media-elements)
+
+[^101]: **Other hosted providers (named) — Video.js**: no. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `Twitch`. Source: video.js 8.24.0, every `.js` and `.d.ts` file in node_modules/video.js (installed package)
+
+[^102]: **Other hosted providers (named) — Video.js 10 (rc)**: plugin. Twitch, TikTok, Spotify, Cloudflare Stream and Mux each still ship as their own media component under the `@videojs/react/media/*` subpath, but changed since `10.0.0-beta.32`: each adapter now imports its own optional peer package (`@videojs/twitch-video` here), which `@videojs/react`'s own `peerDependenciesMeta` marks optional and this pinned install does not add, so importing the subpath throws rather than exporting the component. Plugin `@videojs/twitch-video`: npm `repository` github.com/videojs/v10, org-published. mechanical check: `@videojs/react`'s `docs/reference/components/twitch-video.md` includes `pnpm add @videojs/twitch-video`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/docs (the package ships its own documentation) (`reference/components/twitch-video.md`, "Import")
+
+[^103]: **Audio tracks — Playdeck**: yes. Provider limit, not a status: the YouTube, Vimeo and Wistia embeds report `selectAudioTrack` as provider-unavailable (packages/provider-youtube, packages/provider-vimeo, packages/provider-wistia), as an embedded player would under any library here. mechanical check: `@playdeck/react` exports `AudioTrackMenu`. Source: packages/react/README.md
+
+[^104]: **Audio tracks — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `AudioTrack`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
+
+[^105]: **Audio tracks — Vidstack**: yes. mechanical check: `@vidstack/react`'s `prod/player/vidstack-default-components.js` includes `DefaultAudioTracksMenu`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/player/vidstack-default-components.js (installed package)
+
+[^106]: **Audio tracks — Media Chrome**: yes. mechanical check: `media-chrome/react/menu` exports `MediaAudioTrackMenu`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
+
+[^107]: **Audio tracks — Video.js**: yes. mechanical check: `video.js`'s `dist/video.es.js` includes `registerComponent('AudioTrackButton'`. Source: video.js 8.24.0, node_modules/video.js/dist/video.es.js (installed package)
+
+[^108]: **Audio tracks — Video.js 10 (rc)**: yes. mechanical check: `@videojs/react` exports `AudioTrackRadioGroup`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
+
+[^109]: **Chapters — Playdeck**: yes. mechanical check: `@playdeck/react` exports `ChaptersMenu`. Source: packages/react/README.md
+
+[^110]: **Chapters — react-player**: no. Searched for `hapter`, which catches both `chapter` and `Chapter`. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `hapter`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
+
+[^111]: **Chapters — Vidstack**: yes. mechanical check: `@vidstack/react`'s `prod/player/vidstack-default-components.js` includes `DefaultChaptersMenu`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/player/vidstack-default-components.js (installed package)
+
+[^112]: **Chapters — Media Chrome**: partial. Shows the current chapter title while scrubbing; ships no chapters navigation menu. mechanical check: `media-chrome/react` exports `MediaPreviewChapterDisplay`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
+
+[^113]: **Chapters — Video.js**: yes. mechanical check: `video.js`'s `dist/video.es.js` includes `registerComponent('ChaptersButton'`. Source: video.js 8.24.0, node_modules/video.js/dist/video.es.js (installed package)
+
+[^114]: **Chapters — Video.js 10 (rc)**: yes. mechanical check: `@videojs/react`'s `dist/dev/index.d.ts` includes `TimeSliderChapters`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
+
+[^115]: **Thumbnails / preview on seek — Playdeck**: yes. mechanical check: `@playdeck/react`'s `dist/thumbnails.js` includes `"data-playdeck-part": "thumbnail"`. Source: packages/react/README.md
+
+[^116]: **Thumbnails / preview on seek — react-player**: no. The `light` prop is a static startup poster fetched through oEmbed (`thumbnail_url` in `dist/Preview.js`), not a hover/scrub seek preview. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `thumbnails`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
+
+[^117]: **Thumbnails / preview on seek — Vidstack**: yes. mechanical check: `@vidstack/react` exports `Thumbnail`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
+
+[^118]: **Thumbnails / preview on seek — Media Chrome**: yes. mechanical check: `media-chrome/react` exports `MediaPreviewThumbnail`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
+
+[^119]: **Thumbnails / preview on seek — Video.js**: plugin. No seek-preview thumbnail support in core. Plugin `videojs-sprite-thumbnails`: npm `repository` github.com/phloxic/videojs-sprite-thumbnails, third-party. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `thumbnails`. Source: [registry.npmjs.org/videojs-sprite-thumbnails](https://registry.npmjs.org/videojs-sprite-thumbnails)
+
+[^120]: **Thumbnails / preview on seek — Video.js 10 (rc)**: yes. mechanical check: `@videojs/react` exports `Thumbnail`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
+
+[^121]: **Playlists — Playdeck**: no. `Root` takes one `source`, not a list. mechanical check: no file of `@playdeck/core` and `@playdeck/react` matching `**/*.js` or `**/*.d.ts` contains `Playlist`. Source: packages/core and packages/react, every `.js` and `.d.ts` file each ships under `dist/` after `pnpm build`
+
+[^122]: **Playlists — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `Playlist`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
+
+[^123]: **Playlists — Vidstack**: no. The only `Playlist` string in the package is the `PlaylistIcon` art in `icons.d.ts`; no playlist component or state ships. mechanical check: no file of `@vidstack/react` matching `**/*.js` or `**/*.d.ts` contains `PlaylistInstance`. Source: @vidstack/react 1.15.6, every `.js` and `.d.ts` file in node_modules/@vidstack/react (installed package)
+
+[^124]: **Playlists — Media Chrome**: no. mechanical check: no file of `media-chrome` matching `**/*.js` or `**/*.d.ts` contains `Playlist`. Source: media-chrome 4.19.2, every `.js` and `.d.ts` file in node_modules/media-chrome (installed package)
+
+[^125]: **Playlists — Video.js**: plugin. No playlist component in core (the `Playlist` strings in `core.es.js` are HLS media-playlist parsing). Plugin `videojs-playlist`: npm `repository` github.com/brightcove/videojs-playlist, third-party. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `registerComponent('Playlist`. Source: [registry.npmjs.org/videojs-playlist](https://registry.npmjs.org/videojs-playlist)
+
+[^126]: **Playlists — Video.js 10 (rc)**: no. Searched for `PlaylistProps`, the name a Playlist component would carry in a package that gives every component an `XProps` type: the bare word appears in `@videojs/media` for Google Cast queues and HLS media-playlist parsing. Its own migration guide lists playlists among the "genuinely missing features" that "need real work". mechanical check: no file of `@videojs/react` and `@videojs/core` and `@videojs/media` and `@videojs/spf` and `@videojs/store` and `@videojs/utils` matching `**/*.js` or `**/*.d.ts` contains `PlaylistProps`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/docs (the package ships its own documentation) (`guides/migrate-from-video-js-8.md`, "Plugins")
+
+[^127]: **Ads / IMA — Playdeck**: no. mechanical check: no file of `@playdeck/core` and `@playdeck/react` matching `**/*.js` or `**/*.d.ts` contains `AdBreak`. Source: packages/core and packages/react, every `.js` and `.d.ts` file each ships under `dist/` after `pnpm build`
+
+[^128]: **Ads / IMA — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `AdBreak`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
+
+[^129]: **Ads / IMA — Vidstack**: no. mechanical check: no file of `@vidstack/react` matching `**/*.js` or `**/*.d.ts` contains `AdBreak`. Source: @vidstack/react 1.15.6, every `.js` and `.d.ts` file in node_modules/@vidstack/react (installed package)
+
+[^130]: **Ads / IMA — Media Chrome**: no. mechanical check: no file of `media-chrome` matching `**/*.js` or `**/*.d.ts` contains `AdBreak`. Source: media-chrome 4.19.2, every `.js` and `.d.ts` file in node_modules/media-chrome (installed package)
+
+[^131]: **Ads / IMA — Video.js**: plugin. No ad support in core. The ad-timeline framework is usually paired with Google's `videojs-ima` (npm `repository` github.com/googleads/videojs-ima, third-party), which is not what this cell is anchored on. Plugin `videojs-contrib-ads`: npm `repository` github.com/videojs/videojs-contrib-ads, org-published. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `AdBreak`. Source: [registry.npmjs.org/videojs-contrib-ads](https://registry.npmjs.org/videojs-contrib-ads)
+
+[^132]: **Ads / IMA — Video.js 10 (rc)**: no. Its own migration guide says "If your player depends on an ads plugin, there's no v10 answer today". mechanical check: no file of `@videojs/react` and `@videojs/core` and `@videojs/media` and `@videojs/spf` and `@videojs/store` and `@videojs/utils` matching `**/*.js` or `**/*.d.ts` contains `AdBreak`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/docs (the package ships its own documentation) (`guides/migrate-from-video-js-8.md`, "Plugins")
+
+[^133]: **Analytics hooks — Playdeck**: no. mechanical check: no file of `@playdeck/core` and `@playdeck/react` matching `**/*.js` or `**/*.d.ts` contains `Analytics`. Source: packages/core and packages/react, every `.js` and `.d.ts` file each ships under `dist/` after `pnpm build`
+
+[^134]: **Analytics hooks — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `Analytics`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
+
+[^135]: **Analytics hooks — Vidstack**: no. The only `Analytics` string in the package documents a YouTube embed parameter (`types/vidstack-instances.d.ts`); no analytics component ships. mechanical check: no file of `@vidstack/react` matching `**/*.js` or `**/*.d.ts` contains `AnalyticsInstance`. Source: @vidstack/react 1.15.6, every `.js` and `.d.ts` file in node_modules/@vidstack/react (installed package)
+
+[^136]: **Analytics hooks — Media Chrome**: no. mechanical check: no file of `media-chrome` matching `**/*.js` or `**/*.d.ts` contains `Analytics`. Source: media-chrome 4.19.2, every `.js` and `.d.ts` file in node_modules/media-chrome (installed package)
+
+[^137]: **Analytics hooks — Video.js**: plugin. No analytics reporting in core; `videojs-mux` is the Mux Data SDK for Video.js. Plugin `videojs-mux`: its published npm manifest declares no `repository` field, so no owner is recorded here. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `Analytics`. Source: [registry.npmjs.org/videojs-mux](https://registry.npmjs.org/videojs-mux)
+
+[^138]: **Analytics hooks — Video.js 10 (rc)**: plugin. A `MuxData` component ships in the package, and no other analytics vendor has a component here, but changed since `10.0.0-beta.32`: the component moved from `@videojs/react/media/mux-data` to `@videojs/react/extensions/mux-data`, and its adapter now imports the optional peer `@videojs/mux-data`, which `@videojs/react`'s own `peerDependenciesMeta` marks optional and this pinned install does not add. Plugin `@videojs/mux-data`: npm `repository` github.com/videojs/v10, org-published. mechanical check: `@videojs/react`'s `docs/reference/components/mux-data.md` includes `pnpm add @videojs/react @videojs/mux-data`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/docs (the package ships its own documentation) (`reference/components/mux-data.md`, "Import")
+
+[^139]: **Plugin system — Playdeck**: partial. Extensibility is still mostly React composition (compose primitives, pass props/render props), not a registry a plugin calls into -- with one seam: `Player.Root`'s `providers` prop lets a consumer register a `detect`/`load` pair for a source kind this package does not ship a loader for. No hook over commands or events exists yet. mechanical check: `@playdeck/react`'s `dist/root.d.ts` includes `readonly providers?: P;`. Source: packages/react/dist/root.d.ts (`RootProps.providers`)
+
+[^140]: **Plugin system — react-player**: yes. `ReactPlayer.addCustomPlayer` and `removeCustomPlayers` are assigned in the shipped code and typed in `dist/index.d.ts`; they register and drop a custom player implementation. mechanical check: `react-player`'s `dist/ReactPlayer.js` includes `ReactPlayer.addCustomPlayer =`. Source: react-player 3.4.0, node_modules/react-player/dist/ReactPlayer.js and README.md (installed package), the `addCustomPlayer` / `removeCustomPlayers` lines
+
+[^141]: **Plugin system — Vidstack**: no. mechanical check: no file of `@vidstack/react` matching `**/*.js` or `**/*.d.ts` contains `registerPlugin`. Source: @vidstack/react 1.15.6, every `.js` and `.d.ts` file in node_modules/@vidstack/react (installed package)
+
+[^142]: **Plugin system — Media Chrome**: no. Extensibility is authoring another custom element, not a plugin registry. mechanical check: no file of `media-chrome` matching `**/*.js` or `**/*.d.ts` contains `registerPlugin`. Source: media-chrome 4.19.2, every `.js` and `.d.ts` file in node_modules/media-chrome (installed package)
+
+[^143]: **Plugin system — Video.js**: yes. mechanical check: `video.js`'s `dist/video.es.js` includes `static registerPlugin(name, plugin)`. Source: video.js 8.24.0, node_modules/video.js/dist/video.es.js (installed package)
+
+[^144]: **Plugin system — Video.js 10 (rc)**: no. Its own migration guide opens that section "v10 has no plugin system"; extension is composition, an ejected skin, or a swapped media component. mechanical check: no file of `@videojs/react` and `@videojs/core` and `@videojs/media` and `@videojs/spf` and `@videojs/store` and `@videojs/utils` matching `**/*.js` or `**/*.d.ts` contains `registerPlugin`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/docs (the package ships its own documentation) (`guides/migrate-from-video-js-8.md`, "Plugins")
+
+[^145]: **Shipped skin / theme — Playdeck**: yes. `theme.css` and `docked.css` are exports entries the primitives never import themselves (see "requires an external stylesheet" below). mechanical check: `@playdeck/react`'s `package.json` includes `"./theme.css": "./theme.css"`. Source: packages/react/README.md
+
+[^146]: **Shipped skin / theme — react-player**: no. Ships no CSS file at all; visible controls are always the native `<video>` chrome or an iframe provider's own UI. mechanical check: `react-player` ships no file matching `**/*.css`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
+
+[^147]: **Shipped skin / theme — Vidstack**: yes. mechanical check: `@vidstack/react/player/layouts/default` exports `DefaultVideoLayout`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/player/layouts/default (installed package)
+
+[^148]: **Shipped skin / theme — Media Chrome**: no. No stylesheet and no `dist/themes` directory ship. `MediaThemeElement` is a theming _engine_ for a consumer's own template, not a pre-built skin. mechanical check: `media-chrome` ships no file matching `**/*.css` or `dist/themes/**/*`. Source: media-chrome 4.19.2, every `.js` and `.d.ts` file in node_modules/media-chrome (installed package)
+
+[^149]: **Shipped skin / theme — Video.js**: yes. mechanical check: `video.js`'s `package.json` declares `style`. Source: video.js 8.24.0, node_modules/video.js/package.json (installed package)
+
+[^150]: **Shipped skin / theme — Video.js 10 (rc)**: yes. The `@videojs/react/video` preset ships `skin.css` and `minimal-skin.css` beside its `VideoSkin` component. mechanical check: `@videojs/react`'s `package.json` includes `"./video/*.css"`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/package.json (installed package)
+
+[^151]: **Headless, independently composable parts — Playdeck**: yes. mechanical check: `@playdeck/react` exports `PlayButton`. Source: packages/react/README.md
+
+[^152]: **Headless, independently composable parts — react-player**: no. One configured component; controls are either the native chrome or an iframe provider's own UI, not independently importable parts. mechanical check: no file of `react-player` matching `**/*.js` or `**/*.d.ts` contains `PlayButton`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
+
+[^153]: **Headless, independently composable parts — Vidstack**: yes. mechanical check: `@vidstack/react` exports `PlayButton`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
+
+[^154]: **Headless, independently composable parts — Media Chrome**: yes. mechanical check: `media-chrome/react` exports `MediaPlayButton`. Source: media-chrome 4.19.2, node_modules/media-chrome/README.md (installed package)
+
+[^155]: **Headless, independently composable parts — Video.js**: no. Searched for `jsx-runtime` rather than a part name: the bundle does contain `bigPlayButton`, but as an internal component id, and the question this axis asks is whether React parts are importable at all. This pinned package ships no React integration, so it has none; its own components are reachable imperatively (`player.controlBar.getChild(...)`). The videojs GitHub org publishes a separate React library, `@videojs/react`, which is the Video.js 10 (rc) column. mechanical check: no file of `video.js` matching `**/*.js` or `**/*.d.ts` contains `jsx-runtime`. Source: video.js 8.24.0, every `.js` and `.d.ts` file in node_modules/video.js (installed package)
+
+[^156]: **Headless, independently composable parts — Video.js 10 (rc)**: yes. mechanical check: `@videojs/react` exports `PlayButton`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/dist/dev/index.d.ts (installed package)
+
+[^157]: **Requires an external stylesheet for usable controls — Playdeck**: no. Searched for `.css"` -- a quoted import specifier, the shape a real self-import would take in this build's output -- rather than the bare extension: `@playdeck/react/browser` bundles ReactDOM, whose own style-property helpers read `element.cssFloat` and `element.cssText`, both of which contain the bare substring. No shipped JavaScript imports a stylesheet; an unstyled composition still renders and operates. mechanical check: no file of `@playdeck/core` and `@playdeck/react` matching `**/*.js` contains `.css"`. Source: packages/core and packages/react, every `.js` and `.d.ts` file each ships under `dist/` after `pnpm build`
+
+[^158]: **Requires an external stylesheet for usable controls — react-player**: no. mechanical check: no file of `react-player` matching `**/*.js` contains `.css`. Source: react-player 3.4.0, every `.js` and `.d.ts` file in node_modules/react-player (installed package)
+
+[^159]: **Requires an external stylesheet for usable controls — Vidstack**: yes. mechanical check: `@vidstack/react`'s `player/styles/default/theme.css` includes `Player`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/player/styles/default/theme.css (installed package)
+
+[^160]: **Requires an external stylesheet for usable controls — Media Chrome**: no. Each custom element ships its own Shadow DOM styles. mechanical check: `media-chrome`'s `dist/media-chrome-button.js` includes `attachShadow`. Source: media-chrome 4.19.2, every `.js` and `.d.ts` file in node_modules/media-chrome (installed package)
+
+[^161]: **Requires an external stylesheet for usable controls — Video.js**: yes. mechanical check: `video.js`'s `package.json` declares `style`. Source: video.js 8.24.0, node_modules/video.js/package.json (installed package)
+
+[^162]: **Requires an external stylesheet for usable controls — Video.js 10 (rc)**: yes. Changed since `10.0.0-beta.32`: the skin's own type declaration (`dist/dev/presets/video/skin.d.ts`) no longer names the stylesheet in its doc comment, so this cell now cites the guide's own `import '@videojs/react/video/skin.css';` example instead. The shipped stylesheet itself (`dist/default/presets/video/skin.css`) is unchanged. mechanical check: `@videojs/react`'s `docs/guides/skins.md` includes `import '@videojs/react/video/skin.css';`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/docs (the package ships its own documentation) (`guides/skins.md`, "Packaged skin")
+
+[^163]: **Lazy / deferred provider loading — Playdeck**: yes. mechanical check: `@playdeck/react`'s `dist/index.js` includes `import(`. Source: packages/react/README.md ("Provider packages are pulled in as dependencies but loaded lazily")
+
+[^164]: **Lazy / deferred provider loading — react-player**: yes. mechanical check: `react-player`'s `dist/players.js` includes `lazy(`. Source: react-player 3.4.0, node_modules/react-player/README.md (installed package)
+
+[^165]: **Lazy / deferred provider loading — Vidstack**: yes. mechanical check: `@vidstack/react`'s `prod/vidstack.js` includes `import(`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/prod/vidstack.js (installed package, the file a bare import resolves to)
+
+[^166]: **Lazy / deferred provider loading — Media Chrome**: n/a. The axis cannot apply: media-chrome ships no provider or engine module of its own to defer -- its controller wraps whatever media element a consumer slots in. mechanical check: no file of `media-chrome` matching `**/*.js` or `**/*.d.ts` contains `hls`. Source: media-chrome 4.19.2, every `.js` and `.d.ts` file in node_modules/media-chrome (installed package)
+
+[^167]: **Lazy / deferred provider loading — Video.js**: no. The HLS/DASH engine (videojs-http-streaming, mpd-parser, m3u8-parser) is a static import with no dynamic boundary. mechanical check: no file of `video.js` matching `**/*.js` contains `import(`. Source: video.js 8.24.0, every `.js` and `.d.ts` file in node_modules/video.js (installed package)
+
+[^168]: **Lazy / deferred provider loading — Video.js 10 (rc)**: no. Searched across the two of the six packages that ship the providers and playback engines, because that is what this axis asks about. Each media component is its own `@videojs/react/media/*` subpath a consumer imports statically, so a page pays only for the one it names, and none is deferred. Dynamic `import()` does appear elsewhere in the six: `@videojs/core`'s `dist/*/core/i18n/load-locale.js` defers 53 translation packs, which are locales rather than providers. mechanical check: no file of `@videojs/react` and `@videojs/media` matching `**/*.js` contains `import(`. Source: @videojs/react 10.0.0-rc.4, every `.js` file in node_modules/@videojs/react and node_modules/@videojs/media (installed packages)
+
+[^169]: **React version supported — Playdeck**: yes. `>=19 <20` -- React 19 only. mechanical check: `@playdeck/react`'s `package.json` declares `peerDependencies.react`. Source: packages/react/package.json
+
+[^170]: **React version supported — react-player**: yes. `^17.0.2 || ^18 || ^19`. mechanical check: `react-player`'s `package.json` declares `peerDependencies.react`. Source: react-player 3.4.0, node_modules/react-player/package.json
+
+[^171]: **React version supported — Vidstack**: yes. `^18.0.0 || ^19.0.0`. mechanical check: `@vidstack/react`'s `package.json` declares `peerDependencies.react`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/package.json (installed package)
+
+[^172]: **React version supported — Media Chrome**: partial. Ships a React wrapper (generated at build time via `ce-la-react`, a runtime dependency) but declares no peer range for it; its `package.json` `devDependencies` pin `react` 19.2.2. mechanical check: `media-chrome`'s `package.json` has no `peerDependencies.react`. Source: media-chrome 4.19.2, node_modules/media-chrome/package.json
+
+[^173]: **React version supported — Video.js**: no. This pinned package ships no React integration, so it declares no React range. The videojs GitHub org publishes a separate React library, `@videojs/react`, which is the Video.js 10 (rc) column and declares `^18.0.0 || ^19.0.0`. mechanical check: `video.js`'s `package.json` has no `peerDependencies`. Source: video.js 8.24.0, node_modules/video.js/package.json (installed package)
+
+[^174]: **React version supported — Video.js 10 (rc)**: yes. `^18.0.0 || ^19.0.0`. mechanical check: `@videojs/react`'s `package.json` declares `peerDependencies.react`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/package.json (installed package)
+
+[^175]: **Imports on a server (no DOM globals) — Playdeck**: yes. mechanical check: importing `@playdeck/react` in plain Node, with no DOM globals, succeeds. Source: packages/react, the built `@playdeck/react` this generator imports
+
+[^176]: **Imports on a server (no DOM globals) — react-player**: yes. mechanical check: importing `react-player` in plain Node, with no DOM globals, succeeds. Source: react-player 3.4.0, node_modules/react-player (installed package)
+
+[^177]: **Imports on a server (no DOM globals) — Vidstack**: yes. Also ships a dedicated `server`/`worker` build condition (`server/vidstack.js`) alongside the `'use client'` entry. mechanical check: importing `@vidstack/react` in plain Node, with no DOM globals, succeeds. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react (installed package)
+
+[^178]: **Imports on a server (no DOM globals) — Media Chrome**: yes. Renders as inert custom-element markup during SSR (guarded by `isServer`) without a `'use client'` boundary; behaviour attaches on hydration. mechanical check: importing `media-chrome` in plain Node, with no DOM globals, succeeds. Source: media-chrome 4.19.2, node_modules/media-chrome (installed package)
+
+[^179]: **Imports on a server (no DOM globals) — Video.js**: yes. The package Node loads for `import 'video.js'` is its CJS build (`main`, `dist/video.cjs.js`); it loads with no `window` or `document` present. It ships no React integration, so it carries no `'use client'` boundary either way. mechanical check: importing `video.js` in plain Node, with no DOM globals, succeeds. Source: video.js 8.24.0, node_modules/video.js (installed package)
+
+[^180]: **Imports on a server (no DOM globals) — Video.js 10 (rc)**: yes. mechanical check: importing `@videojs/react` in plain Node, with no DOM globals, succeeds. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react (installed package)
+
+[^181]: **TypeScript types shipped — Playdeck**: yes. mechanical check: `@playdeck/react`'s `package.json` includes `"types": "./dist/index.d.ts"`. Source: packages/react/package.json
+
+[^182]: **TypeScript types shipped — react-player**: yes. mechanical check: `react-player`'s `package.json` includes `"types": "./dist/index.d.ts"`. Source: react-player 3.4.0, node_modules/react-player/package.json
+
+[^183]: **TypeScript types shipped — Vidstack**: yes. mechanical check: `@vidstack/react`'s `package.json` declares `types`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/package.json (installed package)
+
+[^184]: **TypeScript types shipped — Media Chrome**: yes. mechanical check: `media-chrome`'s `package.json` includes `"types": "./dist/react/index.d.ts"`. Source: media-chrome 4.19.2, node_modules/media-chrome/package.json
+
+[^185]: **TypeScript types shipped — Video.js**: yes. mechanical check: `video.js`'s `package.json` declares `types`. Source: video.js 8.24.0, node_modules/video.js/package.json (installed package)
+
+[^186]: **TypeScript types shipped — Video.js 10 (rc)**: yes. mechanical check: `@videojs/react`'s `package.json` declares `types`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/package.json (installed package)
+
+[^187]: **ESM/CJS (dual build) — Playdeck**: partial. ESM-only (`"type": "module"`); the `require` condition resolves to a stub that throws by name. mechanical check: `@playdeck/react`'s `esm-only.cjs` includes `ESM only`. Source: packages/react/esm-only.cjs
+
+[^188]: **ESM/CJS (dual build) — react-player**: partial. ESM-only (`"type": "module"`, no `require` export condition). mechanical check: no file of `react-player` matching `package.json` contains `"require":`. Source: react-player 3.4.0, node_modules/react-player/package.json
+
+[^189]: **ESM/CJS (dual build) — Vidstack**: partial. ESM-only (`"type": "module"`, no `require` export condition). mechanical check: no file of `@vidstack/react` matching `package.json` contains `"require":`. Source: @vidstack/react 1.15.6, node_modules/@vidstack/react/package.json (installed package)
+
+[^190]: **ESM/CJS (dual build) — Media Chrome**: yes. mechanical check: `media-chrome`'s `package.json` includes `"require":`. Source: media-chrome 4.19.2, node_modules/media-chrome/package.json
+
+[^191]: **ESM/CJS (dual build) — Video.js**: yes. `main` (CJS, `dist/video.cjs.js`) and `module` (ESM, `dist/video.es.js`) are both published. mechanical check: `video.js`'s `package.json` declares `main`. Source: video.js 8.24.0, node_modules/video.js/package.json (installed package)
+
+[^192]: **ESM/CJS (dual build) — Video.js 10 (rc)**: partial. ESM-only (`"type": "module"`, no `require` export condition). mechanical check: no file of `@videojs/react` matching `package.json` contains `"require":`. Source: @videojs/react 10.0.0-rc.4, node_modules/@videojs/react/package.json (installed package)
+
+Regenerate with `pnpm compare:features`. `pnpm compare:features:check` fails
+if a fresh check of every anchor in `tests/compare/features.mjs` would
+produce a different table than the one above; it does not police how old the
+date on this file is on its own.
+
+## Comparing Playdeck against other React video libraries: method
+
+This is a snapshot, and a page: every document in this directory is rendered
+whole at `apps/site`'s `/guides/comparison/` route, because that build reads
+`docs/comparison/` at build time. `test:site-links` and `test:site-analytics`
+walk the built site rather than `docs/` directly, and the comparison route is
+part of what they walk now. Publishing it there is a maintainer ruling
+recorded on issue #637, amending the #543 ruling below for this one route: the
+standing rule for `/` is "no claim about any other library, named or implied",
+and this work exists to produce data and a method for that decision, not to
+pre-empt it.
+
+Everything a reader would need to dispute a figure lives in this repository:
+the fixture that composes each library (`tests/compare/`), the harness that
+bundles and measures it (`scripts/compare-libraries.mjs`, with its pure logic
+covered by `scripts/compare-libraries.test.mjs`), and the numbers themselves
+(`docs/comparison/results.md`, regenerated by `pnpm compare:libraries` and
+checked by `pnpm compare:libraries:check`). Re-run it, read the entry file for
+any row that looks wrong, or read the harness's own header comment for how
+each of the two figures is built up from its own bundler's module graph --
+Rollup's, via Vite, for one; esbuild's own for the other.
+
+### Who this is for
+
+The reader this page is written for is a product team embedding video in a
+React application — a course platform, a catalogue, a marketing site, or
+documentation — choosing what to build the player on.
+
+A consumer imports and composes exactly the parts they use: `Player.Root`,
+`Player.Viewport` and `Player.Media` for the core and its native provider, then
+whichever control parts the product needs on top — an `ActivationButton`, or a
+`Controls` wrapper holding some combination of `PlayButton`, `MuteButton`,
+`VolumeSlider`, `SeekSlider`, `Time` and `FullscreenButton`. `results.md`'s
+bundle tables measure four such compositions — **Playdeck (no parts)**,
+**Playdeck**, **Playdeck (play-only)** and **Playdeck (control bar)** — each
+described row by row in "Equivalent composition per library" below; the table
+carries what each one costs.
+
+**Most performant** is a claim about this repository's own rules, not a
+comparative one — nothing this page measures is a runtime number; "What is
+not measured, and why" below says exactly that about playback performance.
+What backs the word instead is a set of gates this repository fails its own
+build over: the committed per-row ceiling on the four Playdeck compositions
+("Date and how to re-run" below), which fails `pnpm compare:libraries` and
+`pnpm compare:libraries:check` the moment a row's gzipped size passes it; the
+per-row forbidden-module matrix (`forbiddenPartsExcept` in
+`scripts/compare-libraries.mjs`), which fails the same two commands the
+moment any of the four Playdeck rows' reachable chunks touch a control part
+it does not render, or one of the four named non-native provider adapters
+the check lists (`youtube`, `wistia`, `hls`, `vimeo`); and
+`tests/bundle/native-only/test.mjs`, run by `pnpm test:bundle` in a real
+Chromium, which fails if any provider chunk is requested before a consumer
+clicks the activation button. None of the three measures an alternative;
+all three measure Playdeck against a number or a rule this repository
+committed to and can fail its own build on.
+
+Three things Playdeck deliberately does not do, restated here because a
+reader comparing libraries meets the gap before they would find the reason.
+Two of them — DASH and DRM — are each already decided and recorded elsewhere
+in this repository; the third, ads and playlists, has not shipped, with
+nothing beyond that absence recorded anywhere:
+
+**DASH** stays out of scope. `.out-of-scope/dash.md` is the record: no browser
+plays DASH natively the way Safari and iOS already play HLS from a plain
+`<video src>`, so a DASH provider costs a full adaptive-bitrate engine on every
+platform, with no platform where it costs only an adapter the way HLS does.
+The decision is `dash.md`'s, and #447 — filed under its "Prior requests"
+heading — is what prompted it.
+
+**DRM** is out of scope, and nothing here builds toward it: Playdeck never
+calls `requestMediaKeySystemAccess`, and no provider it ships exposes a
+key-system option for a consumer to configure. `@playdeck/provider-hls`'s full
+hls.js build carries hls.js's own EME support; its README names EME among what
+the `light` build compiles out, which is the only place this adapter's own
+docs mention it — there is no option anywhere in `createHlsProvider` that
+turns it on. Where DRM plays at all here, it plays inside a provider's own
+iframe under that provider's own rules — `docs/third-party-requests.md`
+records YouTube's `allow` list carrying `encrypted-media`, and Vimeo's
+withholding it as Playdeck writes the frame, though the Vimeo SDK's own
+`updateDRMEmbeds` routine appends the grant back and reloads the frame if it
+reports a DRM-initialisation failure — which is a fact about those frames,
+not a capability Playdeck built or configures.
+
+**Ads and playlists** are out of scope. Both belong to the broadcast shape of a
+player — a single surface that owns an ad break or a queue across items — and
+neither has shipped in this repository. Extension today is React composition,
+not a plugin registry (`docs/comparison/features.md`'s "Plugin system" row).
+
+### What is measured
+
+Gzipped bytes for one fixed composition per library: **a player that plays one
+MP4 URL (`https://example.com/video.mp4`, never fetched — nothing here loads a
+real network resource) with that library's own idea of default controls.**
+React, ReactDOM and the JSX runtime are marked external for every library
+alike and excluded from every figure, because every one of them needs a
+consumer to already have them and none of them would ship them — charging one
+library for a dependency they all share would not be a fact about that
+library.
+
+The number is a sum of gzip sizes, one per JavaScript chunk a browser is
+guaranteed to fetch for that fixed composition, not one gzip of everything the
+library ships. `scripts/compare-libraries.mjs`'s header explains the full
+mechanics; in short, each entry is put through an ordinary `vite build`
+(`write: false`, in memory) so a library's own code-splitting survives as
+separate Rollup chunks, and only the chunks reachable without resolving a
+dynamic `import()` this fixture's fixed inputs cannot reach are counted. CSS is
+not imported by any entry and is not counted for any library — see "Where each
+alternative measures smaller, or wins on something else" below for what that
+costs each one differently.
+
+`results.md`'s "Not counted" column is the other half of that same build:
+every chunk that entry's `vite build` emitted that `reachableChunks` did not
+count, gzipped and summed the same way the "Gzipped" column is. What it holds
+differs by row. For Playdeck it is the other four provider adapters and
+hls.js, each loaded only for a source that actually needs it. For
+react-player it is its other, lazily-loaded provider packages. For Vidstack
+it is the split-off UI and caption modules the "Equivalent composition per
+library" section below names individually. For Media Chrome, Video.js and
+Video.js 10 (rc) it is nothing — each emits a single chunk, with no split
+to report. The column
+exists so "Gzipped" cannot hide code-splitting in either direction: a library
+that defers a lot would otherwise look smaller than what it actually ships,
+and a library that splits nothing gets no credit for that either without a
+number sitting next to it. It is measured from the same build the "Gzipped"
+figure comes from, not read off a library's documentation.
+
+### Cross-checked with a second bundler
+
+Every row in `results.md` is bundled twice: once with Vite
+(`bundleEntryVite`) and once, independently, with esbuild
+(`bundleEntryEsbuild`), from the same entry file, the same externals, and the
+same `reachableChunks` rule -- `scripts/compare-libraries.mjs`'s "the esbuild
+cross-check" header section has the exact esbuild options. `results.md`
+prints both as "Gzipped (Vite)" and "Gzipped (esbuild)". This is not
+redundant with picking one bundler and trusting it: a figure that depends on
+which of this harness's own tools produced it would be a fact about the
+harness, not about the library, and the whole point of naming a bundler in
+the first place is that a reader can pick a different one and check. Two
+bundlers agreeing to within a few percent is what shows a figure is close to
+that ceiling; a bigger gap needs a name for what caused it, not a shrug.
+
+A correction to a premise it would be easy to bring to this comparison: this
+repository's pinned `vite` (8.1.5) does not bundle or minify through esbuild.
+Its own `package.json` depends on `rolldown` — this is the merged,
+Rolldown-based line of Vite — so its default minifier is Rolldown's own
+(built on `oxc-minify`), a different implementation from esbuild's. esbuild
+0.28.1 is _also_ one of Vite's own dependencies, but as a transform fallback,
+not as what actually bundles or minifies these entries. The two paths
+measured here are therefore independent on bundling, tree-shaking, chunk
+splitting and minification alike -- not, as it would be easy to assume, two
+runs of the same minifier under two different bundlers.
+
+Every row's actual delta is `results.md`'s own "Delta" column -- generated
+by `scripts/compare-libraries.mjs`'s `delta` function from the same two
+figures the "Gzipped" columns print, rather than typed here, so it can never
+disagree with them. What follows explains the _shape_ of that column, not
+its numbers: read the numbers from the table, not from this paragraph.
+
+**Media Chrome and Video.js** have no dynamic `import()` anywhere in their
+reachable code (confirmed from both builds' own graphs: neither entry has a
+`dynamicImports` edge at all), so nothing about code-splitting or reachability
+can explain their gaps. What is left is exactly the two minifiers producing
+different bytes for the same input, which is expected of two different
+implementations and is the kind of disagreement this cross-check is supposed
+to surface as normal rather than hide: a small, one-directional gap, on a row
+with nothing else that could move it, is minifier noise, not a finding.
+
+**Video.js 10 (rc)** is not one of those two, and carries the table's
+second-largest gap, so it was traced rather than filed under the same
+heading. Its graph does contain dynamic imports: `@videojs/core`'s
+`dist/default/core/i18n/load-locale.js` holds a `loaders` map of 53
+`() => import("../../i18n/locales/…")` entries, one per translation pack, and
+esbuild's own metafile lists that module among the build's inputs. What
+happens to them differs by bundler. This fixture registers no locale, so the
+module that would reach them is dropped from the output either way: Vite emits
+one chunk, which contains neither `load-locale` nor any `import(` at all,
+while esbuild still emits the 53 packs (plus two re-export shims) as separate
+outputs that its entry chunk does not import. `reachableChunks` counts the
+entry's own closure, so neither figure is charged for them, and `results.md`'s
+"Not counted" column — which reports the Vite build — has no such chunk to
+report. What is left between the two figures is minification: the two entry
+chunks were compared module by module and hold the same set of source
+modules.
+
+**Playdeck, Playdeck (control bar), and Vidstack** carry the same kind of
+minifier noise plus one more, structural difference: their entry chunks
+contain a dynamic `import()`, and Vite (through Rolldown) wraps every dynamic
+import in its own module-preload machinery by default -- a `__vite__mapDeps`
+table plus a small runtime that injects a `<link rel="modulepreload">` for
+each target's own static dependencies before resolving the import. esbuild's
+plain `import()` output carries no such wrapper. Confirmed directly rather
+than inferred, by isolating that machinery in Vite's own output for
+react-player's entry (the smallest row in the table): it accounts for most of
+the
+gap its Delta cell reports. Every other row's entry is large enough that the
+same fixed cost reads as a few percent rather than the dominant term.
+
+**react-player** is therefore the one row where esbuild's figure is smaller
+than Vite's, and by a wide margin proportionally the largest gap in the
+table (see its Delta cell), for a reason that has nothing to do with
+react-player's own code: its reachable bundle is small enough that Vite's own
+preload-helper overhead, which every row with a dynamic import carries, is no
+longer a rounding error next to it. Nothing here suggests either bundler is
+wrong -- both are reporting what a page built with that bundler would
+actually download, preload helper included for Vite's -- so the gap is
+reported as what it is rather than smoothed into agreement.
+
+### What is not measured, and why
+
+**Playback performance.** Time-to-first-frame and similar are dominated by the
+network and the source provider, not by which library requested the play — a
+number that noisy would be worse than none. The maintainer ruling on #543 rules
+this out explicitly.
+
+**DRM, casting, analytics, and other capabilities no fixture here exercises.**
+Measuring whether a library merely _has_ a capability by reading its own
+documentation would be exactly the "reading of a competitor's README" the
+issue's acceptance criteria forbid. The two axes the Agent Brief on #543 names
+as worth trying — capability coverage and provider reach — were tried and
+dropped; see the next two sections for why.
+
+**Capability coverage** — which of the capabilities Playdeck's `Availability`
+and `PlayerCapabilities` model (`CONTEXT.md`'s "Availability" entry) each other
+library exposes at all, and whether it reports _why_ when a capability is
+unavailable. This is not mechanically derivable from an installed package in
+any way this harness could reproduce and re-check on every run. Playdeck's
+answer is a closed union with a reason attached
+(`available` / `unknown` with a reason / `unavailable` with a reason); the
+alternatives each expose their own state through their own, differently-shaped
+API, and there is no common shape a script can query without a person first
+reading each library's types and deciding what counts as an equivalent
+answer. That reading is exactly the kind of "impression" the issue's
+acceptance criteria rule out for a figure that claims to be measured, so no
+cell for this axis appears in `results.md`.
+
+The same axis was later tried on the features table (#638) and dropped there
+too, for the same reason plus a sharper one — see this document's "Features"
+section below. In short: the check that had been standing in for it searched
+each other library for Playdeck's own identifier, `Availability`, which
+answers a question about naming rather than about behaviour, and the wider
+search the features generator now runs shows the naming does not hold either
+(media-chrome declares an `AvailabilityStates` of its own in
+`dist/constants.js`,
+and `@videojs/react`'s own documentation describes a three-state
+`available` / `unavailable` / `unsupported` model). `CONTEXT.md` carries
+Playdeck's own claim about this; neither table makes one about anybody
+else's.
+
+**Provider reach** — which sources each library drives natively. Also not
+mechanically derivable in a way this harness can keep honest across runs.
+Where a library keeps its own provider list as data this repository could in
+principle read — react-player's `players.js` is a literal array of
+`{ key, canPlay, player }` entries, and `@videojs/react` publishes one media
+component per provider under its own `media/*` export subpath — the others do
+not: Media Chrome ships no provider or engine module at all, and its
+controller wraps whatever media element the consumer slots in; video.js 8's
+reach is whatever `videojs-http-streaming` and its own tech registry decide to
+claim for a MIME type at runtime; and Vidstack's is scattered across
+per-provider loader classes with no single enumerable list. A parser that
+reached into one library's internal, unstable module shape to produce a
+_count_ would be bespoke, unverified by any test that would catch it silently
+going stale, and would read as a measurement while actually being a guess
+about a private surface. No cell for this axis appears in `results.md`
+either. The features table answers the same ground a different way, one named
+provider per row (HLS, DASH, YouTube, Vimeo, Wistia, other hosted providers),
+each cell anchored to something in the installed package rather than to a
+count nobody can re-derive.
+
+The original issue body also proposed testing the `loading="interaction"`
+claim — what loads before a click — against the other libraries by the same
+method. The Agent Brief that supersedes the issue body on #543 narrows the
+required axes to gzipped bytes, capability coverage and provider reach, and
+does not carry that probe forward; it would need a real browser
+(`tests/bundle/native-only/test.mjs` is what does this for Playdeck alone,
+with Playwright) rather than the static bundle analysis this harness does, and
+is left as a possible follow-up rather than attempted here.
+
+### Which libraries, and why
+
+The issue names six candidates: Vidstack, Media Chrome / Mux Player,
+react-player, Plyr, Video.js with a React wrapper, and Shaka Player. Five
+libraries are measured, one of them the second, separately-published line of
+the Video.js name.
+
+**In:**
+
+Each entry says what was checked rather than how the library is generally
+spoken of. "Most popular" and "most established" are not facts this repository
+can re-derive on a later run, so they are not used.
+
+- **react-player** — a general-purpose React video component whose own
+  `dist/players.js` carries ten provider entries (`hls`, `dash`, `mux`,
+  `spotify`, `tiktok`, `twitch`, `vimeo`, `wistia`, `youtube` and the `html`
+  fallback), the widest provider list of anything measured here and the reason
+  its "other hosted providers" cell is the only `yes` on that axis: Video.js
+  10 (rc)'s equivalent providers moved to separate, optional peer packages in
+  the rc line and its cell is `plugin` rather than `yes` (see "Features"
+  below).
+- **Vidstack** — a React-first, composable player that also ships a configured
+  default skin: `@vidstack/react/player/layouts/default` exports
+  `DefaultVideoLayout`, which is what this comparison's Vidstack entry
+  renders. That combination — composable parts plus a ready skin — is the
+  closest structural match here to "Playdeck plus a themed layout".
+- **Media Chrome** — a set of custom elements with a React wrapper. It ships
+  no provider or engine module; its controller wraps whatever media element
+  the consumer slots into it (its own docs list eleven separate elements a
+  consumer can slot in), which is the candidate closest to Playdeck's own
+  compose-it-yourself design.
+- **Video.js** — the oldest package measured here: npm records
+  `time.created` for `video.js` as 2013-08-21. The pinned stable line,
+  `video.js` 8.24.0, ships no React integration of its own, which is itself a
+  data point: what a React reader gets from that package is a class-based
+  library and a hand-written `useEffect`. That is a fact about the pinned
+  package and not about the project, which is the next entry.
+- **Video.js 10 (rc)** — `@videojs/react` 10.0.0-rc.4, published by the
+  videojs GitHub org (its own `repository` field is
+  github.com/videojs/v10, directory `packages/react`; first published
+  2025-10-25). It is **not** a React wrapper around `video.js` 8.24.0: it is
+  the Video.js 10 rewrite, depending on its own `@videojs/core`,
+  `@videojs/media`, `@videojs/spf`, `@videojs/store` and `@videojs/utils`
+  engine packages and not on `video.js` at all, and its own README now marks
+  it release candidate ("Close to stable. Adoption in real projects
+  encouraged."). It is measured as its own row and its own column, under the
+  same rules as every other one, because it is a React video library a reader
+  can install today — and both tables label it "Video.js 10 (rc)" so no
+  figure of its is ever read as `video.js` 8.24.0's, or the reverse.
+
+**Out:**
+
+- **Shaka Player** — a playback engine (DASH/HLS/DRM), not a React component
+  library. What was checked, rather than assumed: the `shaka-player` package
+  publishes no `exports` map and its `main` and `types` fields point at
+  `dist/shaka-player.compiled.js` and `.d.ts`, so it has no React entry point
+  to install; and `@shaka-project/react` is not a published package (npm
+  returns 404). A third-party wrapper does exist on npm
+  (`shaka-player-react`), so this is not a claim that no React binding exists
+  anywhere — only that the project publishes none. It occupies the same role
+  hls.js already does for Playdeck — a provider dependency an adapter could
+  wrap — not a peer to measure a "default controls" composition against.
+  Comparing an application-level component library to a playback engine would
+  not be like with like. Media Chrome's own docs list `<shaka-video>` among
+  the elements its controller can wrap, which is the same relationship.
+- **Plyr** — ships no React integration either, which is the reason
+  `video.js` was chosen to represent that category. Plyr and `video.js` 8
+  would both be measured the same way here (the base library plus a
+  hand-written `useEffect` wrapper this harness, not the library, authors), so
+  a second entry in that shape would not add a materially different choice for
+  a React reader deciding between component libraries. It is dropped for that reason,
+  not because installing or bundling it failed.
+- **Mux Player** — built on Media Chrome, which is measured directly:
+  `@mux/mux-player`'s own `dependencies` are `media-chrome`, `player.style`,
+  `@mux/mux-video` and `@mux/playback-core`, so measuring it would measure
+  Media Chrome plus a configured skin and Mux's own playback core. Two of
+  those four dependencies are Mux's own, so a plain MP4 URL from an arbitrary
+  host is not the composition the package is assembled for, and its row would
+  not be measuring the same thing the other rows measure.
+
+Every library measured installed and bundled without needing to be dropped for
+a technical reason; the "install or bundle failed" escape hatch in the Agent
+Brief was not needed for any of them, `@videojs/react` included.
+
+#### Vidstack's version
+
+Checked 2026-09-05: `@vidstack/react`'s `latest` npm dist-tag resolved to
+`0.6.15`, which has no `DefaultVideoLayout` export — the import this fixture
+needs. Its `next` dist-tag resolved to `1.15.6`, which is what
+[vidstack.io](https://vidstack.io)'s documentation installs. This measures
+`1.15.6` for that reason, and records the tag mismatch here so nobody reads
+`results.md`'s version column against `npm view @vidstack/react version` and
+concludes the pin is stale.
+
+### Equivalent composition per library
+
+The judgement call the Agent Brief asks to be written down: what "the same
+thing" means across six libraries with six different ideas of what a video
+player is.
+
+**Playdeck** is measured four times, as four rows, because one composition
+cannot be the fair comparison for react-player (which draws no control
+surface of its own), for the "only what you use loads" claim (which needs a
+number for one control, not zero or five), and for Media Chrome, Vidstack and
+Video.js (which each draw a full control bar). The issue's own warning about
+comparing a headless core against a library that "bundles their own UI or a
+full playback engine" applies just as much to comparing the wrong Playdeck row
+against the wrong alternative: the one-button row against a seven-button bar,
+or the control-bar row against a composition with no control bar at all, would
+each overstate a gap that is really a difference in what was built, not in
+how much either library costs for the same thing.
+
+**Playdeck (no parts)** (`tests/compare/entries/playdeck-no-parts.tsx`) is
+`Player.Root`, `Player.Viewport` and `Player.Media` alone — core plus the
+native provider, and no control part of any kind, not even the one-button
+`Player.ActivationButton` the row below adds. **This row is the fair
+comparison against react-player's row**, and is the more honest one of the two
+Playdeck rows that could be read against it: react-player renders no UI of its
+own for a plain MP4 either (see the react-player paragraph below), so a row
+that also renders none is the one that isolates the library cost from the "did
+it draw a button" difference — the plain **Playdeck** row one paragraph down
+draws one.
+
+**Playdeck** (`tests/compare/entries/playdeck.tsx`) is the composition
+`README.md`'s byte table already calls "MP4 or WebM": `Player.Root` with
+`loading="interaction"`, `Player.Viewport`, `Player.Media`, and one
+`Player.ActivationButton` holding a `Player.PlayIcon`. It is reused verbatim
+from `tests/bundle/native-only/src/main.tsx` rather than redrawn for this
+harness, so this document cannot describe Playdeck's own minimal player any
+more generously than the fixture that gates its bundle budget already does.
+**This is one button, not a control bar** — Playdeck is headless by design and
+ships no built-in seek bar, volume control or time display; a consumer adds
+exactly the parts they use. Its row in `results.md` is smaller than
+`README.md`'s own byte table figure for the same row, because that figure
+deliberately does not tree-shake (it measures the whole `@playdeck/react`
+package, to bound any selection a consumer might make) while this harness
+bundles this fixture's actual five imports through a real bundler. The two
+numbers are not interchangeable, and this harness's approach is the one doing
+here what it does for every other library: measuring what this specific,
+named set of imports costs, not an upper bound over every possible selection.
+**This row sits between the no-parts row above it and the play-only row
+below it** rather than being the fair comparison against any other library's
+row on its own: it draws one part more than react-player's no-UI composition
+(an `ActivationButton`, not a `PlayButton`, so it is not the play-only row's
+composition either), and one control fewer than the five-of-seven control bar
+further down.
+
+**Playdeck (play-only)** (`tests/compare/entries/playdeck-play-only.tsx`) is
+the same fixture as the no-parts row, plus one `Player.Controls` wrapping one
+`Player.PlayButton` with no icon children — the number behind the "only what
+you use loads" claim, isolated to the smallest control a consumer could add.
+**This row is not the fair comparison against any other library's row**: no
+other library measured here ships a bare, unstyled play button as its own
+default composition, so it exists to make one specific claim checkable
+against a figure rather than to sit beside a competitor. Read it against the
+no-parts row above it instead — the difference between the two rows in
+`results.md` is what `Player.Controls` plus one `Player.PlayButton` cost on
+their own, with the native provider and everything above them held fixed.
+
+**Playdeck (control bar)** (`tests/compare/entries/playdeck-control-bar.tsx`)
+is the same fixture plus a `Player.Controls` holding the parts that
+correspond to Media Chrome's seven-button bar: `PlayButton` (swapping
+`PlayIcon`/`PauseIcon`), `MuteButton` (swapping `MutedIcon`/`VolumeHighIcon`),
+`VolumeSlider`, `SeekSlider`, `Time` (current and duration), and
+`FullscreenButton` (swapping `FullscreenEnterIcon`/`FullscreenExitIcon`) —
+every part and every prop shape copied from
+`apps/storybook/stories/reference/reference-player.tsx`'s own control bar
+rather than invented for this fixture. **This row carries five of Media
+Chrome's seven controls, not seven**: Playdeck ships no
+seek-backward or seek-forward button part. `SeekBackwardIcon` and
+`SeekForwardIcon` exist (`packages/react/src/icons.tsx`, re-exported from
+`packages/react/src/index.tsx`) with no `SeekBackwardButton` or
+`SeekForwardButton` beside them to hold one — confirmed by reading
+`packages/react/src/index.tsx` and `packages/react/src/transport-controls.tsx`
+rather than assumed. `Time` is included for the same reason the reference
+composition never pairs a seek slider without one, though it answers nothing
+on Media Chrome's own bar (built from `MediaTimeRange` alone, with no
+`MediaTimeDisplay`) and is not part of the five-of-seven count. **This row is
+the fair comparison against Media Chrome, Vidstack, Video.js and Video.js 10
+(rc)**, each of
+which draws a full control bar rather than one button; see "Where each
+alternative measures smaller, or wins on something else" below for the two
+controls Media Chrome ships that this row does not.
+
+**react-player** (`entries/react-player.tsx`) renders `<ReactPlayer
+src="…mp4" controls />`. For a plain file, react-player's own `players.js`
+resolves to its `html` player — a thin wrapper around a native `<video>` — the
+only provider in that array that is not `React.lazy`-loaded, so `controls`
+here means the same thing it means on a bare `<video>` element: the browser's
+own native control set, not any UI react-player draws itself. Its row in
+`results.md` is smaller than Playdeck's no-parts row too, and the honest
+reason is not that react-player is a smaller library; both rows draw no
+custom UI, so the remaining gap is core-plus-native-provider weight, not a
+button either row draws.
+
+**Vidstack** (`entries/vidstack.tsx`) is `<MediaPlayer src="…mp4">` wrapping
+`<MediaProvider />` and `<DefaultVideoLayout icons={defaultLayoutIcons} />` —
+Vidstack's own documented answer to "give me default controls", and one of the
+two full, off-the-shelf skins measured here (the other is Video.js 10 (rc)'s
+`VideoSkin`): a play button, seek bar, volume, fullscreen, and
+settings/captions/chapters menus, all drawn by the library. `results.md`'s "Not counted" column names the further
+chunks the same build produced beyond that row's own figure. That count and
+size are what the harness measures; what follows is a reading of those
+chunks' `moduleIds` and code, taken on the measurement date and not
+re-verified by `pnpm compare:libraries:check` — only the count and the total
+size in that column are. Most are the caption/text-track pipeline the
+`media-captions` dependency brings in (VTT/SRT/SSA parsing and an error
+dialog), gated on a text track this fixture never adds; several are Google
+Cast support; one is an AirPlay button; one is thumbnail-preview support,
+gated on a source that publishes preview thumbnails, which this fixture's
+plain MP4 does not; one is the chapters/quality/keyboard-shortcuts overlay;
+and a remaining chunk this reading did not identify. None of them is
+reachable without a text track, a casting device, AirPlay, alternate quality
+or chapter tracks, or thumbnail previews — none of which this fixture's
+fixed MP4 provides — so none are counted in that row's own figure.
+
+**Media Chrome** (`entries/media-chrome.tsx`) has no single "default"
+composition to reuse — like Playdeck, it publishes a set of parts rather than
+a configured player — so this uses the control bar its own README teaches: a
+`<MediaController>` wrapping a native `<video>` on the `slot="media"`
+convention, with a `<MediaControlBar>` of seven buttons (play, seek back, seek
+forward, mute, volume, time range, fullscreen). One measured, not asserted,
+structural fact about this row: `media-chrome`'s
+React wrapper re-exports every custom element it has from one module
+(`media-chrome/react/index.js` does `import * as Modules from '../index.js'`
+and defines a React component for each), so importing any one control pulls
+in the whole registry — a menu, a dialog, a live-stream button, none of which
+this fixture's seven imports use — rather than only the seven this entry
+names. That is Media Chrome's own module boundary, not a fixture choice.
+
+**Video.js** (`entries/video-js.tsx`) is the `video.js` 8.24.0 package, which
+ships no React integration, so this hand-writes the standard idiom: a
+`<video>` ref, and `videojs(videoRef.current,
+{ controls: true, sources: […] })` called once after mount. `controls: true`
+is what turns on video.js's own default skin — the big play button and
+control bar drawn by its main bundle, with no separate package to opt into.
+This row's own figure is close to gzipping `video.js`'s own published
+`dist/video.min.js` directly, which is the check that this row is measuring
+the library and not this harness's four-line wrapper around it. The reason
+the figure is the largest in the table: `import videojs from 'video.js'`
+statically
+pulls in `videojs-http-streaming`, `mux.js`, `mpd-parser` and `m3u8-parser` —
+video.js's own HLS/DASH engine — with no dynamic `import()` boundary around any
+of it, so it loads whether or not the page ever plays anything but the plain
+MP4 this fixture asks for. That is measured from the installed package's own
+`dist/video.es.js`, not asserted: the file has no code-splitting to preserve,
+so nothing about it depends on this harness's own reachability logic.
+
+**Video.js 10 (rc)** (`entries/videojs-react.tsx`) is `@videojs/react`
+10.0.0-rc.4, a different library from the row above it — see "Which
+libraries, and why". Its composition is the one the package's own bundled
+documentation installs, read from
+`node_modules/@videojs/react/docs/guides/installation.md` rather than from a
+docs site: `<VideoPlayer><VideoSkin><Video src playsInline /></VideoSkin></VideoPlayer>`,
+imported from the `@videojs/react/video` preset subpath. `VideoSkin` is that
+preset's packaged default skin, which is this library's own answer to "default
+controls", so this row belongs beside Vidstack's and Media Chrome's rather
+than beside react-player's. That guide also imports
+`@videojs/react/video/skin.css`; this entry drops it for the same reason no
+other entry here imports a stylesheet, and the bullet below records what
+excluding CSS costs this row. Its build emits one chunk with no dynamic
+`import()`, so nothing about its figure depends on this harness's
+reachability logic either.
+
+### Where each alternative measures smaller, or wins on something else
+
+The issue's fairness rule is not satisfied by a bytes table alone, and reading
+one number off `results.md` without this paragraph would misread it:
+
+- **react-player's row is smaller than Playdeck's no-parts row here** (see
+  `results.md`), and both draw no custom UI — native browser controls on a
+  bare `<video>` for react-player, no controls of any kind for Playdeck's
+  no-parts row — so the remaining gap is not one either library spends on a
+  button. A reader who wants zero custom UI gets it from react-player for
+  less code than Playdeck's core plus native provider.
+- **Media Chrome ships two controls Playdeck's control-bar row does not**:
+  a seek-backward and a seek-forward button. Playdeck has no
+  `SeekBackwardButton` or `SeekForwardButton` part — only the icons meant to
+  fill one, with nothing built to hold them — so its row carries five of
+  Media Chrome's seven controls, and a reader who wants those two exact
+  buttons gets them from Media Chrome, not from Playdeck, without writing one
+  first. See "Equivalent composition per library" above for how that fifth
+  and sixth control were confirmed absent rather than assumed.
+- **Vidstack's, Video.js's and Video.js 10 (rc)'s rows all ship more than
+  Playdeck's control-bar row does at the same five-of-seven baseline** —
+  Vidstack's row and Video.js 10 (rc)'s row each draw a full skin with
+  menus this fixture's control bar does not attempt, and Video.js's row adds
+  an entire HLS/DASH engine none of the others needed for this fixture's plain
+  MP4. Media Chrome's row is the closest like-for-like match at this
+  composition: a control bar with two more buttons and no menus, no bundled
+  streaming engine.
+- **Video.js, Vidstack's `DefaultVideoLayout` and Video.js 10 (rc)'s
+  `VideoSkin` all need a stylesheet import to render correctly** — a control
+  bar with no CSS is unstyled, not merely plain. Neither this harness nor
+  Playdeck's own `README.md` byte table counts a stylesheet in its headline
+  figure, so this comparison is consistent with itself, but the exclusion is
+  not symmetric in what it costs each row. It costs those three rows
+  something; it costs the other three nothing, and that is the table's own
+  "requires an external stylesheet" row rather than a claim made here:
+  Playdeck, react-player and Media Chrome all read `no` on it, react-player
+  because it ships no CSS file at all and Media Chrome because each of its
+  custom elements carries its own Shadow DOM styles. For Playdeck the anchored
+  fact is narrower than "unstyled works": no JavaScript `@playdeck/react`
+  ships imports a stylesheet, and `tests/bundle/native-only` — whose fixture
+  imports no CSS — is driven in a real Chromium by its own
+  `test.mjs`, which clicks the activation button and asserts the provider
+  chunk is requested only after that click. So an unstyled composition renders
+  and its controls respond; whether it _looks_ finished is a judgement this
+  document does not make. Excluding CSS understates what a working page
+  actually downloads for the three rows above in a way it does not for the
+  other three.
+- **Media Chrome's per-component React exports are not independently
+  tree-shakeable** from the rest of its custom-element registry — a real
+  reader who wants only a play button and a time display pays for the whole
+  set regardless, which this row's own figure in `results.md` already
+  reflects but which Playdeck's own per-primitive imports do not have as a
+  constraint.
+- **"Does this library distinguish 'this capability will never work' from
+  'not known yet', with a reason?" could not be given an anchored answer for
+  every library**, so it is on neither table — not the byte table, which
+  cannot reach it at all, and not the features table, which tried and dropped
+  it (see "Dropped axes" below). `CONTEXT.md` records what Playdeck claims for
+  its own `Availability` union. This document makes no claim, in either
+  direction, about what any other library here does or does not do on that
+  ground.
+
+### Features
+
+`docs/comparison/features.md` (issue #638) extends this comparison onto ground
+`results.md` cannot cover: what each library can do, not what it weighs.
+Features cannot come out of a bundler the way bytes can, so this table needs a
+rule of its own to keep the property that makes the byte table publishable —
+that every figure in it is something a reader can re-derive rather than
+something they have to take on trust.
+
+**The rule: every cell is a sourced claim with a mechanical anchor, never an
+impression.** `tests/compare/features.mjs` encodes the table as data — one
+axis at a time, one entry per library, each an anchor
+`scripts/compare-features.mjs` re-evaluates against the actually-installed
+package on every run. A "yes", "partial" or "plugin" cell names something the
+generator can check for itself: a named export the installed package still
+has, a line still present in a shipped file or its type declarations, or a
+`package.json` field still set the way the cell says it is. `pnpm
+compare:features` fails outright, naming every axis and library at once, if a
+single anchor no longer holds: that is what keeps a "yes" from surviving the
+export it named being renamed or removed in a later pin.
+
+#### What each status means
+
+The vocabulary is defined once, here and in `scripts/compare-features.mjs`'s
+own header, because a status that means one thing in one column and something
+else in the next is the quietest way for a comparison to become an argument:
+
+Most axes are about a control a viewer can see and press — captions, quality,
+playback rate, picture-in-picture, fullscreen, AirPlay, Chromecast, keyboard
+operation, screen-reader labelling, live streaming, audio tracks, chapters,
+thumbnails. For those:
+
+- **`yes`** — the library ships a ready-made UI part for that axis.
+- **`partial`** — the library exposes the axis in its own API or state, but
+  ships no UI part to drive it, or its UI part covers only some of the axis.
+- **`no`** — neither, and an absence the generator checked.
+- **`plugin`** — the answer is a documented plugin outside the package.
+- **`n/a`** — the axis cannot apply to that library at all, with a footnote
+  saying why. Distinct from `no`, which is a library that could have shipped
+  the thing and did not: Media Chrome's "lazy provider loading" cell is `n/a`
+  because it ships no provider to defer, not because it defers badly.
+
+The rest of the axes are not about a control at all — DRM, HLS, DASH, each
+named provider, other hosted providers, a plugin system, lazy provider
+loading, importing on a server, TypeScript types, ESM/CJS, analytics, a
+shipped skin, a required stylesheet, headless parts, the React version. There
+is no UI part to look for, so "ships a UI part" would mark every column `no`
+and say nothing. For those:
+
+- **`yes`** — the capability is in the package's own shipped code or its
+  declared exports, and the anchor names where.
+- **`partial`** — it is there with a documented limit, named in the note (a
+  `require` condition that resolves to a throwing stub, a React wrapper with
+  no declared peer range).
+- **`plugin`** and **`no`** mean what they mean above.
+
+The two lists are written out because a vocabulary that shifts silently
+between rows is the same failure as a status that shifts silently between
+columns.
+
+**A status never encodes which of a library's providers can do the thing.**
+It describes the library's own API and UI for its own file or native
+playback. A YouTube iframe cannot enter picture-in-picture under any library
+in this table — Playdeck's own YouTube adapter marks `pictureInPicture` and
+`airPlay` provider-unavailable in
+`packages/provider-youtube/src/adapter-values.ts` — so that limit is written
+into the footnote, in every column that has it, rather than pushing one
+library's cell down and leaving another's alone. Before this rule was written
+down, react-player's picture-in-picture and playback-rate cells were the only
+two in the table demoted for a provider caveat, which is exactly the
+asymmetry the rule exists to remove.
+
+#### What a "no" has to be searched over
+
+An absence is only worth as much as the ground it was searched over, and that
+ground was not the same in every column. Ten Media Chrome cells and several
+Vidstack ones searched a barrel `index.d.ts` — a file that is a list of import
+names and nothing else — for tokens that could not have appeared in it
+whatever the library did, while video.js's `no` cells were searched against
+its whole bundle. The `absent-in-tree` anchor removes that difference: it
+walks **every `.js` and `.d.ts` file the package ships** and holds only if the
+token is in none of them, so a `no` costs the same evidence in every column,
+Playdeck's included. It searches every package a consumer of that column
+installs, not only the one the column is named after: Playdeck is
+`packages/core` plus `packages/react`, since a consumer installs one and gets
+the other, and Video.js 10 (rc) is `@videojs/react` plus the five
+`@videojs/*` engine packages its own `dependencies` pin at the same version.
+Anything narrower would let one column's `no` cost less evidence than
+another's. One cell narrows deliberately and says so in its footnote: "lazy
+provider loading" for Video.js 10 (rc) searches the two of those six that
+actually ship providers, because that is the question the axis asks — the
+dynamic imports in the other four are `@videojs/core`'s translation packs.
+`absent-in-tree` also refuses to hold vacuously in the other direction: a glob
+matching no file at all throws rather than reporting an absence nobody
+searched for.
+
+Running that wider search moved real ground, which is the point of running
+it: react-player does bind `onKeyDown` (for its `light`-mode preview button
+alone) and does fetch a `thumbnail_url` (an oEmbed poster, not a seek
+preview); Vidstack ships a `PlaylistIcon` and documents a YouTube analytics
+parameter; video.js's `Playlist` strings are HLS media-playlist parsing and
+its only lower-case `airplay` is inside `Fairplay`; media-chrome's only `dash`
+is its own `dashedToCamel`; and `@videojs/media`'s `Playlist` strings are
+Google Cast queues and HLS parsing.
+Where the obvious token for an axis collides with an unrelated identifier
+like those, the anchor narrows to a token that does not, and the footnote
+names the collision — the token every cell was actually searched for is
+printed in its own footnote, so nothing about the narrowing is hidden.
+
+#### Two anchors that ask a property rather than read a string
+
+**SSR** was the axis where a text search was standing in for a question it
+could not answer: Media Chrome scored `yes` for shipping an `isServer` helper
+while video.js scored `no` for not shipping a `"use client"` string, which is
+two different questions wearing one label. The `imports-in-node` anchor asks
+the property directly and identically for every column — import the package in
+a plain Node process, which has no `window` and no `document`, and record that
+it loaded or the error it threw. Every library here imports cleanly, video.js
+included, so the axis is now named for what it checks ("imports on a server
+(no DOM globals)") and reads `yes` across the row. A flat row is an honest
+answer; the axis is kept rather than dropped for the same reason the analytics
+axis was kept when it was flat.
+
+**Plugin provenance** is recorded as data, not as an adjective. A `plugin`
+cell carries the plugin's name, the GitHub owner its own published npm
+manifest points at, and one of two words derived from that owner: a plugin
+whose repository owner is the same GitHub org that publishes the library is
+`org-published`, and anything else is `third-party`, with the owner printed
+beside the word so a reader can disagree with the word and still have the
+fact. This replaced "official" and "community", which were neither checkable
+nor consistently applied — `videojs-youtube`'s repository is
+github.com/videojs/videojs-youtube, the library's own org, and it had been
+labelled a community plugin. The rule applies outside the Video.js columns
+too: react-player's own README teaches a Media Chrome composition for custom
+controls, so its fullscreen, playback-rate and keyboard cells are `plugin`,
+naming `media-chrome` (npm `repository` github.com/muxinc/media-chrome,
+third-party — react-player is published by a different owner). Two of the plugins named here
+(`videojs-contrib-eme`, `videojs-mux`) publish no `repository` field at all,
+and their footnotes say exactly that rather than guessing who stands behind
+them. A "plugin" cell still only names a plugin that is itself documented —
+its own README, its own docs page, or the library's own docs naming it — never
+a guess at what probably exists.
+
+Playdeck's own cells follow the identical rule and carry no adjective the
+other columns do not. A `no` for Playdeck reads exactly like a `no` for any
+other library — a checked absence, not a confession — and a `yes` is anchored
+the same way theirs are: against `@playdeck/react` and `@playdeck/core`'s own
+exports, type declarations and READMEs, never asserted from what the rest of
+this repository already knows to be true.
+
+#### How the axis list was built
+
+The axis list is the union of what each compared library advertises about
+**itself**, not Playdeck's feature list with the others read against it — the
+second shape would make the table an argument for Playdeck before a reader
+reached row one, which is exactly the "reading of a competitor's README" this
+document's "What is not measured" section above already rules out for the byte
+comparison, and would be worse here: a features table built from one library's
+marketing copy is not a comparison, it is that copy with extra columns.
+
+So each library's own documentation was read for what it claims about itself,
+and every axis that surfaced in at least one of them was tried: react-player
+3.4.0's own `README.md` and its shipped `dist/*.d.ts` (the props table, the
+"Supported media" list, the `Config` interface naming Mux, Twitch, TikTok and
+Spotify as lazily-loaded providers); [vidstack.io](https://vidstack.io) and
+`@vidstack/react` 1.15.6's own `index.d.ts` (over a thousand exports, read for
+every primitive, provider loader and event the main entry actually carries);
+media-chrome 4.19.2's own `README.md` and
+[its "compatible media elements" docs page](https://www.media-chrome.org/docs/en/media-element#compatible-media-elements),
+which is where the DASH, HLS, YouTube, Vimeo, Wistia, Cloudflare, JW Player,
+Mux and Shaka Player rows for that column come from — media-chrome ships none
+of them itself, and says so; video.js 8.24.0's own shipped
+`dist/video.es.js` and `dist/types/video.d.ts` (every `registerComponent` call
+is a built-in part, read directly rather than assumed from the docs site,
+which changes less often than the installed code); `@videojs/react`
+10.0.0-rc.4's own bundled documentation, which the package ships in
+`node_modules/@videojs/react/docs` beside its `dist/dev/index.d.ts`, so every
+claim about that column is read from the installed package rather than from a
+docs site; and, for Playdeck, `CONTEXT.md`, `packages/react/README.md` and the
+installed `@playdeck/react` and `@playdeck/core` packages, read under the
+identical rule.
+
+The result is deliberately larger than any one library's own feature list: it
+is why quality selection, playback rate, chapters and audio tracks all have
+rows even though `tests/compare/entries/playdeck.tsx`'s composition uses none
+of them, and why Chromecast, ads and a plugin system appear even though
+Playdeck has none of the three.
+
+#### Dropped axes
+
+The rule that governs this: drop an axis only where an honest, anchored answer
+cannot be written for every library. One axis is dropped under it.
+
+- **Capability honesty** — whether a library distinguishes "this capability
+  will never work" from "its answer is not known yet", with a reason
+  attached. Every cell for it in the alternatives' columns had been anchored
+  on the absence of Playdeck's own identifier, `Availability`, from that
+  library's types. That is self-referential: it tests whether another project
+  chose Playdeck's word, not whether it models the distinction — and this
+  document's own "What is not measured" section had already ruled the concept
+  not mechanically derivable, so the byte comparison and the features
+  comparison were answering the same question two different ways. The wider
+  `absent-in-tree` search then showed the naming test failing on its own
+  terms: media-chrome declares an `AvailabilityStates` of its own in
+  `dist/constants.js`, and
+  `@videojs/react`'s own documentation describes a three-state
+  `available` / `unavailable` / `unsupported` model. The axis is on neither
+  table. `CONTEXT.md` is where Playdeck's own claim about its `Availability`
+  union lives; this document makes no statement about what any other library
+  here does or does not do on that ground.
+
+Two axes came close enough to be worth recording here rather than silently
+deciding them:
+
+- **Analytics hooks** is close to flat, and was kept rather than dropped when
+  it was flat: a checked answer that does not discriminate is still an honest
+  answer, and dropping an axis merely because it did not discriminate would be
+  a second, quieter way to make the table an argument. It has since stopped
+  being flat: `videojs-mux` is a documented Mux Data plugin for video.js, so
+  that cell is `plugin`, and `@videojs/react` ships a `MuxData` component
+  behind its own optional peer package (`@videojs/mux-data`, org-published
+  and not part of this fixture's pinned install), so that cell is `plugin`
+  too. `npm view` finds no equivalent published plugin for Media Chrome or
+  Vidstack, which is why those two stay `no`. What the axis is not asking is
+  whether a library emits playback
+  events a consumer could wire to any analytics tool — every library here,
+  Playdeck included, has those, and an axis they all satisfy by definition
+  would be unfalsifiable.
+- **React version supported** is not a yes/no feature at all, and is recorded
+  as `yes` for every library that declares any range, with the actual range
+  carried in the cell's note rather than encoded in the status — the
+  differentiating fact (Playdeck: `>=19 <20`; react-player:
+  `^17.0.2 || ^18 || ^19`; `@vidstack/react`: `^18.0.0 || ^19.0.0`;
+  `@videojs/react`: `^18.0.0 || ^19.0.0`; media-chrome: no declared range at
+  all; `video.js` 8.24.0: no React integration to declare one for) is in the
+  footnote, not flattened into a status the vocabulary cannot hold.
+
+#### Where each alternative has something Playdeck does not
+
+Read directly off the table. **Quality selection and playback rate** are
+full, ready-made UI primitives in Vidstack, Media Chrome and Video.js 10
+(rc) (and, for playback rate, `video.js` 8 as well), where Playdeck ships
+only the command and capability behind a consumer's own `SettingsMenu`
+composition. **Audio track selection** exists in Vidstack, Media Chrome and
+both Video.js lines and is absent from Playdeck entirely, and so is a
+**thumbnail preview on seek** (Vidstack, Media Chrome and Video.js 10 (rc)
+ship one; `video.js` 8 has a documented plugin). **Chapters** get a full
+navigation UI in Vidstack and both Video.js lines; Playdeck publishes the same
+`Chapter` collection on player state but ships no primitive to browse it.
+**Live streaming** gets a dedicated UI (a "LIVE" button or badge) in Vidstack,
+Media Chrome and both Video.js lines; Playdeck models the state, lets existing
+controls adapt to it, and stops there. **Chromecast** works in Vidstack, Media
+Chrome and Video.js 10 (rc), and through a documented plugin in `video.js`
+8; Playdeck and react-player have no casting beyond AirPlay. **DRM** ships in Video.js 10
+(rc) (a `source.drm` map of key-system ids on its Shaka and hls.js media
+components) and is a documented plugin away in `video.js` 8, with no
+equivalent path in Playdeck at all. **Playlists** and **ads** are each a
+documented `video.js` 8 plugin away and reach nothing else here, Playdeck
+included — Video.js 10 (rc)'s own migration guide lists both among the
+features its rewrite does not yet answer. **DASH** plays in react-player and
+Vidstack outright, and through a documented compatible element in Media
+Chrome; `video.js` 8 bundles it, and Video.js 10 (rc) reaches it only through
+a separate, optional peer package (`@videojs/dash-video`) this fixture does
+not install, so that cell reads `plugin` rather than `yes` — a change from
+the beta line, which bundled its media adapters directly. Playdeck's refusal
+is deliberate and already on record in `.out-of-scope/dash.md`. **Analytics**
+is a documented plugin away in both Video.js lines — `videojs-mux` for
+`video.js` 8, `@videojs/mux-data` (again a peer package, not bundled) for
+Video.js 10 (rc) — and reaches nothing else here. And **other hosted
+providers** — Mux, Twitch, TikTok, Spotify, Cloudflare Stream — reach
+react-player outright through its `Config` interface, and Video.js 10 (rc)
+through the same kind of separate, optional `@videojs/*-video` peer package as
+DASH (each still resolves through the library's own `media/*` subpath, but
+importing it now throws unless the matching peer is installed); Playdeck's
+closed `PlayerSource` union carries none of them.
+
+#### Where Playdeck has something no alternative does
+
+Nowhere, on this table. **No axis reads `yes` for Playdeck and something other
+than `yes` for every other column**, and that is worth stating plainly rather
+than leaving a reader to work out from the absence of a paragraph. The axis
+that used to be claimed here — capability honesty — is dropped, for the
+reasons under "Dropped axes" above; `CONTEXT.md` is where Playdeck's own claim
+about it lives.
+
+What the table does separate is smaller and mutual. **AirPlay and Chromecast**
+are `no` for react-player, which draws no UI of its own for a plain file and
+inherits whatever the native `<video>` element happens to expose; its
+**fullscreen, playback-rate and keyboard** cells read `plugin` rather than
+`no` because its own README's "Custom player controls" section composes Media
+Chrome parts for exactly those three. **Wistia** plays outright in Playdeck
+and react-player, is absent from Vidstack and `video.js` 8 entirely, and
+reaches Media Chrome and Video.js 10 (rc) each only through a separately
+published custom element or peer package (`wistia-video-element`,
+`@videojs/wistia-video` — the latter new in the rc line; the beta line had no
+Wistia adapter at all). **Headless,
+independently composable parts** — primitives a consumer imports and arranges
+individually rather than a single configured component — are `yes` for
+Playdeck, Vidstack, Media Chrome and Video.js 10 (rc) alike, so this is not
+a Playdeck-only property; it is one `video.js` 8, which publishes no React
+parts at all, is on the other side of.
+
+### Date and how to re-run
+
+`docs/comparison/results.md` carries its own measurement date, and the Node,
+Vite and esbuild versions it was built with, on its own header line. Re-run
+the whole thing with:
+
+```sh
+pnpm install
+pnpm build
+pnpm compare:libraries
+```
+
+`pnpm build` first: the Playdeck entry imports `@playdeck/react`, whose
+`package.json` `exports` field points at its own `dist/`, gitignored and not
+rebuilt by `pnpm install` alone — the same reason CI's `docs:bytes:check` runs
+inside the `build` job rather than beside `docs:check` in `static`. A stale
+`dist/` changes Playdeck's four rows and nothing else, silently, which is
+what makes it worth checking first rather than after `--check` fails.
+
+`pnpm compare:libraries:check` fails if a fresh run would produce different
+figures, versions or composition labels than the ones checked in; it ignores
+the date and Node-version tokens on their own, so it never fails purely
+because the calendar moved or because CI's Node differs from a local
+checkout's. The date on `results.md`'s header records when the file was last
+regenerated, not a promise about how current it still is — re-run the command
+above whenever a pinned version changes, a library is added, or a figure is
+doubted.
+
+Each of the four Playdeck rows also carries a **committed ceiling** — a
+`ceilingKb` field beside that row's own entry in `scripts/compare-libraries.mjs`'s
+`libraries` array, not a number in this document's prose, so a ceiling change
+is a diff to the harness's own data rather than a side effect of editing this
+file. `pnpm compare:libraries` and `pnpm compare:libraries:check` both fail,
+naming the row and its measured and committed figures, the moment a row's
+Vite gzip size passes its ceiling — whether that run is regenerating
+`results.md` or only checking it, so a growth past the ceiling can never be
+committed by regenerating the doc and then re-committing the moved ceiling
+along with it. Each ceiling started at the row's own figure on the day #649
+added it, rounded up to the next 0.25 KB, and stays there until someone
+raises it on purpose: edit the `ceilingKb` value in `libraries`, in the same
+commit as whatever grew the row, and say in that commit what grew and why —
+the same "deliberate, reviewable edit with a stated reason" #649 asked this
+mechanism to produce, rather than a ceiling that silently tracks whatever the
+row happens to measure. Shrinking a composition back under its existing
+ceiling needs no such edit; only raising the ceiling itself does.
+
+Each of the four rows also carries a second, independent gate: its reachable
+Vite chunks must not reach a control part the row's own fixture does not
+render, or any provider other than native — see
+`scripts/compare-libraries.mjs`'s `GUARDABLE_PART_NAMES` and
+`forbiddenPartsExcept` for the full guardable list and how each row's own
+forbidden set is built from it. That check fails naming the specific module
+reached and, where one exists, the import chain that reaches it, and is
+unrelated to the ceiling above: a composition can breach either, both or
+neither.

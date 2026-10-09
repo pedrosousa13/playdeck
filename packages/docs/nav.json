@@ -1,0 +1,55 @@
+[
+  {
+    "label": "Start",
+    "pages": [
+      "start.md"
+    ]
+  },
+  {
+    "label": "Guides",
+    "pages": [
+      "guides/index.md",
+      "guides/contract.md",
+      "guides/icons-and-layout.md",
+      "guides/capabilities-matrix.md",
+      "guides/captions.md",
+      "guides/quality.md",
+      "guides/playback-rate.md",
+      "guides/chapters.md",
+      "guides/audio-tracks.md",
+      "guides/live.md",
+      "guides/behaviour-plugins.md",
+      "guides/theme.md",
+      "guides/comparison.md"
+    ]
+  },
+  {
+    "label": "Reference",
+    "pages": [
+      "reference/index.md",
+      "reference/core.md",
+      "reference/provider-hls.md",
+      "reference/provider-native.md",
+      "reference/provider-vimeo.md",
+      "reference/provider-wistia.md",
+      "reference/provider-youtube.md",
+      "reference/react.md"
+    ]
+  },
+  {
+    "label": "Providers",
+    "pages": [
+      "providers/index.md",
+      "providers/youtube.md",
+      "providers/vimeo.md",
+      "providers/wistia.md",
+      "providers/native-files-and-hls.md"
+    ]
+  },
+  {
+    "label": "Examples",
+    "pages": [
+      "examples.md"
+    ]
+  }
+]

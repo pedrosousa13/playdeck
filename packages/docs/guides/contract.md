@@ -1,0 +1,527 @@
+---
+title: "Data-attribute contract"
+description: "Every primitive exposes a stable styling/testing contract via data attributes."
+---
+
+Every primitive exposes a stable styling/testing contract via data attributes.
+
+- **`data-playdeck-part`** — the stable name of a part: one named element in the
+  rendered DOM (`play-button`, `mute-button`, `volume-slider`, `seek-slider` /
+  `seek-slider-input` / `seek-buffered` / `seek-buffered-range` /
+  `seek-progress` / `seek-buffered-description` / `thumbnail`, `fullscreen-button`, `pip-button`,
+  `airplay-button`, `remote-playback-button`, `time`, `controls`, `poster`, `poster-image`,
+  `loading-indicator`, `activation`, `viewport`, `media`, `error` /
+  `error-message` / `error-retry`, `notice` / `notice-message`, `captions` /
+  `captions-button` / `captions-announcer` / `caption-cue` / `caption-line`,
+  `settings-menu-root` / `settings-menu-trigger` / `settings-menu`,
+  `menu-item` / `menu-radio-group` / `menu-radio-item` / `menu-radio-indicator`,
+  `gestures`, `live`). A part name is not a primitive's name, and several parts can
+  come from one primitive. `ErrorDisplay` renders `error`, and by default
+  `error-message` and a recoverable error's `error-retry` inside it. The
+  slashes above only group related names — `captions` / `captions-button` /
+  `captions-announcer` spans two primitives.
+- **`notice` has no default appearance, deliberately.** A Notice is a non-fatal
+  `configuration` error reporting a consumer-supplied value that was rejected —
+  an option a provider refused, or a URL prop the library's own allowlist
+  refused with no provider involved — while the fall-back it degraded to stands
+  unchanged; nothing stopped working. So `ErrorDisplay` renders it without
+  geometry, without stacking and without `role="alert"`, and a player that is
+  still playing is never covered by one (#319). It carries the error category on
+  `data-state` like `error` does, and it is in the DOM for a consumer to place
+  and for a monitoring system to read. A notice the library's own allowlist
+  published leaves the DOM again once nothing holds the rejected value — the
+  prop is fixed, or the component holding it goes away — because that kind of
+  notice reports a rejection that stands, not one that once happened (#330).
+  Notices from elsewhere are withdrawn on their own terms: a provider's goes
+  with its provider, and a configuration conflict's goes when the configuration
+  changes.
+  There is one error slot and no event carries the notice that loses it, so an
+  attach rejecting two values puts only one of them in the DOM: the one of
+  higher severity — a control that protects the viewer fired, rather than a
+  cosmetic option ignored — whatever order the two were reported in (#368).
+  A failure — including a non-fatal `provider`, `policy` or `unsupported` one —
+  still renders `error` with its overlay and its retry.
+- **`time` shows nothing where the source has no duration.** `data-state` on
+  the `time` part is `timed` or `untimed`, and a source is untimed wherever its
+  duration is not a finite number — a live stream, or one whose duration has not
+  arrived yet. `type="duration"` and `type="remaining"` render empty text there
+  rather than `0:00`, which reads as a zero-length video (#248). Nothing is
+  substituted for it: a `LIVE` badge, an em dash or an elapsed-time fallback is
+  a consumer's to compose off `[data-state='untimed']` in their own layout, or
+  to pass as `children`. `type="current"` changes on a live source too, but
+  not by emptying: it reports `live.offsetFromEdge` in place of elapsed time —
+  the word `LIVE` once playback is at the edge, and a negative offset while
+  behind it — so a `current` instance is always a `<time>`, never the `<span>`
+  below, and it still carries `data-state="untimed"` alongside, because that
+  attribute names the source rather than what the instance is showing. The
+  full account, including `liveLabel`, is in the **Live** guide.
+  The element itself is a `<span>` in that state rather than a `<time>` — there
+  is no time to mark up, and an emptied `<time>` would carry neither a
+  `datetime` nor a parseable time. The swap is keyed on the source being
+  untimed, not on the text coming out empty: `<Player.Time type="duration">LIVE</Player.Time>`
+  on a live source is a `<span>` that displays something. Every attribute the
+  part carries survives it — `data-playdeck-part`, `data-state`,
+  `data-time-type` and `data-provider` — so select on
+  `[data-playdeck-part='time']` rather than on the element type. `datetime` is
+  the library's in both states: it is absent on the `<span>`, and a `dateTime`
+  prop is dropped there rather than passed through.
+  Because `duration` is `null` until metadata arrives on nearly every source, a
+  `duration` or `remaining` instance normally starts as a `<span>` and is
+  **replaced** by a `<time>` when metadata lands, rather than re-rendering in
+  place — so a CSS transition, focus, or a `MutationObserver` a consumer has put
+  on that node resets at that moment.
+- **`data-state`** — the part's derived state (e.g. `paused`/`playing`,
+  `muted`/`unmuted`, `idle`/`ready`, `loading`/`loaded`/`error`,
+  `global`/`scoped`, `timed`/`untimed` on `time`, `at-edge`/`behind-edge` on
+  `live`, the error category on `error`, or the activation state).
+  Absent where the part has no observable state: `airplay-button` opens a
+  system picker, and Playdeck does not currently surface an active-route flag, so
+  it exposes no `data-state` rather than a value that never changes. That is
+  today's behaviour rather than a permanent guarantee — WebKit can report an
+  active wireless route, and Playdeck has deferred plumbing it. `remote-playback-button`
+  is the same shape: which device the viewer picked is never exposed, so it
+  carries no `data-state` either, even though `PlayerState.remotePlayback`
+  does publish a connection state elsewhere for a consumer who wants it.
+- **`data-provider`** — carries the active provider name, or is absent when
+  no provider is attached. By design it appears only on the provider-bound
+  control parts (`play-button`, `mute-button`, `volume-slider`,
+  `seek-slider`, `time`, `fullscreen-button`, `pip-button`, `airplay-button`,
+  `remote-playback-button`, `controls`,
+  `error`, `captions-button`), not
+  on the structural/activation parts (`viewport`, `poster`, `poster-image`,
+  `media`, `activation`, `loading-indicator`), which don't read provider
+  state and so avoid re-rendering when it changes.
+- **`data-time-type`** — which of the three times the part reads, `current`,
+  `duration` or `remaining`, mirroring `Time`'s `type` prop. Only on `time`,
+  where several instances usually sit side by side and are otherwise
+  indistinguishable to a selector. It survives the `<span>`/`<time>` swap above,
+  so `[data-playdeck-part='time'][data-time-type='duration']` addresses the same
+  instance in both states.
+- **`data-buffering`** — `"true"` while a stall has been admitted, `"false"`
+  otherwise. Only on `seek-slider`. Debounced: a stall must persist 500ms
+  before it is admitted, and once admitted it is held 500ms, so a short
+  rebuffer never twitches the slider. `data-state` on the same element is a
+  separate axis (`ready`/`idle` means "is there a seek window") and does not
+  move during a stall. The undebounced signal stays available to consumers as
+  `state.buffering`.
+- **`data-idle`** — `"true"` once playback has run 2500ms with no pointer or
+  keyboard input, `"false"` otherwise. Only on `viewport`, written there by
+  `Viewport` itself.
+  The timer runs only while playback is `playing`: it is armed when playback
+  starts, and pausing clears it and writes `"false"`, so a paused player never
+  goes idle and input during a pause starts nothing. A `pointermove`,
+  `pointerdown`, `touchstart`, `keydown` or `focusin` resets it — all five bound
+  to the viewport element rather than to `document`, so one player's pointer
+  traffic never keeps a second player on the same page awake.
+  **Absent until the viewport mounts, and absence means awake.** So key the idle
+  look on `[data-idle='true']` rather than keying the visible look on
+  `[data-idle='false']`: the latter would hide whatever it styles across that
+  first paint, and it would also miss a composition that renders `Controls`
+  outside `Viewport`, where nothing above the bar carries the attribute at all.
+  It reports input, not attention. The timer never inspects focus or whether a
+  menu is open, so `data-idle` can read `"true"` while a focused control keeps
+  the controls plainly on screen — pair it with `:focus-within` if that is the
+  behaviour you want. `@playdeck/react/theme.css` does exactly that to fade its
+  overlaid control bar out; `@playdeck/react/docked.css` never reads the
+  attribute, because nothing it draws sits over the picture.
+  Written straight to the DOM rather than through player state, like the
+  aspect-ratio property below, so going idle and coming back re-renders nothing.
+- **`thumbnail`** is `SeekSlider`'s opt-in seek-preview crop, present only
+  while its `thumbnails` prop resolves to a permitted URL. `data-state` is
+  `hidden` or `visible`, mirroring `poster`'s own vocabulary for the same
+  reason: the part stays mounted through every hover start and stop rather
+  than mounting and unmounting with each one, so a theme can transition
+  between the two `data-state`s instead of a hard pop. It reads `visible`
+  only once there is an actual image behind it -- a resolved cue at the
+  previewed time, and that cue's own image URL permitted -- and `hidden` for
+  every other reason there is nothing to show: no hover or focus is active,
+  the WebVTT file has not loaded yet, no cue covers that time, or the cue's
+  image was refused. The previewed time is the pointer's position while a
+  pointer is over the slider, else the input's own current value while it
+  holds keyboard focus, else there is no preview; a pointer active at the
+  same time as focus wins. `aria-hidden="true"`, like `seek-buffered` above
+  it -- decorative geometry, never a live region.
+- **`live`** reflects `PlayerState.live` (`PlayerLiveState`). `null` there
+  means the stream is not live or its liveness is not yet known, and
+  `LiveIndicator` renders nothing for it -- there is no third `data-state` for
+  "not live", because `PlayerLiveState` is non-null only when `isLive` is
+  `true`; `isLive: false` is not a value `deriveLiveState` produces. So
+  `data-state` carries only the two reachable values: `at-edge` at the live
+  edge, `behind-edge` once the viewer has fallen behind it. Structurally a
+  `<button type="button">`, and `disabled` -- non-interactive, out of the
+  tab order rather than merely `aria-disabled`, which would leave it
+  focusable for a press that does nothing. That is current behaviour rather
+  than a permanent guarantee: if live-edge seeking is ever wired onto this
+  control, it gains an `onClick` and sheds `disabled`.
+
+Style and query against these attributes rather than internal class names.
+
+## Styling a part
+
+The attributes above _are_ the selectors, so a headless player needs no class
+names to look like something. Four worked examples follow — a button, a slider,
+an overlay, and one whose `data-state` is the whole point. Four, not twenty: the
+lesson is the same for the rest.
+
+Each block is generated from a file in `examples/`, and the story it names
+mounts that same file for its `Styled` story, so what you read here is what
+rendered there. Plain CSS, because a data attribute is a plain CSS selector and
+every consumer — Tailwind, CSS modules, styled-components, none of the above —
+can translate from that.
+
+**A button** — `Player/PlayButton`. `data-state` carries the playback state,
+which is `paused`, `playing` or `ended`, and `data-autoplay-state` reports a
+refused autoplay:
+
+```css
+/* Styling a part: a button.
+   `data-playdeck-part` is the hook and `data-state` is the primitive's output, so
+   the pressed look needs no class name, no wrapper and no JavaScript. */
+
+[data-playdeck-part='play-button'] {
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #101828;
+  color: #ffffff;
+  font: inherit;
+  cursor: pointer;
+}
+
+[data-playdeck-part='play-button']:hover {
+  background: #1d2939;
+}
+
+[data-playdeck-part='play-button']:focus-visible {
+  outline: 2px solid #7aa7ff;
+  outline-offset: 2px;
+}
+
+/* Playing, so the button now offers "Pause". */
+[data-playdeck-part='play-button'][data-state='playing'] {
+  background: #2e5aac;
+}
+
+/* Autoplay was refused by the browser: draw attention to the one control that
+   can start playback, because nothing else will. */
+[data-playdeck-part='play-button'][data-autoplay-state='blocked'] {
+  outline: 2px solid #f2b53d;
+  outline-offset: 2px;
+}
+```
+
+**A slider** — `Player/SeekSlider`. One part contains four visible others
+(`seek-slider-input`, `seek-buffered`, a `seek-buffered-range` per range, and
+`seek-progress`, the span of the seek window before the current position) plus
+`seek-buffered-description`, the visually hidden text equivalent of the buffered
+geometry, and `data-buffering` is a second axis beside `data-state`:
+
+```css
+/* Styling a part: a slider.
+   Five parts, no markup of your own: `seek-slider` is the positioned box,
+   `seek-buffered` the layer under the input, `seek-buffered-range` one span
+   per buffered range, `seek-progress` the span before the current position, and
+   `seek-slider-input` the native range input. Reach for the part name rather
+   than a tag selector — the part is the contract, the element type is the
+   primitive's business. */
+
+[data-playdeck-part='seek-slider'] {
+  display: flex;
+  align-items: center;
+}
+
+[data-playdeck-part='seek-slider-input'] {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  background: transparent;
+  accent-color: #7aa7ff;
+}
+
+[data-playdeck-part='seek-buffered'] {
+  position: absolute;
+  inset-inline: 0;
+  height: 4px;
+  border-radius: 2px;
+  background: #2a3140;
+}
+
+/* The ranges are placed by the primitive — `position`, `left` and `width` are
+   inline and state-derived — so only the paint is left to do here. */
+[data-playdeck-part='seek-buffered-range'] {
+  top: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: #4b566b;
+}
+
+/* Placed by the primitive too, and rendered after the ranges, so it paints over
+   the loaded colour wherever the two overlap. */
+[data-playdeck-part='seek-progress'] {
+  top: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: #7aa7ff;
+}
+
+/* No seek window yet — a live edge, or a duration nobody knows. Say so rather
+   than showing a scrubber that cannot move. */
+[data-playdeck-part='seek-slider'][data-state='idle'] {
+  opacity: 0.5;
+}
+
+/* A stall that outlasted the debounce. A separate axis from `data-state`,
+   which reports whether a seek window exists and does not move during one. */
+[data-playdeck-part='seek-slider'][data-buffering='true']
+  [data-playdeck-part='seek-buffered'] {
+  background: #6b4a12;
+}
+```
+
+**An overlay** — `Player/Poster`. The primitive owns the structural geometry
+and the `visibility`; the appearance is yours:
+
+```css
+/* Styling a part: an overlay.
+   `Poster` carries its own structural geometry — absolutely positioned, inset
+   0, z-index 10 — and computes its `visibility` from player state, while
+   `PosterImage` sets `display`, `width` and `height` inline. None of that can
+   be beaten from a stylesheet, so restating any of it here would be dead CSS
+   rather than a conflict (ADR-0001). A stylesheet paints, and that is all. */
+
+[data-playdeck-part='poster'] {
+  background: #0b0e13;
+}
+
+[data-playdeck-part='poster-image'] {
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+/* The load state is on the element, so the frame fades in once it has actually
+   decoded rather than flashing in half-painted. An image that fails to load
+   never reaches `loaded`, so it never fades in: the state machine hides it,
+   and `[data-state='error']` needs no rule of its own to do that. */
+[data-playdeck-part='poster-image'][data-state='loaded'] {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-playdeck-part='poster-image'] {
+    transition: none;
+  }
+}
+```
+
+**A `data-state` worth styling** — `Player/ActivationButton`. Read the states
+before you style them: `dormant` and `error` are the two a press acts on,
+`eligible` means activation has already been committed, and the overlay
+unmounts at `ready` rather than wearing it:
+
+```css
+/* Styling a part whose `data-state` is the whole point.
+   The overlay carries `dormant`, `eligible`, `loading-provider` and `error`;
+   it unmounts at `ready`, so no stylesheet ever sees that value. Each of the
+   four wants a different affordance. The button positions itself (absolutely,
+   inset 0, z-index 30) and resets the user agent's own button face, so this
+   only paints.
+
+   The fill goes through `--playdeck-activation-fill` rather than through
+   `background`. Whatever `ActivationButton` writes inline is out of a
+   stylesheet's reach, and it writes each of those properties as a read of a
+   token: `background-color` from `--playdeck-activation-fill` and `border`
+   from `--playdeck-activation-border`, so a bare player never paints the user
+   agent's own button face over its poster. A `background` or `border`
+   declaration written here would lose to them, whatever its specificity.
+   Setting the tokens reaches the same paint instead, and they cascade and vary
+   by state exactly as a `background` would -- the rules below move the fill per
+   `data-state` and on hover. Everything else here is ordinary CSS against the
+   part. */
+
+[data-playdeck-part='activation'] {
+  display: grid;
+  place-items: center;
+  --playdeck-activation-fill: rgb(11 14 19 / 65%);
+  color: #ffffff;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* The resting state: a press here starts activation. One of the two states a
+   press acts on at all — `error` below is the other. */
+[data-playdeck-part='activation'][data-state='dormant']:hover {
+  --playdeck-activation-fill: rgb(11 14 19 / 40%);
+}
+
+/* Activation is committed and the provider is on its way. Pressing again does
+   nothing from here, so stop inviting it. */
+[data-playdeck-part='activation'][data-state='eligible'] {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Mid-load, and `aria-disabled`: it must not look pressable. */
+[data-playdeck-part='activation'][data-state='loading-provider'] {
+  cursor: progress;
+}
+
+/* The child text reads "Retry" where the error can be retried, and a press does
+   retry — activation acts on this state as well as on `dormant`. So colour it
+   as a recovery, and keep the affordance. The exception is an error the state
+   reports as not recoverable — every configuration error among them — which
+   reads "Play", is `aria-disabled`, and says so through that rather than
+   through colour. */
+[data-playdeck-part='activation'][data-state='error'] {
+  --playdeck-activation-fill: rgb(63 18 18 / 85%);
+}
+
+[data-playdeck-part='activation'][data-state='error']:hover {
+  --playdeck-activation-fill: rgb(90 26 26 / 85%);
+}
+```
+
+None of this is `@playdeck/react/theme.css`, which is a whole opinion you can take
+or leave. These are the smallest rules that make one part look deliberate.
+
+## The media's aspect ratio
+
+One more output, and the only one that is not an attribute. When the active
+provider can measure the media it is playing, Playdeck writes that media's own
+ratio onto the `viewport` part as a custom property — for a vertical clip,
+`--playdeck-media-aspect-ratio: 1080 / 1920`.
+
+It runs the opposite way to a theme token. A token is a value you set and a
+primitive reads; this one the library writes and you read, which makes it a
+sibling of `data-state` rather than of anything in `theme.css`. Playdeck never
+applies it to anything, so opting in is one rule of your own:
+
+```css
+/* Reading a value the library writes.
+   `--playdeck-media-aspect-ratio` is an output, not a token: Playdeck sets it on the
+   viewport part once a provider has measured its media, and this one rule is
+   what opts in to it. Nothing in the library reads it back, so without a rule
+   like this the player is shaped by whatever you already sized it to.
+
+   The fallback is not decoration. It is the whole behaviour wherever no ratio
+   is known — every YouTube source, and any other source until its metadata has
+   arrived — because the property is absent then rather than zero. Pick a value
+   you are happy to render, and size the box's width yourself as usual. */
+
+[data-playdeck-part='viewport'] {
+  aspect-ratio: var(--playdeck-media-aspect-ratio, 16 / 9);
+}
+```
+
+`Real playback/AspectRatio` mounts that same file over a portrait source next to
+a 16:9 one, so you can see one rule produce two shapes.
+
+Which providers measure, and what from:
+
+| Provider | Reports the ratio                                                                                                                         |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| native   | Yes — the media's own `videoWidth`/`videoHeight`, once metadata has loaded and again whenever the frame size changes under it.            |
+| hls      | Yes, on both engines. The picture is drawn into the same `<video>` the native provider drives, so the measurement is the native one.      |
+| vimeo    | Yes — the size the Vimeo SDK reports, once the embed is ready and again when it changes.                                                  |
+| youtube  | **No.** The IFrame API exposes no intrinsic size, and what Playdeck mounts for it is not a media element, so there is nothing to measure. |
+
+Playdeck does not guess a ratio it cannot measure, and does not read one out of a
+source URL — a `/shorts/` path is not a measurement. A consumer who knows they
+are rendering a Short can set the property themselves.
+
+**Absent, never defaulted.** Before metadata arrives, on every YouTube source,
+and on audio-only or errored media, the property is simply not there — which is
+what lets the `var()` fallback in your rule apply. It clears the same way:
+changing source publishes the new ratio or removes the property, and never
+leaves the previous source's shape behind. So the fallback you choose is the
+shape a YouTube player will always have.
+
+The value is written straight to the DOM rather than through player state, so a
+ratio arriving mid-load re-renders nothing.
+
+## The `style` prop and a primitive's own geometry
+
+Some primitives set geometry on themselves — `Viewport` is `position: relative`,
+the overlays are `position: absolute; inset: 0` with a `z-index`, and so on.
+Where that collides with a `style` prop you pass, the rule is:
+
+- **Static geometry is a default. Your `style` wins.** Every property a
+  primitive hardcodes for layout is spread _before_ `...style`, so passing
+  `style={{ zIndex: 5 }}` to `ErrorDisplay` gives you 5, not 40. Layout is the
+  consumer's job, and this is the escape hatch that makes that true.
+- **State-derived properties are the primitive's own. Your `style` does not
+  win.** `Poster` computes `visibility` from whether the poster has been hidden
+  yet; overriding it would not adjust layout, it would pin a state machine open
+  for every source. The test is mechanical: if the value comes from player
+  state, it is not yours to override.
+- **An explicit prop beats `style`.** `PosterImage` takes `objectFit` and
+  `objectPosition` props whose defaults are the `--playdeck-poster-fit` and
+  `--playdeck-poster-position` theming variables. Precedence runs prop →
+  `style` → variable default.
+
+Overriding a primitive's geometry is allowed, not recommended: the overlays'
+`z-index` values are chosen to stack correctly against each other, and
+changing one is your responsibility to keep coherent.
+
+Real playback (real providers, real media) is demonstrated in the
+`Real playback/Providers` stories, with the `Fixtures/PlayerFixture` stories
+driven by the e2e suite. Those stories hit the network and are excluded from
+the deterministic story test run (tagged `!test`).
+
+## Element types are fixed
+
+Each primitive renders fixed element types, and that is a decision rather than
+an omission: `PlayButton` renders a `<button>`, `Viewport` a `<div>`, `Time` a
+`<time>` — or a `<span>` where it has no time to mark up, as above. No prop
+swaps those elements for others.
+
+Where a primitive hands over what goes inside one, it does so through an
+explicit, typed prop rather than a general substitution mechanism:
+`ErrorDisplay` takes render-prop children called with `{ error, retry }`, and
+`Captions` takes `renderCue`. Both replace inner rendering while keeping their
+own element and its part attribute.
+
+What you extend otherwise:
+
+- **Children.** The button primitives above and `Time` render children in place
+  of their default content.
+  `<Player.PlayButton><PlayIcon /></Player.PlayButton>` swaps the label and
+  keeps the button's accessible name. `SeekSlider` renders children inside its
+  `seek-slider` element, after the input; `VolumeSlider`, a bare
+  `<input type="range">`, takes none.
+- **`className` and `style`**, plus a primitive's own props where it has them —
+  `SeekSlider`'s `inputProps`, `PosterImage`'s `objectFit` and
+  `objectPosition`. `style` follows the precedence rules above.
+
+The part attributes work the other way round: `data-playdeck-part` and
+`data-state` are spread after your props, so they are the primitive's output —
+yours to read from CSS and tests, not to set.
+
+The reason is accessibility. The button primitives above set `type="button"`,
+an `aria-label`, and `aria-pressed` where there is a pressed state to report,
+on an element whose shape they know. None of that survives being moved onto an
+element the primitive has never seen.
+
+WCAG 2.2 AA is the standard releases are gated on here rather than an
+aspiration, and it is worth being exact about which half of that gate has been
+cleared. **Automated: yes, and broadly.** Axe runs its default rule set — not a
+narrower WCAG-tag subset — over nine states of the composed example in Chromium,
+Firefox and WebKit, and over every primitive story in Chromium. Alongside it:
+three reflow cases, tab order and menu focus return, focus-not-obscured
+hit-tests, shortcut keys checked against the real media element rather than the
+DOM, and a live-region policy asserting that state transitions announce and time
+updates never do. Axe's needs-review bucket is asserted by equality too, so a
+new undiagnosed finding fails the run rather than passing quietly — two states
+carry a diagnosed entry, and the rest assert it empty. Where you use the
+optional stylesheet, its forced-colors handling has its own tests, including
+ones that measure rendered pixels rather than computed CSS; the headless
+primitives ship no forced-colors handling to test. The reference example in
+`stories/reference/` sets all of that out in full.
+
+**Human: not yet.** Conformance to 2.2 AA as a whole is not something a scanner
+can settle — whether focus is genuinely visible against the backdrop, whether
+captions stay legible over a bright frame, whether a screen reader's account of
+the player makes sense. That review is owner work, it is still open, and until
+it closes nothing here should be read as saying a released version has passed a
+full 2.2 AA audit. What is published is the automated evidence above, which is
+specific and checkable, and an honest statement of where it stops.

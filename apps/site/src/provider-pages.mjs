@@ -50,11 +50,13 @@
  * note in `apps/site/tsconfig.json`.
  */
 
-import { getCollection } from 'astro:content';
 import { readFileSync } from 'node:fs';
 import { join, posix } from 'node:path';
 import { publishablePackages } from '../../../scripts/workspace-packages.mjs';
-import { referencePackageDirs } from './reference-packages.mjs';
+import {
+  referencePackageDirs,
+  siteReferenceHref
+} from './reference-packages.mjs';
 
 /**
  * Where the document is, relative to the repository root. Named once because
@@ -282,10 +284,10 @@ const providerSlice = (section, provider) => {
  * Everything else — an absolute url, a root-relative path — is left as written.
  *
  * @param {string} target
- * @param {{ blob: string; pages: ReadonlySet<string> }} context
+ * @param {{ blob: string; pages: ReadonlySet<string>; referenceHref: (dir: string, fragment?: string) => string }} context
  * @returns {string}
  */
-const rewriteTarget = (target, { blob, pages }) => {
+const rewriteTarget = (target, { blob, pages, referenceHref }) => {
   if (
     target.startsWith('#') ||
     target.startsWith('/') ||
@@ -299,7 +301,7 @@ const rewriteTarget = (target, { blob, pages }) => {
   );
   const pkg = /^packages\/([^/]+)(?:\/README\.md)?$/.exec(resolved);
   return pkg !== null && pages.has(pkg[1])
-    ? `${import.meta.env.BASE_URL}reference/${pkg[1]}/`
+    ? referenceHref(pkg[1])
     : `${blob}${resolved}${fragment === '' ? '' : `#${fragment}`}`;
 };
 
@@ -321,7 +323,7 @@ const rewriteTarget = (target, { blob, pages }) => {
  * Write cross-document links as plain inline links and they are re-addressed.
  *
  * @param {string} markdown
- * @param {{ blob: string; pages: ReadonlySet<string> }} context
+ * @param {{ blob: string; pages: ReadonlySet<string>; referenceHref: (dir: string, fragment?: string) => string }} context
  * @returns {string}
  */
 const rewriteLinks = (markdown, context) => {
@@ -359,9 +361,15 @@ const rewriteLinks = (markdown, context) => {
  *
  * @param {string} source
  * @param {string} repoRoot
+ * @param {(dir: string, fragment?: string) => string} [referenceHref] where a package's reference page is; this
+ *   site's own route unless handed another
  * @returns {ProviderDocument[]}
  */
-export const providerDocuments = (source, repoRoot) => {
+export const providerDocuments = (
+  source,
+  repoRoot,
+  referenceHref = siteReferenceHref
+) => {
   const parsed = sections(source);
   const [intro] = parsed;
   if (!/^# /.test(intro.text)) {
@@ -394,7 +402,8 @@ export const providerDocuments = (source, repoRoot) => {
   );
   const context = {
     blob: repositoryBlobUrl(repoRoot),
-    pages: new Set(referencePackageDirs(repoRoot))
+    pages: new Set(referencePackageDirs(repoRoot)),
+    referenceHref
   };
 
   return PROVIDERS.map((provider) => {
@@ -435,6 +444,10 @@ export const providerDocuments = (source, repoRoot) => {
  * @returns {Promise<ProviderPage[]>}
  */
 export const providerPages = async () => {
+  // Imported here rather than at the top, so that `scripts/docs-package.mjs`
+  // can load `providerDocuments` under plain Node, where the virtual module
+  // does not exist.
+  const { getCollection } = await import('astro:content');
   const entries = await getCollection('providers');
   return entries
     .sort((a, b) => a.data.order - b.data.order)
