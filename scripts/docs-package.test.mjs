@@ -318,6 +318,9 @@ test('the packed package holds only markdown, nav.json, assets and its manifest'
         !path.endsWith('.md') &&
         path !== 'nav.json' &&
         path !== 'package.json' &&
+        // `pnpm publish` copies the repository root's LICENSE into a package
+        // that has none; `npm pack` does not, but either is allowed.
+        path !== 'LICENSE' &&
         !path.startsWith('assets/')
     );
   assert.deepEqual(unexpected, []);
