@@ -1,0 +1,28 @@
+{
+  "name": "@playdeck/docs",
+  "version": "1.3.0",
+  "description": "Playdeck's documentation as markdown, for the deck.cool site to build its pages from.",
+  "keywords": [
+    "playdeck",
+    "documentation"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/pedrosousa13/playdeck/tree/main/packages/docs#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pedrosousa13/playdeck.git",
+    "directory": "packages/docs"
+  },
+  "bugs": {
+    "url": "https://github.com/pedrosousa13/playdeck/issues"
+  },
+  "files": [
+    "**/*.md",
+    "nav.json",
+    "assets"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

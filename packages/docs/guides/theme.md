@@ -1,0 +1,255 @@
+---
+title: "Theme"
+description: "Playdeck ships two independent things: headless primitives that import no CSS at all, and an optional stylesheet — two of those, and a page imports one or the other."
+---
+
+Playdeck ships two independent things: headless primitives that import no CSS at
+all, and an optional stylesheet — two of those, and a page imports one or the
+other. Nothing in the primitives depends on either, and importing one changes no
+behaviour — only appearance.
+
+## Headless usage
+
+The default. You get structure, state, capability gating and accessibility
+semantics, and you write every visual rule yourself. No stylesheet is loaded,
+and the parts carry stable `data-playdeck-part` and `data-state` attributes to hook
+onto.
+
+```tsx
+import * as Player from '@playdeck/react';
+
+// No stylesheet imported: the primitives ship structure, behaviour and
+// accessibility semantics, and every visual rule is yours.
+export const HeadlessPlayer = () => (
+  <Player.Root source="/video.mp4">
+    <Player.Viewport className="my-viewport">
+      <Player.Media />
+      <Player.Controls className="my-controls">
+        <Player.PlayButton className="my-button" />
+        <Player.SeekSlider className="my-slider" />
+        <Player.MuteButton className="my-button" />
+        <Player.FullscreenButton className="my-button" />
+      </Player.Controls>
+    </Player.Viewport>
+  </Player.Root>
+);
+```
+
+## Themed usage
+
+Add one import. That is the whole difference.
+
+```tsx
+import * as Player from '@playdeck/react';
+import '@playdeck/react/theme.css';
+```
+
+The stylesheet styles the parts you render. It adds no elements, changes no
+markup, and gates nothing — a control that was absent because its capability is
+`unavailable` stays absent.
+
+**Or the other one.** `@playdeck/react/docked.css` is a second stylesheet with
+the same contract: it docks the control bar under the picture instead of
+overlaying it, and never hides it. Import one or the other and never both —
+both open `@layer playdeck`, and two files declaring one layer name merge into
+it and compete for the selectors they share on source order alone. Everything
+below applies to whichever you chose.
+
+## Overriding it
+
+Two CSS features do the work, and you don't have to think about either:
+
+**Everything is inside `@layer playdeck`.** Unlayered CSS beats a cascade layer
+whatever its specificity, so your own rules win by default — no `!important`, no
+ordering games, no `:not()` tricks.
+
+**Every selector is wrapped in `:where()`,** which contributes zero specificity.
+A single class of your own outranks any rule in the file. Six rules cannot reach
+zero: a range input's thumb, track and progress fill are reachable only through
+pseudo-elements, and the theme draws all three — the volume slider's thumb on
+Blink and WebKit and its whole control on Gecko, which repaints the moment any
+part of it is styled, plus the seek slider's control on all three engines, so
+that nothing paints over the thumb. Selectors 4 forbids a pseudo-element inside
+`:where()`, so those rules carry the pseudo-element's own (0,0,1). Your single
+class is (0,1,0), so it still outranks them — and the cascade layer above decides
+it either way.
+
+```css
+/* Wins over the theme. That's all it takes. */
+.my-controls {
+  background: white;
+}
+```
+
+## Tokens
+
+Everything worth changing is a custom property, read as `var(--name, default)`.
+The file declares none of them bar the two activation tokens noted below, which
+is deliberate: a declaration — even on the player element — would beat a value
+you set on an ancestor, because a declaration always wins over inheritance.
+Reading with fallbacks means you can set tokens **anywhere above the player**,
+or on the player itself, and they take effect. It also means nothing leaks into
+the surrounding document.
+
+```css
+/* Anywhere above the player. */
+.brand {
+  --playdeck-color-accent: #7c3aed;
+  --playdeck-control-size: 3rem;
+  --playdeck-radius: 0;
+}
+```
+
+Tokens take any colour syntax your own support target allows. The value above is
+a hex for the same reason the stylesheet's own defaults are: `oklch()` reached
+Baseline in May 2023, later than the floor Playdeck declares (Chrome 99, Firefox 97,
+Safari 15.4). Use it if your target is newer — nothing in the theme requires or
+prevents either.
+
+Every token's name, role, default and which parts read it is the versioned
+contract in the [`@playdeck/react` README](../reference/react.md#theming) —
+kept in sync with `theme.css` and `docked.css` by a test, so it is never a
+second copy for an edit here to forget. Two of those tokens are declared by
+both stylesheets rather than only read (`--playdeck-activation-fill` and
+`--playdeck-activation-border`, so a bare player never paints the user agent's
+own button face over its poster): set them on the `activation` part itself,
+not on an ancestor, since a declaration there is what beats a stylesheet's own.
+
+### Starter theme
+
+A minimal theme to copy, overriding a handful of tokens on the viewport part —
+the ancestor every other part inherits a token from unless something closer
+overrides it:
+
+```css
+/* A minimal starter theme: copy this file and change the values that matter
+   to you, or drop it as-is. It does not replace @playdeck/react/theme.css --
+   import that first, the same way you always do, then this file after it. It
+   only overrides a handful of its tokens, set on the viewport part, the
+   ancestor every other part inherits a token from unless something closer
+   overrides it.
+
+   Every name below is a documented token: see the token contract in this
+   package's own README for the full list, each one's default, and which
+   parts read it. */
+
+[data-playdeck-part='viewport'] {
+  --playdeck-color-accent: #7c3aed;
+  --playdeck-color-accent-tint: #c4b5fd;
+  --playdeck-radius: 0.25rem;
+  --playdeck-radius-large: 0.5rem;
+  --playdeck-control-size: 3rem;
+}
+```
+
+**`accent-color` reaches less of a slider than you might expect.** With this
+stylesheet mounted the seek slider is drawn by it on all three engines — that is
+what lets the loaded-range indicator paint behind the control instead of over it
+— and the Firefox volume slider is drawn by it too, because styling any part of a
+range input there turns the native widget off for the whole control. So an
+`accent-color` of your own reaches only the volume slider, and only on Chromium
+and Safari. `--playdeck-color-accent` reaches all of it, on every engine, which
+is what to set.
+
+## Custom icons
+
+Every control accepts children instead of its default. Most button-shaped
+controls default to a text label; the captions and settings triggers default to
+an icon.
+
+**The themed control box is sized for an icon.** Every button-shaped control is
+a square `--playdeck-control-size` that does not shrink, and the theme sizes the
+`svg` it finds inside one via `--playdeck-control-icon-size`. A text label does not
+fit that square — it wraps and spills out of the row. So pass icon children to
+the controls that default to text, or size them yourself: raise
+`--playdeck-control-size`, or write your own rule on the part, which outranks the
+theme either way.
+
+```tsx
+import * as Player from '@playdeck/react';
+import type { ReactElement } from 'react';
+
+declare const MyPlayIcon: () => ReactElement;
+
+// Every control accepts children instead of its default. The theme sizes
+// whatever `svg` it finds via `--playdeck-control-icon-size`, so this works
+// with or without the stylesheet — and the control keeps its own accessible
+// name either way.
+export const CustomIconButton = () => (
+  <Player.PlayButton>
+    <MyPlayIcon />
+  </Player.PlayButton>
+);
+```
+
+Icons are also importable individually and tree-shake if unused — the full set
+is listed in the [`@playdeck/react` README](../reference/react.md#icons):
+
+```tsx
+import { PlayIcon, CaptionsIcon } from '@playdeck/react';
+```
+
+## Custom controls
+
+The theme targets parts, not components, so a control you build yourself is
+themed by carrying the part attribute — and skips the theme entirely if it
+doesn't.
+
+```tsx
+import * as Player from '@playdeck/react';
+
+// The theme targets parts, not components: a control you build yourself is
+// themed by carrying the part attribute, and skips the theme entirely if it
+// does not.
+export const MyPlayButton = () => {
+  const { togglePlayback } = Player.usePlayerActions();
+  const playback = Player.usePlayerState((state) => state.playback);
+
+  return (
+    <button data-playdeck-part="play-button" onClick={togglePlayback}>
+      {playback === 'playing' ? 'Pause' : 'Play'}
+    </button>
+  );
+};
+```
+
+## With Tailwind
+
+Utility classes are unlayered, so they beat the theme with no configuration.
+You can mix the two freely: keep the theme for the fiddly parts (slider track,
+menus, focus rings) and reach for utilities where you want something different.
+
+```tsx
+import '@playdeck/react/theme.css';
+
+<Player.Controls className="gap-3 bg-gradient-to-t from-black/80 px-4">
+  <Player.PlayButton className="rounded-full hover:bg-white/20">
+    <Player.PlayIcon />
+  </Player.PlayButton>
+  <Player.SeekSlider className="flex-1" />
+</Player.Controls>;
+```
+
+If you'd rather Tailwind own everything, skip the stylesheet — the headless path
+above is the supported default, not a fallback.
+
+## Reduced motion and forced colors
+
+Both are handled, and both are covered by tests that emulate the real media
+conditions rather than asserting the CSS text:
+
+- **`prefers-reduced-motion: reduce`** collapses the nonessential opacity
+  transitions on the control surface and the activation affordance. No state is
+  conveyed by motion, so nothing is lost.
+- **Forced-colors mode** replaces the palette with the user's own. Translucent
+  scrims and hover tints are dropped by the browser in this mode, so the theme
+  switches controls to real borders and system colors — otherwise a hovered or
+  focused control would be indistinguishable from an idle one. The two sliders
+  go the other way: every rule that hand-draws one is held out of this mode —
+  the Gecko rules for their track, fill and thumb, and, on all three engines,
+  the `appearance: none`, the hand-drawn thumb and the played span the seek
+  slider is drawn with. So the native range widget stays on and repaints itself
+  in the user's palette without the theme naming a single color for it. Holding
+  those rules out is load-bearing rather than tidy: drawing a range control by
+  hand gives up the forced-colors rendering that came free with the widget, and
+  nothing the theme could name replaces it.

@@ -1,0 +1,148 @@
+---
+title: "Captions"
+description: "Playdeck's caption system is a hybrid: by default Playdeck draws WebVTT cues itself, but hands drawing off to the browser or an embedding provider whenever they own it instead."
+---
+
+Playdeck's caption system is a hybrid: by default Playdeck draws WebVTT cues itself,
+but hands drawing off to the browser or an embedding provider whenever they
+own it instead. `PlayerState.captionRendering` always reports the mode that is
+**actually in effect** — the combination of what was requested and what the
+attached provider is capable of — never merely what was asked for.
+
+## Rendering modes
+
+`captionRendering` is one of four values:
+
+- **`custom`** (default) — Playdeck renders the active WebVTT cues itself, in
+  `Player.Captions`. Fully styleable via the `--playdeck-caption-*` CSS custom
+  properties (`--playdeck-caption-font-size`, `--playdeck-caption-color`,
+  `--playdeck-caption-background`, `--playdeck-caption-edge`) or replaceable
+  per-cue with the `renderCue` render prop — see the `Player/Captions` story
+  docs for the full contract.
+- **`native`** — opt in with `<Player.Root captionRenderer="native">`. The
+  browser's own `<track>` rendering draws the cues, and `Player.Captions`
+  renders nothing, so there is never double rendering. This mode only takes
+  effect once a track is actually selected; with nothing selected there is
+  nothing for the browser to draw, so the effective mode falls back to
+  `custom` (harmless, since there are also no cues to draw there either).
+- **`provider`** — an embedding provider draws the captions inside its own
+  iframe. Playdeck reports the effective mode honestly: it exposes the track list
+  and language selection but renders no overlay, because the embed is the one
+  drawing. (Cues may still reach `useActiveCues` in this mode where the
+  provider supplies them — useful for a transcript — but nothing draws them.)
+- **`unavailable`** — there are no selectable text tracks.
+
+**YouTube and Vimeo differ, because their APIs do.** YouTube's iframe API
+exposes no cue text at all, so YouTube is always `provider`. Vimeo's SDK will
+hand its cues over — `enableTextTrack(language, kind, /* showing */ false)`
+fires `cuechange` without Vimeo's own renderer drawing — so Vimeo runs as
+`custom` by default and its cues flow through `Player.Captions` like any other
+source. Setting `captionRenderer="native"` on a Vimeo source gives drawing back
+to Vimeo, and the effective mode becomes `provider`.
+
+**Vimeo caveat — the one case Playdeck cannot detect.** If a Vimeo embed falls
+back to **native playback** (no Vimeo player UI at all), Vimeo's docs say the
+platform's native renderer draws captions regardless of the `showing` flag. The
+overlay would then be a second set of captions. The SDK exposes no way to ask
+whether that is happening, and Playdeck does not guess: `captionRendering` will
+still say `custom`. If you know your embed hits that path, pass
+`captionRenderer="native"` and let Vimeo own the drawing. Everywhere else —
+including the chromeless embed Playdeck builds by default — `showing: false` is
+confirmed against the real embed to suppress Vimeo's renderer.
+
+**Vimeo caveat — tracks that share a language _and_ a kind.** Vimeo's
+`texttrackchange` event reports a language and a kind, never an id or an index,
+so two tracks matching on both (a plain and a forced-narrative English subtitle
+track, say) cannot be told apart from the event alone. Whenever the pair is ambiguous Playdeck re-reads the
+track list and takes the one the SDK marks as showing, since that is the only
+signal that reflects a change made in Vimeo's own CC menu. Only if no sibling
+is marked does it fall back to the track it last enabled itself, and then to
+the first match. So what remains unresolvable is narrow: an SDK build that
+marks neither sibling as showing, where a change made in Vimeo's UI between
+two such tracks can leave `selectedTextTrackId` naming the wrong one.
+
+Vimeo's cue payload also carries no cue timings. A Vimeo `TextCue` reports the
+playback position at which the cue was observed for both `startTime` and
+`endTime`, rather than inventing a window; treat it as an arrival timestamp,
+not a stable property of the cue.
+
+**Engine caveat:** requesting `captionRenderer="native"` while the HLS
+provider is running its hls.js engine is honored without pretending it did
+something it can't — hls.js's own text-track rendering has to stay off (it's
+needed to feed the `subscribeCues` pipeline), so there's no native surface to
+hand the request to, and `captionRendering` keeps honestly reporting `custom`.
+Cues keep flowing through `Player.Captions` either way. The native `<video>`
+engine (used when the browser can play HLS natively) doesn't have this
+limitation.
+
+## Declaring and selecting tracks
+
+`Player.Media` accepts a `textTracks` prop — an array of
+`{ src, srcLang, label, kind?, default? }` — which renders real `<track>`
+elements for native playback and the HLS provider's native engine. Embedded
+WebVTT in an HLS manifest, and YouTube/Vimeo's own caption tracks, are
+discovered automatically with no extra configuration.
+
+Every discovered track carries a non-empty `label`, so menu items always have
+an accessible name: a track with no label of its own is named after its
+language in that language ("français"), falling back to the raw language code
+and then to "Unknown".
+
+Selection is a single control point regardless of source:
+`controller.selectTextTrack(id | null)`, or the `Player.CaptionsButton` +
+`Player.CaptionsMenu` primitives. `null` means captions off. On load, the
+`<track default>` attribute (or the provider/manifest's own default flag)
+selects a track; otherwise captions start off.
+
+`Player.Root` can also choose a track on the consumer's behalf, instead of a
+`useEffect` calling `selectTextTrack` once tracks publish. `preferredTextTrackLanguage`
+is a BCP 47 language tag; once a source's tracks publish, and again whenever
+captions turn on without the viewer having picked a track of their own,
+selection resolves in order: an exact `TextTrack.language` match, then the
+same base language (`en` matches `en-GB`), then the provider's own default
+track if it has one, and otherwise the first `captions`/`subtitles` track.
+Matching is case-insensitive; a track whose `language` is `null` never
+matches either language step. `defaultTextTrack` (`'auto'` default, or
+`'off'`) starts every source, YouTube included, with no track selected
+instead. Either prop stops acting the moment the viewer makes their own
+choice for that source — through a control or `selectTextTrack` — and a new
+source applies both again.
+
+`preferredTextTrackLanguage` is checked against a BCP 47 tag's shape (letters,
+digits and hyphens, up to 35 characters) before it is used for matching or, on
+YouTube, folded into the embed's `cc_lang_pref` var. A value that fails is
+ignored outright, the same as an absent prop, and a `configuration`-category
+notice naming the rejected value is published on `PlayerState.error`.
+
+On YouTube, `defaultTextTrack="off"` also writes the embed's own
+`cc_load_policy=0` player var. This has not been verified against a real
+YouTube player: the platform documents `cc_load_policy=1` as forcing captions
+on, but gives `0` no documented meaning beyond matching the var's own
+absence, so this repo's own coverage is a fake iframe API honouring the var
+by construction, not a measurement of a real embed's response to it.
+
+## Accessibility model
+
+Caption cues are visual media content, not announcements — cue text never
+enters an `aria-live` region, since a screen reader would otherwise read out
+the entire film as it plays. `Player.CaptionsButton` announces only the
+_control_ change, once per transition, in its own polite live region
+(`data-playdeck-part="captions-announcer"`): `"<label> captions on"` or
+`"Captions off"`. The `C` keyboard shortcut toggles captions the same way the
+button does, restoring the last-selected track.
+
+## Author responsibilities
+
+Playdeck provides the mechanics: discovery, selection, rendering, and styling of
+caption tracks. It does not — and cannot — provide the caption content
+itself. Shipping captions that are inaccurate, out of sync, mislabeled, or
+otherwise non-conformant does not satisfy accessibility requirements just
+because the player supports captions. It remains the content author's
+responsibility to ensure:
+
+- **Accuracy** — captions match the spoken/audible content.
+- **Synchronization** — cue timing matches the audio.
+- **Language labeling** — each track's declared language matches its actual
+  content.
+- **WCAG conformance** — captions meet the applicable conformance level for
+  the content being published.

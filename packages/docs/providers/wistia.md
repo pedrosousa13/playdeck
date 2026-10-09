@@ -1,0 +1,789 @@
+---
+title: "Wistia"
+description: "Setup for Wistia: the source values accepted and refused, and the provider's own options."
+---
+
+Package: [`@playdeck/provider-wistia`](../reference/provider-wistia.md).
+
+Which source values each provider accepts, what each provider's own options are,
+and a worked example wherever the source forms need one. These are
+`detectSource`'s rules, not a
+provider's own documentation, because a form a provider publishes is not a form
+this library reads. The refused forms are named alongside the accepted ones: a
+setup guide that lists a form the detector turns down is worse than one that
+lists fewer. Every claim here was checked by running the detector, not by
+reading it.
+
+Nothing here is an install step. `@playdeck/react` depends on all five provider
+packages and imports each one dynamically, so a YouTube or Vimeo source needs no
+extra package, no registration and no configuration — only a source value
+`detectSource` recognises. When it does not recognise one, the player publishes
+the refusal naming the value it turned down; see [What a refusal
+reads like](#what-a-refusal-reads-like).
+
+Hosts are `wistia.com`, `wistia.net` and any subdomain of either —
+matched on the suffix, because the account subdomain is per-customer and cannot
+be enumerated. A media id is `[A-Za-z0-9]+`, and the accepted paths are
+`/medias/<id>`, `/embed/medias/<id>` and `/embed/iframe/<id>`. Wistia is the one
+host set where a non-embed path is not refused outright: it serves media files
+itself, so a Wistia URL that is not an embed shape is read by file extension
+before failing. `providerOptions.wistia` accepts `controls`, `dnt`,
+`playerColor`, `swatch`, `poster` and `transparentLetterbox`.
+
+## The `source` prop
+
+`Player.Root`'s `source` takes what `detectSource` takes: a URL string, or an
+explicit source object. A string is resolved to a provider by its host and path;
+an object names its provider itself. Both are validated, and a value that fails
+never reaches a provider.
+
+`controls`, `loop`, `startTime` and `endTime` are Playdeck's own props on `Root`
+and work the same on every provider ([ADR-0004](https://github.com/pedrosousa13/playdeck/blob/main/docs/adr/0004-cross-provider-options-live-on-root.md)).
+Everything one provider alone has goes in `providerOptions`, keyed by provider.
+
+## Shared rules for a source string
+
+These run before any host is looked at, and they refuse a string outright.
+
+| Rule                                                                                                                                                                                     |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Non-empty, and equal to its own `trim()` — a leading or trailing space is refused rather than trimmed. No raw tab, line feed or carriage return anywhere.                                |
+| No space and no C0 control character (U+0000 to U+001F) at either end. These are what the URL parser would strip before parsing, so the value that plays would not be the value checked. |
+| No `%` that is not followed by two hex digits.                                                                                                                                           |
+| Scheme must be `http:` or `https:`, or absent. Everything else — `javascript:`, `data:`, `file:`, and `blob:` too — is refused for a string.                                             |
+| A scheme must be followed by `//`: `https:clip.mp4` and `https:/host/clip.mp4` are refused.                                                                                              |
+| A protocol-relative `//host/…` must have a non-`/` after the two slashes.                                                                                                                |
+| The URL must parse.                                                                                                                                                                      |
+
+The two whitespace rules overlap but are not the same rule, and they do not
+report the same way. A trailing **space** is caught by the `trim()` comparison
+and reads as _not readable_; a trailing **control character** is invisible, gets
+past that comparison, and reads as _will not play_ — see
+[What a refusal reads like](#what-a-refusal-reads-like). If a URL that looks
+correct is refused, an invisible character copied in with it is the first thing
+to check.
+
+Scheme-less forms are accepted for every provider: protocol-relative
+(`//host/clip.mp4`), root-relative (`/clip.mp4`) and relative (`clip.mp4`). A
+protocol-relative URL is resolved against `https:` and it is the resolved value
+that is carried forward, never the `//host/…` the caller wrote.
+
+`blob:` is refused for a string because no source type has been resolved yet. It
+is accepted inside an explicit `{ type: 'video' }` object, and only there — see
+[Explicit source objects](#explicit-source-objects).
+
+## A poster before the provider attaches
+
+`Player.Root`'s `poster="provider"` asks the attached provider for its own
+still, which means it only ever resolves once a provider _has_ attached. Under
+`loading="interaction"` that never happens before the viewer's first click —
+the provider stays dormant, nothing fetched and no embed mounted, exactly as
+`loading="interaction"` promises — so `poster="provider"` shows nothing for
+the whole window a dormant player spends on screen. A still for that window
+has to come from somewhere that does not need the provider.
+
+**YouTube.** `@playdeck/provider-youtube` exports
+`resolveYouTubePosterUrl(source)`: synchronous, makes no request, and reads no
+browser global, so it is safe to call before any provider attaches, including
+on the server. It parses with the same `detectSource` this page's YouTube
+section describes — a URL in any form listed above, or an explicit
+`{ type: 'youtube', videoId }` object — and returns `null` for anything else,
+including a source another provider would claim. Pass the result straight into
+`poster`:
+
+```tsx
+import * as Player from '@playdeck/react';
+import { resolveYouTubePosterUrl } from '@playdeck/provider-youtube';
+
+// `poster="provider"` resolves once a provider has attached, so it never
+// resolves for a `loading="interaction"` root: the provider stays dormant
+// until the viewer's first click, by design (the same guarantee `Player.Root`
+// gives every dormant source -- nothing fetched, no embed mounted). A still
+// for that window has to come from somewhere that does not need the
+// provider. `resolveYouTubePosterUrl` is exactly that: synchronous, makes no
+// request, and reads the same `source` a running YouTube adapter would.
+const source = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+
+// `null` for anything that is not a YouTube source `resolveYouTubePosterUrl`
+// recognises -- `?? undefined` is what hands `Player.Root` "no poster" rather
+// than the string `"null"`.
+export const YouTubeClipDormantUntilInteraction = () => (
+  <Player.Root
+    loading="interaction"
+    poster={resolveYouTubePosterUrl(source) ?? undefined}
+    source={source}
+  >
+    <Player.Viewport>
+      {/* No children: `Player.Poster` falls back to `Root`'s own `poster`
+          prop, the same default image a resolved `poster="provider"` would
+          render. */}
+      <Player.Poster />
+      <Player.Media />
+      <Player.ActivationButton aria-label="Play" />
+    </Player.Viewport>
+  </Player.Root>
+);
+```
+
+The still this resolves to is `hqdefault.jpg` — generated for every upload,
+unlike `maxresdefault.jpg`, which only exists for an upload at a resolution
+high enough to have one and 404s silently on every other video, so it is not
+named here as a reliable alternative. `hqdefault.jpg` is itself a 4:3 image
+with the real frame letterboxed inside it wherever the source is a wider
+aspect ratio — expect bars, not a full-bleed still.
+
+**Vimeo and Wistia.** Neither provider derives a poster from an id alone —
+Vimeo's still comes from its oEmbed response, Wistia's from its own oEmbed —
+so there is no pure helper for either: resolving one means a request, and
+making that request while a `loading="interaction"` root is still dormant
+would break the one promise that loading mode makes (no provider request
+before a click). That request path is also not one this library takes on
+itself — see `.out-of-scope/media-url-address-policy.md` for why a new
+non-browser fetch stays out of scope.
+
+The pattern instead is to resolve the still once, at build time (a script,
+a CI step, a server action — anywhere that is not the dormant player), and
+pass the fixed URL into `poster` the same way the YouTube example above
+does:
+
+```ts
+// Run ahead of time, wherever the rest of a page's content is prepared —
+// never from the player itself.
+const response = await fetch(
+  `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(vimeoUrl)}`
+);
+const { thumbnail_url: posterUrl } = await response.json();
+```
+
+Wistia's own oEmbed endpoint (`https://fast.wistia.com/oembed`) answers the
+same shape. Both are the requests this library already makes itself when a
+consumer opts into runtime `poster="provider"` resolution —
+`packages/provider-vimeo/src/oembed-availability.ts` and
+`packages/provider-wistia/src/poster-availability.ts` — reused here ahead of
+time instead of at attach. Neither oEmbed response promises a fixed size: the
+thumbnail dimensions vary by video and, for Vimeo, by the request itself, so
+treat whatever width and height come back as the still's real size rather than
+assuming one.
+
+## Explicit source objects
+
+An object skips host and path detection and names its provider itself. The same
+validation runs, and the same shared allowlist runs over every `src` it carries,
+so `javascript:` and `data:` cannot reach a provider by taking this path.
+
+| Object                                               | Validated on                                                                  |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `{ type: 'youtube', videoId }`                       | `videoId` matches `[A-Za-z0-9_-]+`                                            |
+| `{ type: 'vimeo', videoId, hash? }`                  | `videoId` is digits; `hash`, if given, matches `[A-Za-z0-9]+`                 |
+| `{ type: 'wistia', mediaId }`                        | `mediaId` matches `[A-Za-z0-9]+`                                              |
+| `{ type: 'hls', src, engine? }`                      | `src` non-empty and allowed; `engine` is `auto`, `native` or `hls.js`         |
+| `{ type: 'video', sources: [{ src, mimeType }, …] }` | at least one entry, each with a non-empty `src` and `mimeType`, `src` allowed |
+
+`{ type: 'video' }` is the one place a `blob:` URL is accepted, which is how an
+in-page object — a `MediaSource`, a picked `File` — is handed over. An `hls`
+source refuses `blob:` because its manifest loader fetches the URL itself.
+
+Anything else — a missing field, an id in the wrong shape, a value that is
+neither a string nor an object — is refused as `invalid-source`.
+
+## Supplying your own provider
+
+`Player.Root`'s `providers` prop registers a source kind beyond the five
+above, keyed by the name it goes by: a `detect`/`load` pair per kind, and the
+map may hold more than one.
+
+```
+providers={{
+  example: {
+    detect: (url) => /* a source object of this kind, or undefined */,
+    load: () => /* a Promise of the factory that builds the adapter */
+  }
+}}
+```
+
+`detect` takes a URL string — exactly what `source` is when it is not an
+explicit object — and either turns it into this kind's own source object, or
+declines by returning `undefined`. `load` is a lazy factory: calling it is
+what performs this kind's own dynamic import, the same way this package's own
+`await import('@playdeck/provider-hls')` never runs for a page that plays
+nothing but MP4. What it resolves to is a second function, called with the
+mount point, the detected source and this kind's own `providerOptions` bag,
+that builds and returns the running `ProviderAdapter` — the same interface
+[`@playdeck/core`](../reference/core.md) documents, and every built-in loader
+already produces.
+
+A `detect` that throws declines too, exactly as if it had returned
+`undefined`: the throw is caught, treated as this registration declining, and
+detection moves on to the next one. It is not silently lost — it is reported
+asynchronously, the same way a throwing subscriber already is elsewhere in
+this package, so it stays visible without being able to escape render and
+reach your own error boundary. Write `detect` defensively regardless — for
+example, `new URL(url).pathname` throws for a value that is not a valid URL —
+but a bug there degrades to that source going undetected rather than crashing
+the player.
+
+Detection tries the five built-in kinds first — a supplied kind can never
+intercept a URL, or an explicit object, a built-in host already claims — and
+only on a built-in refusal walks `providers`' own entries, in the order they
+were given, using the first whose `detect` accepts the URL. `hls`, `video`,
+`youtube`, `vimeo` and `wistia` are reserved names: a `providers` entry keyed
+by one of them is skipped outright, on both the string path and the
+explicit-object path, before its `detect` is ever called or its entry is ever
+looked up — not only inert once a resolved source of that `type` reaches this
+package's own built-in loader, which dispatches on `type` first regardless of
+which registration produced it.
+
+An explicit object of a supplied kind — `{ type: 'example', clipId: '…' }` —
+resolves without ever calling `detect`: `detect` takes a URL string, and an
+object handed to `source` has already declared its own kind through its
+`type` field, so it is validated directly instead, the same way an explicit
+object of a built-in kind (the table above) skips that kind's own host and
+path detection. A `type` matching no registered `providers` key is refused,
+same as any other unrecognised source. Unlike the built-in `video` and `hls`
+kinds, a supplied kind's own values are never rewritten — there is no known
+field on an arbitrary shape to normalise a protocol-relative `//host/...`
+value on. If that form matters to your provider, normalise it yourself before
+handing the object to `Player.Root`.
+
+Before anything else runs, the object is copied into a plain structure this
+package builds itself, and `load`'s factory receives that copy rather than
+the object you passed. The copy takes every own, enumerable, string-keyed
+value your object carries — reading each one exactly once, so a getter cannot
+answer differently the second time it is read — at a nesting depth capped well
+past anything a real integration needs, and a total size capped the same way:
+if the same object is referenced from more than one place in your source, the
+copy carries it once per reference rather than once overall, so a shape that
+shares a lot of structure with itself counts against that total more than
+once. Only plain objects, arrays, strings, finite numbers, booleans, `null`
+and `undefined` are admitted: a `Map`, a `Set`, a `bigint`, a function, a
+class instance, a symbol-keyed field, nesting past the depth cap, or a source
+past the total size cap refuses the whole source as `invalid-source`, the
+same way an unrecognised `type` does, and never throws — nor does a value
+whose own shape makes reading it throw, such as a getter that throws or a
+`Proxy` with a hostile trap; that is refused the same way. A non-enumerable
+own property is silently left out of the copy rather than refusing the
+source — it never reaches `load`'s factory either way.
+
+The same shared allowlist runs ahead of every supplied `detect` and every
+explicit object of a supplied kind, exactly where it runs ahead of every
+built-in host inside `detectSource` — a `source` whose scheme the allowlist
+refuses (`javascript:`, `data:`, and anything else not covered by
+[Shared rules for a source string](#shared-rules-for-a-source-string)) never
+reaches a supplied `detect`, and a string carrying one nested anywhere inside
+an explicit object — not just a top-level field — refuses the whole object the
+same way. This is why `detect` is typed as it is: nothing this package writes
+ever reads a field of the source `detect` returns as a URL, so once past that
+gate a supplied kind is trusted the same way its own `load` factory already
+is.
+
+`providerOptions` takes a further key for each supplied kind, alongside the
+four built-in ones, compared for equality the same way — so an inline object
+literal does not tear the provider down and rebuild it every render, the same
+guard that keeps an inline `hls` `build` option from rebuilding the engine.
+Deliberately not a link: this section is shared by every provider page, and
+`## The other three providers`, where `build` is documented, is split per
+provider and so carries no anchor on most of them (#528's link check is what
+catches that).
+
+Every string in a supplied kind's own `providerOptions` entry passes the same
+shared allowlist before `load`'s factory is ever called, exactly as the
+detected source already does. A refused value — `javascript:`, `data:`, or
+anything else [Shared rules for a source string](#shared-rules-for-a-source-string)
+refuses — is omitted from the bag the factory receives, exactly as if you had
+not set that option, and reported the same way any other refused prop is. A
+number or boolean option is never checked and always arrives untouched. Your
+registration's own factory is not expected to guard this itself.
+
+`controls`, `loop`, `startTime` and `endTime` reach a supplied kind not at all:
+`Root` folds each into whichever of the `youtube`, `vimeo` and `wistia` bags
+the detected source belongs to, and a supplied kind has none of those three, so
+the four props are silent no-ops on it — the divergence
+[ADR-0004](https://github.com/pedrosousa13/playdeck/blob/main/docs/adr/0004-cross-provider-options-live-on-root.md) asks be declared
+rather than left to be discovered. A registration that wants to answer one of
+them takes it as a key in its own `Options` bag instead, read off its own
+`providerOptions` entry the way `youtube`, `vimeo` and `wistia` read theirs.
+
+```tsx
+import * as Player from '@playdeck/react';
+import type {
+  ProviderAdapterFactory,
+  ProviderRegistration
+} from '@playdeck/react';
+
+// A source kind this package ships no loader for. Everything past this point
+// is the shape any consumer's own provider takes: a source object of its own,
+// and a lazy factory that turns it into a running ProviderAdapter — the same
+// interface `@playdeck/provider-hls` and the other four built-in packages
+// already produce.
+type ExampleSource = { readonly type: 'example'; readonly clipId: string };
+type ExampleOptions = { readonly quality?: 'sd' | 'hd' };
+
+// Declared rather than implemented: this file exists to type-check the shape
+// `providers` takes, not to ship a real adapter. A real one attaches to the
+// mount point, drives playback, and reports state back through the same
+// ProviderAdapter interface `createNativeProvider` and friends implement.
+declare const createExampleAdapter: ProviderAdapterFactory<
+  ExampleSource,
+  ExampleOptions
+>;
+
+const exampleProvider: ProviderRegistration<ExampleSource, ExampleOptions> = {
+  // Turns a URL none of the five built-in kinds recognise into the source
+  // object above, or declines by returning undefined.
+  detect: (url) => {
+    const match = /^https:\/\/example\.com\/clips\/([\w-]+)$/.exec(url);
+    return match ? { type: 'example', clipId: match[1]! } : undefined;
+  },
+  // Lazy: `load` is only called once a source of this kind actually needs
+  // it, the same way this package's own dynamic `import('@playdeck/provider-hls')`
+  // never runs for a page that plays nothing but MP4.
+  load: () => Promise.resolve(createExampleAdapter)
+};
+
+export const ExampleProviderClip = () => (
+  <Player.Root
+    providerOptions={{ example: { quality: 'hd' } }}
+    providers={{ example: exampleProvider }}
+    source="https://example.com/clips/tracer"
+  >
+    <Player.Viewport>
+      <Player.Media />
+    </Player.Viewport>
+  </Player.Root>
+);
+```
+
+Passing no `providers` prop at all costs nothing beyond the seam itself: there
+is no registry and no module-level state, so a source kind never registered is
+never imported.
+
+### A worked example
+
+The shape above is declared rather than implemented — `createExampleAdapter`
+is typed, never built. A real adapter is a `<video>` element the registration
+owns end to end, built from nothing but the DOM events that element already
+fires — no import from any `@playdeck/provider-*` package required, and none
+of the plumbing above changes to admit it. `clipId` only has to survive the
+round trip from `detect` back out to the factory: which file actually plays
+is `providerOptions`' own `src`, the same way `PlayerProviderOptions.hls`'s
+`build` carries a per-provider choice no source string could. That `src`
+passes the shared allowlist too, exactly like the resolved source's own
+fields — see [Supplying your own provider](#supplying-your-own-provider)
+above. Every capability this adapter does not implement is reported
+`unavailable` --
+`provider` for what the adapter itself leaves out, `source` for
+`providerPoster`, since a raw file carries no poster to read -- rather than
+left for a consumer to discover by calling a command that silently does
+nothing.
+
+```tsx
+import * as Player from '@playdeck/react';
+import type {
+  Availability,
+  CommandResult,
+  PlayerCapabilities,
+  PlayerErrorCategory,
+  ProviderAdapter,
+  ProviderStatePatch
+} from '@playdeck/core';
+import { notifySafely } from '@playdeck/core';
+import type {
+  ProviderAdapterFactory,
+  ProviderRegistration
+} from '@playdeck/react';
+
+// `examples/provider-setup-providers.tsx` types the `providers` prop's shape
+// without implementing it. This file is the other half: a real adapter,
+// built from nothing but a `<video>` element and the DOM events it already
+// fires -- no import from any `@playdeck/provider-*` package, and no package
+// of its own. A consumer who copies it gets a working, if deliberately small,
+// second file-backed provider next to the one this library ships.
+//
+// `ExampleFileOptions.src` -- not a field on the detected source -- is what
+// names the file this adapter actually plays. A source string only has to
+// name ITS OWN kind: `detectExampleFile` recognises the URL and extracts an
+// opaque `clipId`, exactly the way `PlayerProviderOptions.hls`'s `build`
+// carries a choice no source string could. Where the clip actually lives is
+// the same kind of per-provider setting, so it travels the same way.
+export type ExampleFileSource = {
+  readonly type: 'example-file';
+  readonly clipId: string;
+};
+
+export type ExampleFileOptions = { readonly src: string };
+
+const EXAMPLE_FILE_URL_PREFIX = 'https://files.example/clips/';
+
+/**
+ * Turns a URL none of the five built-in kinds recognise into this kind's own
+ * source object, or declines by returning `undefined` -- the same contract
+ * `examples/provider-setup-providers.tsx`'s `detect` types but never runs.
+ */
+export const detectExampleFile = (
+  url: string
+): ExampleFileSource | undefined => {
+  if (!url.startsWith(EXAMPLE_FILE_URL_PREFIX)) return undefined;
+  const clipId = url.slice(EXAMPLE_FILE_URL_PREFIX.length);
+  return clipId.length > 0 ? { type: 'example-file', clipId } : undefined;
+};
+
+// What this adapter does not implement, reported as `unavailable` with the
+// `provider` reason rather than left off `PlayerCapabilities` -- there is no
+// way to leave a field off that type, and there would be no honesty in
+// picking a reason that named the source or the browser for a limit that is
+// this adapter's own. `available` is reserved for a capability this
+// adapter's own behaviour makes true outright rather than one any command
+// backs -- see `customControls` below, true because nothing about this
+// adapter's own behaviour competes with it, not because a command
+// implements it.
+const unimplemented: Availability = {
+  status: 'unavailable',
+  reason: 'provider'
+};
+
+const capabilities: PlayerCapabilities = {
+  seek: unimplemented,
+  setVolume: unimplemented,
+  setPlaybackRate: unimplemented,
+  selectQuality: unimplemented,
+  selectQualityAuto: unimplemented,
+  selectTextTrack: unimplemented,
+  selectAudioTrack: unimplemented,
+  chapters: unimplemented,
+  liveEdge: unimplemented,
+  fullscreen: unimplemented,
+  pictureInPicture: unimplemented,
+  airPlay: unimplemented,
+  // Nothing about this adapter renders the browser's own chrome -- the
+  // `<video>` it creates never gets a `controls` attribute -- so this
+  // library's own controls are never in competition with a native set.
+  customControls: { status: 'available' },
+  // A raw file, like the native provider's own: the media carries no still of
+  // its own to read, as opposed to a provider that could ask a host for one.
+  providerPoster: { status: 'unavailable', reason: 'source' },
+  remotePlayback: unimplemented
+};
+
+const HAVE_METADATA = 1;
+
+/**
+ * The reference adapter: a `<video>` element this factory owns end to end,
+ * playing and pausing through its native methods and publishing its own
+ * events back onto `ProviderStatePatch`. Everything this file's own
+ * `capabilities` marks `unavailable` is genuinely missing here -- there is no
+ * quality ladder, no track list, no fullscreen or Picture-in-Picture wiring --
+ * rather than present and merely unadvertised.
+ */
+export const createExampleFileAdapter: ProviderAdapterFactory<
+  ExampleFileSource,
+  ExampleFileOptions
+> = (mount, source, options) => {
+  if (!(mount instanceof HTMLDivElement)) {
+    // The mount `viewport-media.tsx` renders for any source kind this
+    // package ships no loader for -- a div, the same shape the three embed
+    // providers already attach into.
+    throw new Error(
+      'createExampleFileAdapter requires the div mount a supplied kind receives.'
+    );
+  }
+  if (!options?.src) {
+    throw new Error(
+      'createExampleFileAdapter requires providerOptions["example-file"].src, the file this adapter plays.'
+    );
+  }
+
+  const video = document.createElement('video');
+  video.playsInline = true;
+  video.style.width = '100%';
+  video.style.height = '100%';
+  // Carries the id `detectExampleFile` read off the source URL -- of no use
+  // to playback, which is driven by `options.src` below, but visible on the
+  // element for a reader or a test to confirm the round trip actually
+  // happened.
+  video.dataset.exampleFileClipId = source.clipId;
+  const sourceElement = document.createElement('source');
+  // `options.src` already passed the shared allowlist before this factory was
+  // ever called: `loadProvider`'s supplied-kind branch (`@playdeck/react`)
+  // runs every string in `providerOptions['example-file']` through it and
+  // omits whatever it refuses, the same gate the detected source itself
+  // passes. A `javascript:` or `data:` value never reaches this write --
+  // this adapter is not expected to guard its own options (#752).
+  sourceElement.src = options.src;
+  video.append(sourceElement);
+  mount.append(video);
+
+  const listeners = new Set<(patch: ProviderStatePatch) => void>();
+  const emit = (patch: ProviderStatePatch): void => {
+    listeners.forEach((listener) => notifySafely(listener, patch));
+  };
+
+  const onLoadedMetadata = (): void => {
+    emit({
+      lifecycle: video.readyState >= HAVE_METADATA ? 'ready' : 'loading',
+      activation:
+        video.readyState >= HAVE_METADATA ? 'ready' : 'loading-provider',
+      duration: Number.isFinite(video.duration) ? video.duration : null,
+      capabilities
+    });
+  };
+  const onTimeUpdate = (): void => emit({ currentTime: video.currentTime });
+  const onPlaying = (): void => emit({ playback: 'playing' });
+  const onPause = (): void => emit({ playback: 'paused' });
+  const onEnded = (): void => emit({ playback: 'ended' });
+  // Without this, a 404 or a decode failure leaves the player at
+  // `lifecycle: 'loading'` forever -- the element fires no other event to
+  // move it -- with no `PlayerState.error` for a consumer to read. Mirrors
+  // `@playdeck/provider-native`'s own `mediaError`: `MediaError.code` names
+  // which of the four DOM categories applies, `network` recoverable and the
+  // rest not, since only a network failure stands a chance of succeeding on
+  // a retry.
+  const onError = (): void => {
+    const code = video.error?.code;
+    const category: PlayerErrorCategory =
+      code === 2
+        ? 'network'
+        : code === 3
+          ? 'decode'
+          : code === 4
+            ? 'source'
+            : 'provider';
+    emit({
+      lifecycle: 'error',
+      activation: 'error',
+      playback: 'paused',
+      error: {
+        category,
+        fatal: true,
+        recoverable: category === 'network',
+        message:
+          video.error?.message || 'The media element could not load the source.'
+      }
+    });
+  };
+
+  const play = async (): Promise<CommandResult> => {
+    try {
+      await video.play();
+      return { ok: true };
+    } catch (cause) {
+      // A browser's autoplay policy is one realistic way `play()` rejects
+      // here, but not the only one: the `<source>` above carries no `type`
+      // and its `src` is whatever URL a consumer's `providerOptions` names,
+      // so a 404 or a format the browser cannot decode is just as real.
+      // `NotAllowedError` is the policy refusal specifically; everything
+      // else is reported as this library's own catch-all instead of
+      // guessed to be `'blocked'`.
+      const isPolicyRefusal =
+        cause instanceof DOMException && cause.name === 'NotAllowedError';
+      return {
+        ok: false,
+        reason: isPolicyRefusal ? 'blocked' : 'provider-error'
+      };
+    }
+  };
+  const pause = async (): Promise<CommandResult> => {
+    video.pause();
+    return { ok: true };
+  };
+
+  const adapter: ProviderAdapter<ExampleFileSource['type']> = {
+    // Honest, not a cast: `ProviderAdapter`'s own `Extra` parameter
+    // (`@playdeck/core`) is instantiated here with `ExampleFileSource['type']`,
+    // the same literal `ProviderAdapterFactory` above already carries, so this
+    // adapter reports its own identity rather than borrowing one of the five
+    // built-in kinds.
+    provider: 'example-file',
+    attach: () => {
+      video.addEventListener('loadedmetadata', onLoadedMetadata);
+      video.addEventListener('timeupdate', onTimeUpdate);
+      video.addEventListener('playing', onPlaying);
+      video.addEventListener('pause', onPause);
+      video.addEventListener('ended', onEnded);
+      video.addEventListener('error', onError);
+      onLoadedMetadata();
+    },
+    load: () => {
+      emit({ commandsReady: true });
+    },
+    destroy: () => {
+      video.removeEventListener('loadedmetadata', onLoadedMetadata);
+      video.removeEventListener('timeupdate', onTimeUpdate);
+      video.removeEventListener('playing', onPlaying);
+      video.removeEventListener('pause', onPause);
+      video.removeEventListener('ended', onEnded);
+      video.removeEventListener('error', onError);
+      if (!video.paused) {
+        try {
+          video.pause();
+        } catch {
+          // Teardown must not escape the provider boundary.
+        }
+      }
+      listeners.clear();
+      video.remove();
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    play,
+    pause
+  };
+  return adapter;
+};
+
+export const exampleFileProvider: ProviderRegistration<
+  ExampleFileSource,
+  ExampleFileOptions
+> = {
+  detect: detectExampleFile,
+  load: () => Promise.resolve(createExampleFileAdapter)
+};
+
+/**
+ * Registering it looks exactly like the general shape
+ * `examples/provider-setup-providers.tsx` types, pointed at a real factory
+ * instead of a declared one -- and at whatever file `providerOptions` names.
+ */
+export const ExampleFileProviderClip = () => (
+  <Player.Root
+    providerOptions={{
+      'example-file': { src: 'https://example.com/clips/tracer.mp4' }
+    }}
+    providers={{ 'example-file': exampleFileProvider }}
+    source="https://files.example/clips/tracer"
+  >
+    <Player.Viewport>
+      <Player.Media />
+      <Player.PlayButton />
+    </Player.Viewport>
+  </Player.Root>
+);
+```
+
+The workbench stages this same adapter in
+`apps/storybook/stories/supplied-provider.stories.tsx`, pointed at its own
+local clip through `providerOptions` rather than the placeholder URL above.
+
+### Upgrading a custom provider to 1.2.0
+
+1.2.0 adds four required fields to `PlayerCapabilities`: `liveEdge`,
+`selectQualityAuto`, `selectAudioTrack`, and `remotePlayback`. Any object
+built to satisfy that type — a custom provider adapter, or a capabilities
+fixture in a test — needs all four before it type-checks again, the same
+compatibility impact `providerPoster` had when it landed in 1.1.0.
+
+- `liveEdge` — whether the provider can report a live edge for
+  `seekToLiveEdge` to land on. A provider with no way to answer this for any
+  source returns `{ status: 'unavailable', reason: 'provider' }`.
+- `selectQualityAuto` — whether an automatic-choice item belongs beside the
+  published rungs in `QualityMenu`, distinct from `selectQuality`: a provider
+  can select real rungs while refusing an auto choice. A provider with no
+  quality ladder at all returns `{ status: 'unavailable', reason: 'provider' }`.
+- `selectAudioTrack` — whether the provider can switch between alternate audio
+  renditions. A provider with no audio-track surface to wire the command to
+  returns `{ status: 'unavailable', reason: 'provider' }`.
+- `remotePlayback` — whether the element exposes the Remote Playback API
+  `RemotePlaybackButton` reads. A provider with no media element to read
+  `remote` off returns `{ status: 'unavailable', reason: 'provider' }`.
+
+Each reports the same `unavailable`/`provider` pair `chapters` and
+`providerPoster` already use for a capability the adapter itself leaves out
+entirely, as opposed to `source` or `browser`, which name a limit that is not
+the adapter's own.
+
+```ts
+import type { Availability, PlayerCapabilities } from '@playdeck/core';
+
+// The four fields 1.2.0 added to `PlayerCapabilities`, filled with the value
+// a provider that does not support the feature returns for each -- the same
+// `unavailable`/`provider` pair `examples/provider-setup-file-adapter.tsx`'s
+// `unimplemented` already reports for every other capability its reference
+// adapter leaves out.
+const unsupported: Availability = { status: 'unavailable', reason: 'provider' };
+
+export const newCapabilitiesFields: Pick<
+  PlayerCapabilities,
+  'liveEdge' | 'selectQualityAuto' | 'selectAudioTrack' | 'remotePlayback'
+> = {
+  liveEdge: unsupported,
+  selectQualityAuto: unsupported,
+  selectAudioTrack: unsupported,
+  remotePlayback: unsupported
+};
+```
+
+## What a refusal reads like
+
+A refused source is published on `PlayerState.error` and rendered by
+`Player.ErrorDisplay`. The message names which of the four failures occurred
+and quotes the value that was rejected, truncated to 120 characters.
+
+Each quotation below is the **opening** of the message, so a phrase pasted from
+a console lands here. Every one of them ends with the same further sentence,
+pointing a reader at this document — omitted from the four blockquotes because
+repeating it four times would say nothing the fourth time:
+
+**Not readable** — a string that broke one of the shared rules, or a recognised
+provider host in a path shape not listed above:
+
+> Playdeck could not read a video from the player source "…" — it is either not
+> a well-formed URL, or a provider URL in a form Playdeck does not read.
+
+**Will not play** — the reason that cannot name a single cause, so it states the
+requirement instead. It covers a scheme the allowlist refuses, a control
+character at either end, and a URL that simply matched nothing:
+
+> Playdeck will not play the player source "…". An accepted source URL is
+> http(s) or scheme-less, carries no control character at either end, and is
+> either a YouTube, Vimeo or Wistia URL or a path ending .mp4, .webm or .m3u8.
+
+**Does not play that format** — a well-formed URL for a streaming format
+Playdeck recognises and does not support. Today that is DASH, and only DASH:
+
+> Playdeck does not play DASH. The player source "…" is a DASH manifest, and
+> Playdeck plays HLS (.m3u8), MP4 and WebM.
+
+This one is a scope decision rather than a mistake in the value. Playdeck plays
+HLS and progressive files, and DASH is out of scope: a `.mpd` URL is refused
+deliberately, so changing the URL will not help and no future patch release
+turns it on. Convert the media to HLS, or use a player that carries dash.js.
+
+**Not a source object** — a value that is not a string and does not validate as
+one of the objects above:
+
+> The player source … is not a source object Playdeck accepts.
+
+None of the four is recoverable: a retry re-reads the same `source` prop and
+the same rules refuse it again, so no control offers one. Fix the value.
+
+### When the provider fails to load
+
+A player that fails _after_ the source resolved reports something else:
+
+> Unable to load the &lt;provider&gt; provider. Playdeck cannot say why: the
+> rejection it caught is on this error's cause. See
+> https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md for
+> what to check.
+
+The provider is named because the resolved source knows it. The reason is not,
+and is not guessable: a dynamic import the network never delivered, a
+Content-Security-Policy that refused the chunk, and an adapter factory that
+threw all arrive as one rejection. What to check, in the order that resolves
+this most often:
+
+1. **The page's Content-Security-Policy.** An embed provider needs its origins
+   allowed, and a policy that blocks them fails the load with nothing else to
+   see. [Third-party requests and CSP](https://github.com/pedrosousa13/playdeck/blob/main/docs/third-party-requests.md) lists every
+   origin each provider reaches and the directive it falls under.
+2. **The chunk actually arriving.** Each provider is a dynamic `import()`, so an
+   offline network, a stale deploy or an asset host returning HTML for a missing
+   chunk all land here. The browser's network panel says which.
+3. **`error.cause`.** The rejection itself is carried there for a consumer
+   reading the error object — `usePlayerState((state) => state.error)`, or the
+   `children` render prop on `Player.ErrorDisplay`. It is not rendered by
+   `ErrorDisplay`'s default output, which draws the message and nothing else.
+
+Unlike a refused source, this one **is** recoverable: `ErrorDisplay` offers a
+retry and `ActivationButton` arms, because a load that failed on the network can
+succeed on a second attempt.

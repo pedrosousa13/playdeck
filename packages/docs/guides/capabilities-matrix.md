@@ -1,0 +1,268 @@
+---
+title: "Capabilities matrix"
+description: "Capabilities come from the core `PlayerCapabilities` contract."
+---
+
+Capabilities come from the core `PlayerCapabilities` contract. Each control
+below reads one capability (or, for `Controls`, several) and appears only when
+that capability resolves `available`; while `unknown` or `unavailable` it
+renders nothing.
+
+| Component                     | Gating capability                                     | Renders when                            |
+| ----------------------------- | ----------------------------------------------------- | --------------------------------------- |
+| `Player.PlayButton`           | — (provider presence)                                 | always (not capability-gated)           |
+| `Player.MuteButton`           | `setVolume`                                           | `setVolume` is `available`              |
+| `Player.VolumeSlider`         | `setVolume`                                           | `setVolume` is `available`              |
+| `Player.SeekSlider`           | `seek`                                                | `seek` is `available`                   |
+| `Player.FullscreenButton`     | `fullscreen`                                          | `fullscreen` is `available`             |
+| `Player.PipButton`            | `pictureInPicture`                                    | `pictureInPicture` is `available`       |
+| `Player.AirPlayButton`        | `airPlay`                                             | `airPlay` is `available`                |
+| `Player.RemotePlaybackButton` | `remotePlayback`                                      | `remotePlayback` is `available`         |
+| `Player.QualityMenu`          | `selectQuality`                                       | `selectQuality` is `available`          |
+| `Player.PlaybackRateMenu`     | `setPlaybackRate`                                     | `setPlaybackRate` is `available`        |
+| `Player.ChaptersMenu`         | `chapters`                                            | `chapters` is `available` and non-empty |
+| `Player.Time`                 | — (display)                                           | always                                  |
+| `Player.Controls`             | `seek`, `setVolume`, `fullscreen`, `pictureInPicture` | container; children gate individually   |
+
+`Player.QualityMenu`'s Auto row carries a second, narrower gate of its own —
+`selectQualityAuto` — covered in the `selectQuality` section below.
+
+`airPlay` reports whether there is somewhere to cast to, resolved in this
+order (#71):
+
+| Condition                                                         | `airPlay`                  |
+| ----------------------------------------------------------------- | -------------------------- |
+| No `webkitShowPlaybackTargetPicker` — anything but Safari and iOS | `unavailable` / `browser`  |
+| `x-webkit-airplay="deny"` or `disableRemotePlayback`              | `unavailable` / `policy`   |
+| No playback target announced yet, or the last one went away       | `unavailable` / `provider` |
+| WebKit announced an available playback target                     | `available`                |
+
+The third row is the new one: `airPlay` used to resolve `available` on the
+picker API merely existing, so `Player.AirPlayButton` rendered inside Safari
+even with no receiver on the network and opened an empty picker. It now
+follows `webkitplaybacktargetavailabilitychanged`, which is Apple's own
+guidance and what every native Apple player does.
+
+Two consequences worth knowing:
+
+- **It is live.** Plugging a receiver into the network makes the button appear
+  without a reload, and unplugging it takes the button away again.
+- **`unavailable`, not `unknown`, before the first announcement.** `unknown`
+  promises a verdict is coming; on a machine that never sees a receiver the
+  event never fires, and a consumer gating UI on it would wait forever.
+
+`@playdeck/provider-hls` delegates to the native provider, so HLS inherits all of
+this. The command itself is unchanged: `showAirPlayPicker()` still forwards to
+WebKit whenever the API exists and policy permits, so a consumer driving it
+directly is not blocked by the capability — the capability governs what
+renders, not what is callable.
+
+`remotePlayback` is the same shape, over the standards-based **Remote
+Playback API** rather than WebKit's own — the media element's `remote` object,
+which is Chrome's built-in route to Chromecast for a file or an HLS stream and
+needs no Cast SDK, no sender script and no receiver page:
+
+| Condition                                                    | `remotePlayback`           |
+| ------------------------------------------------------------ | -------------------------- |
+| No `remote` object on the element — no Remote Playback API   | `unavailable` / `browser`  |
+| `remote` exists, but `watchAvailability()` reports no device | `unavailable` / `provider` |
+| `watchAvailability()` reports a device                       | `available`                |
+
+Also live — a receiver appearing or leaving the network flips the capability
+with no reload — and also `unavailable`, not `unknown`, before the first
+callback, for the same reason `airPlay` is: a machine that never sees a
+receiver would otherwise leave a consumer waiting on a verdict that never
+comes. `@playdeck/provider-hls` delegates to the native provider here too.
+Once `available`, `PlayerState.remotePlayback` reflects the element's own
+`remote.state` (`connecting`/`connected`/`disconnected`), and is `null` both
+before that and once the capability goes back to `unavailable`. The Cast SDK
+is a separate, unimplemented route — see `docs/comparison/features.md`'s
+Chromecast / Google Cast row.
+
+`selectTextTrack` gates `Player.CaptionsButton` — see the Captions docs.
+
+`selectQuality` gates `Player.QualityMenu`, which composes `Player.SettingsMenu`/
+`Player.MenuRadioGroup`/`Player.MenuRadioItem` the same way `Player.CaptionsMenu`
+does, listing `PlayerState.qualities` plus an "Auto" row — see below for which
+providers populate that ladder. `setPlaybackRate` gates `Player.PlaybackRateMenu`
+the same way, listing a rate ladder (default `[0.5, 1, 1.5, 2]`, overridable via
+its `rates` prop) instead of a provider-published one — see the **Playback
+rate** guide. The **Reference example**'s settings menu still composes its own
+playback-rate group by hand over `Player.SettingsMenu`/`Player.MenuRadioGroup`,
+for a consumer who wants it alongside quality under one trigger.
+`chapters` gates `Player.ChaptersMenu` the same way, listing
+`PlayerState.chapters` and marking the one containing `currentTime` — see the
+**Chapters** guide. It says only whether the provider can report the
+divisions in `PlayerState.chapters` at all; `Player.ChaptersMenu` additionally
+renders nothing while that collection is empty. Chapter markers drawn on the
+seek slider itself are out of scope for the shipped parts — a consumer
+composes those over `Player.SeekSlider`, which already takes children.
+`customControls` gates no shipped control.
+
+## `commandsReady`: when a command will actually land
+
+A capability says whether a command is _supported_. `PlayerState.commandsReady`
+says whether it is _accepted yet_. Commands issued before it are refused with
+`{ ok: false, reason: 'not-ready' }` — they are **not** queued, and nothing is
+replayed once the provider comes up.
+
+Each provider declares readiness for itself, because the moment differs and
+core cannot derive it: native declares after `media.load()` (which resets
+`playbackRate`, so anything applied earlier is undone), hls.js at
+`MEDIA_ATTACHED`, YouTube at `onReady`, Vimeo when its player is constructed,
+and Wistia at `api-ready` — the moment `<wistia-player>` hands over the
+`PublicApi` handle, which is the adapter's only command surface and does not
+exist before it. `activation` is not a substitute — native with `preload="none"`
+accepts commands while `activation` is still `loading-provider`.
+
+`whenReady()` is the imperative form, and it sits on the player actions, on the
+`Player.Root` ref handle, and on a bare `PlayerController`:
+
+```tsx
+import * as Player from '@playdeck/react';
+import { useEffect } from 'react';
+
+// Declaratively: `commandsReady` means a command issued now is accepted and
+// will not be undone by a load that has yet to run.
+export const RateOnReady = () => {
+  const actions = Player.usePlayerActions();
+  const commandsReady = Player.usePlayerState((state) => state.commandsReady);
+
+  useEffect(() => {
+    if (commandsReady) void actions.setPlaybackRate(0.75);
+  }, [commandsReady, actions]);
+
+  return null;
+};
+
+// Imperatively: `whenReady()` resolves `true` at that same moment, and `false`
+// if the player detaches, is swapped, or fails fatally. It never rejects and
+// never hangs, and a call made before a provider attaches waits rather than
+// answering `false`.
+export const RateWhenReady = () => {
+  const actions = Player.usePlayerActions();
+
+  return (
+    <button
+      onClick={async () => {
+        if (await actions.whenReady()) void actions.setPlaybackRate(0.75);
+      }}
+    >
+      Slow down
+    </button>
+  );
+};
+```
+
+A call made before a provider is attached waits rather than answering `false`,
+so it is safe to await from an effect that runs before mount finishes.
+
+## `buffered`: not every provider reports, and not every provider that does sees the same thing
+
+`PlayerState.buffered` is what `Player.SeekSlider` paints behind the thumb. No
+provider invents a range, but they see different amounts — and one sees nothing
+at all:
+
+| Provider    | What the ranges are                                                          |
+| ----------- | ---------------------------------------------------------------------------- |
+| native, hls | The `<video>` element's own `TimeRanges` — every range, exactly as buffered. |
+| vimeo       | The SDK's `getBuffered()` — every range, including gaps left by a seek.      |
+| youtube     | One range, from where playback entered the buffer to that buffer's edge.     |
+| wistia      | Nothing — the ranges are never published, and stay empty for the session.    |
+
+YouTube is the odd one out because its iframe API exposes no ranges at all —
+only `getVideoLoadedFraction()`, which despite the name reports the _end_ of the
+range the playhead is in, over duration. The start of that range is never
+exposed, so the adapter reports the earliest playhead position it has seen while
+that same range held it: a start it can prove rather than one it assumes.
+
+The practical difference from native, hls and vimeo: buffer loaded _before_ you
+arrived is invisible. Join a video at 30s and the bar starts at 30s, however
+much sits behind it; seek backwards out of the range being tracked and the bar
+restarts from where you land, even though the region you left is still loaded.
+Everything YouTube reports is genuinely buffered — it just reports less than it
+holds.
+
+Wistia is the one provider that reports nothing. Aurora fires no buffering
+events and its `PublicApi` handle exposes no buffered ranges, so the adapter
+publishes no ranges rather than a guess — and `PlayerState.buffering` stays
+`false` throughout for the same reason.
+
+On the other four, an empty array means "nothing is buffered ahead of the
+playhead". On Wistia it means only that Wistia does not say. There is no
+capability to check for the difference: gate on the provider if you need to
+tell the two apart, or treat an empty bar as "no information" and paint
+nothing.
+
+## `selectQuality`: two providers can, one is asked and ignored
+
+| Provider | `selectQuality`                  | Where the ladder comes from                           |
+| -------- | -------------------------------- | ----------------------------------------------------- |
+| hls.js   | `available` with a manifest      | The manifest's levels, with height, width and bitrate |
+| vimeo    | `available` with a ladder        | `getQualities()` — one entry per rung, height only    |
+| native   | `unavailable`, reason `source`   | The browser picks; nothing to enumerate               |
+| youtube  | `unavailable`, reason `provider` | Enumerable, but not selectable — see below            |
+| wistia   | `unavailable`, reason `provider` | No rung ladder to publish — see below                 |
+
+`auto` is not a rung. Vimeo returns it as a member of `getQualities()` and
+hls.js has an equivalent mode; both are reported as `selectedQualityId: null`
+instead, so a menu has one representation of "let the player choose" whichever
+provider is underneath.
+
+### `selectQualityAuto`: whether that representation is actually on offer
+
+`selectQuality` says whether a provider can select a rung at all; it does not
+say whether `selectQuality(null)` -- auto -- is one of the choices. The two
+came apart in practice: hls.js always honours `null` once it has a ladder
+(`currentLevel = -1` never fails), but Vimeo's `getQualities()` does not
+always carry an `auto` entry, and where it does not, `selectQuality(null)`
+resolves `{ ok: false, reason: 'unsupported' }` against a real ladder that
+otherwise selects fine. `PlayerCapabilities.selectQualityAuto` is the signal
+that tells the two cases apart, and `Player.QualityMenu`'s Auto row is gated
+on it rather than on `selectQuality` -- a menu built over the older, single
+capability would render a radio item that silently does nothing when a
+viewer chose it.
+
+| Provider | `selectQualityAuto`                                   |
+| -------- | ----------------------------------------------------- |
+| hls.js   | Mirrors `selectQuality` exactly -- see above          |
+| vimeo    | `available` only where the ladder has an `auto` entry |
+| native   | `unavailable`, reason `source` -- no ladder, no auto  |
+| youtube  | `unavailable`, reason `provider`                      |
+| wistia   | `unavailable`, reason `provider`                      |
+
+On Vimeo, the rung's `height` is Vimeo's own name for it, not a measurement:
+the rung it labels `240p` renders at 480×270. `width` and `bitrate` are `null`
+because the SDK reports neither. Under `auto` the rung actually rendering is not
+identified at all — the SDK marks `auto` itself as the active entry.
+
+**YouTube can enumerate but cannot select, so it offers neither.**
+`getAvailableQualityLevels()` returns an honest list once playback has started,
+but `setPlaybackQuality()` is accepted and discarded: measured against the live
+IFrame API, asking for each of the six levels the player itself offered left
+`getPlaybackQuality()` on `medium` throughout, with no `onPlaybackQualityChange`
+and no rebuffer. So did setting a level and then seeking, and so did
+`loadVideoById({ suggestedQuality })` — where the player announced its own
+choice as `medium` after being asked for both `tiny` and `hd720`. Asking for
+`tiny` failing in the same way as asking for `hd720` is what rules out a
+bandwidth or viewport ceiling: the argument is discarded, not clamped.
+
+Publishing the list anyway would put rungs in the menu that cannot be chosen, so
+the capability stays `unavailable` and `qualities` stays empty. The full
+measurement is on [#82](https://github.com/pedrosousa13/playdeck/issues/82).
+
+**Wistia has no ladder to publish.** Aurora offers a coarse `videoQuality()`
+setter and `quality-min` / `quality-max` attributes, but nothing that enumerates
+the rungs actually available for a media, so the adapter does not wire quality
+selection at all and `qualities` stays empty.
+
+## DASH is declined, not missing
+
+The one adaptive format Playdeck plays is HLS. DASH is out of scope by decision
+rather than by omission: an `.mpd` source is recognised and refused by name, with
+a message saying Playdeck does not play DASH, so a consumer is told to change
+their pipeline rather than left checking their URL. No release turns it on, and
+no capability reports on it — a declined format is not a capability. The
+reasoning is recorded in
+[`.out-of-scope/dash.md`](https://github.com/pedrosousa13/playdeck/blob/main/.out-of-scope/dash.md)
+([#447](https://github.com/pedrosousa13/playdeck/issues/447)).

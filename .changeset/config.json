@@ -10,7 +10,8 @@
       "@playdeck/provider-hls",
       "@playdeck/provider-vimeo",
       "@playdeck/provider-wistia",
-      "@playdeck/provider-youtube"
+      "@playdeck/provider-youtube",
+      "@playdeck/docs"
     ]
   ],
   "linked": [],

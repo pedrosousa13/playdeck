@@ -44,7 +44,7 @@
  * build`, which runs this module for real on every build.
  */
 
-import { getCollection } from 'astro:content';
+import { siteReferenceHref } from './reference-packages.mjs';
 
 /**
  * The documents that get a page, in the order a reader meets them.
@@ -171,12 +171,13 @@ const PACKAGE_ON_GITHUB =
  *
  * @param {string} target
  * @param {ReadonlySet<string>} pages
+ * @param {(dir: string, fragment?: string) => string} referenceHref
  * @returns {string}
  */
-const rewriteTarget = (target, pages) => {
+const rewriteTarget = (target, pages, referenceHref) => {
   const pkg = PACKAGE_ON_GITHUB.exec(target);
   return pkg !== null && pages.has(pkg[1])
-    ? `${import.meta.env.BASE_URL}reference/${pkg[1]}/${pkg[2] ?? ''}`
+    ? referenceHref(pkg[1], pkg[2] ?? '')
     : target;
 };
 
@@ -200,9 +201,16 @@ const rewriteTarget = (target, pages) => {
  * @param {string} source
  * @param {string} file the path in the repository, for the errors below
  * @param {ReadonlySet<string>} pages
+ * @param {(dir: string, fragment?: string) => string} [referenceHref] where a
+ *   package's reference page is; this site's own route unless handed another
  * @returns {{ title: string; markdown: string }}
  */
-export const guideDocument = (source, file, pages) => {
+export const guideDocument = (
+  source,
+  file,
+  pages,
+  referenceHref = siteReferenceHref
+) => {
   const lines = source.split('\n');
   if (!lines.some((line) => META_IMPORT.test(line))) {
     throw new Error(
@@ -238,7 +246,7 @@ export const guideDocument = (source, file, pages) => {
     kept.push(
       line.replace(
         /(?<!!)\]\(([^()\s]+)\)/g,
-        (_, target) => `](${rewriteTarget(target, pages)})`
+        (_, target) => `](${rewriteTarget(target, pages, referenceHref)})`
       )
     );
   }
@@ -266,6 +274,10 @@ export const guideDocument = (source, file, pages) => {
  * @returns {Promise<GuidePage[]>}
  */
 export const guidePages = async () => {
+  // Imported here rather than at the top, so that `scripts/docs-package.mjs`
+  // can load `GUIDES` and `guideDocument` under plain Node, where the virtual
+  // module does not exist.
+  const { getCollection } = await import('astro:content');
   const entries = await getCollection('guides');
   return entries
     .sort((a, b) => a.data.order - b.data.order)
