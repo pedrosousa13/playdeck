@@ -286,9 +286,9 @@ jobs:
       # An eighth, `@playdeck/docs`, is published by this same step and needs
       # the same trusted publisher before its first release. npm sets one up in
       # a package's settings, so a name that is not on the registry yet has no
-      # settings to set it in: publish `@playdeck/docs` once by hand, then add
-      # the publisher, before the release that would otherwise fail here
-      # unauthenticated.
+      # settings to set it in. So `@playdeck/docs` is published once by hand,
+      # at 1.3.0, the version it starts at, and the trusted publisher is added
+      # to it then. This step publishes every version after that one.
       #
       # **The dry run cannot prove any of that.** npm never calls libnpmpublish
       # under `--dry-run`, so it never requests an OIDC token -- established on
@@ -310,15 +310,19 @@ jobs:
 
       # deck.cool's site builds playdeck's pages from `@playdeck/docs`, and
       # bumps it when told a release happened (see "Releasing a deck" in
-      # pedrosousa13/deck-cool's AGENTS.md). It is told only when this run
-      # published `@playdeck/react`: a re-run that found every version already
-      # on the registry publishes nothing, and must not announce a release.
-      # `@playdeck/docs` is in `@playdeck/react`'s fixed group, so the version
-      # is one both carry, and `pnpm publish -r` fails the step above -- and so
-      # skips this one -- if either did not make it.
+      # pedrosousa13/deck-cool's AGENTS.md). It is told when this run
+      # published any `@playdeck/*` package at a stable version, and the
+      # version comes from that entry: every package here is in one fixed
+      # group, so they share it. A run that found every version already on
+      # the registry publishes nothing and tells nobody.
       #
       # A prerelease (`pnpm prerelease:enter`) is published but not announced:
       # deck.cool accepts `MAJOR.MINOR.PATCH` only, and would refuse it.
+      #
+      # Nothing here re-sends a dispatch that was lost -- a re-run after a
+      # failure past the publish, say -- or one deck.cool refused under its
+      # one-day release-age hold. deck.cool's daily scheduled bump checks npm
+      # itself and picks either up the next day.
       - name: Read what was published
         id: published
         if: inputs.dry_run == false
@@ -327,16 +331,16 @@ jobs:
             const { publishedPackages } = JSON.parse(
               require("node:fs").readFileSync("pnpm-publish-summary.json", "utf8")
             );
-            const react = publishedPackages.find(
-              (pkg) => pkg.name === "@playdeck/react"
+            const released = publishedPackages.find(
+              (pkg) =>
+                pkg.name.startsWith("@playdeck/") &&
+                /^[0-9]+\.[0-9]+\.[0-9]+$/.test(pkg.version)
             );
-            const version = react && /^[0-9]+\.[0-9]+\.[0-9]+$/.test(react.version)
-              ? react.version
-              : "";
+            const version = released ? released.version : "";
             console.log(
-              version === ""
-                ? "@playdeck/react was not published as a release; deck.cool is not told."
-                : "@playdeck/react@" + version + " was published; telling deck.cool."
+              released
+                ? released.name + "@" + version + " was published; telling deck.cool."
+                : "No @playdeck package was published at a stable version; deck.cool is not told."
             );
             require("node:fs").appendFileSync(
               process.env.GITHUB_OUTPUT,

@@ -15,7 +15,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
 import { Marked, Tokenizer } from 'marked';
-import { parse as parseYaml } from 'yaml';
 
 /** @typedef {{ file: string; line: number; message: string }} Fault */
 
@@ -31,19 +30,89 @@ const NOT_PAGES = new Set(['readme.md', 'changelog.md', 'license.md']);
 const SKIPPED_DIRECTORIES = new Set(['assets', 'node_modules']);
 
 /**
- * The frontmatter and the body after it, as `@pagedeck/markdown-loader`'s
- * `parseFrontmatter` splits them: a `---` line, YAML, a `---` line.
+ * The frontmatter and the body after it, read the way
+ * `@pagedeck/markdown-loader`'s `parseFrontmatter` (0.2.3) reads them, which is
+ * what deck.cool's loader calls: a deliberately small subset rather than YAML.
+ * A field is a `name: value` line, a value's outer quotes come off and nothing
+ * is unescaped, and an empty value opens a list of `- item` lines. A line that
+ * is none of those, a repeated field and an unclosed block are refused there,
+ * and are faults here.
  * @param {string} source
- * @returns {{ frontmatter: Record<string, unknown>; body: string }}
+ * @returns {{ fields: Map<string, { value: string | string[]; line: number }>; body: string; faults: { line: number; message: string }[] }}
  */
 const splitFrontmatter = (source) => {
-  const match = /^---\n([\s\S]*?)\n---(?:\n|$)/.exec(source);
-  if (match === null) return { frontmatter: {}, body: source };
-  const data = parseYaml(match[1] ?? '');
-  return {
-    frontmatter: typeof data === 'object' && data !== null ? data : {},
-    body: source.slice(match[0].length)
-  };
+  /** @type {Map<string, { value: string | string[]; line: number }>} */
+  const fields = new Map();
+  /** @type {{ line: number; message: string }[]} */
+  const faults = [];
+  const lines = source.split('\n');
+  if (lines[0] !== '---') return { fields, body: source, faults };
+  const end = lines.indexOf('---', 1);
+  if (end === -1) {
+    faults.push({
+      line: 1,
+      message: 'opens a frontmatter block that is never closed'
+    });
+    return { fields, body: source, faults };
+  }
+  /** @param {string} value */
+  const unquote = (value) =>
+    value.length >= 2 &&
+    (value[0] === '"' || value[0] === "'") &&
+    value.endsWith(value[0])
+      ? value.slice(1, -1)
+      : undefined;
+  /** @type {string[] | undefined} */
+  let list;
+  for (let index = 1; index < end; index += 1) {
+    const text = lines[index] ?? '';
+    const line = index + 1;
+    if (text.trim() === '') continue;
+    const item = list === undefined ? null : /^\s*-\s+(.*)$/.exec(text);
+    if (list !== undefined && item !== null) {
+      const value = (item[1] ?? '').trim();
+      list.push(unquote(value) ?? value);
+      continue;
+    }
+    list = undefined;
+    const field = /^([^:]+):(.*)$/.exec(text);
+    if (field === null) {
+      faults.push({
+        line,
+        message: `has a frontmatter line that is not a field, ${text}`
+      });
+      continue;
+    }
+    const name = (field[1] ?? '').trim();
+    const raw = (field[2] ?? '').trim();
+    if (fields.has(name)) {
+      faults.push({
+        line,
+        message: `declares the frontmatter field "${name}" twice`
+      });
+      continue;
+    }
+    if (raw === '') {
+      list = [];
+      fields.set(name, { value: list, line });
+      continue;
+    }
+    const quoted = unquote(raw);
+    fields.set(name, {
+      value:
+        quoted ??
+        (raw.startsWith('[') && raw.endsWith(']')
+          ? raw.slice(1, -1).trim() === ''
+            ? []
+            : raw
+                .slice(1, -1)
+                .split(',')
+                .map((entry) => entry.trim())
+          : raw),
+      line
+    });
+  }
+  return { fields, body: lines.slice(end + 1).join('\n'), faults };
 };
 
 /**
@@ -89,9 +158,9 @@ const locate = (body, raw, from) => {
  */
 export const pageFaults = (file, text, context) => {
   const source = text.replace(/\r\n?/g, '\n');
-  const { frontmatter, body } = splitFrontmatter(source);
+  const { fields, body, faults: frontmatterFaults } = splitFrontmatter(source);
   /** @type {Fault[]} */
-  const faults = [];
+  const faults = frontmatterFaults.map((fault) => ({ file, ...fault }));
   const firstLine = source.split('\n').length - body.split('\n').length + 1;
   /** @param {number} offset */
   const lineAt = (offset) =>
@@ -101,12 +170,21 @@ export const pageFaults = (file, text, context) => {
     faults.push({ file, line: lineAt(offset), message });
 
   for (const field of /** @type {const} */ (['title', 'description'])) {
-    const value = frontmatter[field];
+    const entry = fields.get(field);
+    const value = entry?.value;
     if (typeof value !== 'string' || value.trim() === '') {
       faults.push({
         file,
         line: 1,
         message: `has no "${field}" in its frontmatter`
+      });
+    } else if (/["\\]/.test(value)) {
+      // Pagedeck's parser unescapes nothing, so `\"` would reach the site as
+      // a backslash and a quote. Refused rather than read two ways.
+      faults.push({
+        file,
+        line: entry?.line ?? 1,
+        message: `its "${field}" holds a " or a \\, which Pagedeck's frontmatter parser keeps as written rather than unescaping — reword it without them`
       });
     }
   }
@@ -195,17 +273,21 @@ export const pageFaults = (file, text, context) => {
       if (token.kind === 'image') {
         if (!target.startsWith('assets/') || !context.exists(target)) {
           fault(at, `shows "${token.href}", which is not a file under assets/`);
+          return;
         }
-        return;
-      }
-      if (!target.endsWith(EXTENSION)) {
+      } else if (!target.endsWith(EXTENSION)) {
         fault(at, `links to "${token.href}", which is not a .md page`);
+        return;
       } else if (!context.pages.has(target)) {
         fault(
           at,
           `links to "${token.href}", which is not a page in this package`
         );
-      } else if (
+        return;
+      }
+      // The loader rewrites the destination where it is written, for an image
+      // as for a link, so one it cannot find as written is refused.
+      if (
         matched.indexOf(
           token.href,
           matched.indexOf(token.kind === 'def' ? ']:' : '](')

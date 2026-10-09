@@ -101,26 +101,42 @@ const isFence = (line) => /^\s*(```|~~~)/.test(line);
  * The document with every HTML comment outside a fence taken out, and the run
  * of blank lines it leaves folded to one. Fenced lines are passed through
  * untouched.
+ *
+ * A comment is taken out by the line, so a line that carries text after the
+ * `-->` closing it throws rather than losing that text along with it.
  * @param {string} markdown
+ * @param {string} [source] what the document is, for the error
  * @returns {string}
  */
-export const withoutComments = (markdown) => {
+export const withoutComments = (markdown, source = 'the document') => {
   /** @type {string[]} */
   const kept = [];
   let fenced = false;
   let comment = false;
-  for (const line of markdown.split('\n')) {
+  /** @param {string} line @param {number} index */
+  const closes = (line, index) => {
+    const end = line.indexOf('-->');
+    if (end === -1) return false;
+    const after = line.slice(end + '-->'.length).trim();
+    if (after !== '') {
+      throw new Error(
+        `${source} line ${index + 1} has text after the comment that ends on it, "${after}", which would be dropped with the comment. Put that text on a line of its own.`
+      );
+    }
+    return true;
+  };
+  for (const [index, line] of markdown.split('\n').entries()) {
     if (!comment && isFence(line)) fenced = !fenced;
     if (fenced) {
       kept.push(line);
       continue;
     }
     if (comment) {
-      if (line.includes('-->')) comment = false;
+      if (closes(line, index)) comment = false;
       continue;
     }
     if (/^\s*<!--/.test(line)) {
-      comment = !line.includes('-->');
+      comment = !closes(line, index);
       continue;
     }
     if (line.trim() === '' && kept.at(-1)?.trim() === '') continue;
@@ -139,20 +155,37 @@ const withoutTitle = (markdown) => markdown.replace(/^# .+\n+/, '');
 
 /**
  * The page's file, from `title`, `description` and a body.
+ *
+ * deck.cool reads frontmatter with Pagedeck's subset parser, which takes the
+ * outer quotes off a value and unescapes nothing. So a value is written only
+ * where `JSON.stringify` has nothing to escape in it -- no `"`, no `\`, no
+ * control character -- and the two readers agree on what it says.
+ * @param {string} file
  * @param {string} title
  * @param {string} description
  * @param {string} body
  */
-const page = (title, description, body) =>
-  [
+export const pageFile = (file, title, description, body) => {
+  for (const [field, value] of /** @type {const} */ ([
+    ['title', title],
+    ['description', description]
+  ])) {
+    if (JSON.stringify(value) !== `"${value}"`) {
+      throw new Error(
+        `${file}: its ${field} holds a " or a \\ (or a control character), which Pagedeck's frontmatter parser reads back as written rather than unescaped: ${JSON.stringify(value)}. Reword it without them.`
+      );
+    }
+  }
+  return [
     '---',
-    `title: ${JSON.stringify(title)}`,
-    `description: ${JSON.stringify(description)}`,
+    `title: "${title}"`,
+    `description: "${description}"`,
     '---',
     '',
     body.trim(),
     ''
   ].join('\n');
+};
 
 /**
  * The path from `from`'s directory to `to`, both package paths, written the
@@ -380,7 +413,12 @@ export const docsPackage = (root) => {
   const add = (file, title, description, body) => {
     files.set(
       file,
-      page(title, description, rewriteLinks(body, siteLinks(file, pages)))
+      pageFile(
+        file,
+        title,
+        description,
+        rewriteLinks(body, siteLinks(file, pages))
+      )
     );
   };
 
@@ -406,7 +444,7 @@ export const docsPackage = (root) => {
     // relative to the package becomes the file on GitHub, because the package
     // directory is not what this publishes.
     const body = rewriteLinks(
-      withoutTitle(withoutComments(readme)),
+      withoutTitle(withoutComments(readme, `packages/${pkg.dir}/README.md`)),
       (target) => {
         if (target.startsWith(blob)) {
           const other = /^packages\/([^/]+)\/README\.md(#.+)?$/.exec(
@@ -450,7 +488,9 @@ export const docsPackage = (root) => {
   // ---- guides ----------------------------------------------------------
 
   for (const guide of guides) {
-    const body = withoutTitle(withoutComments(guide.markdown));
+    const body = withoutTitle(
+      withoutComments(guide.markdown, `${guide.file}, as composed,`)
+    );
     add(
       pagePaths.guide(guide.slug),
       guide.title,
@@ -467,7 +507,8 @@ export const docsPackage = (root) => {
       withoutComments(
         // The anchors `comparisonDocument` puts above each of its three parts,
         // raw HTML the contract refuses. Each part's own heading follows it.
-        comparison.markdown.replace(/^<a id="[a-z-]+"><\/a>$/gm, '')
+        comparison.markdown.replace(/^<a id="[a-z-]+"><\/a>$/gm, ''),
+        'The comparison guide'
       )
     )
   );
@@ -488,7 +529,9 @@ export const docsPackage = (root) => {
         {
           title: comparison.title,
           file: pagePaths.comparison,
-          sections: sectionHeadings(withoutComments(comparison.markdown))
+          sections: sectionHeadings(
+            withoutComments(comparison.markdown, 'The comparison guide')
+          )
         }
       ].flatMap(({ title, file, sections }) => [
         `## [${title}](${relativePage(pagePaths.guidesIndex, file)})`,
@@ -528,7 +571,10 @@ export const docsPackage = (root) => {
       [
         `${links.length === 1 ? 'Package' : 'Packages'}: ${links.join(', ')}.`,
         '',
-        withoutComments(provider.markdown)
+        withoutComments(
+          provider.markdown,
+          `The ${provider.title} page of ${PROVIDER_SETUP_DOC}`
+        )
       ].join('\n')
     );
   }

@@ -6,7 +6,13 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath, URL } from 'node:url';
 import { contractFaults } from './docs-contract.mjs';
-import { DEMOS, DOCS_DIR, docsPackageDrift } from './docs-package.mjs';
+import {
+  DEMOS,
+  DOCS_DIR,
+  docsPackageDrift,
+  pageFile,
+  withoutComments
+} from './docs-package.mjs';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
@@ -177,6 +183,95 @@ test('nav.json must exist and be a list of groups', (t) => {
   assert.match(
     faults(tree(t, { 'nav.json': '{}', 'a.md': page('A') })).join('\n'),
     /nav\.json:1 is not a list of groups/
+  );
+});
+
+// Pagedeck reads frontmatter with a subset parser that strips a value's outer
+// quotes and unescapes nothing, so a `"` or `\` would reach deck.cool's page
+// either as written or as an escape sequence the author never meant.
+test('a title or description may hold no " and no \\', (t) => {
+  const root = tree(t, {
+    'nav.json': nav('a.md', 'b.md'),
+    'a.md': '---\ntitle: "Say \\"hi\\""\ndescription: About a.\n---\n\nText.\n',
+    'b.md': '---\ntitle: B\ndescription: C:\\path\n---\n\nText.\n'
+  });
+  const found = faults(root);
+  assert.equal(found.length, 2, found.join('\n'));
+  assert.match(found[0] ?? '', /^a\.md:2 .*"title" holds/);
+  assert.match(found[1] ?? '', /^b\.md:3 .*"description" holds/);
+});
+
+test('frontmatter is read as Pagedeck reads it: outer quotes stripped, nothing else', (t) => {
+  const root = tree(t, {
+    'nav.json': nav('a.md'),
+    'a.md':
+      "---\ntitle: 'Quoted: with a colon'\ndescription: plain, no quotes\n---\n\nText.\n"
+  });
+  assert.deepEqual(faults(root), []);
+});
+
+// The rewrite deck.cool's loader makes in the markdown needs the destination
+// as written, for an image as for a link.
+test('an image whose path is written with escapes is refused', (t) => {
+  const root = tree(t, {
+    'nav.json': nav('a.md'),
+    'a.md': page('A', '![grid](assets/a\\_b.png)\n'),
+    'assets/a_b.png': 'png'
+  });
+  const found = faults(root);
+  assert.equal(found.length, 1, found.join('\n'));
+  assert.match(
+    found[0] ?? '',
+    /"assets\/a_b\.png" in a form the loader cannot rewrite/
+  );
+});
+
+test('withoutComments drops comment lines and keeps fences as they are', () => {
+  assert.equal(
+    withoutComments(
+      [
+        'One.',
+        '',
+        '<!-- example:a -->',
+        '',
+        '```html',
+        '<!-- kept -->',
+        '```',
+        '',
+        '<!--',
+        '  several lines',
+        '-->',
+        '',
+        'Two.'
+      ].join('\n')
+    ),
+    ['One.', '', '```html', '<!-- kept -->', '```', '', 'Two.'].join('\n')
+  );
+});
+
+test('withoutComments refuses text after a comment on its line', () => {
+  assert.throws(
+    () => withoutComments('One.\n\n<!-- note --> Two.\n'),
+    /line 3 .*text after the comment/
+  );
+  assert.throws(
+    () => withoutComments('<!--\nnote\n--> Two.\n'),
+    /line 3 .*text after the comment/
+  );
+});
+
+test('the generator refuses a title or description holding " or \\', () => {
+  assert.throws(
+    () => pageFile('guides/a.md', 'A "quoted" title', 'Fine.', 'Body.'),
+    /guides\/a\.md: its title holds/
+  );
+  assert.throws(
+    () => pageFile('guides/a.md', 'Fine', 'A C:\\path.', 'Body.'),
+    /guides\/a\.md: its description holds/
+  );
+  assert.match(
+    pageFile('guides/a.md', 'A', 'B.', 'Body.'),
+    /^---\ntitle: "A"\ndescription: "B\."\n---\n\nBody\.\n$/
   );
 });
 
