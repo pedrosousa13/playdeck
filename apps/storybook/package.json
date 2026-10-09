@@ -17,17 +17,17 @@
     "@playdeck/core": "workspace:*",
     "@playdeck/provider-hls": "workspace:*",
     "@playdeck/provider-native": "workspace:*",
-    "@storybook/addon-a11y": "10.6.0",
-    "@storybook/addon-docs": "10.6.0",
-    "@storybook/addon-vitest": "10.6.0",
-    "@storybook/react-vite": "10.6.0",
+    "@storybook/addon-a11y": "10.6.1",
+    "@storybook/addon-docs": "10.6.1",
+    "@storybook/addon-vitest": "10.6.1",
+    "@storybook/react-vite": "10.6.1",
     "@vitest/browser": "4.1.11",
     "@vitest/browser-playwright": "4.1.11",
     "hls.js": "1.7.3",
     "playwright": "1.63.0",
     "remark-gfm": "4.0.1",
-    "storybook": "10.6.0",
-    "vite": "8.3.1",
+    "storybook": "10.6.1",
+    "vite": "8.3.3",
     "vitest": "4.1.11"
   }
 }
