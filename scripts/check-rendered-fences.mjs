@@ -92,7 +92,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, URL } from 'node:url';
-import { publishablePackages } from './workspace-packages.mjs';
+import { codePackages } from './workspace-packages.mjs';
 
 const console = globalThis.console;
 
@@ -133,7 +133,7 @@ const GUIDE_SOURCES = [
 
 /**
  * Every markdown/MDX document this script reads fences out of, except the
- * package READMEs — those come from `publishablePackages`, below, which is
+ * package READMEs — those come from `codePackages`, below, which is
  * also `src/reference-packages.mjs`'s own source of "which packages get a
  * page" and so cannot drift from it the way a second hand-kept list could.
  * @type {readonly string[]}
@@ -423,7 +423,7 @@ const main = async () => {
     const text = await readFile(join(repoRoot, doc), 'utf8');
     for (const body of fencedBodies(text)) markdownCorpus.add(body);
   }
-  for (const pkg of publishablePackages(repoRoot)) {
+  for (const pkg of codePackages(repoRoot)) {
     const text = await readFile(join(pkg.path, 'README.md'), 'utf8');
     for (const body of fencedBodies(text)) markdownCorpus.add(body);
   }

@@ -50,6 +50,31 @@ export const publishablePackages = (repoRoot) =>
   selectPublishable(workspaceProjects(repoRoot));
 
 /**
+ * The one publishable package that ships no code: `packages/docs`, the
+ * markdown deck.cool's site builds playdeck's pages from. It is published and
+ * tagged with the rest, so `publishablePackages` holds it, but the gates that
+ * pack, resolve, import or render a package's code and README have nothing in
+ * it to check. Those ask `codePackages` instead.
+ */
+export const DOCS_PACKAGE = '@playdeck/docs';
+
+/**
+ * The packages of a publishable set that ship code: every one but
+ * `DOCS_PACKAGE`.
+ * @param {PublishablePackage[]} packages
+ * @returns {PublishablePackage[]}
+ */
+export const selectCodePackages = (packages) =>
+  packages.filter((pkg) => pkg.name !== DOCS_PACKAGE);
+
+/**
+ * The publishable packages that ship code: every one but `DOCS_PACKAGE`.
+ * @param {string} repoRoot
+ */
+export const codePackages = (repoRoot) =>
+  selectCodePackages(publishablePackages(repoRoot));
+
+/**
  * The publishable set of a tree that is not the working one -- `main`'s, in
  * the audit gate's boundary comparison (#373). The same discovery and the same
  * rule as above, deliberately: the comparison is only worth anything if both

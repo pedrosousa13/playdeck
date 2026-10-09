@@ -16,6 +16,10 @@
  * of where a package sits, and a private package under `packages/` is a shape
  * this repository has had before.
  *
+ * The one publishable package left out is `@playdeck/docs`, through
+ * `codePackages`: it ships these pages' own markdown and no README, so a
+ * reference page for it would be a page about the pages.
+ *
  * This is `.mjs` rather than `.ts`, and that is about what `tsc` can follow
  * from this project rather than a preference. It reaches two things the site's
  * `tsconfig.json` deliberately cannot see: a `.mjs` module belonging to the
@@ -29,7 +33,7 @@
 import { getCollection } from 'astro:content';
 import { readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { publishablePackages } from '../../../scripts/workspace-packages.mjs';
+import { codePackages } from '../../../scripts/workspace-packages.mjs';
 
 /**
  * A package with a reference page: what it is called, what the route is spelt
@@ -55,7 +59,7 @@ export const referencePackages = async () => {
     (await getCollection('reference')).map((entry) => [entry.id, entry])
   );
 
-  return publishablePackages(import.meta.env.PLAYDECK_REPO_ROOT)
+  return codePackages(import.meta.env.PLAYDECK_REPO_ROOT)
     .map((pkg) => {
       const dir = basename(pkg.path);
       const entry = readmes.get(dir);
@@ -99,4 +103,4 @@ export const referencePackages = async () => {
  * @returns {string[]}
  */
 export const referencePackageDirs = (repoRoot) =>
-  publishablePackages(repoRoot).map((pkg) => basename(pkg.path));
+  codePackages(repoRoot).map((pkg) => basename(pkg.path));
