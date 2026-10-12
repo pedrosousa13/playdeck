@@ -255,7 +255,7 @@ jobs:
       #
       # On both flags:
       #
-      # `--access public`: required, not habitual. All seven names are new to
+      # `--access public`: required, not habitual. All eight names are new to
       # the registry, and libnpmpublish refuses provenance for a package it
       # cannot see as public -- "Can't generate provenance for new or private
       # package, you must set `access` to public."
@@ -265,7 +265,7 @@ jobs:
       # under `-r` pnpm forwards only `--tag`, `--registry`, `--access`,
       # `--dry-run`, `--force` and `--otp` to the `npm publish` it spawns per
       # package, so this flag does not reach npm. What actually turns provenance
-      # on is `publishConfig.provenance: true` in each of the seven manifests,
+      # on is `publishConfig.provenance: true` in each of the eight manifests,
       # which npm reads back out of the packed tarball. The flag is kept because
       # it is correct and becomes load-bearing the day a manifest loses that
       # field -- but do not read its presence as proof provenance is on.
@@ -274,16 +274,16 @@ jobs:
       # pnpm's publish-branch check rejects.
       #
       # `-r`: publishes every workspace package that is not `private` and whose
-      # exact version is not already on the registry. The seven come out of the
+      # exact version is not already on the registry. The eight come out of the
       # manifests; nothing here names them.
       #
       # Neither step carries a registry credential any more. Authentication is
       # trusted publishing over OIDC: npm exchanges the `id-token` granted above
       # for a short-lived registry token at publish time, against the trusted
-      # publisher configured on each of the seven packages
+      # publisher configured on each of the eight packages
       # (`pedrosousa13` / `playdeck` / `release.yml`, no environment).
       #
-      # An eighth, `@playdeck/docs`, is published by this same step and needs
+      # A ninth, `@playdeck/docs`, is published by this same step and needs
       # the same trusted publisher before its first release. npm sets one up in
       # a package's settings, so a name that is not on the registry yet has no
       # settings to set it in. So `@playdeck/docs` is published once by hand,

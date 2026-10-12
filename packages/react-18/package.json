@@ -50,6 +50,7 @@
     "./docked.css": "./docked.css"
   },
   "files": [
+    "CHANGELOG.md",
     "dist",
     "!dist/**/*.d.ts.map",
     "!dist/.tsbuildinfo*",
