@@ -1,8 +1,11 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "composite": true,
     "noEmit": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
+  "references": [{ "path": "../react" }],
   "include": ["src"]
 }

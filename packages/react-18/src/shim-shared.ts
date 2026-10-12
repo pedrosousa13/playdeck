@@ -14,7 +14,11 @@
 // only `react/jsx-runtime` would silently miss this one element -- the one
 // element carrying the merged ref callback (`mediaRef`) that most needs the
 // wrapping below.
-import { forwardRef, type ForwardRefExoticComponent } from 'react';
+import {
+  forwardRef,
+  type ForwardRefExoticComponent,
+  type ReactNode
+} from 'react';
 
 type RefCallback = (node: unknown) => (() => void) | void;
 
@@ -110,8 +114,9 @@ const getRefForwardingWrapper = (
   // `createElement` -- so every hook it calls attaches to the one fiber
   // React created for this `forwardRef` component, exactly as if `type` had
   // been written with `forwardRef` from the start.
-  const wrapper = forwardRef((props: Record<string, unknown>, ref: unknown) =>
-    type({ ...props, ref })
+  const wrapper = forwardRef(
+    (props: Record<string, unknown>, ref: unknown) =>
+      type({ ...props, ref }) as ReactNode
   ) as ForwardRefExoticComponent<unknown>;
   (wrapper as { displayName?: string }).displayName =
     (type as { displayName?: string }).displayName || type.name || undefined;

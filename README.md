@@ -78,7 +78,7 @@ initial graph.
 
 ## React 18
 
-[`@playdeck/react-18`](https://www.npmjs.com/package/@playdeck/react-18) is
+[`@playdeck/react-18`](packages/react-18) is
 the same primitives, built at build time from the same source, for a React 18
 project: `react` and `react-dom` at `>=18.3 <19`. It has the same exports and
 types as `@playdeck/react`, and is released in lockstep with it — same

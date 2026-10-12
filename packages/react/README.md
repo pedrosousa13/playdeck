@@ -988,20 +988,20 @@ feature fails the build rather than silently moving this number.
 
 ## React 18
 
-[`@playdeck/react-18`](https://www.npmjs.com/package/@playdeck/react-18) is
+`@playdeck/react-18` is
 this package built for React 18 instead of React 19: a peer dependency range
 of `>=18.3 <19` for `react` and `react-dom`, the same exports and the same
 types as `@playdeck/react`, built at build time from the same source — there
 is no fork to drift out of sync. It has no `./browser` entry, because that
 entry bundles its own React for a script-tag consumer, and a React 18 project
 already has one to point at. A JSX-runtime shim and `forwardRef` wrapping of
-every exported component give it this package's React 19 ref-as-prop and
-ref-cleanup behaviour on top of React 18.
+every exported component whose props accept a `ref` give it this package's
+React 19 ref-as-prop and ref-cleanup behaviour on top of React 18.
 
 It is released in lockstep with this package — the same version number,
 every time.
 
-Two differences reach a React 18 consumer:
+Four differences reach a React 18 consumer:
 
 - A consumer's own wrapper component that forwards a `ref` to a Playdeck
   primitive needs `forwardRef` under React 18, exactly as it would wrapping
@@ -1009,8 +1009,16 @@ Two differences reach a React 18 consumer:
 - `Player.Root`'s `warmUp` preconnect hints render as `<link rel="preconnect">`
   in place in the body, rather than hoisted into `<head>`. Browsers generally
   still act on a preconnect hint wherever it renders in the document.
-
-<!-- TODO react-18: confirm whether any other React 19 behaviour (Suspense, useId hydration, StrictMode effect timing, …) differs under @playdeck/react-18; none is currently known to. -->
+- `PosterImage`'s `fetchPriority` prop still reaches the DOM as the
+  `fetchpriority` attribute — React 18 has no built-in mapping for the
+  camelCase prop, so this package renames it internally before the element
+  reaches React. A consumer passing `fetchPriority` to `Player.PosterImage`
+  sees the same attribute either package produces.
+- Every export whose props accept a `ref` (`Player.Root`, `Player.SeekSlider`,
+  and the rest) is a `forwardRef` object at runtime under
+  `@playdeck/react-18`, where `@playdeck/react` exports the plain function.
+  `typeof Player.Root` and similar runtime introspection differ between the
+  two packages; which components a consumer can attach a `ref` to does not.
 
 Moving from React 18 to React 19 is a package swap: install `@playdeck/react`
 in place of `@playdeck/react-18` and update the import path. Nothing else

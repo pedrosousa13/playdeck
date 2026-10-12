@@ -81,6 +81,7 @@
   },
   "scripts": {
     "build": "node scripts/generate-entry.mjs && vite build && node scripts/copy-assets.mjs",
+    "generate-entry": "node scripts/generate-entry.mjs",
     "test": "vitest run --config vitest.config.ts"
   }
 }

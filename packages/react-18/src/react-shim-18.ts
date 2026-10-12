@@ -19,7 +19,29 @@
 // real `react` below, and never for any other importer (this package's own
 // `entry.tsx`, or a test file), which need no `createElement` wrapping and
 // get the real `react` directly.
-export * from 'react';
+//
+// Named re-exports rather than `export * from 'react'`: `@types/react`
+// declares itself with `export = React`, which TypeScript refuses to combine
+// with a wildcard re-export (TS2498). The list below is exactly the value
+// names `../react/src` imports from `'react'` anywhere in that directory
+// (`createElement` excepted, wrapped below) -- re-checked by hand against
+// `../react/src`'s own imports whenever one is added, since nothing here
+// derives it automatically the way `generate-entry.mjs` derives its export
+// list.
+export {
+  createContext,
+  isValidElement,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore
+} from 'react';
 import { createElement as realCreateElement } from 'react';
 import { transform } from './shim-shared.js';
 

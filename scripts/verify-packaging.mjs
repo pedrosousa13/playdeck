@@ -254,6 +254,23 @@ const tarballProblems = (tarball, version) => {
 };
 
 async function main() {
+  /** @type {string[]} */
+  const failures = [];
+
+  // 0. `packages/react-18/src/entry.tsx` is committed rather than gitignored
+  // -- `pnpm typecheck` runs before `pnpm build` in both CI and
+  // scripts/verify.mjs, and a file the build only generates would not exist
+  // yet for that step to check. Checked here, before step 2 rebuilds it
+  // fresh and would otherwise mask a stale commit.
+  console.log('\n--- generated entry: @playdeck/react-18 ---');
+  if (
+    !tryRun('node', ['packages/react-18/scripts/generate-entry.mjs', '--check'])
+  ) {
+    failures.push(
+      'packages/react-18/src/entry.tsx is out of date -- run `pnpm --filter @playdeck/react-18 generate-entry`'
+    );
+  }
+
   // 1. Discover every publishable (non-private) workspace package that ships
   // code. `@playdeck/docs` ships markdown only, and its own gate is
   // scripts/docs-package.test.mjs.
@@ -267,8 +284,6 @@ async function main() {
   const tarballDir = mkdtempSync(
     join(tmpdir(), 'playdeck-packaging-tarballs-')
   );
-  /** @type {string[]} */
-  const failures = [];
 
   try {
     // 2. Build and pack each package.

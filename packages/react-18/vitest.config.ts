@@ -122,6 +122,20 @@ export default defineConfig({
       {
         find: /^\.\.\/src\/index$/,
         replacement: ENTRY_PATH
+      },
+      // `icons.test.tsx` imports a handful of icons directly from
+      // `'../src/icons'` and asserts each is the SAME object `Player`
+      // re-exports (`expect(Player.SettingsIcon).toBe(SettingsIcon)`).
+      // `entry.tsx` wraps every ref-accepting export, icons included, in its
+      // own `forwardRef` object -- a different object from the one
+      // `'../src/icons'` would otherwise answer with -- so that assertion
+      // only holds here if both imports resolve to the one module. Redirecting
+      // this specifier to the same entry rather than excluding the test or
+      // leaving icons unwrapped keeps every exported icon able to take a
+      // `ref` under React 18 exactly like every other wrapped export.
+      {
+        find: /^\.\.\/src\/icons$/,
+        replacement: ENTRY_PATH
       }
     ]
   },
