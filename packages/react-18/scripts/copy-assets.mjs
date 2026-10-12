@@ -1,5 +1,5 @@
 // Runs after `vite build` as the last build-time step. It ships two things
-// this spike never asks `tsc` to produce for @playdeck/react-18 itself:
+// this package never asks `tsc` to produce for itself:
 //
 // - The `.d.ts` files: @playdeck/react's own declaration output is already
 //   the correct public type surface for this package too, since
@@ -18,7 +18,9 @@
 //   the wrong file once sitting beside a different package's `dist`.
 //
 // - `theme.css` and `docked.css`: @playdeck/react's own copies, unchanged --
-//   nothing about either file is React-version-specific.
+//   nothing about either file is React-version-specific. The copies this
+//   writes are gitignored build output, not committed source: committing
+//   them would let a copy go stale whenever @playdeck/react's CSS changes.
 import { copyFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import console from 'node:console';

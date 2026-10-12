@@ -8,6 +8,12 @@ dist/
 # `apps/site`'s `build:based`. `e2e/site-search.spec.ts` searches it to prove
 # the base path is derived rather than written down; it ships nowhere.
 apps/site/dist-base/
+# @playdeck/react-18's own copies of @playdeck/react's theme.css and
+# docked.css, written by packages/react-18/scripts/copy-assets.mjs on every
+# build -- never committed, for the same reason as the rest of this file:
+# a copy in the tree goes stale whenever @playdeck/react's CSS changes.
+packages/react-18/theme.css
+packages/react-18/docked.css
 .worktrees/
 storybook-static/
 # Astro's generated ambient types, written by `astro sync` and by every build.
