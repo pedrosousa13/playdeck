@@ -590,8 +590,8 @@ jobs:
           browser: chromium
       # `pnpm build` is `turbo run build`, which includes `@playdeck/site`:
       # its `build` script runs `scripts/media-sprite-fright.mjs` before
-      # `astro build`, the same as `site` and `deploy-site.yml`. Same
-      # defensive `ffmpeg` check, same cache, keyed the same way.
+      # `astro build`, the same as `site`. Same defensive `ffmpeg` check,
+      # same cache, keyed the same way.
       - uses: ./.github/actions/sprite-fright-media
       # Builds every package once via the Turborepo cache; test:packages,
       # test:bundle and test:integrations below rebuild the same package set
@@ -874,10 +874,8 @@ jobs:
   # pulls in the packages the site cannot be built without: the landing page
   # imports `@playdeck/react` through its published entry and measures every
   # built bundle for the figures it prints, so a site build against an unbuilt
-  # tree fails on the measurement. `deploy-site.yml` builds the same two halves
-  # in the same order and spells them as two `pnpm --filter` commands, which
-  # `scripts/check-deploy-artifact.mjs` mirrors exactly so that what the check
-  # assembles is what the deploy would.
+  # tree fails on the measurement. `scripts/check-deploy-artifact.mjs` builds
+  # the same two halves in the same order, as two `pnpm --filter` commands.
   #
   # Nor does anything here drive a browser over the site, and that is not a gap
   # either: the `site-*` specs do, in the `e2e` matrix above, whose
@@ -903,9 +901,9 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # As in `deploy-site.yml`: `apps/site/package.json`'s `build` runs
+      # As in `package`: `apps/site/package.json`'s `build` runs
       # `scripts/media-sprite-fright.mjs` before `astro build`, so this job
-      # builds the same self-hosted clip that job deploys. Same defensive
+      # builds the self-hosted clip the site serves. Same defensive
       # `ffmpeg` check, same cache, keyed the same way, so a pull request that
       # touches neither the script nor the source film pays for neither the
       # download nor the encode.

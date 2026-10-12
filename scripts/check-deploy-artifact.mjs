@@ -208,8 +208,8 @@ export const evaluateHeaders = (text) => {
 };
 
 /**
- * Serves the assembled artifact at the origin root, which is what the Worker
- * does with the directory `wrangler.jsonc` names. The 404 is load-bearing
+ * Serves the assembled artifact at the origin root, as an assets-only
+ * Cloudflare Worker does. The 404 is load-bearing
  * rather than incidental: `not_found_handling` is `"none"` precisely so a miss
  * stays a miss, and a server that fell back to the artifact's own index would
  * answer exactly the requests this check exists to catch with a 200.
@@ -309,7 +309,7 @@ const recordFailures = (page, failures, name) => {
  * `apps/site/public/_headers`, read straight off the artifact directory
  * rather than through `origin`: `serveArtifact` above answers a request with
  * whatever `_redirects` says and the file on disk, and applies no header —
- * unlike the Worker `wrangler.jsonc` names, which reads `_headers` itself and
+ * unlike an assets-only Cloudflare Worker, which reads `_headers` itself and
  * needs no code here to do it. So a check of what a response over `origin`
  * carries would prove nothing about the header, only about this harness's own
  * server. What is checked instead, with `evaluateHeaders` above, is what the
@@ -441,8 +441,7 @@ const checkSite = async (browser, origin, failures) => {
 async function main() {
   const shouldBuild = !process.argv.includes('--no-build');
   if (shouldBuild) {
-    // The site is built the way `.github/workflows/deploy-site.yml` builds it.
-    // Nothing has to be stripped from the environment to make that true: the
+    // Nothing has to be stripped from the environment to build the site: the
     // site's prefix is the literal `base: '/'` in `apps/site/astro.config.ts`,
     // and no part of the site build reads an environment variable to find it.
     //
@@ -451,9 +450,8 @@ async function main() {
     // `pnpm test:budgets` reports, measured at build time from the module that
     // script measures with, and that module reads build output. Building them here is
     // what makes `pnpm test:deploy` prove the tree under test rather than
-    // whichever `dist/` happened to be lying around. `deploy-site.yml` runs the
-    // same filter for the same reason, and `pnpm run` resolves it
-    // topologically, so a package is built after the packages it depends on.
+    // whichever `dist/` happened to be lying around. `pnpm run` resolves the
+    // filter topologically, so a package is built after the packages it depends on.
     console.log('--- Building the packages the site measures ---');
     execFileSync('pnpm', ['--filter', './packages/*', 'build'], {
       cwd: repoRoot,

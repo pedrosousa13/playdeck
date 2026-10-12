@@ -1,5 +1,12 @@
 # Publishing runs from a configuration this repository commits, onto an apex domain
 
+_Superseded: as of 2026-10-12 the site is published from
+[pedrosousa13/deck-cool](https://github.com/pedrosousa13/deck-cool) at
+`play.deck.cool`, and `playdeck.video` redirects there
+([deck-cool#65](https://github.com/pedrosousa13/deck-cool/issues/65)). This
+repository deploys nothing: `deploy-site.yml` and `wrangler.jsonc` are
+deleted._
+
 _Superseded in part by
 [ADR-0007](0007-the-deployed-artifact-is-the-site-alone.md), which removed the
 Storybook workbench from the deployment. What still holds is where and how

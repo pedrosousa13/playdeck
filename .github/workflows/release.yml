@@ -131,7 +131,7 @@ jobs:
       # `apps/site`'s build runs `scripts/media-sprite-fright.mjs` before
       # `astro build`, which needs `ffmpeg` on the runner, and `pnpm build`
       # builds the whole workspace rather than only the publishable packages.
-      # `ci.yml` and `deploy-site.yml` both carry this line already; this
+      # `ci.yml` carries this check already; this
       # workflow did not, and the 1.1.0 release failed here when the
       # `ubuntu-latest` image stopped shipping `ffmpeg`.
       - run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
@@ -236,7 +236,7 @@ jobs:
       # `apps/site`'s build runs `scripts/media-sprite-fright.mjs` before
       # `astro build`, which needs `ffmpeg` on the runner, and `pnpm build`
       # builds the whole workspace rather than only the publishable packages.
-      # `ci.yml` and `deploy-site.yml` both carry this line already; this
+      # `ci.yml` carries this check already; this
       # workflow did not, and the 1.1.0 release failed here when the
       # `ubuntu-latest` image stopped shipping `ffmpeg`.
       - run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)

@@ -1,5 +1,12 @@
 # The deployed artifact is the site alone
 
+_Superseded: as of 2026-10-12 the site is published from
+[pedrosousa13/deck-cool](https://github.com/pedrosousa13/deck-cool) at
+`play.deck.cool`, and `playdeck.video` redirects there
+([deck-cool#65](https://github.com/pedrosousa13/deck-cool/issues/65)). This
+repository deploys nothing: `deploy-site.yml` and `wrangler.jsonc` are
+deleted._
+
 Supersedes [ADR-0006](0006-publishing-is-a-committed-configuration-on-an-apex-domain.md)
 on what is deployed. Everything else that ADR decided stands: publishing is a
 Cloudflare Worker serving static assets, driven from a workflow against a

@@ -1,12 +1,11 @@
 // Composes the one deployed artifact out of the one build behind it: the Astro
 // site, at the root of `playdeck.video` and alone in it. Until #534 the
 // Storybook workbench was copied in under `storybook/` as well; it is a
-// development tool for this repository now and nothing publishes it. The
-// directory this writes is what `wrangler.jsonc` publishes as its assets, so
-// what lands here is the URL space of the domain.
+// development tool for this repository now and nothing publishes it. What
+// lands in the directory this writes is the URL space of the domain.
 //
-// A script rather than a `cp` line inline in
-// `.github/workflows/deploy-site.yml`, because the verification harness
+// A script rather than a `cp` line inline in a deploy workflow, because the
+// verification harness
 // assembles the same artifact in order to prove it loads where it is served
 // from. Two copies of the composition would drift, and the drift would be
 // silent: the harness would go green against a shape the deploy no longer

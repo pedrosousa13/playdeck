@@ -1,6 +1,5 @@
 # Cloudflare Workers static assets read this the same way it reads
-# `_redirects` beside it — no Worker script needed, since `wrangler.jsonc`
-# publishes this build as an assets-only Worker.
+# `_redirects` beside it, with no Worker script needed.
 #
 # No `script-src` or `default-src` here (#758's ruling: the cheap headers, no
 # CSP). This site loads a third-party analytics script from
