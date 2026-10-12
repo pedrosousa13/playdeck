@@ -18,10 +18,11 @@ pnpm add @playdeck/react
 ```
 
 React 19 is a peer dependency, and only React 19 — the range is `>=19 <20`, so
-a React 18 or React 20 project cannot install this package. Provider packages
-are pulled in as dependencies but loaded lazily — a consumer playing only MP4
-ships no YouTube, Vimeo, Wistia or hls.js code in its initial graph, and makes
-no provider network requests.
+a React 20 project cannot install this package. A React 18 project installs
+[`@playdeck/react-18`](#react-18) instead. Provider packages are pulled in as
+dependencies but loaded lazily — a consumer playing only MP4 ships no
+YouTube, Vimeo, Wistia or hls.js code in its initial graph, and makes no
+provider network requests.
 
 This package's entry carries a `'use client'` directive, so a React Server
 Component can import these primitives and render them directly, with no wrapper
@@ -963,6 +964,34 @@ requirement, so a headless consumer is bound only by the JavaScript floor.
 
 `test/theme.test.ts` freezes the stylesheet's CSS feature inventory, so a newer
 feature fails the build rather than silently moving this number.
+
+## React 18
+
+[`@playdeck/react-18`](https://www.npmjs.com/package/@playdeck/react-18) is
+this package built for React 18 instead of React 19: a peer dependency range
+of `>=18.3 <19` for `react` and `react-dom`, the same exports and the same
+types as `@playdeck/react`, built at build time from the same source — there
+is no fork to drift out of sync. It has no `./browser` entry, because that
+entry bundles its own React for a script-tag consumer, and a React 18 project
+already has one to point at. A JSX-runtime shim and `forwardRef` wrapping of
+every exported component give it this package's React 19 ref-as-prop and
+ref-cleanup behaviour on top of React 18.
+
+It is released in lockstep with this package — the same version number,
+every time.
+
+Two differences reach a React 18 consumer:
+
+- A consumer's own wrapper component that forwards a `ref` to a Playdeck
+  primitive needs `forwardRef` under React 18, exactly as it would wrapping
+  any other React 18 component. React 19 needs no such wrapper.
+- `Player.Root`'s `warmUp` preconnect hints render as `<link rel="preconnect">`
+  in place in the body, rather than hoisted into `<head>`. Browsers generally
+  still act on a preconnect hint wherever it renders in the document.
+
+Moving from React 18 to React 19 is a package swap: install `@playdeck/react`
+in place of `@playdeck/react-18` and update the import path. Nothing else
+changes.
 
 ## No-build usage
 

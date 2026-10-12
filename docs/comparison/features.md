@@ -401,7 +401,7 @@ Measured 2026-10-03 against `tests/compare`'s pinned installs:
 
 [^168]: **Lazy / deferred provider loading — Video.js 10 (rc)**: no. Searched across the two of the six packages that ship the providers and playback engines, because that is what this axis asks about. Each media component is its own `@videojs/react/media/*` subpath a consumer imports statically, so a page pays only for the one it names, and none is deferred. Dynamic `import()` does appear elsewhere in the six: `@videojs/core`'s `dist/*/core/i18n/load-locale.js` defers 53 translation packs, which are locales rather than providers. mechanical check: no file of `@videojs/react` and `@videojs/media` matching `**/*.js` contains `import(`. Source: @videojs/react 10.0.0-rc.4, every `.js` file in node_modules/@videojs/react and node_modules/@videojs/media (installed packages)
 
-[^169]: **React version supported — Playdeck**: yes. `>=19 <20` -- React 19 only. mechanical check: `@playdeck/react`'s `package.json` declares `peerDependencies.react`. Source: packages/react/package.json
+[^169]: **React version supported — Playdeck**: yes. `@playdeck/react` is `>=19 <20`; `@playdeck/react-18`, the same primitives built from the same source for React 18, is `>=18.3 <19`. mechanical check: `@playdeck/react-18`'s `package.json` declares `peerDependencies.react`. Source: packages/react-18/package.json
 
 [^170]: **React version supported — react-player**: yes. `^17.0.2 || ^18 || ^19`. mechanical check: `react-player`'s `package.json` declares `peerDependencies.react`. Source: react-player 3.4.0, node_modules/react-player/package.json
 

@@ -832,7 +832,8 @@ deciding them:
 - **React version supported** is not a yes/no feature at all, and is recorded
   as `yes` for every library that declares any range, with the actual range
   carried in the cell's note rather than encoded in the status — the
-  differentiating fact (Playdeck: `>=19 <20`; react-player:
+  differentiating fact (Playdeck: `@playdeck/react` at `>=19 <20`, with
+  `@playdeck/react-18` covering `>=18.3 <19`; react-player:
   `^17.0.2 || ^18 || ^19`; `@vidstack/react`: `^18.0.0 || ^19.0.0`;
   `@videojs/react`: `^18.0.0 || ^19.0.0`; media-chrome: no declared range at
   all; `video.js` 8.24.0: no React integration to declare one for) is in the

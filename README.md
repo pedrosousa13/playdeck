@@ -15,7 +15,8 @@ Install `@playdeck/react`. It is the only package a consumer installs:
 pnpm add @playdeck/react
 ```
 
-`react` and `react-dom` are peer dependencies, at `>=19 <20`.
+`react` and `react-dom` are peer dependencies, at `>=19 <20`. A React 18
+project installs [`@playdeck/react-18`](#react-18) instead.
 
 <!-- example:quickstart -->
 
@@ -74,6 +75,15 @@ Only `@playdeck/react` needs installing: it depends on the rest and loads each
 provider lazily, once source detection says the active source needs it. A
 consumer playing MP4 ships no YouTube, Vimeo, Wistia or hls.js code in its
 initial graph.
+
+## React 18
+
+[`@playdeck/react-18`](https://www.npmjs.com/package/@playdeck/react-18) is
+the same primitives, built at build time from the same source, for a React 18
+project: `react` and `react-dom` at `>=18.3 <19`. It has the same exports and
+types as `@playdeck/react`, and is released in lockstep with it — same
+version number, every time. [`@playdeck/react`'s README](packages/react#react-18)
+covers the small behavioural differences and how to move to React 19 later.
 
 ## What a page actually downloads
 

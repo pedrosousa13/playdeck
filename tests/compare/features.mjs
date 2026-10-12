@@ -2162,11 +2162,11 @@ export const axes = [
         status: 'yes',
         anchor: {
           kind: 'package',
-          module: '@playdeck/react',
+          module: '@playdeck/react-18',
           field: 'peerDependencies.react'
         },
-        source: 'packages/react/package.json',
-        note: '`>=19 <20` -- React 19 only.'
+        source: 'packages/react-18/package.json',
+        note: '`@playdeck/react` is `>=19 <20`; `@playdeck/react-18`, the same primitives built from the same source for React 18, is `>=18.3 <19`.'
       },
       'react-player': {
         status: 'yes',
