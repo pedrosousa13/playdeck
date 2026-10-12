@@ -16,6 +16,7 @@
     "test:storybook": "pnpm --filter @playdeck/storybook test",
     "test:integrations": "turbo run build --filter=@playdeck/integration-next-image && pnpm --filter @playdeck/integration-next-image test:integration",
     "test:packages": "node scripts/verify-packaging.mjs",
+    "test:react-18": "pnpm --filter @playdeck/react-18 test",
     "test:deploy": "node scripts/check-deploy-artifact.mjs",
     "test:site-links": "node scripts/check-site-links.mjs",
     "test:site-analytics": "node scripts/check-site-analytics.mjs",
