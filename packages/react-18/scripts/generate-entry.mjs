@@ -12,7 +12,8 @@
 // PascalCase function export is fine, rather than special-casing the ~32
 // that actually declare a `ref`.
 import { readFileSync, writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, URL } from 'node:url';
+import console from 'node:console';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const sourceIndexPath = fileURLToPath(

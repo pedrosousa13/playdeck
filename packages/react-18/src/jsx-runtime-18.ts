@@ -13,11 +13,7 @@
 // cannot reach on its own: a JSX element that TypeScript compiles to
 // `React.createElement` instead of `jsx`/`jsxs` (see that file's header).
 // Both apply the same `transform` from `shim-shared.ts`.
-import {
-  jsx as realJsx,
-  jsxs as realJsxs,
-  Fragment
-} from 'react/jsx-runtime';
+import { jsx as realJsx, jsxs as realJsxs, Fragment } from 'react/jsx-runtime';
 import { jsxDEV as realJsxDEV } from 'react/jsx-dev-runtime';
 import { transform } from './shim-shared.js';
 

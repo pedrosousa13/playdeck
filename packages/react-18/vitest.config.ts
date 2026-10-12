@@ -34,9 +34,7 @@ const REACT_SHIM_PATH = fileURLToPath(
 // be classified rather than fixed -- pass here while still failing for a
 // real consumer, whose own app code compiles through their own, unshimmed
 // `react/jsx-runtime`.
-const REACT_SRC_DIR = fileURLToPath(
-  new URL('../react/src/', import.meta.url)
-);
+const REACT_SRC_DIR = fileURLToPath(new URL('../react/src/', import.meta.url));
 // Any real file inside this package, passed as the `importer` to
 // `this.resolve` below so Node's own upward node_modules walk starts here
 // -- inside packages/react-18, where this package's own devDependencies

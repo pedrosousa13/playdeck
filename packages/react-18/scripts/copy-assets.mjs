@@ -20,7 +20,8 @@
 // - `theme.css` and `docked.css`: @playdeck/react's own copies, unchanged --
 //   nothing about either file is React-version-specific.
 import { copyFileSync, mkdirSync, readdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, URL } from 'node:url';
+import console from 'node:console';
 
 const reactDist = fileURLToPath(new URL('../../react/dist/', import.meta.url));
 const ownDist = fileURLToPath(new URL('../dist/', import.meta.url));
@@ -30,13 +31,19 @@ const dtsFiles = readdirSync(reactDist).filter(
   (name) => name.endsWith('.d.ts') && name !== 'browser.d.ts'
 );
 for (const name of dtsFiles) {
-  copyFileSync(new URL(name, `file://${reactDist}`), new URL(name, `file://${ownDist}`));
+  copyFileSync(
+    new URL(name, `file://${reactDist}`),
+    new URL(name, `file://${ownDist}`)
+  );
 }
 
 const reactRoot = fileURLToPath(new URL('../../react/', import.meta.url));
 const ownRoot = fileURLToPath(new URL('../', import.meta.url));
 for (const name of ['theme.css', 'docked.css']) {
-  copyFileSync(new URL(name, `file://${reactRoot}`), new URL(name, `file://${ownRoot}`));
+  copyFileSync(
+    new URL(name, `file://${reactRoot}`),
+    new URL(name, `file://${ownRoot}`)
+  );
 }
 
 console.log(

@@ -30,10 +30,6 @@ export function createElement(
 ): unknown {
   const [nextType, nextProps] = transform(type, config);
   return (
-    realCreateElement as (
-      t: unknown,
-      p: unknown,
-      ...c: unknown[]
-    ) => unknown
+    realCreateElement as (t: unknown, p: unknown, ...c: unknown[]) => unknown
   )(nextType, nextProps, ...children);
 }

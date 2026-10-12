@@ -87,10 +87,8 @@ const isPlainFunctionComponent = (
   type: unknown
 ): type is (props: Record<string, unknown>) => unknown =>
   typeof type === 'function' &&
-  !(
-    (type as { prototype?: { isReactComponent?: unknown } }).prototype
-      ?.isReactComponent
-  );
+  !(type as { prototype?: { isReactComponent?: unknown } }).prototype
+    ?.isReactComponent;
 
 // Keyed by the original component function so the same component, rendered
 // many times (or re-rendered with new props), always gets back the same
@@ -146,7 +144,10 @@ const rewriteFetchPriority = (type: unknown, props: AnyProps): AnyProps => {
 // rather than patched, since there is no DOM API this shim can call to hoist
 // an element into `<head>` on React 18's behalf without reimplementing a slice
 // of React 19's metadata feature.
-export const transform = (type: unknown, props: unknown): [unknown, unknown] => {
+export const transform = (
+  type: unknown,
+  props: unknown
+): [unknown, unknown] => {
   if (props === null || typeof props !== 'object') return [type, props];
   let nextProps = props as AnyProps;
 
