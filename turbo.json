@@ -31,6 +31,28 @@
     // `apps/storybook/stories/*.mdx`, `packages/*/README.md` and
     // `packages/*/package.json` are all read through `join(repoRoot, ...)`
     // rather than imported, so those five stay a manual audit.
+    // react-18's build reads @playdeck/react directly -- `vite.config.ts`
+    // compiles `../react/src` under this package's own shims, and
+    // `scripts/copy-assets.mjs` copies @playdeck/react's `dist/*.d.ts`,
+    // `theme.css` and `docked.css` once @playdeck/react's own build has
+    // written them. That dependency is deliberately absent from
+    // package.json -- react-18 ships none of @playdeck/react's code, only a
+    // build-time source import -- so the default `^build` edge, which
+    // follows package.json dependencies, never orders the two builds.
+    // Without this entry turbo runs them in parallel and copy-assets can
+    // read `../react/dist` before @playdeck/react has written anything into
+    // it, copying zero `.d.ts` files.
+    //
+    // `@playdeck/react#build` is an explicit task edge, independent of the
+    // package.json graph, so this also fixes the cache: turbo folds an
+    // upstream task's hash into the tasks that depend on it, so a change to
+    // `packages/react/src`, `theme.css` or `docked.css` now invalidates
+    // react-18's cached build even though its own tracked files (`src/`
+    // holds only `entry.tsx`/`jsx-runtime-18.ts`/etc.) didn't change.
+    "@playdeck/react-18#build": {
+      "dependsOn": ["^build", "@playdeck/react#build"],
+      "outputs": ["dist/**", ".tsbuildinfo"]
+    },
     "@playdeck/site#build": {
       "dependsOn": ["^build"],
       "inputs": [

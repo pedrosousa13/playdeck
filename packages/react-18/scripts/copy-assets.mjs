@@ -32,6 +32,19 @@ mkdirSync(ownDist, { recursive: true });
 const dtsFiles = readdirSync(reactDist).filter(
   (name) => name.endsWith('.d.ts') && name !== 'browser.d.ts'
 );
+// A zero count means @playdeck/react's own build hasn't written its
+// declarations yet (or wrote none) -- copying silently and leaving this
+// package with no types is what let that reach CI undetected; see
+// turbo.json's `@playdeck/react-18#build` entry for the ordering this
+// depends on.
+if (dtsFiles.length === 0 || !dtsFiles.includes('index.d.ts')) {
+  throw new Error(
+    `copy-assets: found ${dtsFiles.length} .d.ts file(s) in ${reactDist} ` +
+      `(expected index.d.ts among them). @playdeck/react's build must run ` +
+      `and finish writing its declarations before this package's ` +
+      `copy-assets step runs.`
+  );
+}
 for (const name of dtsFiles) {
   copyFileSync(
     new URL(name, `file://${reactDist}`),
