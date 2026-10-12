@@ -600,6 +600,14 @@ jobs:
       # step produced, and `main`'s copies read it through the same paths this
       # pull request's copies do.
       - run: pnpm build
+      # `../react/test`'s own suite, run unmodified against @playdeck/react-18's
+      # generated entry instead of @playdeck/react/src/index.tsx -- the suite
+      # this pull request's packages/react-18/vitest.config.ts resolves
+      # @playdeck/core and the providers through their built `dist`, the way a
+      # real installed consumer would, so it has to run after `pnpm build`
+      # above rather than beside `pnpm test` in the `unit` job, which aliases
+      # straight to source and needs no build at all.
+      - run: pnpm test:react-18
       # `main`'s copies of the two gate scripts this job runs. The `audit` job
       # above carries the full argument for taking a gate's *source* from
       # `main`; this is that mechanism applied to the two scripts #337

@@ -259,6 +259,11 @@ export const STEPS = [
     invocation: { form: 'script', script: 'build' }
   },
   {
+    name: 'test:react-18',
+    command: ['pnpm', 'test:react-18'],
+    invocation: { form: 'script', script: 'test:react-18' }
+  },
+  {
     name: 'test:packages',
     command: ['pnpm', 'test:packages'],
     invocation: { form: 'script', script: 'test:packages' }

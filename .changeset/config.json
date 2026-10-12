@@ -6,6 +6,7 @@
     [
       "@playdeck/core",
       "@playdeck/react",
+      "@playdeck/react-18",
       "@playdeck/provider-native",
       "@playdeck/provider-hls",
       "@playdeck/provider-vimeo",

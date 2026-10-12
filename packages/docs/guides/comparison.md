@@ -5,7 +5,7 @@ description: "How Playdeck compares with other React video libraries: the measur
 
 ## React video library comparison: measured figures
 
-Measured 2026-10-03 on Node v22.23.2, Vite 8.3.1, esbuild
+Measured 2026-10-12 on Node v22.23.2, Vite 8.3.1, esbuild
 0.28.2, from `tests/compare`'s pinned installs. React, ReactDOM
 and the JSX runtime are marked external for every library alike and excluded
 from every figure below. "Gzipped (Vite)" and "Gzipped (esbuild)" are each the
@@ -60,7 +60,7 @@ under any of these libraries -- so that limit is written in the footnote
 instead, for every column alike. `docs/comparison/method.md`'s "Features"
 section has the full rule.
 
-Measured 2026-10-03 against `tests/compare`'s pinned installs:
+Measured 2026-10-12 against `tests/compare`'s pinned installs:
 `Playdeck` 1.3.0, `react-player` 3.4.0, `Vidstack` 1.15.6, `Media Chrome` 4.19.2, `Video.js` 8.24.1, `Video.js 10 (rc)` 10.0.0-rc.4.
 
 | Axis                                                | Playdeck      | react-player  | Vidstack      | Media Chrome  | Video.js     | Video.js 10 (rc) |
@@ -434,7 +434,7 @@ Measured 2026-10-03 against `tests/compare`'s pinned installs:
 
 [^168]: **Lazy / deferred provider loading — Video.js 10 (rc)**: no. Searched across the two of the six packages that ship the providers and playback engines, because that is what this axis asks about. Each media component is its own `@videojs/react/media/*` subpath a consumer imports statically, so a page pays only for the one it names, and none is deferred. Dynamic `import()` does appear elsewhere in the six: `@videojs/core`'s `dist/*/core/i18n/load-locale.js` defers 53 translation packs, which are locales rather than providers. mechanical check: no file of `@videojs/react` and `@videojs/media` matching `**/*.js` contains `import(`. Source: @videojs/react 10.0.0-rc.4, every `.js` file in node_modules/@videojs/react and node_modules/@videojs/media (installed packages)
 
-[^169]: **React version supported — Playdeck**: yes. `>=19 <20` -- React 19 only. mechanical check: `@playdeck/react`'s `package.json` declares `peerDependencies.react`. Source: packages/react/package.json
+[^169]: **React version supported — Playdeck**: yes. `@playdeck/react` is `>=19 <20`; `@playdeck/react-18`, the same primitives built from the same source for React 18, is `>=18.3 <19`. mechanical check: `@playdeck/react-18`'s `package.json` declares `peerDependencies.react`. Source: packages/react-18/package.json
 
 [^170]: **React version supported — react-player**: yes. `^17.0.2 || ^18 || ^19`. mechanical check: `react-player`'s `package.json` declares `peerDependencies.react`. Source: react-player 3.4.0, node_modules/react-player/package.json
 
@@ -1321,7 +1321,8 @@ deciding them:
 - **React version supported** is not a yes/no feature at all, and is recorded
   as `yes` for every library that declares any range, with the actual range
   carried in the cell's note rather than encoded in the status — the
-  differentiating fact (Playdeck: `>=19 <20`; react-player:
+  differentiating fact (Playdeck: `@playdeck/react` at `>=19 <20`, with
+  `@playdeck/react-18` covering `>=18.3 <19`; react-player:
   `^17.0.2 || ^18 || ^19`; `@vidstack/react`: `^18.0.0 || ^19.0.0`;
   `@videojs/react`: `^18.0.0 || ^19.0.0`; media-chrome: no declared range at
   all; `video.js` 8.24.0: no React integration to declare one for) is in the

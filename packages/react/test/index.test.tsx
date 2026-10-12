@@ -11,6 +11,7 @@ import {
 } from '@testing-library/react';
 import {
   createRef,
+  forwardRef,
   startTransition,
   StrictMode,
   Suspense,
@@ -91,8 +92,17 @@ beforeEach(() => {
 const controllerOf = (handle: Player.PlayerHandle | null): PlayerController =>
   (handle as unknown as InternalControllerAccess)[INTERNAL_CONTROLLER];
 
-const LegacyRoot = ({ loading = 'eager', ...props }: Player.RootProps) => (
-  <Player.Root {...props} loading={loading} />
+// A consumer's own wrapper around `Root`, written with `forwardRef` so the
+// `ref` this file's fixtures pass reaches `Root` the same way on both React
+// versions `Root` ships for: a plain function component here would never
+// receive a `ref` prop at all under React 18, which has no bearing on
+// whether `Root` itself forwards one correctly (`@playdeck/react-18`'s own
+// README names this as the one thing a consumer's own wrapper has to do
+// differently there).
+const LegacyRoot = forwardRef<Player.PlayerHandle, Player.RootProps>(
+  ({ loading = 'eager', ...props }, ref) => (
+    <Player.Root {...props} loading={loading} ref={ref} />
+  )
 );
 
 afterEach(() => {

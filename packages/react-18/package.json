@@ -1,0 +1,88 @@
+{
+  "name": "@playdeck/react-18",
+  "version": "1.3.0",
+  "description": "Headless, composable React 18 media player primitives with capability-aware providers (React 18 build of @playdeck/react, produced entirely at build time from its unchanged source).",
+  "keywords": [
+    "media",
+    "player",
+    "video",
+    "react",
+    "headless",
+    "hls",
+    "youtube",
+    "vimeo",
+    "accessibility"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/pedrosousa13/playdeck/tree/main/packages/react-18#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pedrosousa13/playdeck.git",
+    "directory": "packages/react-18"
+  },
+  "bugs": {
+    "url": "https://github.com/pedrosousa13/playdeck/issues"
+  },
+  "type": "module",
+  "sideEffects": [
+    "./esm-only.cjs",
+    "*.css"
+  ],
+  "browserslist": [
+    "chrome >= 99",
+    "edge >= 99",
+    "firefox >= 97",
+    "safari >= 15.4",
+    "ios_saf >= 15.4"
+  ],
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./esm-only.d.cts",
+        "default": "./esm-only.cjs"
+      }
+    },
+    "./theme.css": "./theme.css",
+    "./docked.css": "./docked.css"
+  },
+  "files": [
+    "CHANGELOG.md",
+    "dist",
+    "!dist/**/*.d.ts.map",
+    "!dist/.tsbuildinfo*",
+    "theme.css",
+    "docked.css",
+    "esm-only.cjs",
+    "esm-only.d.cts"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "@playdeck/core": "workspace:^",
+    "@playdeck/provider-hls": "workspace:^",
+    "@playdeck/provider-native": "workspace:^",
+    "@playdeck/provider-vimeo": "workspace:^",
+    "@playdeck/provider-wistia": "workspace:^",
+    "@playdeck/provider-youtube": "workspace:^"
+  },
+  "peerDependencies": {
+    "react": ">=18.3 <19",
+    "react-dom": ">=18.3 <19"
+  },
+  "devDependencies": {
+    "@testing-library/react": "16.3.3",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "scripts": {
+    "build": "node scripts/generate-entry.mjs && vite build && node scripts/copy-assets.mjs",
+    "generate-entry": "node scripts/generate-entry.mjs",
+    "test": "vitest run --config vitest.config.ts"
+  }
+}

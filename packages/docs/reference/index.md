@@ -16,3 +16,4 @@ Published under `@playdeck/`.
 - [`@playdeck/provider-wistia`](./provider-wistia.md) — Wistia player SDK provider for Playdeck.
 - [`@playdeck/provider-youtube`](./provider-youtube.md) — YouTube IFrame Player API provider for Playdeck.
 - [`@playdeck/react`](./react.md) — Headless, composable React 19 media player primitives with capability-aware providers.
+- [`@playdeck/react-18`](./react-18.md) — Headless, composable React 18 media player primitives with capability-aware providers (React 18 build of @playdeck/react, produced entirely at build time from its unchanged source).
