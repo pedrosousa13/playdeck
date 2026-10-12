@@ -5,7 +5,7 @@ description: "How Playdeck compares with other React video libraries: the measur
 
 ## React video library comparison: measured figures
 
-Measured 2026-10-03 on Node v22.23.2, Vite 8.3.1, esbuild
+Measured 2026-10-12 on Node v22.23.2, Vite 8.3.1, esbuild
 0.28.2, from `tests/compare`'s pinned installs. React, ReactDOM
 and the JSX runtime are marked external for every library alike and excluded
 from every figure below. "Gzipped (Vite)" and "Gzipped (esbuild)" are each the
@@ -60,7 +60,7 @@ under any of these libraries -- so that limit is written in the footnote
 instead, for every column alike. `docs/comparison/method.md`'s "Features"
 section has the full rule.
 
-Measured 2026-10-03 against `tests/compare`'s pinned installs:
+Measured 2026-10-12 against `tests/compare`'s pinned installs:
 `Playdeck` 1.3.0, `react-player` 3.4.0, `Vidstack` 1.15.6, `Media Chrome` 4.19.2, `Video.js` 8.24.1, `Video.js 10 (rc)` 10.0.0-rc.4.
 
 | Axis                                                | Playdeck      | react-player  | Vidstack      | Media Chrome  | Video.js     | Video.js 10 (rc) |

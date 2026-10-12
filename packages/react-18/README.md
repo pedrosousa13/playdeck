@@ -1,6 +1,6 @@
 # @playdeck/react-18
 
-[`@playdeck/react`](https://www.npmjs.com/package/@playdeck/react) built for
+`@playdeck/react` built for
 React 18: the same headless, composable media-player primitives, the same
 exports and the same types, built at build time from the same source — there
 is no fork to drift out of sync. A JSX-runtime shim and `forwardRef` wrapping
@@ -50,9 +50,7 @@ import path. Nothing else changes.
 ## Docs
 
 Everything else — usage, styling, exports, Media Session, provider setup —
-is documented once, in
-[`@playdeck/react`'s README](https://www.npmjs.com/package/@playdeck/react),
-under its own [React 18](https://www.npmjs.com/package/@playdeck/react#react-18)
+is documented once, in `@playdeck/react`'s README, under its own React 18
 section for the differences above.
 
 ## License
