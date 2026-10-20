@@ -44,6 +44,49 @@ test('eager loading renders the native video element with its sources in server 
   expect(markup).toContain('preload="auto"');
 });
 
+// #913: every `sources[].media` entry reaches server HTML, unfiltered -- the
+// browser's own resource-selection algorithm is what picks among them for a
+// server-rendered element, and it needs every candidate present to pick
+// correctly (`media`'s own selection rule never reacts to a later viewport
+// change, so there is no later chance to add a candidate back in).
+//
+// Demonstrated red: before this commit, `VideoFileSource.sources` carried no
+// `media` field and `Media` rendered no such attribute, so this failed --
+//
+//   expected '<div data-playdeck-part="viewport"…' to contain
+//   'media="(max-width: 600px)"'
+test('renders every entry with its media attribute in server HTML', () => {
+  const markup = renderToString(
+    <Player.Root
+      loading="eager"
+      source={{
+        type: 'video',
+        sources: [
+          {
+            src: '/mobile.mp4',
+            mimeType: 'video/mp4',
+            media: '(max-width: 600px)'
+          },
+          {
+            src: '/desktop.mp4',
+            mimeType: 'video/mp4',
+            media: '(min-width: 601px)'
+          }
+        ]
+      }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  expect(markup).toContain('src="/mobile.mp4"');
+  expect(markup).toContain('media="(max-width: 600px)"');
+  expect(markup).toContain('src="/desktop.mp4"');
+  expect(markup).toContain('media="(min-width: 601px)"');
+});
+
 test.each([['viewport'], ['interaction']] as const)(
   '%s loading still renders no video in server HTML',
   (loading) => {

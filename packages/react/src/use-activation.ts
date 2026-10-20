@@ -54,6 +54,18 @@ export type ActivationBindings = {
   readonly registerMedia: (media: PlayerMediaMount | null) => void;
   readonly registerViewport: (viewport: HTMLDivElement | null) => void;
   readonly sourceCommitted: boolean;
+  // Whether THIS render committed the source at render time rather than from
+  // an effect -- `eagerVideoCommit`'s own result, re-exposed rather than
+  // re-derived, so `Media` (`viewport-media.tsx`) can tell a server-rendered
+  // `<video>` (every `sources[].media` entry rendered, the browser's own
+  // selection algorithm picking among them) from one the client alone created
+  // (only the entries `matchMedia` currently matches rendered, so no browser
+  // ever has a wrong entry to pick). Reusing this signal rather than deriving
+  // a second one is what keeps the two decisions -- whether the native
+  // provider restarts resource selection (`committedAtRender`'s own hatch)
+  // and which `<source>` children `Media` renders -- from ever disagreeing
+  // about which case a render is in.
+  readonly sourceCommittedAtRender: boolean;
 };
 
 export type UseActivationOptions = {
@@ -1654,10 +1666,12 @@ export const useActivation = (
       preload: options.preload,
       registerMedia,
       registerViewport,
-      sourceCommitted
+      sourceCommitted,
+      sourceCommittedAtRender: eagerRenderCommit
     }),
     [
       activateFromInteraction,
+      eagerRenderCommit,
       options.loading,
       playGateOpen,
       options.preload,

@@ -327,7 +327,22 @@ try {
   // this entry does. The whole distance from the last committed figure is
   // this issue's: that figure was 114.56 KB (117306 bytes), measured
   // 2026-10-20 per the block above.
-  const GZIP_EAGER_CEILING_KB = 115;
+  //
+  // 118233 bytes measured 2026-10-20 (Node 22) -- 115.4619140625 KB, 115.46
+  // KB to two places, rounded up to the next 0.25 KB -- 115.50 KB. What
+  // carried this past 115.00 KB is #913's per-entry `media` selection:
+  // `viewport-media.tsx`'s `matchesMediaQuery` helper and the
+  // `videoSources`/`validMediaSources`/`visibleSources` filtering it runs
+  // unconditionally for every `video` file source, plus
+  // `provider-native/src/attachment.ts`'s `matchesSourceMedia`,
+  // `canPlaySourceType` and `expectedMediaQuerySource` helpers and the
+  // `load()` branch that reads them -- all reached by `/browser.js` and
+  // `/provider-native.js` regardless of whether a consumer's source ever
+  // sets `media`, the same way every other unconditional import on this
+  // entry does. The whole distance from the last committed figure is this
+  // issue's: that figure was 114.90 KB (117661 bytes), measured 2026-10-20
+  // per the block above.
+  const GZIP_EAGER_CEILING_KB = 115.5;
   const gzipKb = (bytes) => (bytes / 1024).toFixed(2);
   const scriptBytes = await Promise.all(
     expectedScripts.map((pathname) => readFile(resolveRequest(pathname)))

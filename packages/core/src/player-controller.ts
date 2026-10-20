@@ -35,6 +35,7 @@ import {
   noticesMatch,
   notifySafely,
   orderedRanges,
+  rejectedSourceMediaNotice,
   rejectedTextTrackLanguageNotice,
   sameOrderedRanges,
   REFUSED_URL_NOTICES,
@@ -86,7 +87,13 @@ type NoticeScope =
   // only ever one surface here, unlike `'refused-url'`'s fixed set, so no
   // per-value discriminant is carried on the scope itself -- the value lives
   // on the registered notice instead (`rejectedTextTrackLanguageNotice`).
-  | { readonly kind: 'rejected-text-track-language' };
+  | { readonly kind: 'rejected-text-track-language' }
+  // A rejected `VideoFileSource.sources[].media` entry, the same shape as
+  // `'rejected-text-track-language'` immediately above and for the same
+  // reason: a consumer-supplied string no provider ever sees, with the value
+  // living on the registered notice (`rejectedSourceMediaNotice`) rather than
+  // on the scope.
+  | { readonly kind: 'rejected-source-media' };
 
 // A patch is the provider confirming the playback command that asked for it.
 const confirmsPlayback = (
@@ -458,6 +465,17 @@ export class PlayerController {
         .map((entry) => entry.notice)
     );
 
+  // The single candidate the `{ kind: 'rejected-source-media' }` entries
+  // currently offer the error slot, folded the same way
+  // `#currentRejectedTextTrackLanguageNotice` is and for the same reason:
+  // only one surface, so insertion order is the tie-break (#368).
+  #currentRejectedSourceMediaNotice = (): PlayerError | undefined =>
+    mostImportantNotice(
+      ...[...this.#notices.values()]
+        .filter((entry) => entry.scope.kind === 'rejected-source-media')
+        .map((entry) => entry.notice)
+    );
+
   // What `#registerNotice`'s disposer asks after removing an entry: what does
   // this entry's OWN scope resolve to now. Kept as its own read rather than
   // inlined so the disposer stays one implementation regardless of which fold
@@ -465,7 +483,9 @@ export class PlayerController {
   #resolveScope = (scope: NoticeScope): PlayerError | undefined => {
     if (scope.kind === 'provider') return this.#currentProviderNotice();
     if (scope.kind === 'refused-url') return this.#currentRefusedUrlNotice();
-    return this.#currentRejectedTextTrackLanguageNotice();
+    if (scope.kind === 'rejected-text-track-language')
+      return this.#currentRejectedTextTrackLanguageNotice();
+    return this.#currentRejectedSourceMediaNotice();
   };
 
   // Every `{ kind: 'provider' }` entry belongs to the provider being replaced
@@ -565,6 +585,23 @@ export class PlayerController {
       }
     );
     const after = this.#currentRejectedTextTrackLanguageNotice();
+    if (after !== before) {
+      this.#applyPatch(this.#state.error === before ? { error: null } : {});
+    }
+    return dispose;
+  };
+
+  // Mirrors `reportRejectedTextTrackLanguage` immediately above, for a
+  // rejected `VideoFileSource.sources[].media` entry
+  // (`@playdeck/react`'s `viewport-media.tsx`): a consumer-supplied value no
+  // provider ever validates, registered under its own scope so it survives an
+  // attach the same way.
+  reportRejectedSourceMedia = (value: string): (() => void) => {
+    const before = this.#currentRejectedSourceMediaNotice();
+    const dispose = this.#registerNotice(rejectedSourceMediaNotice(value), {
+      kind: 'rejected-source-media'
+    });
+    const after = this.#currentRejectedSourceMediaNotice();
     if (after !== before) {
       this.#applyPatch(this.#state.error === before ? { error: null } : {});
     }
@@ -1408,13 +1445,16 @@ export class PlayerController {
             // (#330). A rejected `preferredTextTrackLanguage` is lowest of
             // all: like a refused URL it is a prop beside the source rather
             // than about it, and it joined this fold after the other three
-            // already had their order settled.
+            // already had their order settled. A rejected
+            // `sources[].media` entry joins lowest of all, after this fold's
+            // own order was already settled.
             (standingFailure ??
             mostImportantNotice(
               standingNotice,
               this.#currentProviderNotice(),
               this.#currentRefusedUrlNotice(),
-              this.#currentRejectedTextTrackLanguageNotice()
+              this.#currentRejectedTextTrackLanguageNotice(),
+              this.#currentRejectedSourceMediaNotice()
             ) ??
             null)
     };
@@ -1422,15 +1462,15 @@ export class PlayerController {
   };
 
   // The configurations that outlive a provider — the autoplay conflict, a
-  // refused consumer URL and a rejected `preferredTextTrackLanguage` —
-  // re-applied over a state rebuilt from scratch. None of these is a
-  // `{ kind: 'provider' }` entry, which belongs to one provider and is
-  // cleared immediately above the call site. `setProvider` resets to
-  // `createInitialPlayerState()` without going through `#applyPatch`, so these
-  // would otherwise be dropped on every attach — which for a refused
-  // consumer URL is the common case, not an edge one, because the poster
-  // reports before the provider loads (#330). All three are ranked as
-  // `#applyPatch` ranks them.
+  // refused consumer URL, a rejected `preferredTextTrackLanguage` and a
+  // rejected `sources[].media` entry — re-applied over a state rebuilt from
+  // scratch. None of these is a `{ kind: 'provider' }` entry, which belongs
+  // to one provider and is cleared immediately above the call site.
+  // `setProvider` resets to `createInitialPlayerState()` without going
+  // through `#applyPatch`, so these would otherwise be dropped on every
+  // attach — which for a refused consumer URL is the common case, not an
+  // edge one, because the poster reports before the provider loads (#330).
+  // Every one of them is ranked as `#applyPatch` ranks it.
   #withHeldConfiguration = (state: PlayerState): PlayerState => {
     if (this.#hasAutoplayConfigurationError) {
       return {
@@ -1442,7 +1482,8 @@ export class PlayerController {
     }
     const heldNotice = mostImportantNotice(
       this.#currentRefusedUrlNotice(),
-      this.#currentRejectedTextTrackLanguageNotice()
+      this.#currentRejectedTextTrackLanguageNotice(),
+      this.#currentRejectedSourceMediaNotice()
     );
     return heldNotice ? { ...state, error: heldNotice } : state;
   };

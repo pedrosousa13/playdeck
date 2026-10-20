@@ -1024,6 +1024,133 @@ test('renders every explicit video source in order with its MIME type', () => {
   ]);
 });
 
+// #913: every entry renders with its own `media` attribute too, the server
+// HTML shape -- the browser's own resource-selection algorithm is what picks
+// among them there, so every candidate has to be present for it to pick
+// correctly.
+//
+// Demonstrated red: with `viewport-media.tsx`'s own changes reverted (the
+// type still carries `media`, but nothing reads or renders it), this failed
+// -- `expected [ null, null ] to deeply equal [ '(max-width: 600px)', …(1) ]`
+// (`getAttribute('media')` reads `null` for an attribute nothing writes).
+test('renders every explicit video source with its media attribute', () => {
+  render(
+    <LegacyRoot
+      source={{
+        type: 'video',
+        sources: [
+          {
+            src: '/mobile.mp4',
+            mimeType: 'video/mp4',
+            media: '(max-width: 600px)'
+          },
+          {
+            src: '/desktop.mp4',
+            mimeType: 'video/mp4',
+            media: '(min-width: 601px)'
+          }
+        ]
+      }}
+    >
+      <Player.Media />
+    </LegacyRoot>
+  );
+
+  const sources = screen
+    .getByLabelText('Playdeck media')
+    .querySelectorAll('source');
+  expect(Array.from(sources, (source) => source.getAttribute('media'))).toEqual(
+    ['(max-width: 600px)', '(min-width: 601px)']
+  );
+});
+
+// #913: a client-created element -- `loading="viewport"`, committed from the
+// effect rather than at render, under the stubbed `ImmediateIntersectionObserver`
+// above -- renders only the entries `matchMedia` currently matches, so no
+// browser ever has a wrong entry to pick.
+//
+// Demonstrated red: before this commit, there was no `media`-aware filter at
+// all and every entry always rendered regardless of `sourceCommittedAtRender`
+// -- `expected [ '/mobile.mp4', '/desktop.mp4' ] to equal [ '/mobile.mp4' ]`.
+test('a client-created video element renders only the matching media entries', () => {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query === '(max-width: 600px)'
+  }));
+
+  render(
+    <LegacyRoot
+      loading="viewport"
+      source={{
+        type: 'video',
+        sources: [
+          {
+            src: '/mobile.mp4',
+            mimeType: 'video/mp4',
+            media: '(max-width: 600px)'
+          },
+          {
+            src: '/desktop.mp4',
+            mimeType: 'video/mp4',
+            media: '(min-width: 601px)'
+          }
+        ]
+      }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </LegacyRoot>
+  );
+
+  const sources = screen
+    .getByLabelText('Playdeck media')
+    .querySelectorAll('source');
+  expect(Array.from(sources, (source) => source.getAttribute('src'))).toEqual([
+    '/mobile.mp4'
+  ]);
+});
+
+// #913: a rejected `media` value drops its own entry rather than being kept
+// and read as unconditional, and publishes a `configuration` notice naming it
+// -- the entry carrying the good value is unaffected either way.
+//
+// Demonstrated red: before this commit, there was no validation at all, so
+// the hostile entry rendered as an ordinary `<source>` -- `expected
+// ['/safe.mp4', '/hostile.mp4'] to equal ['/safe.mp4']` -- and no notice
+// published -- `expected null not to be null`.
+test('drops a video source entry with a rejected media value and publishes a notice', () => {
+  const handle = createRef<Player.PlayerHandle>();
+  render(
+    <LegacyRoot
+      ref={handle}
+      source={{
+        type: 'video',
+        sources: [
+          { src: '/safe.mp4', mimeType: 'video/mp4' },
+          {
+            src: '/hostile.mp4',
+            mimeType: 'video/mp4',
+            media: 'javascript:alert(1)'
+          }
+        ]
+      }}
+    >
+      <Player.Media />
+    </LegacyRoot>
+  );
+
+  const sources = screen
+    .getByLabelText('Playdeck media')
+    .querySelectorAll('source');
+  expect(Array.from(sources, (source) => source.getAttribute('src'))).toEqual([
+    '/safe.mp4'
+  ]);
+  expect(handle.current?.getState().error).toMatchObject({
+    category: 'configuration',
+    message: expect.stringContaining('javascript:alert(1)')
+  });
+});
+
 test('remounts media and resets confirmed playing state after a transition to HLS', () => {
   const source = { type: 'hls' as const, src: '/master.m3u8' };
   const player = (playerSource: '/tracer.mp4' | typeof source) => (

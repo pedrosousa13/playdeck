@@ -1196,3 +1196,85 @@ test('publishes the rejected-text-track-language notice frozen', () => {
 
   expect(Object.isFrozen(controller.getState().error)).toBe(true);
 });
+
+// `reportRejectedSourceMedia` mirrors `reportRejectedTextTrackLanguage`
+// immediately above, for a rejected `VideoFileSource.sources[].media` entry
+// (`@playdeck/react`'s `viewport-media.tsx`) rather than `Root`'s
+// `preferredTextTrackLanguage` -- same registration shape, same echoed value.
+//
+// Red, with `this.#currentRejectedSourceMediaNotice()` deleted from
+// `#applyPatch`'s `mostImportantNotice(...)` call: this test's `error` stayed
+// `null` -- the registration still happened, but nothing read it into the
+// published slot, so the assertion below failed with
+// `expected null to match object ...` before that line was restored.
+test('publishes a rejected sources[].media entry as a notice naming the value', () => {
+  const controller = new PlayerController();
+
+  controller.reportRejectedSourceMedia('javascript:alert(1)');
+
+  expect(controller.getState().error).toMatchObject({
+    category: 'configuration',
+    fatal: false,
+    recoverable: false,
+    severity: 'protective',
+    message: expect.stringContaining('javascript:alert(1)')
+  });
+  expect(controller.getState().lifecycle).not.toBe('error');
+});
+
+test('withdraws the rejected-source-media notice once released', () => {
+  const controller = new PlayerController();
+
+  const release = controller.reportRejectedSourceMedia('"><script>');
+  expect(controller.getState().error).not.toBeNull();
+
+  release();
+
+  expect(controller.getState().error).toBeNull();
+});
+
+test('does not re-plant a withdrawn rejected-source-media notice on setProvider', () => {
+  const controller = new PlayerController();
+  const fake = createProvider();
+
+  controller.reportRejectedSourceMedia('bad media')();
+  controller.setProvider(fake.provider);
+
+  expect(controller.getState().error).toBeNull();
+});
+
+test('keeps a rejected-source-media notice through a provider attaching after it', () => {
+  const controller = new PlayerController();
+  const fake = createProvider();
+
+  controller.reportRejectedSourceMedia('bad media');
+  const reported = controller.getState().error;
+  controller.setProvider(fake.provider);
+
+  expect(controller.getState().error).toMatchObject(reported!);
+
+  fake.emit({ lifecycle: 'ready', activation: 'ready' });
+
+  expect(controller.getState().error).toMatchObject(reported!);
+});
+
+// Ranked below a rejected-text-track-language notice, the same way that one
+// is ranked below a refused-URL notice: each joined this fold after the
+// previous one's order was already settled.
+test('keeps a rejected-text-track-language notice over an equally protective rejected-source-media notice', () => {
+  const controller = new PlayerController();
+
+  controller.reportRejectedTextTrackLanguage('bad lang');
+  const languageNotice = controller.getState().error;
+  controller.reportRejectedSourceMedia('bad media');
+
+  expect(controller.getState().error).toMatchObject(languageNotice!);
+});
+
+test('publishes the rejected-source-media notice frozen', () => {
+  const controller = new PlayerController();
+
+  controller.reportRejectedSourceMedia('bad media');
+
+  expect(Object.isFrozen(controller.getState().error)).toBe(true);
+});

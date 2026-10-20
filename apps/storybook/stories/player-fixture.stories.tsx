@@ -393,14 +393,36 @@ const PlayerFixture = ({
                         }
                       ]
                     }
-                  : (vimeoSource ??
-                    (sourceChange
-                      ? 'https://provider.invalid/source-a.mp4'
-                      : activationSource === 'external'
-                        ? 'https://provider.invalid/tracer.mp4'
-                        : activationSource === 'youtube'
-                          ? youtubeExampleUrl
-                          : assetUrl('tracer.mp4')));
+                  : // #913: a mobile rendition (the short tracer) alongside a
+                    // desktop one (the ten-second clip), told apart by `media`
+                    // rather than by MIME type -- the two files are
+                    // distinguishable by URL and by duration, so
+                    // `e2e/native-source-media-query.spec.ts` can assert which
+                    // one a given viewport width actually requested.
+                    sourceKey === 'media-query'
+                    ? {
+                        type: 'video',
+                        sources: [
+                          {
+                            src: assetUrl('tracer.mp4'),
+                            mimeType: 'video/mp4',
+                            media: '(max-width: 600px)'
+                          },
+                          {
+                            src: assetUrl('tracer-10s.mp4'),
+                            mimeType: 'video/mp4',
+                            media: '(min-width: 601px)'
+                          }
+                        ]
+                      }
+                    : (vimeoSource ??
+                      (sourceChange
+                        ? 'https://provider.invalid/source-a.mp4'
+                        : activationSource === 'external'
+                          ? 'https://provider.invalid/tracer.mp4'
+                          : activationSource === 'youtube'
+                            ? youtubeExampleUrl
+                            : assetUrl('tracer.mp4')));
 
   const replacementSource = sourceChange
     ? 'https://provider.invalid/source-b.mp4'
@@ -545,7 +567,7 @@ const meta: Meta<PlayerFixtureProps> = {
     source: {
       control: 'text',
       description:
-        "'hls' | 'hls-nosubs' | 'hls-audio' | 'live' | 'long' | 'no-cors' | 'multi' | 'vimeo' | 'vimeo-unlisted' | an https:// URL | undefined (defaults to the native tracer)."
+        "'hls' | 'hls-nosubs' | 'hls-audio' | 'live' | 'long' | 'no-cors' | 'multi' | 'media-query' | 'vimeo' | 'vimeo-unlisted' | an https:// URL | undefined (defaults to the native tracer)."
     },
     engine: {
       control: 'radio',
@@ -648,6 +670,13 @@ export const NativeSourceError404: Story = {
 // 404s and the second loads.
 export const NativeSourceErrorMulti: Story = {
   args: { source: 'multi', showErrorDisplay: true }
+};
+
+// A mobile rendition and a desktop rendition picked by `media` (#913) --
+// `e2e/native-source-media-query.spec.ts` drives this at a phone width and a
+// desktop width and asserts only the matching file was requested.
+export const NativeSourceMediaQuery: Story = {
+  args: { source: 'media-query' }
 };
 
 // The ten-second clip, with `chapters.vtt` attached -- `e2e/chapters.spec.ts`

@@ -2462,6 +2462,87 @@ test('skips media.load() when committed at render, regardless of networkState', 
   );
 });
 
+// #913: a committed-at-render element can disagree with `matchMedia` about
+// which `<source media>` candidate is right once hydration runs -- an empty
+// `currentSrc` means the browser has not settled on one yet (selection is
+// asynchronous), so there is nothing to compare against and it is left to
+// finish choosing on its own, exactly as an element with no `media` at all
+// always has been.
+//
+// Demonstrated red: with the `media.currentSrc !== ''` guard removed, this
+// failed -- `expected "load" to not be called at all, but actually been
+// called 1 times` (the reconciliation ran against an empty `currentSrc` and
+// found it "disagreeing" with the matching candidate's real URL).
+test('calls no media.load() to reconcile media selection while currentSrc is still empty', async () => {
+  const media = document.createElement('video');
+  const mobile = document.createElement('source');
+  mobile.setAttribute('src', '/mobile.mp4');
+  mobile.setAttribute('type', 'video/mp4');
+  mobile.setAttribute('media', '(max-width: 600px)');
+  const desktop = document.createElement('source');
+  desktop.setAttribute('src', '/desktop.mp4');
+  desktop.setAttribute('type', 'video/mp4');
+  desktop.setAttribute('media', '(min-width: 601px)');
+  media.append(mobile, desktop);
+  vi.spyOn(media, 'canPlayType').mockReturnValue('probably');
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query === '(max-width: 600px)'
+  }));
+  // Forced to `''` explicitly: happy-dom's own `currentSrc` getter defaults to
+  // the first `<source>` child's resolved `src` rather than genuinely modelling
+  // pending resource selection, so this is the one way to put this element in
+  // the state a real browser is in before it has settled on a candidate.
+  Object.defineProperty(media, 'currentSrc', {
+    configurable: true,
+    value: ''
+  });
+  const load = vi.spyOn(media, 'load');
+  const provider = createNativeProvider(media, withCommittedAtRender(true));
+
+  await provider.attach();
+  await provider.load();
+
+  expect(load).not.toHaveBeenCalled();
+});
+
+// The other half: a non-empty `currentSrc` that disagrees with what
+// `matchMedia` says now is a definite wrong answer, corrected with exactly
+// one `media.load()`.
+//
+// Demonstrated red: with the reconciliation removed entirely (`load()` left
+// to only its pre-existing `if (!committedAtRender) media.load();` guard),
+// this failed -- `expected "load" to have been called at least once, but it
+// was not called at all`.
+test('calls media.load() once to reconcile a currentSrc that disagrees with the matching media entry', async () => {
+  const media = document.createElement('video');
+  const mobile = document.createElement('source');
+  mobile.setAttribute('src', '/mobile.mp4');
+  mobile.setAttribute('type', 'video/mp4');
+  mobile.setAttribute('media', '(max-width: 600px)');
+  const desktop = document.createElement('source');
+  desktop.setAttribute('src', '/desktop.mp4');
+  desktop.setAttribute('type', 'video/mp4');
+  desktop.setAttribute('media', '(min-width: 601px)');
+  media.append(mobile, desktop);
+  vi.spyOn(media, 'canPlayType').mockReturnValue('probably');
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query === '(max-width: 600px)'
+  }));
+  // The browser's own pick, read back as `currentSrc` -- the desktop entry,
+  // disagreeing with `(max-width: 600px)` matching right now.
+  Object.defineProperty(media, 'currentSrc', {
+    configurable: true,
+    value: desktop.src
+  });
+  const load = vi.spyOn(media, 'load');
+  const provider = createNativeProvider(media, withCommittedAtRender(true));
+
+  await provider.attach();
+  await provider.load();
+
+  expect(load).toHaveBeenCalledTimes(1);
+});
+
 // `load()` skipping `media.load()` drops what the restart also gave this
 // provider for free: restarting resource selection after `attach()` wired
 // its listeners guaranteed a `<source>` failure, whatever it was, fired

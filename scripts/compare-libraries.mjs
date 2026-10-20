@@ -720,7 +720,21 @@ export const libraries = [
     // regardless of whether a consumer ever sets `priority`. The whole
     // distance from the last committed figure is this issue's: that figure
     // was 22.53 KB (23068 bytes), measured 2026-10-20 per the block above.
-    ceilingKb: 23.25,
+    //
+    // 24026 bytes measured 2026-10-20 (Node 22) -- 23.4628906250 KB, 23.46
+    // KB to two places, rounded up to the next 0.25 KB boundary -- 23.50 KB.
+    // What carried this past 23.25 KB is #913's per-entry `media` selection,
+    // the same code described on the "Playdeck" row below:
+    // `viewport-media.tsx`'s `matchesMediaQuery` helper and the
+    // `videoSources`/`validMediaSources`/`visibleSources` filtering, plus
+    // `provider-native/src/attachment.ts`'s `matchesSourceMedia`,
+    // `canPlaySourceType` and `expectedMediaQuerySource` helpers and the
+    // `load()` branch reading them -- all reached through this fixture's
+    // native provider regardless of which control parts it renders or
+    // whether its source ever sets `media`. The whole distance from the
+    // last committed figure is this issue's: that figure was 23.06 KB
+    // (23613 bytes), measured 2026-10-20 per the block above.
+    ceilingKb: 23.5,
     // This fixture renders no control part at all (see
     // tests/compare/entries/playdeck-no-parts.tsx's own header) -- every
     // guardable part is forbidden.
@@ -898,7 +912,17 @@ export const libraries = [
     // regardless of `priority`. The whole distance from the last committed
     // figure is this issue's: that figure was 23.27 KB (23831 bytes),
     // measured 2026-10-20 per the block above.
-    ceilingKb: 24,
+    //
+    // 24919 bytes measured 2026-10-20 (Node 22) -- 24.3447265625 KB, 24.34
+    // KB to two places, rounded up to the next 0.25 KB boundary -- 24.50 KB.
+    // What carried this past 24.00 KB is #913's per-entry `media` selection,
+    // the same cost described on the "no parts" row above, reached the same
+    // way: unconditionally through this fixture's own `@playdeck/react` and
+    // native-provider imports, whether or not its source ever sets `media`.
+    // The whole distance from the last committed figure is this issue's:
+    // that figure was 23.90 KB (24475 bytes), measured 2026-10-20 per the
+    // block above.
+    ceilingKb: 24.5,
     // This fixture renders one `Player.ActivationButton` and nothing else
     // guardable (tests/compare/entries/playdeck.tsx) -- every guardable
     // part except `ActivationButton` is forbidden.
@@ -1039,7 +1063,15 @@ export const libraries = [
     // throughout, so the distance is the prop's own code. The whole
     // distance from the last committed figure is this issue's: that figure
     // was 24.58 KB (25169 bytes), measured 2026-10-20 per the block above.
-    ceilingKb: 25.25,
+    //
+    // 26086 bytes measured 2026-10-20 (Node 22) -- 25.47460938 KB, 25.47 KB
+    // to two places, rounded up to the next 0.25 KB boundary -- 25.50 KB.
+    // What carried this past 25.25 KB is #913's per-entry `media` selection,
+    // the same cost described on the "no parts" row above, reached the same
+    // unconditional way through this fixture's own imports. The whole
+    // distance from the last committed figure is this issue's: that figure
+    // was 25.06 KB (25662 bytes), measured 2026-10-20 per the block above.
+    ceilingKb: 25.5,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
@@ -1188,7 +1220,15 @@ export const libraries = [
     // distance from the last committed figure is this issue's: that figure
     // was 28.02 KB (28688 bytes), measured 2026-10-03 per `results.md` on
     // `main`.
-    ceilingKb: 29,
+    //
+    // 29864 bytes measured 2026-10-20 (Node 22) -- 29.1640625 KB, 29.16 KB
+    // to two places, rounded up to the next 0.25 KB boundary -- 29.25 KB.
+    // What carried this past 29.00 KB is #913's per-entry `media` selection,
+    // the same cost described on the "no parts" row above, reached the same
+    // unconditional way through this fixture's own imports. The whole
+    // distance from the last committed figure is this issue's: that figure
+    // was 28.76 KB (29453 bytes), measured 2026-10-20 per the block above.
+    ceilingKb: 29.25,
     // This fixture's control bar renders `ActivationButton`, `Controls`,
     // `PlayButton`, `MuteButton`, `VolumeSlider`, `SeekSlider`, `Time` and
     // `FullscreenButton` (tests/compare/entries/playdeck-control-bar.tsx,

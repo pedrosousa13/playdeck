@@ -580,7 +580,15 @@ export type ProviderStateListener = (
 
 export type VideoFileSource = {
   type: 'video';
-  sources: ReadonlyArray<{ src: string; mimeType: string }>;
+  // `media`, like `<source media>` on a native `<video>`, names the CSS media
+  // query this rendition is for -- a lighter mobile file alongside a heavier
+  // desktop one, say. Selection works like the browser's own: the first entry
+  // whose `media` matches, or that has no `media`, and whose `mimeType` is
+  // playable, is the one that loads. An entry whose `media` fails
+  // `isValidMediaQuery` (`source-detection.ts`) is dropped rather than treated
+  // as unconditional, which is why this is validated downstream rather than
+  // here -- see `@playdeck/react`'s `viewport-media.tsx`.
+  sources: ReadonlyArray<{ src: string; mimeType: string; media?: string }>;
 };
 
 export type HlsSource = {
