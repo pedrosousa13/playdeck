@@ -88,6 +88,21 @@ export const Clip = () => (
 [Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md) for which URL forms each provider
 accepts, which it refuses, and what each provider's `providerOptions` are.
 
+`loading` chooses when the source commits and the provider attaches:
+`'eager'` (the default), `'viewport'`, or `'interaction'`. Under `'eager'`, a
+`video` file source commits at render time rather than waiting for an effect,
+so the native `<video>` and its `<source>` children — `preload` included — are
+in the server HTML too, and the browser can start the request while it parses
+the page, before hydration or any script runs. HLS and the three embed
+providers (YouTube, Vimeo, Wistia) still commit from an effect, client-side
+only. `'viewport'` commits once `Player.Viewport` crosses `loadThreshold`;
+`'interaction'` commits on the first `Player.ActivationButton` press, or a
+direct `activateFromInteraction` call, and cannot be combined with `autoplay`.
+Autoplay itself is unaffected by any of this: the server can't evaluate
+`prefers-reduced-motion`, so the server HTML never carries an `autoplay`
+attribute, and the controller still attempts `play()` only after the provider
+attaches on the client, whatever `loading` is set to.
+
 `textTracks` is a prop on `Player.Media`, not on `Player.Root`. It takes an
 array of `{ src, srcLang, label, kind?, default? }`, where `kind` is
 `'captions'` or `'subtitles'` and `default` selects that track on load. Tracks
