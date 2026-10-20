@@ -2308,6 +2308,77 @@ test('native clears the dimensions on destroy', async () => {
   expect(seen.at(-1)).toBeUndefined();
 });
 
+// #911: a server-rendered `<video>` can already be past `HAVE_METADATA` by
+// the time the native provider attaches to it -- the element ran its own
+// resource selection algorithm during HTML parsing, well before this
+// package's `attach()` ever runs. `emitMediaState` already re-reads
+// `readyState`/duration/buffered on every attach, so the duration/lifecycle
+// half of this was already true: demonstrated red by a substitute mutation
+// (docs/agents/demonstrated-red.md), since there is no unfixed state for it
+// to revert to. With the `emitMediaState()` call commented out of `attach()`,
+// this failed:
+//
+//   expected { activation: 'dormant', … } to deep equal
+//   { activation: 'ready', lifecycle: 'ready', duration: 12 }
+//
+// and passed again once restored. `publishDimensions()`, by contrast, ran
+// only from the `loadedmetadata`/`resize` listeners -- events that an
+// element already past `HAVE_METADATA` will never fire again -- so that half
+// is a genuine, unmodified red: before this commit's `attach()` change,
+// `seen` below held only `[undefined]`.
+test('publishes duration, lifecycle and dimensions on attach when metadata already arrived', async () => {
+  const { media } = videoWithDimensions(1080, 1920);
+  Object.defineProperty(media, 'readyState', { configurable: true, value: 1 });
+  Object.defineProperty(media, 'duration', { configurable: true, value: 12 });
+  const provider = createNativeProvider(media);
+  const patches: Array<Record<string, unknown>> = [];
+  provider.subscribe((patch) => patches.push(patch));
+  const seen = collectDimensions(provider);
+
+  await provider.attach();
+
+  expect(patches.at(-1)).toMatchObject({
+    activation: 'ready',
+    lifecycle: 'ready',
+    duration: 12
+  });
+  expect(seen.at(-1)).toEqual({ width: 1080, height: 1920 });
+});
+
+// #911: that same server-rendered element may already have left
+// `NETWORK_EMPTY` by the time this package's `load()` runs -- the browser
+// started fetching its `<source>` children on its own. Before this commit,
+// `load()` called `media.load()` unconditionally, which aborts an in-flight
+// resource selection and restarts it, discarding whatever the server-rendered
+// request had already downloaded. Demonstrated red, unmodified: against the
+// code as it stood before this commit,
+//
+//   expected "load" to not be called at all, but actually been called 1 times
+//
+// happy-dom's own `networkState` is a plain field it never updates itself
+// (see the source-exhaustion tests above, which set it by hand for the same
+// reason), so it is set here to stand in for a browser that already began
+// loading the element.
+test('does not restart a resource selection the element already began on its own', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'networkState', {
+    configurable: true,
+    value: 2
+  });
+  const load = vi.spyOn(media, 'load');
+  const provider = createNativeProvider(media);
+  const patches: Array<Record<string, unknown>> = [];
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+  await provider.load();
+
+  expect(load).not.toHaveBeenCalled();
+  expect(patches).toContainEqual(
+    expect.objectContaining({ commandsReady: true })
+  );
+});
+
 // `addListeners`/`removeListeners` mirror each other; a `resize` listener
 // added to only one keeps the destroyed provider publishing off the element.
 test('native stops observing resize after destroy', async () => {

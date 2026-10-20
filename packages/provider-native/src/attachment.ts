@@ -8,6 +8,7 @@ import type {
 import { deriveLiveState, liveStateEqual, notifySafely } from '@playdeck/core';
 import {
   HAVE_METADATA,
+  NETWORK_EMPTY,
   NETWORK_NO_SOURCE,
   providerEvent,
   sourceExhausted,
@@ -465,6 +466,16 @@ export const createNativeAttachment = (
       audioTracks.attachListeners();
       audioTracks.discover();
       remotePlayback.attachListeners();
+      // A server-rendered `<video>` (#911) can already be past
+      // `HAVE_METADATA` by the time this runs -- the element ran its own
+      // resource selection algorithm while the HTML was parsed, before this
+      // provider ever attached. `emitMediaState` below already re-reads
+      // `readyState`/duration/buffered as they stand; dimensions are the one
+      // reading it does not carry, since `videoWidth`/`videoHeight` are
+      // published only from the `loadedmetadata`/`resize` listeners just
+      // added -- events an element already past `HAVE_METADATA` will never
+      // fire again.
+      if (media.readyState >= HAVE_METADATA) publishDimensions();
       emitMediaState();
     },
     load: () => {
@@ -474,7 +485,14 @@ export const createNativeAttachment = (
       // after `attach()` discovered this source's tracks. A source switch
       // creates a new provider, and the controller clears caption state on
       // the swap.
-      media.load();
+      //
+      // Skipped once the element has already left `NETWORK_EMPTY` (#911): a
+      // server-rendered `<video>` with its `<source>` children began the
+      // browser's own resource selection algorithm during HTML parsing, and
+      // `media.load()` here would abort that in-flight request and restart
+      // it from scratch, discarding whatever the server-rendered request had
+      // already downloaded.
+      if (media.networkState === NETWORK_EMPTY) media.load();
       // Declared here rather than at attach: the commands operate on the
       // element from birth, but the load algorithm resets `playbackRate` to
       // `defaultPlaybackRate`, so anything applied earlier is undone (#69).
