@@ -13,16 +13,17 @@ import {
 import { createSeekingVideo } from '@playdeck/test-support/seeking-video';
 import { createNativeProvider } from '../src/index';
 import { COMMITTED_AT_RENDER } from '../src/internal-options';
+import type { NativePlaybackOptions } from '../src/playback';
 import { captureRethrows } from '@playdeck/test-support/capture-rethrows';
 
 // The same hatch `@playdeck/react`'s `use-activation.ts` writes onto
-// `NativePlaybackOptions` before calling `createNativeProvider` -- a plain
-// object here, since `createNativeProvider` takes no options of its own for
-// this.
+// `NativePlaybackOptions` before calling `createNativeProvider` -- `options`
+// defaults empty so a call site that only needs the flag can omit it.
 const withCommittedAtRender = (
-  committedAtRender: boolean
-): Record<symbol, boolean> =>
-  Object.defineProperty({}, COMMITTED_AT_RENDER, {
+  committedAtRender: boolean,
+  options: NativePlaybackOptions = {}
+): NativePlaybackOptions =>
+  Object.defineProperty({ ...options }, COMMITTED_AT_RENDER, {
     value: committedAtRender,
     enumerable: false
   });
@@ -303,14 +304,48 @@ test('writes no initial position the element already holds', async () => {
 // `applyInitialPosition` has ever run from, will never fire again. Before
 // this commit a non-zero `startTime` was silently never applied in that
 // case. Demonstrated red: before this commit, `writes` below stayed `[]`.
+// Gated on `committedAtRender`: `load()` still calls `media.load()` for any
+// element that is not one (see its own comment, `attachment.ts`), which
+// would reset this element and discard an offset applied this early.
 test('applies a real initial start position on attach when metadata already arrived', async () => {
   const media = document.createElement('video');
   Object.defineProperty(media, 'duration', { configurable: true, value: 20 });
   Object.defineProperty(media, 'readyState', { configurable: true, value: 1 });
   const { writes } = trackPosition(media, 0);
+  const provider = createNativeProvider(
+    media,
+    withCommittedAtRender(true, { startTime: 4 })
+  );
+
+  await provider.attach();
+
+  expect(writes).toEqual([4]);
+});
+
+// Regression for the gate above: an element that is NOT `committedAtRender`
+// still has `load()` call `media.load()` next (its own comment above), which
+// resets the element and fires a real `loadedmetadata` once the reset
+// completes. Applying the offset at `attach()` in that case would latch
+// `positioned` against metadata this provider is about to throw away,
+// leaving that real `loadedmetadata` with nothing left to apply --
+// reproducing CI's own e2e failures on `e2e/native-start-time.spec.ts` and
+// `e2e/start-time-above-seekable-end.spec.ts`, where a `startTime` inside a
+// fully covering `seekable` window still landed at 0. Demonstrated red:
+// before this commit, `writes` already held `[4]` immediately after
+// `attach()`, before `load()` ever ran.
+test('does not apply the offset at attach unless committedAtRender, so a later reset does not strand it', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 20 });
+  Object.defineProperty(media, 'readyState', { configurable: true, value: 1 });
+  const { rewind, writes } = trackPosition(media, 0);
+  vi.spyOn(media, 'load').mockImplementation(() => rewind());
   const provider = createNativeProvider(media, { startTime: 4 });
 
   await provider.attach();
+  expect(writes).toEqual([]);
+
+  await provider.load();
+  media.dispatchEvent(new Event('loadedmetadata'));
 
   expect(writes).toEqual([4]);
 });

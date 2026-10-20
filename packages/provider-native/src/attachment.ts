@@ -489,16 +489,30 @@ export const createNativeAttachment = (
       // `HAVE_METADATA` by the time this runs -- the element ran its own
       // resource selection algorithm while the HTML was parsed, before this
       // provider ever attached. `emitMediaState` below already re-reads
-      // `readyState`/duration/buffered as they stand; dimensions and the
-      // initial `startTime` are the two readings it does not carry.
-      // `videoWidth`/`videoHeight` are published only from the
-      // `loadedmetadata`/`resize` listeners just added, and
-      // `applyInitialPosition` has so far only ever run from
-      // `onLoadedMetadata` -- both events an element already past
-      // `HAVE_METADATA` will never fire again.
-      if (media.readyState >= HAVE_METADATA) {
+      // `readyState`/duration/buffered as they stand; dimensions are the
+      // other reading it does not carry, since `videoWidth`/`videoHeight`
+      // are published only from the `loadedmetadata`/`resize` listeners just
+      // added, and an element already past `HAVE_METADATA` will never fire
+      // either again. Dimensions are safe to read early regardless of what
+      // happens next: a later real `loadedmetadata` publishes them again,
+      // and `publishDimensions` holds no state of its own to go stale.
+      if (media.readyState >= HAVE_METADATA) publishDimensions();
+      // `applyInitialPosition` is the one reading `attach()` must NOT take
+      // this early unless `committedAtRender` -- it is the one reading this
+      // file publishes that is not idempotent. It latches `positioned`
+      // (`playback.ts`) the first time it runs, settling the offset for the
+      // rest of this load, and `load()` below still calls `media.load()`
+      // whenever `committedAtRender` is false, which resets the element back
+      // to `HAVE_NOTHING` and starts a second, real load. Applying the
+      // offset here against the first load's metadata would latch
+      // `positioned` against a load this provider is about to throw away,
+      // leaving the real `loadedmetadata` that follows the reset with
+      // nothing left to apply. `publishSourceExhaustion` below has no such
+      // hazard: its own latch, `sourceErrorPublished`, is reset by
+      // `onEmptied`, which fires at the start of every `media.load()` --
+      // `positioned` is reset only by `retry()`.
+      if (media.readyState >= HAVE_METADATA && committedAtRender) {
         playback.applyInitialPosition();
-        publishDimensions();
       }
       emitMediaState();
       // Same reasoning, for a source that failed every candidate before
