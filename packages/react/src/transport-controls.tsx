@@ -899,7 +899,7 @@ export const Time = ({
           : null
         : // A live source has no fixed start `current` counts up from that
           // means anything to a viewer. What varies instead, and what
-          // `CONTEXT.md`'s "Live edge" entry already names, is how far behind
+          // `GLOSSARY.md`'s "Live edge" entry already names, is how far behind
           // the provider's own edge playback has fallen —
           // `live.offsetFromEdge`, already in the whole seconds this
           // component renders at (`live-state.ts`). `type="duration"` never

@@ -709,7 +709,7 @@ as worth trying — capability coverage and provider reach — were tried and
 dropped; see the next two sections for why.
 
 **Capability coverage** — which of the capabilities Playdeck's `Availability`
-and `PlayerCapabilities` model (`CONTEXT.md`'s "Availability" entry) each other
+and `PlayerCapabilities` model (`GLOSSARY.md`'s "Availability" entry) each other
 library exposes at all, and whether it reports _why_ when a capability is
 unavailable. This is not mechanically derivable from an installed package in
 any way this harness could reproduce and re-check on every run. Playdeck's
@@ -731,7 +731,7 @@ search the features generator now runs shows the naming does not hold either
 (media-chrome declares an `AvailabilityStates` of its own in
 `dist/constants.js`,
 and `@videojs/react`'s own documentation describes a three-state
-`available` / `unavailable` / `unsupported` model). `CONTEXT.md` carries
+`available` / `unavailable` / `unsupported` model). `GLOSSARY.md` carries
 Playdeck's own claim about this; neither table makes one about anybody
 else's.
 
@@ -1085,7 +1085,7 @@ one number off `results.md` without this paragraph would misread it:
   'not known yet', with a reason?" could not be given an anchored answer for
   every library**, so it is on neither table — not the byte table, which
   cannot reach it at all, and not the features table, which tried and dropped
-  it (see "Dropped axes" below). `CONTEXT.md` records what Playdeck claims for
+  it (see "Dropped axes" below). `GLOSSARY.md` records what Playdeck claims for
   its own `Availability` union. This document makes no claim, in either
   direction, about what any other library here does or does not do on that
   ground.
@@ -1268,7 +1268,7 @@ which changes less often than the installed code); `@videojs/react`
 10.0.0-rc.4's own bundled documentation, which the package ships in
 `node_modules/@videojs/react/docs` beside its `dist/dev/index.d.ts`, so every
 claim about that column is read from the installed package rather than from a
-docs site; and, for Playdeck, `CONTEXT.md`, `packages/react/README.md` and the
+docs site; and, for Playdeck, `GLOSSARY.md`, `packages/react/README.md` and the
 installed `@playdeck/react` and `@playdeck/core` packages, read under the
 identical rule.
 
@@ -1297,7 +1297,7 @@ cannot be written for every library. One axis is dropped under it.
   `dist/constants.js`, and
   `@videojs/react`'s own documentation describes a three-state
   `available` / `unavailable` / `unsupported` model. The axis is on neither
-  table. `CONTEXT.md` is where Playdeck's own claim about its `Availability`
+  table. `GLOSSARY.md` is where Playdeck's own claim about its `Availability`
   union lives; this document makes no statement about what any other library
   here does or does not do on that ground.
 
@@ -1372,7 +1372,7 @@ Nowhere, on this table. **No axis reads `yes` for Playdeck and something other
 than `yes` for every other column**, and that is worth stating plainly rather
 than leaving a reader to work out from the absence of a paragraph. The axis
 that used to be claimed here — capability honesty — is dropped, for the
-reasons under "Dropped axes" above; `CONTEXT.md` is where Playdeck's own claim
+reasons under "Dropped axes" above; `GLOSSARY.md` is where Playdeck's own claim
 about it lives.
 
 What the table does separate is smaller and mutual. **AirPlay and Chromecast**

@@ -839,7 +839,7 @@ shorter word was taken. `archetype` already means a composed example player here
 and is also a route. `surface` already names two things. `register` had 151 hits
 across the repository, `treatment` 20, and `mode` and `kind` are both the
 player's own domain. `stance` had none, in `apps/`, `packages/`, `docs/` or
-`CONTEXT.md`, so it arrives meaning one thing.
+`GLOSSARY.md`, so it arrives meaning one thing.
 
 **The default is the load-bearing half.** Every route but one is a document, so
 a page added later gets the quiet treatment with nothing to remember — no list

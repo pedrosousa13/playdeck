@@ -306,7 +306,7 @@ export const ErrorDisplay = ({
   const { controller } = usePlayer();
   if (!error) return null;
 
-  // A Notice, per CONTEXT.md: a non-fatal `configuration` error reporting a
+  // A Notice, per GLOSSARY.md: a non-fatal `configuration` error reporting a
   // value that was rejected, while the fall-back behaviour it degraded to stands
   // unchanged. Nothing stopped working, so it must not be rendered as a failure
   // (#319). The rule is `isNotice` in core, which this asks of the published

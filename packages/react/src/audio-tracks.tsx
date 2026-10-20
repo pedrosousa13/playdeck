@@ -36,7 +36,7 @@ export const AudioTrackMenu = ({ children, ...props }: AudioTrackMenuProps) => {
   // `AudioTrackController.switchLevel` resolves a default, a window that
   // file's own header comment explains and `onAudioTrackSwitching` closes
   // moments later. The native provider enforces exclusivity only on
-  // selection too (CONTEXT.md's **Audio track** glossary entry) -- nothing
+  // selection too (GLOSSARY.md's **Audio track** glossary entry) -- nothing
   // guarantees one active track at rest on either provider, which is what
   // `MenuRadioGroup` still needs some value for.
   const activeId = audioTracks.find((track) => track.active)?.id ?? '';

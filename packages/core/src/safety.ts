@@ -245,7 +245,7 @@ export const standingRefusedUrlNotice = (
   return surface === undefined ? undefined : REFUSED_URL_NOTICES[surface];
 };
 
-// Whether an error is a Notice, per CONTEXT.md: a non-fatal `configuration`
+// Whether an error is a Notice, per GLOSSARY.md: a non-fatal `configuration`
 // error reporting a value that was rejected, while the fall-back it degraded to
 // stands unchanged. Nothing stopped working, which is what separates it from a
 // failure — it must not drive the lifecycle, and a consumer must not render it

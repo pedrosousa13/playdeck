@@ -158,7 +158,7 @@ export const createNativeAttachment = (
   // statements dispatches a media event.
   let lastDuration: number | null | undefined;
 
-  // The buffered ranges last put on the wire — what `CONTEXT.md` calls the
+  // The buffered ranges last put on the wire — what `GLOSSARY.md` calls the
   // **Buffered window**. An element reporting no ranges is saying one of two
   // things it gives no way to tell apart, "nothing is buffered" and "not
   // telling you", so this adapter answers for it: within one attachment an

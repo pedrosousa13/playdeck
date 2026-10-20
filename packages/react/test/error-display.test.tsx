@@ -187,7 +187,7 @@ describe('ErrorDisplay', () => {
 
 // #319. A Notice is a non-fatal `configuration` error a provider publishes to
 // report a value it rejected, while the fall-back it degraded to stands
-// unchanged (see CONTEXT.md, and `noticeIn` at
+// unchanged (see GLOSSARY.md, and `noticeIn` at
 // `packages/core/src/player-controller.ts:76-82`, whose predicate this mirrors).
 // Nothing stopped working, so covering a playing video with a full-bleed
 // `role="alert"` that carries no retry — `configuration` is always
