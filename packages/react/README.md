@@ -667,7 +667,7 @@ the same shape for `state.audioTracks`, covered in
 rung per published track and marks whichever one carries `active: true`.
 There is no "Auto" row and no sibling selection field, since an audio track
 carries its own selection (see the **Audio track** glossary entry in
-`CONTEXT.md`).
+`GLOSSARY.md`).
 
 <!-- example:react-menus -->
 

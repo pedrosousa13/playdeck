@@ -19,7 +19,7 @@ import { useEffect, useRef } from 'react';
 //    here is exactly the origin that seek began with.
 //  - `lifecycle` moving to `'error'`, carrying the `PlayerError` it moved
 //    with. A Notice -- a rejected prop, a fallback taken -- also fills
-//    `PlayerState.error`, but CONTEXT.md's "Notice" entry is explicit that
+//    `PlayerState.error`, but GLOSSARY.md's "Notice" entry is explicit that
 //    one never moves `lifecycle`, so only a fatal failure produces an event
 //    here.
 export type BehaviourPluginEvent =

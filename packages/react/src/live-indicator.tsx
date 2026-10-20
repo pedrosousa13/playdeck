@@ -23,7 +23,7 @@ export type LiveIndicatorProps = ComponentPropsWithRef<'button'>;
  * LIVE badge instead of vanishing -- a deliberate, named exception to the
  * uniform rule this package otherwise holds without exception (stated in
  * `packages/react/README.md`, beside its capability-gating rule, and in
- * `CONTEXT.md`'s **Availability** entry): "a control whose command the active
+ * `GLOSSARY.md`'s **Availability** entry): "a control whose command the active
  * provider cannot honour renders nothing rather than rendering disabled."
  * `LiveIndicator` is an indicator, not a control: it reports a property of
  * the stream (that it is live, and whether the viewer is at its edge), it

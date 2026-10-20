@@ -23,7 +23,7 @@ import { tokenDefault, withoutPhoneDockingBlock } from './token-default';
 // `--playdeck-poster-position`, `--playdeck-control-min-size`,
 // `--playdeck-seek-slider-min-block-size` and the four `--playdeck-caption-*`
 // tokens are read only inline, by the primitive that owns the part -- never by
-// `theme.css` or `docked.css` -- which is exactly what CONTEXT.md's own Token
+// `theme.css` or `docked.css` -- which is exactly what GLOSSARY.md's own Token
 // entry describes ("a primitive reads inline with a fallback"). Scoping this
 // scan to the two stylesheets alone would leave those ten permanently
 // undocumentable: nothing would ever confirm they are read at all, and the

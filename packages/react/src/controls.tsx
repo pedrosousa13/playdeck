@@ -188,7 +188,7 @@ const ownsArrowKeysTarget = (
 
 // What "outside the player" is checked against, for every global-mode key
 // exemption below: `Player.Viewport`'s own DOM node -- the player's own
-// bounding box (CONTEXT.md's "Viewport" entry) -- when this region sits
+// bounding box (GLOSSARY.md's "Viewport" entry) -- when this region sits
 // inside one, the same viewport part `useLiftAboveControls` (`captions.tsx`)
 // already reaches through to find `Controls` from outside it. A consumer's
 // own widget composed elsewhere in that box, a `SeekSlider` moved outside

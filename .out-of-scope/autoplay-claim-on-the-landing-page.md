@@ -3,7 +3,7 @@
 `/` makes no claim about autoplay. It carries no autoplay switch, no autoplay
 readout in the provider truth table, and no prose stating the capability either
 way. This is a decision about that page, not about the library: playdeck's
-autoplay support is real, documented in `CONTEXT.md`'s vocabulary and pinned by
+autoplay support is real, documented in `GLOSSARY.md`'s vocabulary and pinned by
 tests, and the provider pages and README are where a reader learns about it.
 
 ## Why this is out of scope
@@ -38,7 +38,7 @@ capabilities it lacks.
   `'audible'` and `'audible-then-muted'`, and the refusal path pinned by unit,
   component and e2e tests.
 - The vocabulary — play gate, autoplay attempt, recovered autoplay, suppressed
-  autoplay — defined in `CONTEXT.md`.
+  autoplay — defined in `GLOSSARY.md`.
 - Documentation on the provider pages and in the package READMEs, where a reader
   looking for capability detail actually goes.
 

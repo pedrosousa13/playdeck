@@ -25,7 +25,7 @@ to react to, in the same family as `data-state`. ADR-0001's boundary does not
 place it, and does not need extending to, because that boundary is about
 inbound values and this is the outbound direction.
 
-Direction is the entire argument, and `CONTEXT.md` already carries it. A
+Direction is the entire argument, and `GLOSSARY.md` already carries it. A
 **Token** there is "a CSS custom property a primitive reads inline with a
 fallback, so a consumer can change a value from a stylesheet without importing
 one" — the primitive reads, the consumer sets. `--playdeck-media-aspect-ratio`

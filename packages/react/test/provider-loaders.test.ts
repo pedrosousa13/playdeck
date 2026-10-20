@@ -1553,7 +1553,7 @@ test("never calls reportRefusedUrl when a supplied kind's own bag has nothing to
 // tests above with no such field, and a real caller with no controller to
 // report to (the same reason `useRefusedUrlReport`'s own `controller`
 // parameter is optional) must not crash either. Never a throw, per the
-// allowlist's own rule (`CONTEXT.md`'s "Shared allowlist" entry).
+// allowlist's own rule (`GLOSSARY.md`'s "Shared allowlist" entry).
 test('omits a refused option without throwing when no reportRefusedUrl is supplied', async () => {
   const adapter = { provider: 'native' } as unknown as ProviderAdapter;
   const factory = vi.fn(async () => adapter);
