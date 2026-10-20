@@ -853,7 +853,16 @@ export const libraries = [
     // additions described on the "no parts" row above -- up from 23.21 KB
     // (23767 bytes) the same day (2026-10-03), per `results.md` on `main`
     // -- which stays under this ceiling with no raise needed.
-    ceilingKb: 23.25,
+    //
+    // 23831 bytes measured 2026-10-20 -- 23.2724609375 KB, 23.27 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 23.25 KB is #911's render-time source commit: `use-activation.ts`'s
+    // `useActivation` now also computes `eagerRenderCommit` and folds it
+    // into `sourceCommitted`, reached by every composition this fixture
+    // builds through `@playdeck/react`'s own hook. The whole distance from
+    // the last committed figure is this issue's: that figure was 23.24 KB
+    // (23793 bytes), measured 2026-10-03 per `results.md` on `main`.
+    ceilingKb: 23.5,
     // This fixture renders one `Player.ActivationButton` and nothing else
     // guardable (tests/compare/entries/playdeck.tsx) -- every guardable
     // part except `ActivationButton` is forbidden.
