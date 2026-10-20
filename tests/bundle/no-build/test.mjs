@@ -315,30 +315,18 @@ try {
   // committed figure is this issue's: that figure was 114.34 KB
   // (117081 bytes), measured 2026-10-03 per `results.md` on `main`.
   //
-  // 118013 bytes measured 2026-10-20 -- 115.2470703125 KB, 115.25 KB to two
-  // places, already on the 0.25 KB grid. What carried this past 114.75 KB is
-  // #912's `priority` prop: `root.tsx` calls React 19's `preload()`, imported
-  // from the bare `react-dom` specifier, to hint the poster during render.
-  // `react-dom`'s float/resource module -- `preload`, `preinit` and their
-  // siblings -- was reached by nothing this package imported before, so it
-  // lands in `/browser.js` whether or not a consumer ever sets `priority`,
-  // the same way an unconditional import always has on this entry (`warmUp`'s
-  // own comment three blocks above records the same shape). The whole
-  // distance from the last committed figure is this issue's: that figure was
-  // 114.56 KB (117306 bytes), measured 2026-10-20 per the block above.
-  //
-  // 117660 bytes measured 2026-10-20 -- 114.90234375 KB, 114.90 KB to two
-  // places, rounded up to the next 0.25 KB -- 115.00 KB. Down from 115.25 KB
-  // after review: `root.tsx` renders `priority`'s poster hint as a plain
-  // `<link rel="preload">` element instead of calling `react-dom`'s own
-  // `preload()` -- React 19 hoists a rendered `<link>` into `<head>` on its
-  // own, server and client alike, so the explicit call and its `react-dom`
-  // import (the whole distance the block above records) were never needed.
-  // Still above the pre-#912 114.56 KB figure: the `priority` prop's own
-  // resolution logic (`loading`/`preload` defaults, the poster merge, the
-  // link element) ships in this eager bundle regardless of whether a
-  // consumer sets `priority`, the same way every other unconditional import
-  // on this entry does.
+  // 117661 bytes measured 2026-10-20 -- 114.9033203125 KB, 114.90 KB to two
+  // places, rounded up to the next 0.25 KB -- 115.00 KB. What carried this
+  // past 114.75 KB is #912's `priority` prop: `root.tsx`'s `loading`/
+  // `preload` resolution, the poster default merge, and the
+  // `<link rel="preload">` element it renders for the poster -- React 19
+  // hoists a rendered `<link>` into `<head>` on its own, so none of this
+  // needed `react-dom`'s own `preload()` API, which this entry does not
+  // call. All of it reaches `/browser.js` regardless of whether a consumer
+  // ever sets `priority`, the same way every other unconditional import on
+  // this entry does. The whole distance from the last committed figure is
+  // this issue's: that figure was 114.56 KB (117306 bytes), measured
+  // 2026-10-20 per the block above.
   const GZIP_EAGER_CEILING_KB = 115;
   const gzipKb = (bytes) => (bytes / 1024).toFixed(2);
   const scriptBytes = await Promise.all(

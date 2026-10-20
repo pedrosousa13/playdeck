@@ -386,6 +386,13 @@ const unsupportedError = (message: string) => ({
   message
 });
 
+// Shared by the interaction and viewport effects below, the only two
+// strategies `priority && loading !== 'eager'` can be reached from -- a
+// second call site means a second copy of the string unless it is named
+// once here.
+const PRIORITY_LOADING_CONFLICT_MESSAGE =
+  "priority cannot be combined with an explicit loading other than 'eager'.";
+
 // How much of the rejected source the message quotes, in code points. A YouTube
 // watch url is 43 of them and a `player.vimeo.com` url with a privacy hash 55, so
 // every form `docs/provider-setup.md` lists survives whole. Past that the quote
@@ -1058,9 +1065,7 @@ export const useActivation = (
     if (options.priority) {
       options.controller.setActivation({
         activation: 'error',
-        error: configurationError(
-          "priority cannot be combined with an explicit loading other than 'eager'."
-        )
+        error: configurationError(PRIORITY_LOADING_CONFLICT_MESSAGE)
       });
       return;
     }
@@ -1107,9 +1112,7 @@ export const useActivation = (
     if (currentConfiguration === 'invalid-priority-loading') {
       options.controller.setActivation({
         activation: 'error',
-        error: configurationError(
-          "priority cannot be combined with an explicit loading other than 'eager'."
-        )
+        error: configurationError(PRIORITY_LOADING_CONFLICT_MESSAGE)
       });
       return;
     }

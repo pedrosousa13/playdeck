@@ -708,26 +708,18 @@ export const libraries = [
     // figure is this issue's: that figure was 22.42 KB (22951 bytes),
     // measured 2026-10-03 per `results.md` on `main`.
     //
-    // 23619 bytes measured 2026-10-20 -- 23.0654296875 KB, 23.07 KB to two
-    // places, rounded up to the next 0.25 KB boundary -- 23.25 KB. What
-    // carried this past 22.75 KB is #912's `priority` prop: `root.tsx` calls
-    // React 19's `preload()`, imported from the bare `react-dom` specifier,
-    // to hint the poster during render. `react-dom`'s float/resource module
-    // was reached by nothing this package imported before, so it lands in
-    // every Playdeck composition this file measures regardless of whether a
-    // consumer ever sets `priority` -- the same unconditional-import shape
-    // the block above describes for #911. The whole distance from the last
-    // committed figure is this issue's: that figure was 22.53 KB
-    // (23068 bytes), measured 2026-10-20 per the block above.
-    //
     // 23613 bytes measured 2026-10-20 -- 23.0595703125 KB, 23.06 KB to two
-    // places, which stays under this ceiling with no raise needed. Down
-    // slightly after review: `root.tsx` renders `priority`'s poster hint as
-    // a plain `<link rel="preload">` element instead of calling
-    // `react-dom`'s own `preload()`, which removes the `react-dom` import
-    // the block above charged every composition -- offset by the small cost
-    // of the `<link>` element and its own resolution logic, still reached
-    // unconditionally the same way.
+    // places, rounded up to the next 0.25 KB boundary -- 23.25 KB. What
+    // carried this past 22.75 KB is #912's `priority` prop. `react-dom` was
+    // external to this measured bundle throughout the feature's development
+    // -- the import an earlier revision added for its own `preload()` call
+    // never reached these bytes -- so the whole distance is the prop's own
+    // code: `Root`'s `loading`/`preload` resolution, the poster default
+    // merge, and the `<link rel="preload">` element, all reached
+    // unconditionally through this fixture's own `@playdeck/react` import
+    // regardless of whether a consumer ever sets `priority`. The whole
+    // distance from the last committed figure is this issue's: that figure
+    // was 22.53 KB (23068 bytes), measured 2026-10-20 per the block above.
     ceilingKb: 23.25,
     // This fixture renders no control part at all (see
     // tests/compare/entries/playdeck-no-parts.tsx's own header) -- every
@@ -897,19 +889,15 @@ export const libraries = [
     // the last committed figure is this issue's: that figure was 23.24 KB
     // (23793 bytes), measured 2026-10-03 per `results.md` on `main`.
     //
-    // 24468 bytes measured 2026-10-20 -- 23.89453125 KB, 23.89 KB to two
+    // 24475 bytes measured 2026-10-20 -- 23.900390625 KB, 23.90 KB to two
     // places, rounded up to the next 0.25 KB -- 24.00 KB. What carried this
-    // past 23.5 KB is #912's `priority` prop, the same `react-dom` `preload`
-    // import described on the "no parts" row above, reached unconditionally
-    // through this fixture's own `@playdeck/react` import regardless of
-    // `priority`. The whole distance from the last committed figure is this
-    // issue's: that figure was 23.27 KB (23831 bytes), measured 2026-10-20
-    // per the block above.
-    //
-    // 24470 bytes measured 2026-10-20 -- 23.896484375 KB, 23.90 KB to two
-    // places, which stays under this ceiling with no raise needed -- the
-    // same post-review `preload()`-to-`<link>` swap described on the "no
-    // parts" row above.
+    // past 23.5 KB is #912's `priority` prop, the same cost described on the
+    // "no parts" row above -- `react-dom` was external to this bundle
+    // throughout, so the distance is the prop's own code, reached
+    // unconditionally through this fixture's own `@playdeck/react` import
+    // regardless of `priority`. The whole distance from the last committed
+    // figure is this issue's: that figure was 23.27 KB (23831 bytes),
+    // measured 2026-10-20 per the block above.
     ceilingKb: 24,
     // This fixture renders one `Player.ActivationButton` and nothing else
     // guardable (tests/compare/entries/playdeck.tsx) -- every guardable
@@ -1044,17 +1032,13 @@ export const libraries = [
     // issue's: that figure was 24.39 KB (24975 bytes), measured 2026-10-03
     // per `results.md` on `main`.
     //
-    // 25653 bytes measured 2026-10-20 -- 25.0517578125 KB, 25.05 KB to two
-    // places, rounded up to the next 0.25 KB -- 25.25 KB. What carried this
-    // past 24.75 KB is #912's `priority` prop, the same `react-dom` `preload`
-    // import described on the "no parts" row above. The whole distance from
-    // the last committed figure is this issue's: that figure was 24.58 KB
-    // (25169 bytes), measured 2026-10-20 per the block above.
-    //
     // 25662 bytes measured 2026-10-20 -- 25.060546875 KB, 25.06 KB to two
-    // places, which stays under this ceiling with no raise needed -- the
-    // same post-review `preload()`-to-`<link>` swap described on the "no
-    // parts" row above.
+    // places, rounded up to the next 0.25 KB -- 25.25 KB. What carried this
+    // past 24.75 KB is #912's `priority` prop, the same cost described on
+    // the "no parts" row above -- `react-dom` was external to this bundle
+    // throughout, so the distance is the prop's own code. The whole
+    // distance from the last committed figure is this issue's: that figure
+    // was 24.58 KB (25169 bytes), measured 2026-10-20 per the block above.
     ceilingKb: 25.25,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
@@ -1195,19 +1179,15 @@ export const libraries = [
     // KB had no headroom left to absorb this, so the ceiling moves to the
     // next 0.25 KB bracket up.
     //
-    // 29445 bytes measured 2026-10-20 -- 28.7548828125 KB, 28.75 KB to two
+    // 29453 bytes measured 2026-10-20 -- 28.7626953125 KB, 28.76 KB to two
     // places, rounded up to the next 0.25 KB: 29.00 KB (28.75 itself is not
-    // far enough: the row is 5 bytes past 28.75 KB exactly). What carried
-    // this past 28.25 KB is #912's `priority` prop, the same `react-dom`
-    // `preload` import described on the "no parts" row above. The whole
+    // far enough: the row is 13 bytes past 28.75 KB exactly). What carried
+    // this past 28.25 KB is #912's `priority` prop, the same cost described
+    // on the "no parts" row above -- `react-dom` was external to this
+    // bundle throughout, so the distance is the prop's own code. The whole
     // distance from the last committed figure is this issue's: that figure
     // was 28.02 KB (28688 bytes), measured 2026-10-03 per `results.md` on
     // `main`.
-    //
-    // 29452 bytes measured 2026-10-20 -- 28.76171875 KB, 28.76 KB to two
-    // places, which stays under this ceiling with no raise needed -- the
-    // same post-review `preload()`-to-`<link>` swap described on the "no
-    // parts" row above.
     ceilingKb: 29,
     // This fixture's control bar renders `ActivationButton`, `Controls`,
     // `PlayButton`, `MuteButton`, `VolumeSlider`, `SeekSlider`, `Time` and
