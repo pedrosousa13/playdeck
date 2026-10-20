@@ -707,7 +707,20 @@ export const libraries = [
     // control parts it renders. The whole distance from the last committed
     // figure is this issue's: that figure was 22.42 KB (22951 bytes),
     // measured 2026-10-03 per `results.md` on `main`.
-    ceilingKb: 22.75,
+    //
+    // 23613 bytes measured 2026-10-20 -- 23.0595703125 KB, 23.06 KB to two
+    // places, rounded up to the next 0.25 KB boundary -- 23.25 KB. What
+    // carried this past 22.75 KB is #912's `priority` prop. `react-dom` was
+    // external to this measured bundle throughout the feature's development
+    // -- the import an earlier revision added for its own `preload()` call
+    // never reached these bytes -- so the whole distance is the prop's own
+    // code: `Root`'s `loading`/`preload` resolution, the poster default
+    // merge, and the `<link rel="preload">` element, all reached
+    // unconditionally through this fixture's own `@playdeck/react` import
+    // regardless of whether a consumer ever sets `priority`. The whole
+    // distance from the last committed figure is this issue's: that figure
+    // was 22.53 KB (23068 bytes), measured 2026-10-20 per the block above.
+    ceilingKb: 23.25,
     // This fixture renders no control part at all (see
     // tests/compare/entries/playdeck-no-parts.tsx's own header) -- every
     // guardable part is forbidden.
@@ -875,7 +888,17 @@ export const libraries = [
     // builds through `@playdeck/react`'s own hook. The whole distance from
     // the last committed figure is this issue's: that figure was 23.24 KB
     // (23793 bytes), measured 2026-10-03 per `results.md` on `main`.
-    ceilingKb: 23.5,
+    //
+    // 24475 bytes measured 2026-10-20 -- 23.900390625 KB, 23.90 KB to two
+    // places, rounded up to the next 0.25 KB -- 24.00 KB. What carried this
+    // past 23.5 KB is #912's `priority` prop, the same cost described on the
+    // "no parts" row above -- `react-dom` was external to this bundle
+    // throughout, so the distance is the prop's own code, reached
+    // unconditionally through this fixture's own `@playdeck/react` import
+    // regardless of `priority`. The whole distance from the last committed
+    // figure is this issue's: that figure was 23.27 KB (23831 bytes),
+    // measured 2026-10-20 per the block above.
+    ceilingKb: 24,
     // This fixture renders one `Player.ActivationButton` and nothing else
     // guardable (tests/compare/entries/playdeck.tsx) -- every guardable
     // part except `ActivationButton` is forbidden.
@@ -1008,7 +1031,15 @@ export const libraries = [
     // provider. The whole distance from the last committed figure is this
     // issue's: that figure was 24.39 KB (24975 bytes), measured 2026-10-03
     // per `results.md` on `main`.
-    ceilingKb: 24.75,
+    //
+    // 25662 bytes measured 2026-10-20 -- 25.060546875 KB, 25.06 KB to two
+    // places, rounded up to the next 0.25 KB -- 25.25 KB. What carried this
+    // past 24.75 KB is #912's `priority` prop, the same cost described on
+    // the "no parts" row above -- `react-dom` was external to this bundle
+    // throughout, so the distance is the prop's own code. The whole
+    // distance from the last committed figure is this issue's: that figure
+    // was 24.58 KB (25169 bytes), measured 2026-10-20 per the block above.
+    ceilingKb: 25.25,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
@@ -1147,7 +1178,17 @@ export const libraries = [
     // eagerly the same way every row's does regardless of composition. 28.00
     // KB had no headroom left to absorb this, so the ceiling moves to the
     // next 0.25 KB bracket up.
-    ceilingKb: 28.25,
+    //
+    // 29453 bytes measured 2026-10-20 -- 28.7626953125 KB, 28.76 KB to two
+    // places, rounded up to the next 0.25 KB: 29.00 KB (28.75 itself is not
+    // far enough: the row is 13 bytes past 28.75 KB exactly). What carried
+    // this past 28.25 KB is #912's `priority` prop, the same cost described
+    // on the "no parts" row above -- `react-dom` was external to this
+    // bundle throughout, so the distance is the prop's own code. The whole
+    // distance from the last committed figure is this issue's: that figure
+    // was 28.02 KB (28688 bytes), measured 2026-10-03 per `results.md` on
+    // `main`.
+    ceilingKb: 29,
     // This fixture's control bar renders `ActivationButton`, `Controls`,
     // `PlayButton`, `MuteButton`, `VolumeSlider`, `SeekSlider`, `Time` and
     // `FullscreenButton` (tests/compare/entries/playdeck-control-bar.tsx,

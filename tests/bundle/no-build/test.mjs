@@ -314,7 +314,20 @@ try {
   // (`'viewport'`, the library default). The whole distance from the last
   // committed figure is this issue's: that figure was 114.34 KB
   // (117081 bytes), measured 2026-10-03 per `results.md` on `main`.
-  const GZIP_EAGER_CEILING_KB = 114.75;
+  //
+  // 117661 bytes measured 2026-10-20 -- 114.9033203125 KB, 114.90 KB to two
+  // places, rounded up to the next 0.25 KB -- 115.00 KB. What carried this
+  // past 114.75 KB is #912's `priority` prop: `root.tsx`'s `loading`/
+  // `preload` resolution, the poster default merge, and the
+  // `<link rel="preload">` element it renders for the poster -- React 19
+  // hoists a rendered `<link>` into `<head>` on its own, so none of this
+  // needed `react-dom`'s own `preload()` API, which this entry does not
+  // call. All of it reaches `/browser.js` regardless of whether a consumer
+  // ever sets `priority`, the same way every other unconditional import on
+  // this entry does. The whole distance from the last committed figure is
+  // this issue's: that figure was 114.56 KB (117306 bytes), measured
+  // 2026-10-20 per the block above.
+  const GZIP_EAGER_CEILING_KB = 115;
   const gzipKb = (bytes) => (bytes / 1024).toFixed(2);
   const scriptBytes = await Promise.all(
     expectedScripts.map((pathname) => readFile(resolveRequest(pathname)))
