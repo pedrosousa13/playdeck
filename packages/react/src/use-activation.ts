@@ -66,6 +66,12 @@ export type UseActivationOptions = {
   readonly playThreshold: number;
   readonly prepareMedia: (media: PlayerMediaMount) => void;
   readonly preload: PlayerPreload;
+  // Resolved, like `loading` above: `Root` has already folded an omitted
+  // `loading` into `'eager'` under `priority` by the time either reaches
+  // here, so `priority && loading !== 'eager'` below is reachable only for an
+  // explicit `loading` that contradicts it -- the one case the brief calls a
+  // configuration error.
+  readonly priority: boolean;
   readonly providerOptions?: ResolvedProviderOptions;
   // Passed straight through to `loadProvider`'s own `providers` field once
   // loading actually happens (below); this hook makes no decision on the
@@ -105,7 +111,10 @@ type Session = {
 type PlaybackOwnership = 'none' | 'autoplaying' | 'auto-paused';
 
 type ActivationConfiguration =
-  'valid' | 'invalid-interaction-autoplay' | 'invalid-play-threshold';
+  | 'valid'
+  | 'invalid-interaction-autoplay'
+  | 'invalid-play-threshold'
+  | 'invalid-priority-loading';
 
 type ObserverRegistration = {
   readonly configuration: ActivationConfiguration;
@@ -144,15 +153,23 @@ const sourceKey = (source: SourceDetectionResult): string =>
 // gap between them. Only under `viewport`: neither threshold is read by the
 // other two strategies, so no observer is ever built and there is nothing there
 // for the combination to break.
+//
+// `priority` asking for `loading !== 'eager'` is checked first, ahead of both:
+// `Root` has already folded an omitted `loading` into `'eager'` under
+// `priority`, so reaching this function with both set is only possible for a
+// consumer who wrote an explicit, contradicting `loading` -- the one case the
+// brief says must not be silently resolved either way.
 const activationConfiguration = ({
   autoplay,
   loadThreshold,
   loading,
-  playThreshold
+  playThreshold,
+  priority
 }: Pick<
   UseActivationOptions,
-  'autoplay' | 'loadThreshold' | 'loading' | 'playThreshold'
+  'autoplay' | 'loadThreshold' | 'loading' | 'playThreshold' | 'priority'
 >): ActivationConfiguration => {
+  if (priority && loading !== 'eager') return 'invalid-priority-loading';
   if (loading === 'interaction' && autoplay !== false)
     return 'invalid-interaction-autoplay';
   if (loading === 'viewport' && playThreshold < loadThreshold)
@@ -1034,6 +1051,19 @@ export const useActivation = (
       });
       return;
     }
+    // Checked ahead of the autoplay conflict below, on the same terms as the
+    // refusal above it: `priority` asking for `'eager'` is the more
+    // fundamental mismatch, and a consumer who wrote both conflicts should
+    // not be told about the autoplay one first.
+    if (options.priority) {
+      options.controller.setActivation({
+        activation: 'error',
+        error: configurationError(
+          "priority cannot be combined with an explicit loading other than 'eager'."
+        )
+      });
+      return;
+    }
     if (options.autoplay === false) return;
     options.controller.setActivation({
       activation: 'error',
@@ -1046,6 +1076,7 @@ export const useActivation = (
     options.autoplay,
     options.controller,
     options.loading,
+    options.priority,
     refusedMessage
   ]);
 
@@ -1067,6 +1098,18 @@ export const useActivation = (
       options.controller.setActivation({
         activation: 'error',
         error: refusedSourceError(refusedMessage)
+      });
+      return;
+    }
+    // Checked ahead of the play-threshold conflict below, same reason the
+    // interaction effect orders its own `priority` check ahead of its
+    // autoplay conflict: the more fundamental mismatch first.
+    if (currentConfiguration === 'invalid-priority-loading') {
+      options.controller.setActivation({
+        activation: 'error',
+        error: configurationError(
+          "priority cannot be combined with an explicit loading other than 'eager'."
+        )
       });
       return;
     }

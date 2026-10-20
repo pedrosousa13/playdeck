@@ -153,6 +153,7 @@ type ActivationProbeProps = {
   readonly onLayout?: () => void;
   readonly playThreshold?: number;
   readonly preload?: Player.PlayerPreload;
+  readonly priority?: boolean;
   readonly providerOptions?: Player.PlayerProviderOptions;
   readonly showMedia?: boolean;
   readonly showViewport?: boolean;
@@ -172,6 +173,7 @@ const ActivationProbe = ({
   onLayout,
   playThreshold = loadThreshold,
   preload = 'metadata',
+  priority = false,
   providerOptions,
   showMedia = true,
   showViewport = true,
@@ -193,6 +195,7 @@ const ActivationProbe = ({
     playThreshold,
     prepareMedia: () => undefined,
     preload,
+    priority,
     providerOptions,
     source: detectSource(source)
   });
@@ -295,6 +298,93 @@ test('eager loads after client mount and forwards preload', async () => {
   await vi.waitFor(() =>
     expect(fake.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
   );
+});
+
+// `priority` with no explicit `loading` resolves to `'eager'` -- the same
+// commit-at-mount this file's own test above exercises for an explicit
+// `loading: 'eager'` -- and with no explicit `preload` resolves to `'auto'`,
+// the one difference from that test's own `preload: 'none'`.
+test('priority with no explicit loading commits eagerly and defaults preload to auto', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+
+  render(fixture({ priority: true }));
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  expect(screen.getByLabelText('Playdeck media').getAttribute('preload')).toBe(
+    'auto'
+  );
+  expect(ControlledIntersectionObserver.instances).toHaveLength(0);
+});
+
+// An explicit `preload` still wins over `priority`'s own default, the DOM
+// counterpart of priority-ssr.test.tsx's own assertion of the same claim.
+test('an explicit preload still wins under priority', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+
+  render(fixture({ preload: 'none', priority: true }));
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  expect(screen.getByLabelText('Playdeck media').getAttribute('preload')).toBe(
+    'none'
+  );
+});
+
+// Named rather than silently resolved, on the same terms as the
+// interaction/autoplay and playThreshold conflicts above and below:
+// `priority` asks for `'eager'`, and an explicit `loading` that disagrees is
+// a configuration error, not a value `priority` quietly overrides.
+test('priority with an explicit loading other than eager is a configuration error (viewport)', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  render(fixture({ loading: 'viewport', priority: true, ref: handle }));
+
+  await vi.waitFor(() =>
+    expect(handle.current?.getState()).toMatchObject({
+      activation: 'error',
+      error: {
+        category: 'configuration',
+        fatal: false,
+        recoverable: false,
+        message:
+          "priority cannot be combined with an explicit loading other than 'eager'."
+      }
+    })
+  );
+  expect(ControlledIntersectionObserver.instances).toHaveLength(0);
+  expect(mockedLoadProvider).not.toHaveBeenCalled();
+});
+
+test('priority with an explicit loading other than eager is a configuration error (interaction)', async () => {
+  const handle = createRef<Player.PlayerHandle>();
+  render(interactionFixture({ priority: true, ref: handle }));
+
+  await vi.waitFor(() =>
+    expect(handle.current?.getState()).toMatchObject({
+      activation: 'error',
+      error: {
+        category: 'configuration',
+        fatal: false,
+        recoverable: false,
+        message:
+          "priority cannot be combined with an explicit loading other than 'eager'."
+      }
+    })
+  );
+  expect(mockedLoadProvider).not.toHaveBeenCalled();
+});
+
+// `loading: 'eager'` explicitly alongside `priority` agrees with it rather
+// than conflicting -- the one explicit value priority's own rule permits.
+test('priority with an explicit loading of eager is not a configuration error', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+  const handle = createRef<Player.PlayerHandle>();
+
+  render(fixture({ loading: 'eager', priority: true, ref: handle }));
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  expect(handle.current?.getState().activation).not.toBe('error');
 });
 
 test('viewport uses the default margin and does not load before intersection', async () => {
@@ -3007,6 +3097,19 @@ const configurationErrorProducers = [
           source="/tracer.mp4"
         >
           <Player.Viewport>{surface}</Player.Viewport>
+        </Player.Root>
+      );
+    }
+  },
+  {
+    producer: 'priority with an explicit non-eager loading',
+    mount: (surface: ReactNode, ref: Ref<Player.PlayerHandle>) => {
+      render(
+        <Player.Root loading="viewport" priority ref={ref} source="/tracer.mp4">
+          <Player.Viewport>
+            <Player.Media />
+            {surface}
+          </Player.Viewport>
         </Player.Root>
       );
     }

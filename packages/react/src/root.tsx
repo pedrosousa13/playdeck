@@ -11,6 +11,7 @@ import {
 import { resolvePreferredTextTrack } from './captions.js';
 import { preconnectOriginsFor } from './connection-warm-up.js';
 import { INTERNAL_CONTROLLER } from './internal-controller.js';
+import { permittedUrl } from './permitted-url.js';
 import {
   collectPlayerActions,
   PlayerContext,
@@ -18,7 +19,11 @@ import {
   type PlayerHandle,
   type PosterState
 } from './player-context.js';
-import { DefaultPosterContext, type ResponsivePoster } from './poster.js';
+import {
+  DefaultPosterContext,
+  permittedPosterSrcSet,
+  type ResponsivePoster
+} from './poster.js';
 import { detectSourceWithProviders } from './provider-loaders.js';
 import {
   useActivation,
@@ -42,6 +47,7 @@ import {
   type ReactNode,
   type Ref
 } from 'react';
+import { preload as preloadResource } from 'react-dom';
 
 // HTMLMediaElement.HAVE_CURRENT_DATA, inlined for the same reason
 // provider-native inlines HAVE_METADATA: some DOM test environments omit the
@@ -154,6 +160,12 @@ export type RootProps<P extends ConsumerProviders = Record<string, never>> = {
    * - `'interaction'` commits on the first `Player.ActivationButton` press
    *   (or a direct `activateFromInteraction` call); cannot be combined with
    *   `autoplay`.
+   *
+   * Defaults to `'viewport'` unless `priority` is set and this is left unset,
+   * in which case it defaults to `'eager'` instead -- see `priority`. An
+   * explicit value here other than `'eager'` together with `priority` is a
+   * configuration error, reported the same way the other two conflicts above
+   * are.
    */
   readonly loading?: import('./use-activation.js').PlayerLoadingStrategy;
   /**
@@ -229,7 +241,37 @@ export type RootProps<P extends ConsumerProviders = Record<string, never>> = {
    * (`PlayerController.reportRejectedTextTrackLanguage`).
    */
   readonly preferredTextTrackLanguage?: string;
+  /**
+   * The native `<video>` element's own `preload` hint -- `'none'`,
+   * `'metadata'` (default) or `'auto'`. Defaults to `'auto'` instead where
+   * `priority` is set and this is left unset; an explicit value here always
+   * wins over `priority`'s own default either way. HLS and the three embed
+   * providers read nothing from this prop.
+   */
   readonly preload?: import('./use-activation.js').PlayerPreload;
+  /**
+   * Treat this player as the one above the fold, for a consumer who would
+   * otherwise set `loading`, `preload` and a `ResponsivePoster`'s own priority
+   * fields by hand to get there. Defaults to `false`, which changes none of
+   * those defaults. Set `true` and it:
+   *
+   * - Implies `loading: 'eager'` where `loading` is left unset. An explicit
+   *   `loading` other than `'eager'` is a configuration error instead -- see
+   *   `loading`.
+   * - Implies `preload: 'auto'` where `preload` is left unset; an explicit
+   *   `preload` is honoured either way.
+   * - Carries `fetchPriority: 'high'` and `loading: 'eager'` onto the poster
+   *   `Player.Poster` resolves from this component's own `poster` prop,
+   *   unless the `ResponsivePoster` given to `poster` already sets either
+   *   field itself.
+   * - Calls React 19's `preload()` (`react-dom`) for that same poster during
+   *   render, with `fetchPriority: 'high'` and its `srcSet`/`sizes` as
+   *   `imageSrcSet`/`imageSizes` -- so the server HTML carries a `<link
+   *   rel="preload">` for it ahead of any script, for a poster URL the
+   *   shared allowlist permits. A poster this component has no URL for yet
+   *   (`poster: 'provider'`, unresolved) gets no preload hint.
+   */
+  readonly priority?: boolean;
   // Compared by value, not by reference, so an inline literal is safe to
   // pass: see `providerOptionsEqual` in `use-activation.ts`, which compares
   // every key either bag carries -- a key named after a `providers` entry
@@ -343,7 +385,12 @@ export type RootProps<P extends ConsumerProviders = Record<string, never>> = {
 // declared beside it so there is no second copy to drift.
 export type PlayerActivationProps = Pick<
   RootProps,
-  'loadMargin' | 'loadThreshold' | 'loading' | 'playThreshold' | 'preload'
+  | 'loadMargin'
+  | 'loadThreshold'
+  | 'loading'
+  | 'playThreshold'
+  | 'preload'
+  | 'priority'
 >;
 
 type Reconciliation<Value> = { value: Value };
@@ -374,7 +421,7 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
   ignoreReducedMotion = false,
   loadMargin = '200px 0px',
   loadThreshold = 0,
-  loading = 'viewport',
+  loading: loadingProp,
   loop,
   mediaMetadata,
   muted,
@@ -390,13 +437,24 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
   preferredTextTrackLanguage,
   providerOptions,
   providers,
+  priority = false,
   ref,
   source,
   startTime,
-  preload = 'metadata',
+  preload: preloadProp,
   volume,
   warmUp = false
 }: RootProps<P>) => {
+  // `loading` and `preload` each have a default that depends on `priority`
+  // rather than a fixed one, so the two are resolved here instead of in the
+  // destructuring above -- a destructuring default cannot tell an omitted
+  // prop apart from one explicitly set to the same value, and that
+  // distinction is exactly what `priority`'s conflict rule (`loading` above)
+  // turns on: an omitted `loading` becomes `'eager'` under `priority`, while
+  // an explicit one that disagrees is a configuration error reported by
+  // `useActivation` (`invalid-priority-loading`), not silently overridden.
+  const loading = loadingProp ?? (priority ? 'eager' : 'viewport');
+  const preload = preloadProp ?? (priority ? 'auto' : 'metadata');
   const [controller] = useState(() => new PlayerController());
   const [hiddenTransition, setHiddenTransition] = useState<SourceTransition>();
   // `hiddenTransition` also latches on a decoded frame with no confirmed play
@@ -980,6 +1038,7 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
     playThreshold,
     prepareMedia,
     preload,
+    priority,
     providerOptions: resolvedProviderOptions,
     providers,
     source: detectedSource
@@ -1360,7 +1419,7 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
   // default image in either case. A literal or a `ResponsivePoster` needs no
   // source to resolve against and is normalized whether or not one is
   // attached yet.
-  const defaultPoster: ResponsivePoster | undefined =
+  const resolvedPoster: ResponsivePoster | undefined =
     poster === undefined
       ? undefined
       : poster === 'provider'
@@ -1370,6 +1429,40 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
         : typeof poster === 'string'
           ? { src: poster }
           : poster;
+  // `priority` raises the resolved poster's own fetch priority and loading
+  // eagerness, unless the `ResponsivePoster` already set either field --
+  // `??` reads as "unless set", since neither field has a falsy value worth
+  // telling apart from absent (`fetchPriority`/`loading` are string enums).
+  const defaultPoster: ResponsivePoster | undefined =
+    priority && resolvedPoster !== undefined
+      ? {
+          ...resolvedPoster,
+          fetchPriority: resolvedPoster.fetchPriority ?? 'high',
+          loading: resolvedPoster.loading ?? 'eager'
+        }
+      : resolvedPoster;
+  // The preload hint `priority` promises: called during render, not from an
+  // effect, which is what lets React's own float mechanism hoist it into the
+  // streamed server HTML ahead of any script, the same way `eagerVideoCommit`
+  // (`use-activation.ts`) needs its render-time read rather than an effect's.
+  // Gated on `permittedUrl` on the same terms as `PosterImage`'s own `src`
+  // (`poster.tsx`) -- a poster URL this library would refuse to render gets
+  // no preload hint either, so a `javascript:`/`data:` value cannot reach the
+  // server HTML through this second surface. `poster: 'provider'` unresolved
+  // (`resolvedPoster` still `undefined`) hints nothing, there being no URL yet
+  // to hint.
+  const posterPreloadHref =
+    priority && defaultPoster !== undefined
+      ? permittedUrl(defaultPoster.src)
+      : undefined;
+  if (posterPreloadHref !== undefined) {
+    preloadResource(posterPreloadHref, {
+      as: 'image',
+      fetchPriority: 'high',
+      imageSizes: defaultPoster?.sizes,
+      imageSrcSet: permittedPosterSrcSet(defaultPoster?.srcSet).value
+    });
+  }
 
   return (
     <PlayerContext.Provider value={value}>

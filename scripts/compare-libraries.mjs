@@ -707,7 +707,19 @@ export const libraries = [
     // control parts it renders. The whole distance from the last committed
     // figure is this issue's: that figure was 22.42 KB (22951 bytes),
     // measured 2026-10-03 per `results.md` on `main`.
-    ceilingKb: 22.75,
+    //
+    // 23619 bytes measured 2026-10-20 -- 23.0654296875 KB, 23.07 KB to two
+    // places, rounded up to the next 0.25 KB boundary -- 23.25 KB. What
+    // carried this past 22.75 KB is #912's `priority` prop: `root.tsx` calls
+    // React 19's `preload()`, imported from the bare `react-dom` specifier,
+    // to hint the poster during render. `react-dom`'s float/resource module
+    // was reached by nothing this package imported before, so it lands in
+    // every Playdeck composition this file measures regardless of whether a
+    // consumer ever sets `priority` -- the same unconditional-import shape
+    // the block above describes for #911. The whole distance from the last
+    // committed figure is this issue's: that figure was 22.53 KB
+    // (23068 bytes), measured 2026-10-20 per the block above.
+    ceilingKb: 23.25,
     // This fixture renders no control part at all (see
     // tests/compare/entries/playdeck-no-parts.tsx's own header) -- every
     // guardable part is forbidden.
@@ -875,7 +887,16 @@ export const libraries = [
     // builds through `@playdeck/react`'s own hook. The whole distance from
     // the last committed figure is this issue's: that figure was 23.24 KB
     // (23793 bytes), measured 2026-10-03 per `results.md` on `main`.
-    ceilingKb: 23.5,
+    //
+    // 24468 bytes measured 2026-10-20 -- 23.89453125 KB, 23.89 KB to two
+    // places, rounded up to the next 0.25 KB -- 24.00 KB. What carried this
+    // past 23.5 KB is #912's `priority` prop, the same `react-dom` `preload`
+    // import described on the "no parts" row above, reached unconditionally
+    // through this fixture's own `@playdeck/react` import regardless of
+    // `priority`. The whole distance from the last committed figure is this
+    // issue's: that figure was 23.27 KB (23831 bytes), measured 2026-10-20
+    // per the block above.
+    ceilingKb: 24,
     // This fixture renders one `Player.ActivationButton` and nothing else
     // guardable (tests/compare/entries/playdeck.tsx) -- every guardable
     // part except `ActivationButton` is forbidden.
@@ -1008,7 +1029,14 @@ export const libraries = [
     // provider. The whole distance from the last committed figure is this
     // issue's: that figure was 24.39 KB (24975 bytes), measured 2026-10-03
     // per `results.md` on `main`.
-    ceilingKb: 24.75,
+    //
+    // 25653 bytes measured 2026-10-20 -- 25.0517578125 KB, 25.05 KB to two
+    // places, rounded up to the next 0.25 KB -- 25.25 KB. What carried this
+    // past 24.75 KB is #912's `priority` prop, the same `react-dom` `preload`
+    // import described on the "no parts" row above. The whole distance from
+    // the last committed figure is this issue's: that figure was 24.58 KB
+    // (25169 bytes), measured 2026-10-20 per the block above.
+    ceilingKb: 25.25,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
@@ -1147,7 +1175,16 @@ export const libraries = [
     // eagerly the same way every row's does regardless of composition. 28.00
     // KB had no headroom left to absorb this, so the ceiling moves to the
     // next 0.25 KB bracket up.
-    ceilingKb: 28.25,
+    //
+    // 29445 bytes measured 2026-10-20 -- 28.7548828125 KB, 28.75 KB to two
+    // places, rounded up to the next 0.25 KB: 29.00 KB (28.75 itself is not
+    // far enough: the row is 5 bytes past 28.75 KB exactly). What carried
+    // this past 28.25 KB is #912's `priority` prop, the same `react-dom`
+    // `preload` import described on the "no parts" row above. The whole
+    // distance from the last committed figure is this issue's: that figure
+    // was 28.02 KB (28688 bytes), measured 2026-10-03 per `results.md` on
+    // `main`.
+    ceilingKb: 29,
     // This fixture's control bar renders `ActivationButton`, `Controls`,
     // `PlayButton`, `MuteButton`, `VolumeSlider`, `SeekSlider`, `Time` and
     // `FullscreenButton` (tests/compare/entries/playdeck-control-bar.tsx,

@@ -314,7 +314,19 @@ try {
   // (`'viewport'`, the library default). The whole distance from the last
   // committed figure is this issue's: that figure was 114.34 KB
   // (117081 bytes), measured 2026-10-03 per `results.md` on `main`.
-  const GZIP_EAGER_CEILING_KB = 114.75;
+  //
+  // 118013 bytes measured 2026-10-20 -- 115.2470703125 KB, 115.25 KB to two
+  // places, already on the 0.25 KB grid. What carried this past 114.75 KB is
+  // #912's `priority` prop: `root.tsx` calls React 19's `preload()`, imported
+  // from the bare `react-dom` specifier, to hint the poster during render.
+  // `react-dom`'s float/resource module -- `preload`, `preinit` and their
+  // siblings -- was reached by nothing this package imported before, so it
+  // lands in `/browser.js` whether or not a consumer ever sets `priority`,
+  // the same way an unconditional import always has on this entry (`warmUp`'s
+  // own comment three blocks above records the same shape). The whole
+  // distance from the last committed figure is this issue's: that figure was
+  // 114.56 KB (117306 bytes), measured 2026-10-20 per the block above.
+  const GZIP_EAGER_CEILING_KB = 115.25;
   const gzipKb = (bytes) => (bytes / 1024).toFixed(2);
   const scriptBytes = await Promise.all(
     expectedScripts.map((pathname) => readFile(resolveRequest(pathname)))

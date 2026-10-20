@@ -7,6 +7,12 @@ export default defineConfig({
       external: [
         'react',
         'react/jsx-runtime',
+        // `root.tsx` calls React 19's `preload()` for `priority`'s poster
+        // hint -- the same reason `react` itself is external: the host
+        // app's own `react-dom` is what the DOM (or the server renderer)
+        // actually runs, and bundling a second copy in here would call a
+        // float dispatcher disconnected from it, doing nothing.
+        'react-dom',
         '@playdeck/core',
         // Each of the two subpaths, named separately: an `external` entry is
         // an exact specifier match, so leaving either out would bundle it

@@ -102,6 +102,17 @@ Autoplay itself is unaffected by any of this: the server can't evaluate
 attribute, and the controller still attempts `play()` only after the provider
 attaches on the client, whatever `loading` is set to.
 
+`priority` is a shorthand for the player above the fold, for a consumer who
+would otherwise set `loading`, `preload` and a poster's own `fetchPriority`
+by hand to get there. Set `true` on a `Root` whose `source` resolves to a
+`video` file, it implies `loading: 'eager'` and `preload: 'auto'` where either
+is left unset (an explicit `loading` other than `'eager'` is a configuration
+error instead), carries `fetchPriority: 'high'` and `loading: 'eager'` onto
+the poster `Player.Poster` resolves from `poster` unless the poster already
+sets either itself, and calls React 19's `preload()` for that same poster
+during render, so the server HTML carries a `<link rel="preload">` for it
+too. Defaults to `false`, which changes none of those defaults.
+
 `textTracks` is a prop on `Player.Media`, not on `Player.Root`. It takes an
 array of `{ src, srcLang, label, kind?, default? }`, where `kind` is
 `'captions'` or `'subtitles'` and `default` selects that track on load. Tracks

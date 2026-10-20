@@ -226,7 +226,11 @@ const scanSrcSetCandidates = (srcSet: string): string[] => {
 // then disagree with it. It is one flag for the whole list, not one per
 // candidate -- the notice slot holds one notice, and an operator with a
 // poisoned `srcSet` has the same one field to go and clean either way (#330).
-const permittedPosterSrcSet = (
+// Exported for `root.tsx`'s own `priority` preload hint: the `<link
+// rel="preload">` it emits for the resolved poster carries the same
+// `imageSrcSet` candidates `PosterImage` itself renders, filtered through the
+// one allowlist both surfaces answer to.
+export const permittedPosterSrcSet = (
   srcSet: string | undefined
 ): { readonly value: string | undefined; readonly refused: boolean } => {
   if (srcSet === undefined) return { value: undefined, refused: false };
