@@ -44,6 +44,18 @@ export type NativeAttachmentDeps = {
   >;
   // Drops the host's provider-state subscribers on destroy.
   readonly clearStateListeners: () => void;
+  // Whether `@playdeck/react` committed this element's source at render
+  // time rather than from an effect (`use-activation.ts`'s own
+  // `eagerVideoCommit`, under `loading: 'eager'` only) -- an explicit
+  // signal from the caller that already knows it, not something read off
+  // the element. `load()` below reads this, not `media.networkState`: per
+  // spec, inserting a `<source>` child with no `src` while `networkState`
+  // is still `NETWORK_EMPTY` itself invokes resource selection, whose first
+  // step sets `networkState` away from `NETWORK_EMPTY` synchronously -- so a
+  // client-created element reaches the same `networkState` a server-
+  // rendered one does, before this provider ever attaches to either, and
+  // reading it back could never tell the two apart.
+  readonly committedAtRender: boolean;
 };
 
 // The load/attach/teardown seam: owns the attached/loaded/destroyed flags,
@@ -70,7 +82,8 @@ export const createNativeAttachment = (
     remotePlayback,
     textTracks,
     audioTracks,
-    clearStateListeners
+    clearStateListeners,
+    committedAtRender
   }: NativeAttachmentDeps
 ): NativeAttachment => {
   const ownerDocument = media.ownerDocument;
@@ -331,14 +344,15 @@ export const createNativeAttachment = (
     lastBuffered = [];
     emit(syncLive({ buffered: [] }));
   };
-  // Fires once per failed `<source>` candidate rather than once per load: the
-  // media element itself never errors when every child does (see
-  // `sourceExhausted`), so this is the only listener that hears it.
-  // `networkState` reaching `NETWORK_NO_SOURCE` is the browser's own signal
-  // that nothing is left to try -- an earlier candidate's failure leaves it at
-  // `NETWORK_LOADING` while the next one is attempted, so a source that fails
-  // while a later one succeeds never reaches this branch.
-  const onSourceError = (originalEvent: Event): void => {
+  // Shared by `onSourceError` below and by `attach()`'s own pre-attach
+  // check: `networkState` reaching `NETWORK_NO_SOURCE` is the browser's own
+  // signal that nothing is left to try -- an earlier
+  // candidate's failure leaves it at `NETWORK_LOADING` while the next one is
+  // attempted, so a source that fails while a later one succeeds never
+  // reaches either caller. `originalEvent` is the `<source>`'s own `error`
+  // event where there is one; `attach()` has none to give, the same
+  // optional-event shape `emitMediaState` already uses.
+  const publishSourceExhaustion = (originalEvent?: Event): void => {
     if (sourceErrorPublished || media.networkState !== NETWORK_NO_SOURCE)
       return;
     sourceErrorPublished = true;
@@ -352,9 +366,15 @@ export const createNativeAttachment = (
         seeking: false,
         error
       },
-      providerEvent('error', originalEvent, error)
+      originalEvent ? providerEvent('error', originalEvent, error) : undefined
     );
   };
+  // Fires once per failed `<source>` candidate rather than once per load:
+  // the media element itself never errors when every child does (see
+  // `sourceExhausted`), so this is the only listener that hears a failure
+  // live.
+  const onSourceError = (originalEvent: Event): void =>
+    publishSourceExhaustion(originalEvent);
   const onVolumeChange = (originalEvent: Event): void => {
     emit(
       { muted: media.muted, volume: media.volume },
@@ -465,7 +485,43 @@ export const createNativeAttachment = (
       audioTracks.attachListeners();
       audioTracks.discover();
       remotePlayback.attachListeners();
+      // A server-rendered `<video>` (#911) can already be past
+      // `HAVE_METADATA` by the time this runs -- the element ran its own
+      // resource selection algorithm while the HTML was parsed, before this
+      // provider ever attached. `emitMediaState` below already re-reads
+      // `readyState`/duration/buffered as they stand; dimensions are the
+      // other reading it does not carry, since `videoWidth`/`videoHeight`
+      // are published only from the `loadedmetadata`/`resize` listeners just
+      // added, and an element already past `HAVE_METADATA` will never fire
+      // either again. Dimensions are safe to read early regardless of what
+      // happens next: a later real `loadedmetadata` publishes them again,
+      // and `publishDimensions` holds no state of its own to go stale.
+      if (media.readyState >= HAVE_METADATA) publishDimensions();
+      // `applyInitialPosition` is the one reading `attach()` must NOT take
+      // this early unless `committedAtRender` -- it is the one reading this
+      // file publishes that is not idempotent. It latches `positioned`
+      // (`playback.ts`) the first time it runs, settling the offset for the
+      // rest of this load, and `load()` below still calls `media.load()`
+      // whenever `committedAtRender` is false, which resets the element back
+      // to `HAVE_NOTHING` and starts a second, real load. Applying the
+      // offset here against the first load's metadata would latch
+      // `positioned` against a load this provider is about to throw away,
+      // leaving the real `loadedmetadata` that follows the reset with
+      // nothing left to apply. `publishSourceExhaustion` below has no such
+      // hazard: its own latch, `sourceErrorPublished`, is reset by
+      // `onEmptied`, which fires at the start of every `media.load()` --
+      // `positioned` is reset only by `retry()`.
+      if (media.readyState >= HAVE_METADATA && committedAtRender) {
+        playback.applyInitialPosition();
+      }
       emitMediaState();
+      // Same reasoning, for a source that failed every candidate before
+      // this provider ever attached: `load()` below does not always call
+      // `media.load()`, so a restart cannot be relied on to re-run resource
+      // selection after this attachment's listeners exist. Checked here
+      // instead, directly, the same verdict `onSourceError` reaches from a
+      // live event.
+      publishSourceExhaustion();
     },
     load: () => {
       if (destroyed || loaded) return;
@@ -474,7 +530,18 @@ export const createNativeAttachment = (
       // after `attach()` discovered this source's tracks. A source switch
       // creates a new provider, and the controller clears caption state on
       // the swap.
-      media.load();
+      //
+      // Skipped when `committedAtRender` says `@playdeck/react` already put
+      // this element's `<source>` children in the DOM at render time
+      // (`use-activation.ts`'s `eagerVideoCommit`, under `loading: 'eager'`
+      // only) -- a server-rendered element can already be well into
+      // resource selection by the time this runs, and `media.load()` would
+      // abort that in-flight request and restart it from scratch,
+      // discarding whatever had already downloaded. Not a `networkState`
+      // read: see `committedAtRender`'s own comment above for why that
+      // cannot tell a server-rendered element apart from a client-created
+      // one.
+      if (!committedAtRender) media.load();
       // Declared here rather than at attach: the commands operate on the
       // element from birth, but the load algorithm resets `playbackRate` to
       // `defaultPlaybackRate`, so anything applied earlier is undone (#69).

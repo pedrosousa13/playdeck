@@ -12,7 +12,21 @@ import {
 } from '@playdeck/core';
 import { createSeekingVideo } from '@playdeck/test-support/seeking-video';
 import { createNativeProvider } from '../src/index';
+import { COMMITTED_AT_RENDER } from '../src/internal-options';
+import type { NativePlaybackOptions } from '../src/playback';
 import { captureRethrows } from '@playdeck/test-support/capture-rethrows';
+
+// The same hatch `@playdeck/react`'s `use-activation.ts` writes onto
+// `NativePlaybackOptions` before calling `createNativeProvider` -- `options`
+// defaults empty so a call site that only needs the flag can omit it.
+const withCommittedAtRender = (
+  committedAtRender: boolean,
+  options: NativePlaybackOptions = {}
+): NativePlaybackOptions =>
+  Object.defineProperty({ ...options }, COMMITTED_AT_RENDER, {
+    value: committedAtRender,
+    enumerable: false
+  });
 
 type ContractAdapter = {
   provider: ProviderAdapter;
@@ -283,6 +297,57 @@ test('writes no initial position the element already holds', async () => {
   media.dispatchEvent(new Event('loadedmetadata'));
 
   expect(writes).toEqual([]);
+});
+
+// #911: a server-rendered `<video>` can already be past `HAVE_METADATA` by
+// the time this provider attaches -- `loadedmetadata`, the one event
+// `applyInitialPosition` has ever run from, will never fire again. Before
+// this commit a non-zero `startTime` was silently never applied in that
+// case. Demonstrated red: before this commit, `writes` below stayed `[]`.
+// Gated on `committedAtRender`: `load()` still calls `media.load()` for any
+// element that is not one (see its own comment, `attachment.ts`), which
+// would reset this element and discard an offset applied this early.
+test('applies a real initial start position on attach when metadata already arrived', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 20 });
+  Object.defineProperty(media, 'readyState', { configurable: true, value: 1 });
+  const { writes } = trackPosition(media, 0);
+  const provider = createNativeProvider(
+    media,
+    withCommittedAtRender(true, { startTime: 4 })
+  );
+
+  await provider.attach();
+
+  expect(writes).toEqual([4]);
+});
+
+// Regression for the gate above: an element that is NOT `committedAtRender`
+// still has `load()` call `media.load()` next (its own comment above), which
+// resets the element and fires a real `loadedmetadata` once the reset
+// completes. Applying the offset at `attach()` in that case would latch
+// `positioned` against metadata this provider is about to throw away,
+// leaving that real `loadedmetadata` with nothing left to apply --
+// reproducing CI's own e2e failures on `e2e/native-start-time.spec.ts` and
+// `e2e/start-time-above-seekable-end.spec.ts`, where a `startTime` inside a
+// fully covering `seekable` window still landed at 0. Demonstrated red:
+// before this commit, `writes` already held `[4]` immediately after
+// `attach()`, before `load()` ever ran.
+test('does not apply the offset at attach unless committedAtRender, so a later reset does not strand it', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'duration', { configurable: true, value: 20 });
+  Object.defineProperty(media, 'readyState', { configurable: true, value: 1 });
+  const { rewind, writes } = trackPosition(media, 0);
+  vi.spyOn(media, 'load').mockImplementation(() => rewind());
+  const provider = createNativeProvider(media, { startTime: 4 });
+
+  await provider.attach();
+  expect(writes).toEqual([]);
+
+  await provider.load();
+  media.dispatchEvent(new Event('loadedmetadata'));
+
+  expect(writes).toEqual([4]);
 });
 
 // A retry reloads the source, and `media.load()` puts the playhead back at 0,
@@ -2306,6 +2371,210 @@ test('native clears the dimensions on destroy', async () => {
   await provider.destroy();
 
   expect(seen.at(-1)).toBeUndefined();
+});
+
+// #911: a server-rendered `<video>` can already be past `HAVE_METADATA` by
+// the time the native provider attaches to it -- the element ran its own
+// resource selection algorithm during HTML parsing, well before this
+// package's `attach()` ever runs. `emitMediaState` already re-reads
+// `readyState`/duration/buffered on every attach, so the duration/lifecycle
+// half of this was already true: demonstrated red by a substitute mutation
+// (docs/agents/demonstrated-red.md), since there is no unfixed state for it
+// to revert to. With the `emitMediaState()` call commented out of `attach()`,
+// this failed:
+//
+//   expected { activation: 'dormant', … } to deep equal
+//   { activation: 'ready', lifecycle: 'ready', duration: 12 }
+//
+// and passed again once restored. `publishDimensions()`, by contrast, ran
+// only from the `loadedmetadata`/`resize` listeners -- events that an
+// element already past `HAVE_METADATA` will never fire again -- so that half
+// is a genuine, unmodified red: before this commit's `attach()` change,
+// `seen` below held only `[undefined]`.
+test('publishes duration, lifecycle and dimensions on attach when metadata already arrived', async () => {
+  const { media } = videoWithDimensions(1080, 1920);
+  Object.defineProperty(media, 'readyState', { configurable: true, value: 1 });
+  Object.defineProperty(media, 'duration', { configurable: true, value: 12 });
+  const provider = createNativeProvider(media);
+  const patches: Array<Record<string, unknown>> = [];
+  provider.subscribe((patch) => patches.push(patch));
+  const seen = collectDimensions(provider);
+
+  await provider.attach();
+
+  expect(patches.at(-1)).toMatchObject({
+    activation: 'ready',
+    lifecycle: 'ready',
+    duration: 12
+  });
+  expect(seen.at(-1)).toEqual({ width: 1080, height: 1920 });
+});
+
+// `committedAtRender` is the explicit signal `@playdeck/react`
+// (`use-activation.ts`) computes from `loading` and the detected source and
+// hands this provider through its own hatch (`internal-options.ts`), rather
+// than anything read off the element: `media.networkState` cannot
+// distinguish a server-rendered element from a client-created one, since
+// inserting a `<source>` child moves it off `NETWORK_EMPTY` synchronously
+// either way, before this provider ever attaches. It is `true` only for a
+// `video` source committed under `eager`, never for `viewport` or
+// `interaction`.
+//
+// Demonstrated red: `networkState` is set to disagree with
+// `committedAtRender` here, which a flag-driven decision must not care
+// about. With `networkState` left non-`NETWORK_EMPTY`, this failed:
+//
+//   expected "load" to be called at least once
+//
+test('calls media.load() when not committed at render, regardless of networkState', async () => {
+  const media = document.createElement('video');
+  Object.defineProperty(media, 'networkState', {
+    configurable: true,
+    value: 2
+  });
+  const load = vi.spyOn(media, 'load');
+  const provider = createNativeProvider(media, withCommittedAtRender(false));
+
+  await provider.attach();
+  await provider.load();
+
+  expect(load).toHaveBeenCalled();
+});
+
+// The other half, `networkState` disagreeing the other way. Demonstrated
+// red: `expected "load" to not be called at all, but actually been called
+// 1 times`.
+test('skips media.load() when committed at render, regardless of networkState', async () => {
+  const media = document.createElement('video');
+  // Left at its default (`NETWORK_EMPTY`) deliberately: the point of this
+  // test is that `networkState` must not be what decides this.
+  const load = vi.spyOn(media, 'load');
+  const provider = createNativeProvider(media, withCommittedAtRender(true));
+  const patches: Array<Record<string, unknown>> = [];
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+  await provider.load();
+
+  expect(load).not.toHaveBeenCalled();
+  expect(patches).toContainEqual(
+    expect.objectContaining({ commandsReady: true })
+  );
+});
+
+// `load()` skipping `media.load()` drops what the restart also gave this
+// provider for free: restarting resource selection after `attach()` wired
+// its listeners guaranteed a `<source>` failure, whatever it was, fired
+// again where something was listening. `attach()` now checks directly
+// instead: `networkState` already at `NETWORK_NO_SOURCE` when nothing has
+// been published yet reads as exhaustion, the same verdict `onSourceError`
+// reaches from a live event.
+//
+// Demonstrated red: before this commit, `attach()` never made this check, so
+// `patches` held only the ordinary `emitMediaState` snapshot --
+//
+//   expected [ { activation: 'loading-provider', … } ] to contain an item
+//   matching { activation: 'error', … }
+test('publishes source exhaustion on attach when every source failed before attach', async () => {
+  const media = document.createElement('video');
+  const source = document.createElement('source');
+  media.append(source);
+  Object.defineProperty(media, 'networkState', {
+    configurable: true,
+    value: 3
+  });
+  const provider = createNativeProvider(media);
+  const patches: Array<Record<string, unknown>> = [];
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      lifecycle: 'error',
+      activation: 'error',
+      error: expect.objectContaining({
+        category: 'source',
+        message: 'No source could be loaded.'
+      })
+    })
+  );
+});
+
+// A later, real `<source>` error must not publish a second time once attach
+// has already published the exhaustion it describes. Demonstrated red,
+// before attach() made this check: the one patch here was the live `error`
+// event's own first (and only) publish -- `expected [ {lifecycle: 'error',
+// …} ] to deeply equal []`.
+test('does not publish source exhaustion twice for the same load', async () => {
+  const media = document.createElement('video');
+  const source = document.createElement('source');
+  media.append(source);
+  Object.defineProperty(media, 'networkState', {
+    configurable: true,
+    value: 3
+  });
+  const provider = createNativeProvider(media);
+  const patches: Array<Record<string, unknown>> = [];
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+  patches.length = 0;
+  source.dispatchEvent(new Event('error'));
+
+  expect(patches).toEqual([]);
+});
+
+// `committedAtRender` is also `true` for a plain client-only eager mount,
+// not only a server-rendered one: `@playdeck/react` commits a `video`
+// source at render time under `eager` whether or not the element came from
+// server HTML, since a client-created `<video>` with its `<source>`
+// children inserted in the same commit can also already have begun
+// resource selection on its own by the time this provider attaches. Same
+// mechanism, same recorded red, as "skips media.load() when committed at
+// render, regardless of networkState" above.
+test('a client-only eager mount still reaches ready with media.load() skipped', async () => {
+  const { media } = videoWithDimensions(1080, 1920);
+  Object.defineProperty(media, 'readyState', { configurable: true, value: 1 });
+  const load = vi.spyOn(media, 'load');
+  const provider = createNativeProvider(media, withCommittedAtRender(true));
+  const patches: Array<Record<string, unknown>> = [];
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+  await provider.load();
+
+  expect(load).not.toHaveBeenCalled();
+  expect(patches).toContainEqual(
+    expect.objectContaining({ activation: 'ready', lifecycle: 'ready' })
+  );
+});
+
+// The same client-only mount, every source already failed before attach.
+// Same mechanism, same recorded red, as "publishes source exhaustion on
+// attach when every source failed before attach" above: `committedAtRender`
+// decides only whether `load()` restarts resource selection, never whether
+// `attach()` checks for exhaustion.
+test('a client-only eager mount whose sources all failed before attach still reports exhaustion', async () => {
+  const media = document.createElement('video');
+  const source = document.createElement('source');
+  media.append(source);
+  Object.defineProperty(media, 'networkState', {
+    configurable: true,
+    value: 3
+  });
+  const provider = createNativeProvider(media, withCommittedAtRender(true));
+  const patches: Array<Record<string, unknown>> = [];
+  provider.subscribe((patch) => patches.push(patch));
+
+  await provider.attach();
+
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      activation: 'error',
+      error: expect.objectContaining({ category: 'source' })
+    })
+  );
 });
 
 // `addListeners`/`removeListeners` mirror each other; a `resize` listener

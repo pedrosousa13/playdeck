@@ -14,6 +14,10 @@ import {
   type EmitProviderState
 } from './adapter-values.js';
 import {
+  COMMITTED_AT_RENDER,
+  type CommittedAtRenderCarrier
+} from './internal-options.js';
+import {
   createNativeAudioTracks,
   type NativeAudioTracks
 } from './audio-tracks.js';
@@ -185,7 +189,9 @@ export const createNativeProvider = (
     remotePlayback,
     textTracks,
     audioTracks,
-    clearStateListeners: () => listeners.clear()
+    clearStateListeners: () => listeners.clear(),
+    committedAtRender:
+      (options as CommittedAtRenderCarrier)[COMMITTED_AT_RENDER] ?? false
   });
 
   return {

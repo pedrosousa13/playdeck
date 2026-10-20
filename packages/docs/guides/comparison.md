@@ -5,7 +5,7 @@ description: "How Playdeck compares with other React video libraries: the measur
 
 ## React video library comparison: measured figures
 
-Measured 2026-10-03 on Node v22.23.2, Vite 8.3.1, esbuild
+Measured 2026-10-20 on Node v22.23.2, Vite 8.3.1, esbuild
 0.28.2, from `tests/compare`'s pinned installs. React, ReactDOM
 and the JSX runtime are marked external for every library alike and excluded
 from every figure below. "Gzipped (Vite)" and "Gzipped (esbuild)" are each the
@@ -20,10 +20,10 @@ inputs cannot reach, gzipped the same way -- see
 
 | Library                | Version     | Composition measured                                                               | Gzipped (Vite) | Gzipped (esbuild) | Delta  | Not counted          |
 | ---------------------- | ----------- | ---------------------------------------------------------------------------------- | -------------- | ----------------- | ------ | -------------------- |
-| Playdeck (no parts)    | 1.3.0       | core + native provider, no control parts                                           | 22.41 KB       | 23.31 KB          | +4.0%  | 10 chunks, 317.08 KB |
-| Playdeck               | 1.3.0       | core + primitives + native provider                                                | 23.24 KB       | 24.08 KB          | +3.6%  | 10 chunks, 317.05 KB |
-| Playdeck (play-only)   | 1.3.0       | core + primitives + native provider + one control (PlayButton)                     | 24.39 KB       | 25.37 KB          | +4.0%  | 10 chunks, 317.08 KB |
-| Playdeck (control bar) | 1.3.0       | core + primitives + native provider + control bar (5 of Media Chrome's 7 controls) | 28.02 KB       | 29.00 KB          | +3.5%  | 11 chunks, 319.30 KB |
+| Playdeck (no parts)    | 1.3.0       | core + native provider, no control parts                                           | 22.62 KB       | 23.49 KB          | +3.9%  | 10 chunks, 317.08 KB |
+| Playdeck               | 1.3.0       | core + primitives + native provider                                                | 23.43 KB       | 24.25 KB          | +3.5%  | 10 chunks, 317.06 KB |
+| Playdeck (play-only)   | 1.3.0       | core + primitives + native provider + one control (PlayButton)                     | 24.58 KB       | 25.57 KB          | +4.0%  | 10 chunks, 317.08 KB |
+| Playdeck (control bar) | 1.3.0       | core + primitives + native provider + control bar (5 of Media Chrome's 7 controls) | 28.23 KB       | 29.19 KB          | +3.4%  | 11 chunks, 319.30 KB |
 | react-player           | 3.4.0       | default export, `controls`, html5 fallback player                                  | 2.97 KB        | 2.40 KB           | -19.2% | 13 chunks, 727.65 KB |
 | Vidstack               | 1.15.6      | MediaPlayer + MediaProvider + DefaultVideoLayout                                   | 89.67 KB       | 91.83 KB          | +2.4%  | 13 chunks, 22.02 KB  |
 | Media Chrome           | 4.19.2      | MediaController + a 7-button control bar                                           | 41.82 KB       | 43.70 KB          | +4.5%  | 0                    |

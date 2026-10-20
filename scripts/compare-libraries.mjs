@@ -694,7 +694,19 @@ export const libraries = [
     // under this ceiling with no raise needed. Both additions are small and
     // live in the facade itself, which this fixture's `Root` always
     // imports eagerly regardless of composition.
-    ceilingKb: 22.5,
+    //
+    // 23068 bytes measured 2026-10-20 -- 22.53 KB, past the 22.5 KB ceiling,
+    // rounded up to the next 0.25 KB boundary -- 22.75 KB. What carried this
+    // row past it is #911's `committedAtRender` hatch, the same one
+    // described on the "Playdeck" row below: `use-activation.ts`'s
+    // `eagerVideoCommit` and `provider-native/src/attachment.ts`'s
+    // `committedAtRender`-gated `load()`, `publishSourceExhaustion` and the
+    // attach-time `applyInitialPosition`/`publishDimensions` pair -- all
+    // reached through this fixture's native provider regardless of which
+    // control parts it renders. The whole distance from the last committed
+    // figure is this issue's: that figure was 22.42 KB (22951 bytes),
+    // measured 2026-10-03 per `results.md` on `main`.
+    ceilingKb: 22.75,
     // This fixture renders no control part at all (see
     // tests/compare/entries/playdeck-no-parts.tsx's own header) -- every
     // guardable part is forbidden.
@@ -853,7 +865,16 @@ export const libraries = [
     // additions described on the "no parts" row above -- up from 23.21 KB
     // (23767 bytes) the same day (2026-10-03), per `results.md` on `main`
     // -- which stays under this ceiling with no raise needed.
-    ceilingKb: 23.25,
+    //
+    // 23831 bytes measured 2026-10-20 -- 23.2724609375 KB, 23.27 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 23.25 KB is #911's render-time source commit: `use-activation.ts`'s
+    // `useActivation` now also computes `eagerRenderCommit` and folds it
+    // into `sourceCommitted`, reached by every composition this fixture
+    // builds through `@playdeck/react`'s own hook. The whole distance from
+    // the last committed figure is this issue's: that figure was 23.24 KB
+    // (23793 bytes), measured 2026-10-03 per `results.md` on `main`.
+    ceilingKb: 23.5,
     // This fixture renders one `Player.ActivationButton` and nothing else
     // guardable (tests/compare/entries/playdeck.tsx) -- every guardable
     // part except `ActivationButton` is forbidden.
@@ -978,7 +999,15 @@ export const libraries = [
     // additions described on the "no parts" row above -- up from 24.36 KB
     // (24949 bytes) the same day (2026-10-03), per `results.md` on `main`
     // -- which stays under this ceiling with no raise needed.
-    ceilingKb: 24.5,
+    //
+    // 25169 bytes measured 2026-10-20 -- 24.5791015625 KB, 24.58 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 24.5 KB is #911's `committedAtRender` hatch, the same one described on
+    // the "no parts" row above, reached through this fixture's own native
+    // provider. The whole distance from the last committed figure is this
+    // issue's: that figure was 24.39 KB (24975 bytes), measured 2026-10-03
+    // per `results.md` on `main`.
+    ceilingKb: 24.75,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
