@@ -143,13 +143,14 @@ export type RootProps<P extends ConsumerProviders = Record<string, never>> = {
   /**
    * When the source commits and the provider attaches. Three strategies:
    *
-   * - `'eager'` (default) commits immediately. For a `video` file source this
-   *   happens at render time, so the native `<video>` and its `<source>`
-   *   children (and `preload`) are in the server HTML too -- the browser can
-   *   start the request while it parses the page, before any script runs.
-   *   HLS and the embed providers (YouTube, Vimeo, Wistia) still commit from
-   *   an effect, client-side only.
-   * - `'viewport'` commits once `Player.Viewport` crosses `loadThreshold`.
+   * - `'viewport'` (default) commits once `Player.Viewport` crosses
+   *   `loadThreshold`.
+   * - `'eager'` commits immediately. For a `video` file source this happens
+   *   at render time, so the native `<video>` and its `<source>` children
+   *   (and `preload`) are in the server HTML too -- the browser can start
+   *   the request while it parses the page, before any script runs. HLS and
+   *   the embed providers (YouTube, Vimeo, Wistia) still commit from an
+   *   effect, client-side only.
    * - `'interaction'` commits on the first `Player.ActivationButton` press
    *   (or a direct `activateFromInteraction` call); cannot be combined with
    *   `autoplay`.

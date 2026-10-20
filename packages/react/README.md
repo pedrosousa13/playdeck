@@ -89,14 +89,14 @@ export const Clip = () => (
 accepts, which it refuses, and what each provider's `providerOptions` are.
 
 `loading` chooses when the source commits and the provider attaches:
-`'eager'` (the default), `'viewport'`, or `'interaction'`. Under `'eager'`, a
+`'viewport'` (the default), `'eager'`, or `'interaction'`. `'viewport'`
+commits once `Player.Viewport` crosses `loadThreshold`. Under `'eager'`, a
 `video` file source commits at render time rather than waiting for an effect,
 so the native `<video>` and its `<source>` children — `preload` included — are
 in the server HTML too, and the browser can start the request while it parses
 the page, before hydration or any script runs. HLS and the three embed
 providers (YouTube, Vimeo, Wistia) still commit from an effect, client-side
-only. `'viewport'` commits once `Player.Viewport` crosses `loadThreshold`;
-`'interaction'` commits on the first `Player.ActivationButton` press, or a
+only. `'interaction'` commits on the first `Player.ActivationButton` press, or a
 direct `activateFromInteraction` call, and cannot be combined with `autoplay`.
 Autoplay itself is unaffected by any of this: the server can't evaluate
 `prefers-reduced-motion`, so the server HTML never carries an `autoplay`
