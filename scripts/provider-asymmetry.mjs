@@ -273,7 +273,7 @@ const ownMaterial = (markdown, preambleBlocks) =>
  *
  * @param {string} source the whole of `docs/provider-setup.md`
  * @param {string} repoRoot
- * @param {(dir: string, fragment?: string) => string} [referenceHref] handed on to `providerDocuments`
+ * @param {(dir: string, fragment?: string) => string} referenceHref handed on to `providerDocuments`
  * @returns {{
  *   questions: readonly string[];
  *   providers: readonly ProviderTruth[];

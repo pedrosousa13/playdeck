@@ -15,7 +15,8 @@ muted retry are the whole of what an autoplay feature has to show, and neither
 can ever occur there. An autoplay switch was specced as one of three switch
 groups, built, and cut for exactly this: what was left was a control whose only
 effect was to add a prop to the printed composition, which is a knob arguing by
-printing itself. `apps/site/DESIGN.md` records the cut.
+printing itself. `apps/site/DESIGN.md` recorded the cut; that file was retired
+with the site in #901, and no replacement of it exists in pedrosousa13/deck-cool.
 
 **A live readout would contradict the page's headline claim.** Determining
 autoplay availability for real means attempting it, and an attempt costs a media

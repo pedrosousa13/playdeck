@@ -32,17 +32,3 @@ import { codePackages } from './workspace-packages.mjs';
  */
 export const referencePackageDirs = (repoRoot) =>
   codePackages(repoRoot).map((pkg) => basename(pkg.path));
-
-/**
- * The address of a package's reference page, with an optional `#fragment`.
- * `scripts/docs-package.mjs` passes its own relative `.md` link instead of
- * calling this, since the document modules below take it as a default they
- * can be handed something else in place of -- this one is never reached from
- * there, and is kept for the signature's own documentation value.
- *
- * @param {string} dir
- * @param {string} [fragment]
- * @returns {string}
- */
-export const siteReferenceHref = (dir, fragment = '') =>
-  `/reference/${dir}/${fragment}`;

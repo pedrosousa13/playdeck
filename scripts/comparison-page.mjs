@@ -53,10 +53,7 @@
 import { readFileSync } from 'node:fs';
 import { join, posix } from 'node:path';
 import { publishablePackages } from './workspace-packages.mjs';
-import {
-  referencePackageDirs,
-  siteReferenceHref
-} from './reference-packages.mjs';
+import { referencePackageDirs } from './reference-packages.mjs';
 
 /** Where the three source documents live, relative to the repository root. */
 export const COMPARISON_DIR = 'docs/comparison';
@@ -230,15 +227,11 @@ const rewriteLinks = (markdown, context) => {
  * The guide, composed from the three source documents on disk.
  *
  * @param {string} repoRoot
- * @param {(dir: string, fragment?: string) => string} [referenceHref] where a
+ * @param {(dir: string, fragment?: string) => string} referenceHref where a
  *   package's reference page is; `scripts/docs-package.mjs`'s own route
- *   unless handed another
  * @returns {{ title: string; markdown: string }}
  */
-export const comparisonDocument = (
-  repoRoot,
-  referenceHref = siteReferenceHref
-) => {
+export const comparisonDocument = (repoRoot, referenceHref) => {
   const context = {
     blob: repositoryBlobUrl(repoRoot),
     pages: new Set(referencePackageDirs(repoRoot)),

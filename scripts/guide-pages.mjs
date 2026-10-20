@@ -59,8 +59,6 @@
  * would fail.
  */
 
-import { siteReferenceHref } from './reference-packages.mjs';
-
 /**
  * The documents that get a page, in the order a reader meets them.
  *
@@ -189,17 +187,11 @@ const rewriteTarget = (target, pages, referenceHref) => {
  * @param {string} source
  * @param {string} file the path in the repository, for the errors below
  * @param {ReadonlySet<string>} pages
- * @param {(dir: string, fragment?: string) => string} [referenceHref] where a
+ * @param {(dir: string, fragment?: string) => string} referenceHref where a
  *   package's reference page is; `scripts/docs-package.mjs`'s own route
- *   unless handed another
  * @returns {{ title: string; markdown: string }}
  */
-export const guideDocument = (
-  source,
-  file,
-  pages,
-  referenceHref = siteReferenceHref
-) => {
+export const guideDocument = (source, file, pages, referenceHref) => {
   const lines = source.split('\n');
   if (!lines.some((line) => META_IMPORT.test(line))) {
     throw new Error(

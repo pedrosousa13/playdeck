@@ -6,12 +6,12 @@
  * fetch of it is genuinely subject to CORS (`page.route` interception is
  * not: see that spec's header).
  *
- * Started once by `playwright.config.ts`'s `webServer` array, the way
- * `scripts/serve-site.mjs` is, rather than once per test: chromium and
- * firefox run the same spec in parallel, and a retry can start a third
- * attempt while an earlier one is still tearing down, so a server bound
- * per-test on a fixed port can lose a race to bind it. One process for the
- * whole run has nothing left to race.
+ * Started once by `playwright.config.ts`'s `webServer` array, shared by the
+ * whole run rather than started once per test: chromium and firefox run the
+ * same spec in parallel, and a retry can start a third attempt while an
+ * earlier one is still tearing down, so a server bound per-test on a fixed
+ * port can lose a race to bind it. One process for the whole run has nothing
+ * left to race.
  *
  * Usage:
  *   node e2e/fixtures/no-cors-server.mjs --port 4174

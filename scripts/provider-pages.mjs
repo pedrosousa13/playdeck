@@ -45,10 +45,7 @@
 import { readFileSync } from 'node:fs';
 import { join, posix } from 'node:path';
 import { publishablePackages } from './workspace-packages.mjs';
-import {
-  referencePackageDirs,
-  siteReferenceHref
-} from './reference-packages.mjs';
+import { referencePackageDirs } from './reference-packages.mjs';
 
 /**
  * Where the document is, relative to the repository root. Named once because
@@ -347,15 +344,11 @@ const rewriteLinks = (markdown, context) => {
  *
  * @param {string} source
  * @param {string} repoRoot
- * @param {(dir: string, fragment?: string) => string} [referenceHref] where a package's reference page is; this
- *   package's own route unless handed another
+ * @param {(dir: string, fragment?: string) => string} referenceHref where a
+ *   package's reference page is; `scripts/docs-package.mjs`'s own route
  * @returns {ProviderDocument[]}
  */
-export const providerDocuments = (
-  source,
-  repoRoot,
-  referenceHref = siteReferenceHref
-) => {
+export const providerDocuments = (source, repoRoot, referenceHref) => {
   const parsed = sections(source);
   const [intro] = parsed;
   if (!/^# /.test(intro.text)) {
