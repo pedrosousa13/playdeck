@@ -24,9 +24,9 @@ directions against the rules in `theme.css`, `docked.css` and every primitive
 in `packages/react/src` — the same two-way shape
 `apps/storybook/stories/parts.contract.test.ts` already used for parts.
 `Theme.mdx` carries no table of its own any more; its **Tokens** section links
-to the README's table instead, rendered by the site as that package's own
-reference page rather than as a trip off it (`apps/site/src/guide-pages.mjs`
-rewrites the GitHub URL a Storybook document has to write into one).
+to the README's table instead, rendered as that package's own reference page
+rather than as a trip off it (`scripts/guide-pages.mjs` rewrites the GitHub URL
+a Storybook document has to write into one).
 
 The reason is the same test-ability argument ADR-0001 and ADR-0002 already
 apply to everything else here: a table that ships inside the npm tarball, next

@@ -543,10 +543,11 @@ geometry and appearance are separate, and
 output is not a token.
 
 The marketing site has its own visual system, and its rules bind anything added
-to it: see [`apps/site/DESIGN.md`](apps/site/DESIGN.md) for the palette, the
-type scale, the one-gradient rule and the four audit constraints. That system is
-not the player's theme — `packages/react/theme.css` ships to consumers and
-shares no tokens with it, and the two are deliberately separate.
+to it: its `DESIGN.md` records the palette, the type scale, the one-gradient
+rule and the four audit constraints. That system is not the player's theme —
+`packages/react/theme.css` ships to consumers and shares no tokens with it, and
+the two are deliberately separate. The site itself is served from
+pedrosousa13/deck-cool rather than this repository (#901).
 
 **Archetype**:
 A composed example player standing for a whole class of real product — the
@@ -563,9 +564,9 @@ The Storybook build — where primitives are exercised in isolation, where the
 deterministic story run and the visual checks live, and where a local media
 fixture is available that the marketing site cannot serve. Distinct from the
 marketing site, which argues to a reader; the workbench is for proving a
-component behaves. Nothing publishes it: the deployed artifact is the site
-alone ([ADR-0007](docs/adr/0007-the-deployed-artifact-is-the-site-alone.md)), and
-the workbench is a development tool for this repository whose stories are browser
+component behaves. Nothing publishes it: this repository deploys nothing at
+all (#901; the site itself is served from pedrosousa13/deck-cool), and the
+workbench is a development tool for this repository whose stories are browser
 tests. The site and the workbench are named individually; there is no collective
 noun for the two, and `surface` in particular is not one — that word names a
 refused prop, above.
@@ -573,28 +574,25 @@ _Avoid_: playground, sandbox, storybook (lower-case, as a common noun)
 
 **Stance**:
 Which of the marketing site's two page treatments a route is served in:
-`argument` for `/`, `document` for every other route. `Base.astro` takes it as a
-prop, defaults it to `document`, and writes it to the `<body>` as `data-stance`,
-which the site's entry motion was keyed off until that vocabulary was deleted.
-No rule in the app reads the attribute today; `e2e/site-stance.spec.ts` does,
-holding every route to the stance `DESIGN.md` assigns it. A separate axis from the
-`documentation` prop, which decides only whether a page is in the search index:
-`/design` is `documentation={false}` and `stance="document"`. Site-only — it
-says nothing about a player.
+`argument` for the landing page, `document` for every other route. A separate
+axis from the `documentation` prop, which decides only whether a page is in the
+search index. Implemented and gated in pedrosousa13/deck-cool, which now serves
+the site (#901) — it says nothing about a player.
 _Avoid_: mode, register, treatment, archetype — **Archetype** above is a
 composed example player, and using it for a page treatment would collide with it
 
 **Provider asymmetry readout**:
-The table on the marketing site's provider index that asks the same three
-questions — which hosts, which source forms, which options — of each of its four
-columns, native files and HLS sharing one because a file extension is what
-chooses either, and prints where the answers differ in kind. Asymmetry rather than comparison,
-because what it exists to show is that a cell can answer `unknown` with a reason
-and that flattening the five into one shape would be the lie. Site-only, and it
-writes down no facts: `apps/site/src/provider-asymmetry.mjs` derives every host,
-form, key and reason from `docs/provider-setup.md`, and a section that document
-grows in a shape the module cannot place stops the build rather than rendering
-an empty cell.
+The table that asks the same three questions — which hosts, which source
+forms, which options — of each of four provider columns, native files and HLS
+sharing one because a file extension is what chooses either, and prints where
+the answers differ in kind. Asymmetry rather than comparison, because what it
+exists to show is that a cell can answer `unknown` with a reason and that
+flattening the five into one shape would be the lie. It writes down no facts:
+`scripts/provider-asymmetry.mjs` derives every host, form, key and reason from
+`docs/provider-setup.md`, and a section that document grows in a shape the
+module cannot place stops the build rather than rendering an empty cell. Reaches
+a reader twice from the one derivation — the marketing site's provider index,
+and `@playdeck/docs`'s `providers/index.md` (`scripts/docs-package.mjs`).
 _Avoid_: provider matrix, feature table, comparison grid
 
 **Structural geometry**:

@@ -775,13 +775,12 @@
    * stage, only because nothing between here and the document root carries
    * a `transform`, `filter`, `perspective`, `contain: paint`/`layout` or
    * `will-change: transform` -- any of those would make that ancestor the
-   * sheet's containing block and trap it inside the stage instead. The one
-   * ancestor that used to needed watching, `apps/site`'s own entrance
-   * animation on `.bench__stage`, ended its `enter` keyframe on
-   * `transform: translateY(0)` rather than `none`; both look identical at
-   * rest, but only `none` leaves no transform behind once the `forwards`
-   * fill keeps the last keyframe applied forever. Fixed there
-   * (`apps/site/src/pages/index.astro`), not here and not with a portal.
+   * sheet's containing block and trap it inside the stage instead. A
+   * consumer whose own entrance animation ends its `enter` keyframe on
+   * `transform: translateY(0)` rather than `none` leaves exactly such a
+   * transform behind once a `forwards` fill keeps the last keyframe applied
+   * forever, even though the two look identical at rest -- fix it at the
+   * animation, not here and not with a portal.
    *
    * The scrim is `box-shadow: 0 0 0 100vmax`, not a `::before`: a
    * pseudo-element cannot sit inside `:where()` (Selectors 4 forbids it),

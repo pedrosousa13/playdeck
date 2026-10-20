@@ -1,33 +1,7 @@
 node_modules/
-# Covers the site's search index too: Pagefind writes it into
-# `apps/site/dist/pagefind/` after Astro has emitted the pages, so it is inside
-# the build output rather than beside it, and it is never committed for the same
-# reason nothing else in there is — it is derived from the pages on every build.
 dist/
-# The site built a second time under a non-root prefix, by
-# `apps/site`'s `build:based`. `e2e/site-search.spec.ts` searches it to prove
-# the base path is derived rather than written down; it ships nowhere.
-apps/site/dist-base/
 .worktrees/
 storybook-static/
-# Astro's generated ambient types, written by `astro sync` and by every build.
-# Build output, so never committed -- `apps/site/tsconfig.json` records why it
-# is also outside what `tsc -b` reads.
-.astro/
-# The assembled deployment, composed from the site build above by
-# scripts/assemble-deploy.mjs and published as the Worker's assets (#519).
-deploy-dist/
-
-# The self-hosted HLS clip scripts/media-sprite-fright.mjs builds: the ladder
-# under apps/site/public/media/, and the two posters cut alongside it. Build
-# output like everything else in apps/site/public/dist ignores, derived from a
-# downloaded film rather than committed -- see that script's own header for
-# the source, the cache and why this is regenerated rather than checked in.
-# The downloaded source film itself is never under the repository at all --
-# it caches under the OS temp dir by default, or wherever
-# PLAYDECK_MEDIA_CACHE_DIR points -- so it needs no entry here.
-apps/site/public/media/
-apps/site/public/sprite-fright-hls-poster-*.webp
 *storybook.log
 playwright-report/
 test-results/

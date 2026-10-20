@@ -1,36 +1,33 @@
 /*
- * The composition the two switches just built, printed beside them, now
- * highlighted, since `Bench.astro`'s frontmatter runs Shiki over all four
- * reachable (source, skin) pairs at build time and hands this component
- * already-rendered HTML rather than a plain string.
+ * A composition built from two switches, printed and highlighted: `html` is
+ * already-rendered markup from a build-time Shiki pass over the composition's
+ * source, not a plain string this component highlights itself.
  *
  * One `<div dangerouslySetInnerHTML>` and no `<pre>` of its own: Shiki's own
  * `codeToHtml` output already IS a `<pre>`, carrying `astro-code`,
- * `data-bench-composition` and `tabindex="0"` from the `pre` transformer
- * `Bench.astro` adds, so a `<pre>` here would nest one inside another.
+ * `data-bench-composition` and `tabindex="0"` from the caller's own `pre`
+ * transformer, so a `<pre>` here would nest one inside another.
  *
- * `min-w-0` on this div: it is the element `BenchIsland.tsx`'s row actually
- * lays out (the `<pre>` inside is one level down), and a flex/grid item's
- * automatic minimum size is its content's width unless something clips or
- * scrolls that item itself. The `<pre>` inside carries `overflow-x: auto`
- * from `.astro-code[data-bench-composition]`, but that rule reaches the
- * `<pre>`, not this wrapper, so without this the wrapper refused to shrink
- * below the unwrapped source's width and pushed the page wider than the
- * viewport at narrow widths -- measured: 233px of horizontal overflow at
- * 320px before this class was added.
+ * `min-w-0` on this div: it is the element a flex/grid row actually lays out
+ * (the `<pre>` inside is one level down), and a flex/grid item's automatic
+ * minimum size is its content's width unless something clips or scrolls that
+ * item itself. The `<pre>` inside carries `overflow-x: auto` from
+ * `.astro-code[data-bench-composition]`, but that rule reaches the `<pre>`,
+ * not this wrapper, so without this the wrapper refused to shrink below the
+ * unwrapped source's width and pushed the page wider than the viewport at
+ * narrow widths -- measured: 233px of horizontal overflow at 320px before
+ * this class was added.
  *
  * ---- the changed-line highlight (2026-09-03) --------------------------
  *
  * `changedLines` names the 1-indexed lines that moved between the previous
- * composition and this one -- `BenchIsland.tsx` computes it by diffing the
- * plain source, since the highlighted HTML's own markup would make a text
- * diff noisy. This component's only job with it is to stamp `data-changed`
- * on the matching `.line[data-line="N"]` spans Shiki's own `line` hook
- * already wrote `data-line` onto, and to clear it again after the
- * transition `base.css`'s `.line[data-changed]` rule declares --
- * `HIGHLIGHT_MS`, in its own module (`highlight-ms.ts`) rather than a local
- * const, since `e2e/site-bench.spec.ts` imports the same number for its own
- * poll budget rather than retyping it.
+ * composition and this one -- the caller computes it by diffing the plain
+ * source, since the highlighted HTML's own markup would make a text diff
+ * noisy. This component's only job with it is to stamp `data-changed` on the
+ * matching `.line[data-line="N"]` spans Shiki's own `line` hook already wrote
+ * `data-line` onto, and to clear it again after `HIGHLIGHT_MS`, in its own
+ * module rather than a local const since it has to agree by hand with the
+ * caller's own CSS transition rule on `[data-changed]`.
  *
  * The timeout is cleared and restarted on every `html`/`changedLines`
  * change, which is what "a second flip restarts the highlight" means: a
@@ -41,7 +38,7 @@ import { useEffect, useRef } from 'react';
 import { HIGHLIGHT_MS } from './highlight-ms';
 
 export type CompositionPanelProps = {
-  /** One of `Bench.astro`'s four precomputed strings, picked by (source, skin). */
+  /** One precomputed, already-highlighted string, picked by the caller. */
   readonly html: string;
   /** The 1-indexed lines that changed since the previous composition. */
   readonly changedLines: readonly number[];

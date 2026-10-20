@@ -7,23 +7,8 @@ export default tseslint.config(
   {
     ignores: [
       '**/dist/**',
-      // The site built a second time under a non-root prefix, by
-      // `apps/site`'s `build:based` for `e2e/site-search.spec.ts`. It is the
-      // same build output as `dist/` above under a name that pattern does not
-      // reach, so without this the gate lints Pagefind's own bundles and the
-      // minified islands (#525).
-      'apps/site/dist-base/**',
       '**/node_modules/**',
       '**/storybook-static/**',
-      // Gitignored and generated, and listed for the reason `.scratch/**`
-      // below is: flat config does not read .gitignore, so without this the
-      // ambient types `astro build` writes are linted as project source and
-      // fail the gate on code nobody in this repo wrote (#519).
-      '**/.astro/**',
-      // The assembled deployment (scripts/assemble-deploy.mjs) is a copy of the
-      // two build outputs above, so linting it lints minified bundles that were
-      // already excluded under the names they were built as (#519).
-      'deploy-dist/**',
       'playwright-report/**',
       'test-results/**',
       // Gitignored, unlike the two entries below — and not redundant for it.
@@ -48,11 +33,7 @@ export default tseslint.config(
       '.superpowers/**',
       'docs/superpowers/plans/**',
       // MPEG-TS media segments share the .ts extension with TypeScript.
-      'apps/storybook/public/hls/**',
-      // scripts/media-sprite-fright.mjs's generated output -- gitignored, not
-      // gated: the same MPEG-TS collision as the entry above, on the clip
-      // that entry's own directory played before #519 removed it.
-      'apps/site/public/media/**'
+      'apps/storybook/public/hls/**'
     ]
   },
   js.configs.recommended,

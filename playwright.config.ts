@@ -2,12 +2,9 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
-  // Two e2e servers, and the budget is set by the first: `storybook dev`
-  // compiles each story on first request, and on slower CI runners (notably
-  // Linux WebKit) that cold compile can push the first interaction past a tight
-  // budget, so allow generous headroom. The second server is a built site and
-  // serves static files, so it costs a test nothing once it is up — its own
-  // cost is the build, which `webServer` waits out before any test starts.
+  // `storybook dev` compiles each story on first request, and on slower CI
+  // runners (notably Linux WebKit) that cold compile can push the first
+  // interaction past a tight budget, so allow generous headroom.
   timeout: 30_000,
   // Retry on CI: a first attempt warms Storybook's on-demand story compile, so
   // the retry hits a compiled story and runs fast. Also absorbs known
@@ -32,9 +29,8 @@ export default defineConfig({
   // while pixelmatch's own antialiasing detection still absorbs edge noise.
   expect: { toHaveScreenshot: { threshold: 0.1 } },
   use: { baseURL: 'http://127.0.0.1:4173' },
-  // Two servers, and `baseURL` above names the first: the workbench is what
-  // almost every spec here drives, so a relative `page.goto` stays a story.
-  // The site specs write their address out in full for that reason.
+  // `baseURL` above names the first server: the workbench is what almost
+  // every spec here drives, so a relative `page.goto` stays a story.
   webServer: [
     {
       command:
@@ -43,50 +39,6 @@ export default defineConfig({
       gracefulShutdown: { signal: 'SIGTERM', timeout: 500 },
       reuseExistingServer: !process.env.CI,
       timeout: 120_000
-    },
-    /*
-     * The built site, for the `site-*` specs that drive it. Named by their
-     * prefix rather than listed, because the list went stale the first time one
-     * of them was replaced. A second server
-     * rather than a second Playwright project: it serves a different artifact,
-     * not a different engine, and the specs that use it want the same three
-     * engines as everything else.
-     *
-     * It is unconditional, and that is a limitation rather than a choice.
-     * `webServer` is a property of the config and not of a project — there is
-     * no per-project form of it in Playwright's types — so a run of one
-     * workbench spec still waits for both site builds, and a site build that
-     * breaks fails every project. Scoping it on `process.argv` would make the
-     * suite's servers depend on how it was invoked, which is worse than the
-     * wait. What keeps the wait small is Turbo: the first entry's build is
-     * cached, so the cost is paid once per change to the site's inputs rather
-     * than once per run.
-     *
-     * It is built rather than served by `astro dev` because the search index is
-     * a build artifact — `apps/site/package.json` runs Pagefind over `dist/`
-     * after Astro has finished — so the dev server would serve a site with no
-     * index in it and the search tests would fail for a reason that is not a
-     * defect.
-     *
-     * Two builds, at two prefixes, from the same source. The site ships from
-     * the apex so `base` is `/`, which is the one prefix at which a path
-     * written as a literal and a path derived from `import.meta.env.BASE_URL`
-     * are the same string. The second build is what makes the difference
-     * observable; `scripts/serve-site.mjs` mounts both at once so one server
-     * answers for both.
-     */
-    {
-      command:
-        'pnpm exec turbo run build --filter=@playdeck/site... && pnpm --filter @playdeck/site run build:based && node scripts/serve-site.mjs --port 4322 --mount /=apps/site/dist --mount /playdeck/=apps/site/dist-base',
-      // The site's own `build` and `build:based` scripts each run
-      // `scripts/media-sprite-fright.mjs` before `astro build`, so the bench's
-      // `hls` position has a real clip under `apps/site/public/media/` for
-      // both builds above -- idempotent and cached (see that script's own
-      // header), so a warm machine pays this once rather than once per build.
-      url: 'http://127.0.0.1:4322/playdeck/reference/',
-      gracefulShutdown: { signal: 'SIGTERM', timeout: 500 },
-      reuseExistingServer: !process.env.CI,
-      timeout: 300_000
     },
     // `e2e/native-source-error.spec.ts`'s CORS case, on its own port so it is
     // a real cross-origin request from the storybook origin. See

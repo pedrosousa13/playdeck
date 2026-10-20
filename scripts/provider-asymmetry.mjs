@@ -10,8 +10,8 @@
  * its prose was written against a detector that was run rather than read, so a
  * figure taken out of it is a figure something else already keeps honest. A
  * hand-written capability table beside it would be a second copy no gate
- * watches, which is the drift `src/content.config.ts` (#523) and
- * `src/provider-pages.mjs` (#524) both exist to remove.
+ * watches, which is the drift the package READMEs' own rendering (#523) and
+ * `scripts/provider-pages.mjs` (#524) both exist to remove.
  *
  * So this module writes down no facts. It writes down which *questions* the
  * page asks — three of them, in `FACTS` below — and how the document answers
@@ -20,7 +20,7 @@
  *
  * ---- what it reuses, and what it deliberately does not ----------------------
  *
- * The slicing is `src/provider-pages.mjs`'s and is not repeated here. That
+ * The slicing is `scripts/provider-pages.mjs`'s and is not repeated here. That
  * module already knows which providers the document covers, where each one's
  * material is, and — the part that matters most — that a `## ` section it can
  * place in neither category must fail the build rather than appear on every
@@ -37,8 +37,8 @@
  * counting its blocks in the source rather than by matching its text — the
  * links in it are rewritten on the way through and the text is no longer the
  * text, but no rewriting there joins or splits a line, so the block count is
- * the same on both sides. If `provider-pages.mjs` ever exports the slice, this
- * should read it instead.
+ * the same on both sides. If `scripts/provider-pages.mjs` ever exports the
+ * slice, this should read it instead.
  *
  * ---- the discipline this module carries -----------------------------------
  *
@@ -48,11 +48,7 @@
  * is the whole reason this is safe to render: the alternative — a cell that
  * quietly reads empty — would be a page claiming a provider says nothing about
  * its hosts, which is a lie the build should not be able to ship. A rewritten
- * paragraph in that document either still parses or stops the site.
- *
- * `.mjs` for `src/provider-pages.mjs`'s reason: it imports that module, which
- * reaches `astro:content`, and nothing in this repository type-checks either.
- * What stands behind them is `astro build`, which runs both for real.
+ * paragraph in that document either still parses or stops the build.
  */
 
 import { PROVIDER_SETUP_DOC, providerDocuments } from './provider-pages.mjs';
@@ -242,7 +238,7 @@ const FACTS = [
  * @returns {string}
  */
 const unreadable = (subject) =>
-  `A provider's section of ${PROVIDER_SETUP_DOC} no longer states its ${subject} in a shape src/provider-asymmetry.mjs reads, so the landing page's provider comparison would print an empty cell where a fact belongs. Either restore the shape in that document, or teach the matching entry of FACTS the new one.`;
+  `A provider's section of ${PROVIDER_SETUP_DOC} no longer states its ${subject} in a shape scripts/provider-asymmetry.mjs reads, so the landing page's provider comparison would print an empty cell where a fact belongs. Either restore the shape in that document, or teach the matching entry of FACTS the new one.`;
 
 /**
  * A provider's own material, recovered from its composed page.
@@ -277,7 +273,7 @@ const ownMaterial = (markdown, preambleBlocks) =>
  *
  * @param {string} source the whole of `docs/provider-setup.md`
  * @param {string} repoRoot
- * @param {(dir: string, fragment?: string) => string} [referenceHref] handed on to `providerDocuments`
+ * @param {(dir: string, fragment?: string) => string} referenceHref handed on to `providerDocuments`
  * @returns {{
  *   questions: readonly string[];
  *   providers: readonly ProviderTruth[];
@@ -295,7 +291,7 @@ export const providerAsymmetry = (source, repoRoot, referenceHref) => {
       const blocks = ownMaterial(document.markdown, preambleBlocks);
       if (blocks.length === 0) {
         throw new Error(
-          `${PROVIDER_SETUP_DOC} left "${document.title}" with no material of its own once the shared sections were removed, so the landing page's provider comparison has nothing to read. This is src/provider-pages.mjs's slicing seen from the other side — check PROVIDERS there first.`
+          `${PROVIDER_SETUP_DOC} left "${document.title}" with no material of its own once the shared sections were removed, so the landing page's provider comparison has nothing to read. This is scripts/provider-pages.mjs's slicing seen from the other side — check PROVIDERS there first.`
         );
       }
       return {

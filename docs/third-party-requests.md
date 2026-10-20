@@ -595,9 +595,9 @@ here beside them.
   included. No Playdeck option exists for it and none is planned — the exposure is
   the vendor element's shadow root, not a gap in this provider's options.
   `playdeck.video` itself is a page that mounts these providers — the bench on
-  `/` renders YouTube and Vimeo sources — and its own deployment sends exactly
-  that header, for every path: `apps/site/public/_headers` sets
-  `Referrer-Policy: strict-origin-when-cross-origin`.
+  its landing page renders YouTube and Vimeo sources — and its own deployment
+  (served from pedrosousa13/deck-cool since #901) sends exactly that header,
+  for every path: `Referrer-Policy: strict-origin-when-cross-origin`.
 - **YouTube's API script** — `strict-origin-when-cross-origin`, set by Playdeck
   on the `<script>` `packages/provider-youtube/src/loader.ts:179` builds for
   `https://www.youtube.com/iframe_api`, before the append at `:180`. Matches
@@ -1451,15 +1451,15 @@ images — your own host, not Playdeck's, so there is no origin this document ca
 name for you in advance. See the per-provider section's own note on it above.
 
 This table is what a consuming application's CSP should carry — it is not what
-`playdeck.video` itself carries. `apps/site/public/_headers` ships no
-`script-src` or `default-src` at all (the maintainer's ruling on #758: the
-cheap headers, no CSP). The site's own analytics script comes from
+`playdeck.video` itself carries. Its deployment (pedrosousa13/deck-cool since
+#901) ships no `script-src` or `default-src` at all (the maintainer's ruling on
+#758: the cheap headers, no CSP). The site's own analytics script comes from
 `analytics.pedrosousa.me`, so a script-restricting policy here would have to
 trust that origin — and trusting it does nothing to stop a compromised
 analytics script from rewriting the page, which is the realistic threat on a
 documentation site with no accounts, sessions or user data to protect. A
-strict policy also risks breaking the bench's provider embeds on `/` in ways
-that would only surface after a deploy. What the site does send is
-`frame-ancestors 'self'`: the site frames nothing of its own that another
+strict policy also risks breaking the bench's provider embeds on the landing
+page in ways that would only surface after a deploy. What the site does send
+is `frame-ancestors 'self'`: the site frames nothing of its own that another
 origin needs to embed, so `'self'` costs nothing today and keeps any future
 page that frames another same-origin page working.

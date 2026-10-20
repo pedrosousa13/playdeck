@@ -1,14 +1,14 @@
 /*
- * Which providers get a setup page, and how one document becomes four of them.
+ * Which providers get a setup page in `@playdeck/docs`, and how one document
+ * becomes four of them.
  *
  * The source is `docs/provider-setup.md`, whole and unedited. That file is in
  * `scripts/docs-examples.mjs`'s checked list, so the two fences inside it are
  * generated from real files in `examples/` and `pnpm docs:check` compares them
  * byte for byte; its prose was written against a detector that was run rather
- * than read. A site-native retelling of any of that would be a second copy no
- * gate watches, which is the drift `src/content.config.ts` was written to
- * remove for the package READMEs (#523) and the reason this ticket renders
- * rather than rewrites (#524).
+ * than read. A retelling of any of that would be a second copy no gate
+ * watches, which is the drift the package READMEs' own rendering was written
+ * to remove (#523) and the reason this renders rather than rewrites (#524).
  *
  * A page here is therefore a *selection* of that document and never a summary
  * of it: the intro, the provider's own material, and every section that applies
@@ -27,7 +27,7 @@
  *   same reason.
  * - That material is moved to the top, ahead of the shared sections. In the
  *   document the shared rules come first because a reader is going through it
- *   once, front to back; a reader on `/providers/vimeo/` came for Vimeo. The
+ *   once, front to back; a reader of the Vimeo page came for Vimeo. The
  *   cross-references survive the move because they were never forward
  *   references out of a provider's section: `see below` in the grouped section
  *   points at *Explicit source objects*, which still follows it, and the `a
@@ -40,23 +40,12 @@
  * same way.` opens `## The other three providers` and is a connective about
  * that grouping. Split into a page each, there is no grouping for it to be
  * about. It is the only sentence of the document that reaches no page.
- *
- * This is `.mjs` rather than `.ts` for the reason `src/reference-packages.mjs`
- * is: it reaches `astro:content`, whose declarations are generated into the
- * `.astro/` directory the site's `tsconfig.json` deliberately does not read,
- * and a module belonging to the `scripts` project. Nothing type-checks it as a
- * result — there is no `astro check` in this repository — so what stands behind
- * it is `astro build`, which runs this module for real on every build; see the
- * note in `apps/site/tsconfig.json`.
  */
 
 import { readFileSync } from 'node:fs';
 import { join, posix } from 'node:path';
-import { publishablePackages } from '../../../scripts/workspace-packages.mjs';
-import {
-  referencePackageDirs,
-  siteReferenceHref
-} from './reference-packages.mjs';
+import { publishablePackages } from './workspace-packages.mjs';
+import { referencePackageDirs } from './reference-packages.mjs';
 
 /**
  * Where the document is, relative to the repository root. Named once because
@@ -74,7 +63,7 @@ export const PROVIDER_SETUP_DOC = 'docs/provider-setup.md';
  * is what tells those apart, and a page whose `lead` is absent takes its whole
  * section.
  *
- * The set is stated rather than derived, unlike `src/reference-packages.mjs`'s,
+ * The set is stated rather than derived, unlike `scripts/reference-packages.mjs`'s,
  * and the difference is that there is nothing to derive it from. Publishable is
  * a property of a manifest and `pnpm list -r` answers it; "is this section
  * about one provider" is a property of prose. What keeps the two in step is the
@@ -127,16 +116,14 @@ const SHARED_SECTIONS = [
 ];
 
 /*
- * The branch a link out of this document resolves against, and the third copy
- * of this constant in the repository: `src/content.config.ts` has one for the
- * package READMEs and `scripts/verify-packaging.mjs` has the whole literal at
- * its `repositoryBlobUrl`. All three have to agree, and nothing fails if they
- * stop agreeing -- that gate only checks links that already start with its own
- * url, so a branch changed here alone would send readers to a ref that gate has
- * never looked at. They are not one exported value because they are not one
- * shape: that side needs a prefix to match against, `content.config.ts` needs a
- * url per package built from that package's `repository` field, and this side
- * needs one url for the repository itself.
+ * The branch a link out of this document resolves against, and one of several
+ * copies of this constant in the repository: `scripts/verify-packaging.mjs`
+ * has the whole literal at its `repositoryBlobUrl`. Both have to agree, and
+ * nothing fails if they stop agreeing -- that gate only checks links that
+ * already start with its own url, so a branch changed here alone would send
+ * readers to a ref that gate has never looked at. They are not one exported
+ * value because they are not one shape: that side needs a prefix to match
+ * against and this side needs one url for the repository itself.
  */
 const branch = 'main';
 
@@ -144,7 +131,7 @@ const branch = 'main';
  * Where a file in this repository lives on GitHub.
  *
  * Derived from the publishable manifests rather than written out, because a
- * fourth literal of the same url is a fourth thing to keep true and this one
+ * second literal of the same url is a second thing to keep true and this one
  * has a source: every published package points `repository.url` at this
  * repository, npm shows that url, and `scripts/verify-packaging.mjs` fails a
  * package whose manifest fields do not survive packing. The root manifest
@@ -240,11 +227,12 @@ const providerSlice = (section, provider) => {
   // which carry no full stop inside the emphasis -- though those are in a
   // shared section this function is never handed.
   const blocks = body.split('\n\n');
+  /** @param {string} block */
   const opens = (block) => /^\*\*(.+?)\.\*\*\s/.exec(block)?.[1];
   const start = blocks.findIndex((block) => opens(block) === provider.lead);
   if (start === -1) {
     throw new Error(
-      `${PROVIDER_SETUP_DOC} has no paragraph opening "**${provider.lead}.**" under "## ${provider.heading}", so that provider's setup page has nothing to render. Either the lead was renamed, or the provider moved to a section of its own — update PROVIDERS in src/provider-pages.mjs to match.`
+      `${PROVIDER_SETUP_DOC} has no paragraph opening "**${provider.lead}.**" under "## ${provider.heading}", so that provider's setup page has nothing to render. Either the lead was renamed, or the provider moved to a section of its own — update PROVIDERS in scripts/provider-pages.mjs to match.`
     );
   }
   const after = blocks.findIndex(
@@ -256,22 +244,18 @@ const providerSlice = (section, provider) => {
 };
 
 /**
- * One link target, as this site needs it rather than as the repository does.
+ * One link target, as the docs package needs it rather than as the repository
+ * does.
  *
  * The document is read in two places and its relative links are right in only
  * one of them. Written to be read from `docs/`, `third-party-requests.md` sits
- * beside it and `adr/0004-...` sits under it; from `/providers/vimeo/` both
- * resolve to nothing at all. So a relative target is resolved against the
- * document's own directory and pointed at the file's real home on GitHub, which
- * is where a reader of the site was always going to have to end up — except for
- * the one class of target this site publishes itself. `../packages/provider-vimeo`
- * is a package with a reference page, so it becomes that page rather than a trip
- * to GitHub to read a README the site is already rendering.
- *
- * Through `import.meta.env.BASE_URL`, which is what Astro fills the configured
- * `base` into, and never as a literal `/reference/`. The prefix is the root
- * today and the literal would be identical, which is exactly why the habit is
- * kept: a hand-written path is the bug a base path exists to prevent (#435).
+ * beside it and `adr/0004-...` sits under it; from a rendered provider page
+ * both resolve to nothing at all. So a relative target is resolved against the
+ * document's own directory and pointed at the file's real home on GitHub,
+ * which is where a reader was always going to have to end up — except for the
+ * one class of target the docs package publishes itself. `../packages/provider-vimeo`
+ * is a package with a reference page, so it becomes that page rather than a
+ * trip to GitHub to read a README the package is already rendering.
  *
  * A fragment-only target is left alone, and that is load-bearing rather than
  * lazy: the document's `#what-a-refusal-reads-like` and
@@ -311,16 +295,15 @@ const rewriteTarget = (target, { blob, pages, referenceHref }) => {
  * Fenced blocks are stepped over, and that is a requirement rather than a
  * tidiness: this document's two fences are generated from `examples/` and
  * `pnpm docs:check` compares them byte for byte, so a fence must come out of
- * here exactly as it went in rather than come out rewritten and put the site
- * and the gate into disagreement about what the example is.
+ * here exactly as it went in rather than come out rewritten and put the docs
+ * package and the gate into disagreement about what the example is.
  *
- * What it handles is what `src/content.config.ts` handles for the READMEs, and
- * for the same reason — one regular expression is worth more here than a
- * parser, on a corpus two gates already read: an inline `[text](target)` whose
- * target has no spaces and no parentheses, on a line outside a fence. An image,
- * a title, an angle-bracketed target and a reference-style definition are left
- * as written, which for a relative target means a link that 404s on the site.
- * Write cross-document links as plain inline links and they are re-addressed.
+ * One regular expression is worth more here than a parser, on a corpus two
+ * gates already read: an inline `[text](target)` whose target has no spaces
+ * and no parentheses, on a line outside a fence. An image, a title, an
+ * angle-bracketed target and a reference-style definition are left as
+ * written, which for a relative target means a link that 404s. Write
+ * cross-document links as plain inline links and they are re-addressed.
  *
  * @param {string} markdown
  * @param {{ blob: string; pages: ReadonlySet<string>; referenceHref: (dir: string, fragment?: string) => string }} context
@@ -361,15 +344,11 @@ const rewriteLinks = (markdown, context) => {
  *
  * @param {string} source
  * @param {string} repoRoot
- * @param {(dir: string, fragment?: string) => string} [referenceHref] where a package's reference page is; this
- *   site's own route unless handed another
+ * @param {(dir: string, fragment?: string) => string} referenceHref where a
+ *   package's reference page is; `scripts/docs-package.mjs`'s own route
  * @returns {ProviderDocument[]}
  */
-export const providerDocuments = (
-  source,
-  repoRoot,
-  referenceHref = siteReferenceHref
-) => {
+export const providerDocuments = (source, repoRoot, referenceHref) => {
   const parsed = sections(source);
   const [intro] = parsed;
   if (!/^# /.test(intro.text)) {
@@ -384,14 +363,16 @@ export const providerDocuments = (
     .map((section) => section.heading)
     .filter(
       (heading) =>
-        !providerHeadings.has(heading) && !SHARED_SECTIONS.includes(heading)
+        heading !== undefined &&
+        !providerHeadings.has(heading) &&
+        !SHARED_SECTIONS.includes(heading)
     );
   if (unclassified.length > 0) {
     // Not a section left off a page by accident, and not one silently added to
     // all four: whoever added a heading to that document knows which of the two
     // it is, and nobody reading the pages six months later would.
     throw new Error(
-      `${PROVIDER_SETUP_DOC} has section(s) the provider pages cannot place: ${unclassified.map((heading) => `"${heading}"`).join(', ')}. Add each to PROVIDERS in src/provider-pages.mjs if it documents one provider, or to SHARED_SECTIONS if it applies to all of them.`
+      `${PROVIDER_SETUP_DOC} has section(s) the provider pages cannot place: ${unclassified.map((heading) => `"${heading}"`).join(', ')}. Add each to PROVIDERS in scripts/provider-pages.mjs if it documents one provider, or to SHARED_SECTIONS if it applies to all of them.`
     );
   }
 
@@ -410,7 +391,7 @@ export const providerDocuments = (
     const section = parsed.find((entry) => entry.heading === provider.heading);
     if (section === undefined) {
       throw new Error(
-        `${PROVIDER_SETUP_DOC} has no "## ${provider.heading}" section, so a provider page listed in src/provider-pages.mjs has nothing to render. Update PROVIDERS to name the heading that replaced it.`
+        `${PROVIDER_SETUP_DOC} has no "## ${provider.heading}" section, so a provider page listed in scripts/provider-pages.mjs has nothing to render. Update PROVIDERS to name the heading that replaced it.`
       );
     }
     const title = provider.lead ?? provider.heading;
@@ -428,33 +409,4 @@ export const providerDocuments = (
       )
     };
   });
-};
-
-/**
- * The pages, in the order `PROVIDERS` lists them, each with the rendered entry
- * the route puts on screen. `order` is stored on the entry rather than recovered
- * here, because a content collection hands entries back in whatever order its
- * store iterates and alphabetical would be a different order for no reason.
- *
- * That order is the document's and not a ranking: YouTube and Vimeo are the two
- * with sections of their own and come first there, which is also the order the
- * two a consumer is likeliest to be wiring up want to be in (#524).
- *
- * @typedef {{ slug: string; title: string; packages: readonly string[]; entry: import('astro:content').CollectionEntry<'providers'> }} ProviderPage
- * @returns {Promise<ProviderPage[]>}
- */
-export const providerPages = async () => {
-  // Imported here rather than at the top, so that `scripts/docs-package.mjs`
-  // can load `providerDocuments` under plain Node, where the virtual module
-  // does not exist.
-  const { getCollection } = await import('astro:content');
-  const entries = await getCollection('providers');
-  return entries
-    .sort((a, b) => a.data.order - b.data.order)
-    .map((entry) => ({
-      slug: entry.id,
-      title: entry.data.title,
-      packages: entry.data.packages,
-      entry
-    }));
 };

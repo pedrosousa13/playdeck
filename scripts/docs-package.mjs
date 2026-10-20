@@ -10,10 +10,9 @@
 // `Overview/*` MDX, `docs/provider-setup.md` and `docs/comparison/` are read
 // and gated where they sit, and `examples/` is compiled by the `examples`
 // project. So nothing here is written twice. Each page is composed from those
-// sources by the same modules `apps/site` renders them with -- which sections
-// of `docs/provider-setup.md` reach which provider page, what comes off a
-// Storybook MDX -- handed a link target that is a relative `.md` page rather
-// than a route of that site.
+// sources by the sibling modules beside this one -- which sections of
+// `docs/provider-setup.md` reach which provider page, what comes off a
+// Storybook MDX -- handed a link target that is a relative `.md` page.
 //
 // Two things the contract refuses come off on the way through, and nothing
 // else is touched:
@@ -22,19 +21,16 @@
 //   and the generated-file notes in `docs/comparison/`. A demo marker is the
 //   only HTML the contract allows. The fences those markers wrap are copied
 //   byte for byte, and `pnpm docs:check` checks them where they are generated.
-// - The anchors `src/comparison-page.mjs` writes above each part of the
+// - The anchors `scripts/comparison-page.mjs` writes above each part of the
 //   comparison guide, which are raw HTML too.
 //
-// The prose of the five pages `apps/site` writes in Astro -- start, examples
-// and the three indexes -- is held here, in the page functions below, and
-// each value those pages compute (the install command, the peers, the
-// providers and their adapters, the guides' sections) is computed the same
-// way. The byte figures `/start` measures off built artifacts are left out:
-// they need a build, they move with the Node version doing the gzipping, and
-// this has to run in CI's `static` job, which builds nothing.
-//
-// Until `apps/site` retires, an edit to one of those five Astro pages is also
-// an edit to its function here. Nothing checks the two against each other.
+// The prose of the five pages -- start, examples and the three indexes -- is
+// held here, in the page functions below, and each value those pages compute
+// (the install command, the peers, the providers and their adapters, the
+// guides' sections) is computed the same way. The byte figures `/start`
+// measures off built artifacts are left out: they need a build, they move
+// with the Node version doing the gzipping, and this has to run in CI's
+// `static` job, which builds nothing.
 
 import {
   readFileSync,
@@ -46,29 +42,10 @@ import {
 import { basename, dirname, join, posix, relative, sep } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 import { codePackages } from './workspace-packages.mjs';
-
-/**
- * One of `apps/site`'s document modules, loaded by a computed URL so that the
- * `scripts` project's `tsc` does not follow it: those modules belong to the
- * site, which type-checks none of its `.mjs` (see `apps/site/tsconfig.json`).
- * What this file uses of them is typed below instead.
- * @param {string} name
- * @returns {Promise<any>}
- */
-const siteModule = (name) =>
-  import(new URL(`../apps/site/src/${name}`, import.meta.url).href);
-
-/** @typedef {(dir: string, fragment?: string) => string} ReferenceHref */
-/** @typedef {{ state: string; items: readonly string[]; reason?: string }} Reading */
-
-/** @type {{ GUIDES: readonly { file: string; slug: string }[]; guideDocument: (source: string, file: string, pages: ReadonlySet<string>, referenceHref: ReferenceHref) => { title: string; markdown: string } }} */
-const { GUIDES, guideDocument } = await siteModule('guide-pages.mjs');
-/** @type {{ providerDocuments: (source: string, repoRoot: string, referenceHref: ReferenceHref) => { slug: string; title: string; packages: readonly string[]; markdown: string }[] }} */
-const { providerDocuments } = await siteModule('provider-pages.mjs');
-/** @type {{ providerAsymmetry: (source: string, repoRoot: string, referenceHref: ReferenceHref) => { questions: readonly string[]; providers: readonly { slug: string; title: string; packages: readonly string[]; readings: readonly Reading[] }[] } }} */
-const { providerAsymmetry } = await siteModule('provider-asymmetry.mjs');
-/** @type {{ comparisonDocument: (repoRoot: string, referenceHref: ReferenceHref) => { title: string; markdown: string } }} */
-const { comparisonDocument } = await siteModule('comparison-page.mjs');
+import { GUIDES, guideDocument } from './guide-pages.mjs';
+import { providerDocuments } from './provider-pages.mjs';
+import { providerAsymmetry } from './provider-asymmetry.mjs';
+import { comparisonDocument } from './comparison-page.mjs';
 
 const console = globalThis.console;
 const process = globalThis.process;
@@ -83,7 +60,7 @@ export const DOCS_DIR = 'packages/docs';
  */
 export const DEMOS = ['streaming-service', 'course-platform'];
 
-/** The origin `apps/site` is published at, as the READMEs link to it. */
+/** playdeck.video's own origin, as the READMEs link to it. */
 const SITE = 'https://playdeck.video/';
 
 const PROVIDER_SETUP_DOC = 'docs/provider-setup.md';
@@ -199,7 +176,7 @@ const relativePage = (from, to) => {
 };
 
 /**
- * The page a path on `apps/site` is in this package, or `undefined` for a
+ * The page a path on playdeck.video is in this package, or `undefined` for a
  * route this package has no page for.
  * @param {string} path the path after the origin, such as `guides/contract/`
  * @param {ReadonlySet<string>} pages
@@ -213,8 +190,8 @@ const pageForRoute = (path, pages) => {
 
 /**
  * Every inline link outside a fence, each target handed to `rewrite`. The same
- * reading of a link `apps/site`'s modules make: `[text](target)` with no
- * spaces or parentheses in the target.
+ * reading of a link the sibling modules beside this one make: `[text](target)`
+ * with no spaces or parentheses in the target.
  * @param {string} markdown
  * @param {(target: string) => string} rewrite
  */
@@ -238,7 +215,7 @@ const rewriteLinks = (markdown, rewrite) => {
 };
 
 /**
- * A link to `apps/site` pointed at this package's page for the same route,
+ * A link to playdeck.video pointed at this package's page for the same route,
  * from the page at `file`. Any other target is returned as it is.
  * @param {string} file
  * @param {ReadonlySet<string>} pages
@@ -550,7 +527,7 @@ export const docsPackage = (root) => {
       const pkg = byDir.get(dir);
       if (pkg === undefined) {
         throw new Error(
-          `The ${title} setup page names packages/${dir}, which has no reference page. Update PROVIDERS in apps/site/src/provider-pages.mjs, or check that the package is still publishable.`
+          `The ${title} setup page names packages/${dir}, which has no reference page. Update PROVIDERS in scripts/provider-pages.mjs, or check that the package is still publishable.`
         );
       }
       return {
