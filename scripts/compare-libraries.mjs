@@ -697,9 +697,9 @@ export const libraries = [
     //
     // 23068 bytes measured 2026-10-20 -- 22.53 KB, past the 22.5 KB ceiling,
     // rounded up to the next 0.25 KB boundary -- 22.75 KB. What carried this
-    // row past it is #911's review fixes, the same ones described on the
-    // "Playdeck" row below: `use-activation.ts`'s
-    // `nativeElementCommittedAtRender` and `provider-native/src/attachment.ts`'s
+    // row past it is #911's `committedAtRender` hatch, the same one
+    // described on the "Playdeck" row below: `use-activation.ts`'s
+    // `eagerVideoCommit` and `provider-native/src/attachment.ts`'s
     // `committedAtRender`-gated `load()`, `publishSourceExhaustion` and the
     // attach-time `applyInitialPosition`/`publishDimensions` pair -- all
     // reached through this fixture's native provider regardless of which
@@ -999,7 +999,15 @@ export const libraries = [
     // additions described on the "no parts" row above -- up from 24.36 KB
     // (24949 bytes) the same day (2026-10-03), per `results.md` on `main`
     // -- which stays under this ceiling with no raise needed.
-    ceilingKb: 24.5,
+    //
+    // 25169 bytes measured 2026-10-20 -- 24.5791015625 KB, 24.58 KB to two
+    // places, rounded up to the next 0.25 KB. What carried this row past
+    // 24.5 KB is #911's `committedAtRender` hatch, the same one described on
+    // the "no parts" row above, reached through this fixture's own native
+    // provider. The whole distance from the last committed figure is this
+    // issue's: that figure was 24.39 KB (24975 bytes), measured 2026-10-03
+    // per `results.md` on `main`.
+    ceilingKb: 24.75,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
