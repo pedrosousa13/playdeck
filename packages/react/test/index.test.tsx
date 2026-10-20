@@ -1437,9 +1437,6 @@ test('passes loop and playback boundaries from Root to the native adapter', asyn
 });
 
 test('replaces the provider once when native playback options change', async () => {
-  const load = vi
-    .spyOn(HTMLMediaElement.prototype, 'load')
-    .mockImplementation(() => undefined);
   const play = vi
     .spyOn(HTMLMediaElement.prototype, 'play')
     .mockImplementation(function (this: HTMLMediaElement) {
@@ -1462,9 +1459,7 @@ test('replaces the provider once when native playback options change', async () 
   const media = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
   confirmMetadataReady(media);
   await waitFor(() => expect(play).toHaveBeenCalledOnce());
-  await waitFor(() => expect(load).toHaveBeenCalledOnce());
   play.mockClear();
-  load.mockClear();
   const providerStates: Array<string | null> = [];
   const unsubscribe = handle.current?.subscribe((state) =>
     providerStates.push(state.provider)
@@ -1474,7 +1469,6 @@ test('replaces the provider once when native playback options change', async () 
   rerender(player(1));
 
   await waitFor(() => expect(play).toHaveBeenCalledOnce());
-  await waitFor(() => expect(load).toHaveBeenCalledOnce());
   await waitFor(() =>
     expect(handle.current?.getState()).toMatchObject({
       provider: 'native',
@@ -1487,9 +1481,6 @@ test('replaces the provider once when native playback options change', async () 
 });
 
 test('attaches and loads one provider without detaching on source switch', async () => {
-  const load = vi
-    .spyOn(HTMLMediaElement.prototype, 'load')
-    .mockImplementation(() => undefined);
   const handle = createRef<Player.PlayerHandle>();
   const player = (source: string) => (
     <LegacyRoot ref={handle} source={source}>
@@ -1497,8 +1488,14 @@ test('attaches and loads one provider without detaching on source switch', async
     </LegacyRoot>
   );
   const { rerender } = render(player('/first.mp4'));
-  await waitFor(() => expect(load).toHaveBeenCalledOnce());
-  load.mockClear();
+  // `commandsReady` is what the adapter's own `load()` publishes once it
+  // runs, regardless of whether it also calls `media.load()` (#911: it does
+  // not here, `LegacyRoot` defaulting to `loading="eager"`) -- the signal
+  // this test needs is "the provider finished loading", not that one DOM
+  // call in particular.
+  await waitFor(() =>
+    expect(handle.current?.getState().commandsReady).toBe(true)
+  );
   const providerStates: Array<string | null> = [];
   const unsubscribe = handle.current?.subscribe((state) =>
     providerStates.push(state.provider)
@@ -1506,10 +1503,10 @@ test('attaches and loads one provider without detaching on source switch', async
   providerStates.length = 0;
 
   rerender(player('/second.mp4'));
-  await waitFor(() => expect(load).toHaveBeenCalled());
-  await Promise.resolve();
+  await waitFor(() =>
+    expect(handle.current?.getState().commandsReady).toBe(true)
+  );
 
-  expect(load).toHaveBeenCalledOnce();
   expect(providerStates).toEqual(expect.arrayContaining(['native']));
   expect(providerStates.lastIndexOf(null)).toBeLessThan(
     providerStates.indexOf('native')
@@ -2851,19 +2848,32 @@ test('omits the controls attribute on the native video when controls is unset', 
 });
 
 test('toggles the video controls attribute across a re-render without re-attaching the native provider', async () => {
-  const load = vi
-    .spyOn(HTMLMediaElement.prototype, 'load')
-    .mockImplementation(() => undefined);
+  // `removeEventListener`, not `load` (#911: `LegacyRoot` defaults to
+  // `loading="eager"`, and its `media.load()` is skipped for a
+  // `committedAtRender` element regardless of a re-attach, so it is no
+  // longer a signal this test can read anything from). `destroy()` is what
+  // a re-attach runs on its way to building a fresh provider, and it always
+  // removes this element's listeners first.
+  const removeEventListener = vi.spyOn(
+    HTMLMediaElement.prototype,
+    'removeEventListener'
+  );
+  const handle = createRef<Player.PlayerHandle>();
   const player = (controls: boolean) => (
-    <LegacyRoot controls={controls} source="/clip.mp4">
+    <LegacyRoot controls={controls} ref={handle} source="/clip.mp4">
       <Player.Media />
     </LegacyRoot>
   );
   const { rerender } = render(player(true));
   const video = screen.getByLabelText<HTMLVideoElement>('Playdeck media');
-  await waitFor(() => expect(load).toHaveBeenCalledOnce());
+  // Waits for the provider to actually attach before checking that toggling
+  // `controls` does not re-attach it -- otherwise there is nothing yet for
+  // the assertion below to prove didn't happen.
+  await waitFor(() =>
+    expect(handle.current?.getState().commandsReady).toBe(true)
+  );
   expect(video.controls).toBe(true);
-  load.mockClear();
+  removeEventListener.mockClear();
 
   rerender(player(false));
 
@@ -2872,7 +2882,7 @@ test('toggles the video controls attribute across a re-render without re-attachi
   // reaches the element as a DOM attribute, not through the provider-options
   // comparison that would tear it down and rebuild it.
   await act(async () => undefined);
-  expect(load).not.toHaveBeenCalled();
+  expect(removeEventListener).not.toHaveBeenCalled();
 });
 
 test('sizes the native video to fill its viewport and letterbox by default', () => {
@@ -3014,17 +3024,23 @@ test('tolerates an inline callback ref through unrelated parent re-renders', () 
   expect(observerInstances).toHaveLength(1);
 });
 
-test('issues no autoplay play before the provider load when metadata is already present', async () => {
+test('issues no autoplay play before the provider is ready when metadata is already present', async () => {
   // The end-to-end shape of #87, driven through the real native provider
   // rather than a fake: `provider-native.attach()` calls `emitMediaState()`
   // synchronously, which reports `ready` off `readyState >= HAVE_METADATA`.
-  // The controller only queues `load()` after `attach()` returns, so an
-  // autoplay play issued during the attach tick lands first and `load()` then
-  // aborts it, per the HTML media spec.
+  // The controller's own sequencing -- `attach()`, then the adapter's own
+  // `load()`, then `synchronizeAutoplay()` -- is what keeps an autoplay play
+  // from landing before the provider is ready, independent of whether the
+  // adapter's `load()` calls `media.load()` itself.
   //
   // Reproducing needs metadata present BEFORE the provider attaches — a local
   // fixture served directly rather than a throttled or mocked response. That
   // latency difference is why the sibling defect (#86) survived so long.
+  //
+  // `LegacyRoot` defaults to `loading="eager"` (#911): with metadata already
+  // present at mount, this is also a `committedAtRender` element, so the
+  // adapter's `load()` does not call `media.load()` at all here -- `calls`
+  // holds only `play`.
   const calls: string[] = [];
   vi.spyOn(HTMLMediaElement.prototype, 'readyState', 'get').mockReturnValue(1);
   vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {
@@ -3048,7 +3064,7 @@ test('issues no autoplay play before the provider load when metadata is already 
   await waitFor(() =>
     expect(screen.getByRole('button').dataset.autoplayState).toBe('started')
   );
-  expect(calls).toEqual(['load', 'play']);
+  expect(calls).toEqual(['play']);
 });
 
 // #69: the awaitable is only useful if consumers can reach it. `PlayerHandle`
