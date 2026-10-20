@@ -1107,7 +1107,15 @@ test('exposes stable actions and a ref handle backed by the Root controller', ()
 
   rerender(player());
 
-  expect(actionReferences).toHaveLength(3);
+  // Two, not three (#911): `eager` used to commit a `video` source only once
+  // the `eager` effect ran, which flipped `sourceCommitted` false -> true and
+  // so changed the `activation` object `PlayerContext`'s value is built from
+  // -- the context value Probe consumes, forcing it to re-render once before
+  // this test's own explicit `rerender` call. `sourceCommitted` now reads
+  // `true` from the very first render, so that flip -- and the render it
+  // forced -- no longer happens; only the explicit `rerender` below still
+  // changes `children`'s identity and forces one.
+  expect(actionReferences).toHaveLength(2);
   expect(
     actionReferences.every((actions) => actions === actionReferences[0])
   ).toBe(true);

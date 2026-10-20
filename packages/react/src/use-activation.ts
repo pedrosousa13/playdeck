@@ -652,7 +652,26 @@ export const useActivation = (
   const [playGateIdentity, setPlayGateIdentity] = useState<string | undefined>(
     undefined
   );
-  const sourceCommitted = committedIdentity === currentActivationIdentity;
+  // #911: under `eager`, with a configuration that is not an error and a
+  // `video` file source `detectSource` already accepted, every input the
+  // commit decision needs is available synchronously, at render time -- so it
+  // is read straight off `options` rather than waited for in the `eager`
+  // effect below, which is what let `Media` (`viewport-media.tsx`) return
+  // `null` through the first render and the server markup alike. `'video'`
+  // only: `hls` needs `hls.js`, and the three embeds need an iframe, so both
+  // stay committed by the effect exactly as they are today. Folded into
+  // `sourceCommitted` with `||` rather than replacing the state comparison --
+  // the effect still runs, still calls `activate(false)`, and still sets
+  // `committedIdentity`, which is what every other strategy continues to
+  // depend on; this only stops `video` under `eager` from ever reading
+  // `false` on the way there.
+  const eagerRenderCommit =
+    options.loading === 'eager' &&
+    currentConfiguration === 'valid' &&
+    options.source.status === 'success' &&
+    options.source.source.type === 'video';
+  const sourceCommitted =
+    committedIdentity === currentActivationIdentity || eagerRenderCommit;
   // Whether there is a gate at all. `playThreshold` defaults to `loadThreshold`,
   // and two equal thresholds are met by the same entry -- `meetsThreshold` is a
   // pure function of the entry and the number -- so the crossing that loads is
