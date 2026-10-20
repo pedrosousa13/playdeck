@@ -75,7 +75,19 @@ type NativeStateListener = (
 
 export const createNativeProvider = (
   media: HTMLVideoElement,
-  options: NativePlaybackOptions = {}
+  options: NativePlaybackOptions = {},
+  // A second parameter rather than a fourth key on `options`: `options` is
+  // `NativePlaybackOptions`, the same type `Pick<RootProps, keyof
+  // NativePlaybackOptions>` is pinned against (`root-props.test.ts`), and a
+  // key that type does not also belong on `RootProps` would break that pin.
+  // This is never a consumer-facing setting -- `@playdeck/react` is this
+  // package's one caller (`provider-loaders.ts`) and the only one that ever
+  // passes it.
+  internal?: {
+    // See `NativeAttachmentDeps.committedAtRender` (`attachment.ts`) for what
+    // this means and why `load()` reads it instead of `media.networkState`.
+    readonly committedAtRender?: boolean;
+  }
 ): NativeProviderAdapter => {
   const listeners = new Set<NativeStateListener>();
 
@@ -185,7 +197,8 @@ export const createNativeProvider = (
     remotePlayback,
     textTracks,
     audioTracks,
-    clearStateListeners: () => listeners.clear()
+    clearStateListeners: () => listeners.clear(),
+    committedAtRender: internal?.committedAtRender ?? false
   });
 
   return {

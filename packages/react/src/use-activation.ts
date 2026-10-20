@@ -1355,6 +1355,22 @@ export const useActivation = (
     const loadOptions = optionsRef.current;
     const controller = loadOptions.controller;
     const replacingProvider = controller.getState().provider !== null;
+    // Re-derives the render-time commit condition (`eagerRenderCommit`
+    // above) rather than closing over that render's own value: this effect
+    // can run for a generation bump its triggering render did not itself
+    // cause (a native/provider option change, `registerMedia`'s own bump),
+    // and `loading`/`configuration`/`source` above are already this
+    // session's recorded values, not whatever the latest render computed.
+    // Passed to the native provider as `committedAtRender`
+    // (`provider-native/src/attachment.ts`), which is what its own `load()`
+    // reads instead of `media.networkState` (#911 review) -- `true` only
+    // under `eager`, for a `video` file source, never for `viewport` or
+    // `interaction`, which always create their element well after this
+    // effect last had a chance to run before mount.
+    const nativeElementCommittedAtRender =
+      loading === 'eager' &&
+      configuration === 'valid' &&
+      source.source.type === 'video';
     const isCurrentLoad = (): boolean => {
       const current = session.current;
       const inputs = latestInputsRef.current;
@@ -1383,6 +1399,7 @@ export const useActivation = (
     suppliedProviderOptionDispose.current = undefined;
     void loadProvider({
       media,
+      nativeElementCommittedAtRender,
       nativeOptions,
       providerOptions,
       providers: loadOptions.providers,

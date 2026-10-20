@@ -358,6 +358,16 @@ export type ProviderLoaderRequest = {
   // and by any caller with nothing to report to, and refusing there must
   // still omit the value rather than throw (#752).
   readonly reportRefusedUrl?: (surface: RefusedUrlSurface) => () => void;
+  // Read by the `video` branch alone, and passed straight through to
+  // `createNativeProvider`'s own internal `committedAtRender` (#911 review):
+  // whether `use-activation.ts` committed this source at render time rather
+  // than from an effect (`eagerRenderCommit`, under `loading: 'eager'`
+  // only), which tells the native provider's `load()` a server-rendered
+  // element may already be mid-fetch without it ever reading
+  // `media.networkState` itself. `undefined` for a direct caller (tests, or
+  // any other caller of `loadProvider`) reads as `false` the same way
+  // `createNativeProvider`'s own default does.
+  readonly nativeElementCommittedAtRender?: boolean;
 };
 
 // The supplied-kind counterpart of `everyStringPermitted` further down: a
@@ -444,6 +454,7 @@ const ownEntry = <T>(
 // actually needs it.
 export const loadProvider = async ({
   media,
+  nativeElementCommittedAtRender,
   nativeOptions,
   providerOptions,
   providers,
@@ -484,7 +495,9 @@ export const loadProvider = async ({
       throw new Error('The native provider requires a media mount.');
     }
     const { createNativeProvider } = await import('@playdeck/provider-native');
-    return createNativeProvider(media, nativeOptions);
+    return createNativeProvider(media, nativeOptions, {
+      committedAtRender: nativeElementCommittedAtRender
+    });
   }
   if (builtin.type === 'youtube') {
     if (!media) {
