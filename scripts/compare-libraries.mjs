@@ -694,7 +694,19 @@ export const libraries = [
     // under this ceiling with no raise needed. Both additions are small and
     // live in the facade itself, which this fixture's `Root` always
     // imports eagerly regardless of composition.
-    ceilingKb: 22.5,
+    //
+    // 23068 bytes measured 2026-10-20 -- 22.53 KB, past the 22.5 KB ceiling,
+    // rounded up to the next 0.25 KB boundary -- 22.75 KB. What carried this
+    // row past it is #911's review fixes, the same ones described on the
+    // "Playdeck" row below: `use-activation.ts`'s
+    // `nativeElementCommittedAtRender` and `provider-native/src/attachment.ts`'s
+    // `committedAtRender`-gated `load()`, `publishSourceExhaustion` and the
+    // attach-time `applyInitialPosition`/`publishDimensions` pair -- all
+    // reached through this fixture's native provider regardless of which
+    // control parts it renders. The whole distance from the last committed
+    // figure is this issue's: that figure was 22.42 KB (22951 bytes),
+    // measured 2026-10-03 per `results.md` on `main`.
+    ceilingKb: 22.75,
     // This fixture renders no control part at all (see
     // tests/compare/entries/playdeck-no-parts.tsx's own header) -- every
     // guardable part is forbidden.

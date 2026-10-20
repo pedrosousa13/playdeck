@@ -300,7 +300,20 @@ try {
   // described in `scripts/compare-libraries.mjs`'s own rows -- up from
   // 114.31 KB (117052 bytes) the same day (2026-10-03), per `results.md` on
   // `main` -- which stays under this ceiling with no raise needed.
-  const GZIP_EAGER_CEILING_KB = 114.5;
+  //
+  // 117306 bytes measured 2026-10-20 -- 114.556640625 KB, 114.56 KB to two
+  // places, rounded up to the next 0.25 KB. What carried this past 114.50 KB
+  // is #911's review fixes: `use-activation.ts`'s `nativeElementCommittedAtRender`
+  // (folded into the `loadProvider` call every eager composition makes
+  // through `@playdeck/react`), plus `provider-native/src/attachment.ts`'s
+  // `committedAtRender`-gated `load()`, its `publishSourceExhaustion` helper
+  // and the `applyInitialPosition`/`publishDimensions` pair `attach()` now
+  // also runs when metadata already arrived -- all reached by `/browser.js`
+  // and `/provider-native.js` regardless of this entry's own `loading`
+  // (`'viewport'`, the library default). The whole distance from the last
+  // committed figure is this issue's: that figure was 114.34 KB
+  // (117081 bytes), measured 2026-10-03 per `results.md` on `main`.
+  const GZIP_EAGER_CEILING_KB = 114.75;
   const gzipKb = (bytes) => (bytes / 1024).toFixed(2);
   const scriptBytes = await Promise.all(
     expectedScripts.map((pathname) => readFile(resolveRequest(pathname)))
