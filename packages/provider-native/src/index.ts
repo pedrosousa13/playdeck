@@ -14,6 +14,10 @@ import {
   type EmitProviderState
 } from './adapter-values.js';
 import {
+  COMMITTED_AT_RENDER,
+  type CommittedAtRenderCarrier
+} from './internal-options.js';
+import {
   createNativeAudioTracks,
   type NativeAudioTracks
 } from './audio-tracks.js';
@@ -75,19 +79,7 @@ type NativeStateListener = (
 
 export const createNativeProvider = (
   media: HTMLVideoElement,
-  options: NativePlaybackOptions = {},
-  // A second parameter rather than a fourth key on `options`: `options` is
-  // `NativePlaybackOptions`, the same type `Pick<RootProps, keyof
-  // NativePlaybackOptions>` is pinned against (`root-props.test.ts`), and a
-  // key that type does not also belong on `RootProps` would break that pin.
-  // This is never a consumer-facing setting -- `@playdeck/react` is this
-  // package's one caller (`provider-loaders.ts`) and the only one that ever
-  // passes it.
-  internal?: {
-    // See `NativeAttachmentDeps.committedAtRender` (`attachment.ts`) for what
-    // this means and why `load()` reads it instead of `media.networkState`.
-    readonly committedAtRender?: boolean;
-  }
+  options: NativePlaybackOptions = {}
 ): NativeProviderAdapter => {
   const listeners = new Set<NativeStateListener>();
 
@@ -198,7 +190,8 @@ export const createNativeProvider = (
     textTracks,
     audioTracks,
     clearStateListeners: () => listeners.clear(),
-    committedAtRender: internal?.committedAtRender ?? false
+    committedAtRender:
+      (options as CommittedAtRenderCarrier)[COMMITTED_AT_RENDER] ?? false
   });
 
   return {

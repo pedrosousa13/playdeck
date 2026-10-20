@@ -46,7 +46,7 @@ export type NativeAttachmentDeps = {
   readonly clearStateListeners: () => void;
   // Whether `@playdeck/react` committed this element's source at render
   // time rather than from an effect (`use-activation.ts`'s own
-  // `eagerRenderCommit`, under `loading: 'eager'` only) -- an explicit
+  // `eagerVideoCommit`, under `loading: 'eager'` only) -- an explicit
   // signal from the caller that already knows it, not something read off
   // the element. `load()` below reads this, not `media.networkState`: per
   // spec, inserting a `<source>` child with no `src` while `networkState`
@@ -54,7 +54,7 @@ export type NativeAttachmentDeps = {
   // step sets `networkState` away from `NETWORK_EMPTY` synchronously -- so a
   // client-created element reaches the same `networkState` a server-
   // rendered one does, before this provider ever attaches to either, and
-  // reading it back could never have told the two apart (#911 review).
+  // reading it back could never tell the two apart.
   readonly committedAtRender: boolean;
 };
 
@@ -344,9 +344,9 @@ export const createNativeAttachment = (
     lastBuffered = [];
     emit(syncLive({ buffered: [] }));
   };
-  // Shared by `onSourceError` below and by `attach()`'s own pre-attach check
-  // (#911 review): `networkState` reaching `NETWORK_NO_SOURCE` is the
-  // browser's own signal that nothing is left to try -- an earlier
+  // Shared by `onSourceError` below and by `attach()`'s own pre-attach
+  // check: `networkState` reaching `NETWORK_NO_SOURCE` is the browser's own
+  // signal that nothing is left to try -- an earlier
   // candidate's failure leaves it at `NETWORK_LOADING` while the next one is
   // attempted, so a source that fails while a later one succeeds never
   // reaches either caller. `originalEvent` is the `<source>`'s own `error`
@@ -502,11 +502,9 @@ export const createNativeAttachment = (
       }
       emitMediaState();
       // Same reasoning, for a source that failed every candidate before
-      // this provider ever attached (#911 review): with `load()` below no
-      // longer always calling `media.load()`, that restart is no longer
-      // guaranteed to re-run resource selection after this attachment's
-      // listeners exist, which used to be what made a pre-attach failure
-      // observable regardless of when it actually happened. Checked here
+      // this provider ever attached: `load()` below does not always call
+      // `media.load()`, so a restart cannot be relied on to re-run resource
+      // selection after this attachment's listeners exist. Checked here
       // instead, directly, the same verdict `onSourceError` reaches from a
       // live event.
       publishSourceExhaustion();
@@ -521,7 +519,7 @@ export const createNativeAttachment = (
       //
       // Skipped when `committedAtRender` says `@playdeck/react` already put
       // this element's `<source>` children in the DOM at render time
-      // (`use-activation.ts`'s `eagerRenderCommit`, under `loading: 'eager'`
+      // (`use-activation.ts`'s `eagerVideoCommit`, under `loading: 'eager'`
       // only) -- a server-rendered element can already be well into
       // resource selection by the time this runs, and `media.load()` would
       // abort that in-flight request and restart it from scratch,

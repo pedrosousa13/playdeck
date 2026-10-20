@@ -72,10 +72,6 @@ export const HAVE_METADATA = 1;
 // HTMLMediaElement.NETWORK_NO_SOURCE, inlined for the same reason.
 export const NETWORK_NO_SOURCE = 3;
 
-// HTMLMediaElement.NETWORK_EMPTY, inlined for the same reason: no resource
-// selection has been invoked for this element yet.
-export const NETWORK_EMPTY = 0;
-
 export const toRanges = (
   ranges: globalThis.TimeRanges
 ): ReadonlyArray<TimeRange> =>

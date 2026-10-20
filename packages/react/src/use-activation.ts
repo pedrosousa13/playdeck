@@ -160,6 +160,47 @@ const activationConfiguration = ({
   return 'valid';
 };
 
+// Whether a `video` file source commits at render time rather than waiting
+// on the `eager` effect: `eager`, a configuration that is not an error, and
+// a `video` file source `detectSource` already accepted. `hls` needs
+// `hls.js` and the three embeds need an iframe, so neither can commit this
+// way; both stay committed by the effect. Two call sites read this, each
+// from values it already has rather than a shared closure: `sourceCommitted`
+// reads it fresh every render, and the load effect re-derives it from the
+// session's own recorded inputs, since that effect can run for a generation
+// bump its triggering render did not itself cause.
+const eagerVideoCommit = (
+  loading: PlayerLoadingStrategy,
+  configuration: ActivationConfiguration,
+  source: SourceDetectionResult
+): boolean =>
+  loading === 'eager' &&
+  configuration === 'valid' &&
+  source.status === 'success' &&
+  source.source.type === 'video';
+
+// The write side of `@playdeck/provider-native`'s own hatch
+// (`internal-options.ts`'s `COMMITTED_AT_RENDER`), on the same terms as
+// `@playdeck/react`'s own `internal-controller.ts`: `Symbol.for`, not an
+// import, so this string is the one thing that has to agree between the two
+// packages. The native provider's `load()` reads it off `options` to decide
+// whether a server-rendered element may already be mid-fetch.
+const NATIVE_COMMITTED_AT_RENDER: unique symbol = Symbol.for(
+  'playdeck.internal.native-committed-at-render'
+);
+
+// A copy, never a mutation of `nativeOptions` itself: that reference is also
+// what `isCurrentLoad` and the session compare by value, and a hatch written
+// onto a shared, stored object would outlive the load it was computed for.
+const withNativeCommittedAtRender = (
+  nativeOptions: NativePlaybackOptions,
+  committedAtRender: boolean
+): NativePlaybackOptions =>
+  Object.defineProperty({ ...nativeOptions }, NATIVE_COMMITTED_AT_RENDER, {
+    value: committedAtRender,
+    enumerable: false
+  });
+
 const activationIdentityKey = (
   source: string,
   loading: PlayerLoadingStrategy,
@@ -652,24 +693,20 @@ export const useActivation = (
   const [playGateIdentity, setPlayGateIdentity] = useState<string | undefined>(
     undefined
   );
-  // #911: under `eager`, with a configuration that is not an error and a
-  // `video` file source `detectSource` already accepted, every input the
-  // commit decision needs is available synchronously, at render time -- so it
-  // is read straight off `options` rather than waited for in the `eager`
-  // effect below, which is what let `Media` (`viewport-media.tsx`) return
-  // `null` through the first render and the server markup alike. `'video'`
-  // only: `hls` needs `hls.js`, and the three embeds need an iframe, so both
-  // stay committed by the effect exactly as they are today. Folded into
-  // `sourceCommitted` with `||` rather than replacing the state comparison --
-  // the effect still runs, still calls `activate(false)`, and still sets
-  // `committedIdentity`, which is what every other strategy continues to
-  // depend on; this only stops `video` under `eager` from ever reading
-  // `false` on the way there.
-  const eagerRenderCommit =
-    options.loading === 'eager' &&
-    currentConfiguration === 'valid' &&
-    options.source.status === 'success' &&
-    options.source.source.type === 'video';
+  // Every input `eagerVideoCommit` needs is available synchronously, at
+  // render time -- so it is read straight off `options` rather than waited
+  // for in the `eager` effect below, which is what let `Media`
+  // (`viewport-media.tsx`) return `null` through the first render and the
+  // server markup alike. Folded into `sourceCommitted` with `||` rather than
+  // replacing the state comparison -- the effect still runs, still calls
+  // `activate(false)`, and still sets `committedIdentity`, which is what
+  // every other strategy continues to depend on; this only stops a `video`
+  // source under `eager` from ever reading `false` on the way there.
+  const eagerRenderCommit = eagerVideoCommit(
+    options.loading,
+    currentConfiguration,
+    options.source
+  );
   const sourceCommitted =
     committedIdentity === currentActivationIdentity || eagerRenderCommit;
   // Whether there is a gate at all. `playThreshold` defaults to `loadThreshold`,
@@ -817,6 +854,13 @@ export const useActivation = (
     setMediaVersion((version) => version + 1);
   }, []);
 
+  // The compiler's dependency inference for this callback changes once
+  // `eagerVideoCommit` is called earlier in this component (verified: an
+  // inline copy of the same three-condition boolean does not trip it), even
+  // though nothing here changed and `[]` is still this callback's correct
+  // dependency list. Compilation is skipped for it, not broken: it keeps
+  // running as the plain, hand-written `useCallback` below.
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const registerViewport = useCallback((viewport: HTMLDivElement | null) => {
     if (viewportRef.current === viewport) return;
     const registration = observerRef.current;
@@ -1355,22 +1399,17 @@ export const useActivation = (
     const loadOptions = optionsRef.current;
     const controller = loadOptions.controller;
     const replacingProvider = controller.getState().provider !== null;
-    // Re-derives the render-time commit condition (`eagerRenderCommit`
-    // above) rather than closing over that render's own value: this effect
-    // can run for a generation bump its triggering render did not itself
-    // cause (a native/provider option change, `registerMedia`'s own bump),
-    // and `loading`/`configuration`/`source` above are already this
-    // session's recorded values, not whatever the latest render computed.
-    // Passed to the native provider as `committedAtRender`
-    // (`provider-native/src/attachment.ts`), which is what its own `load()`
-    // reads instead of `media.networkState` (#911 review) -- `true` only
-    // under `eager`, for a `video` file source, never for `viewport` or
-    // `interaction`, which always create their element well after this
-    // effect last had a chance to run before mount.
-    const nativeElementCommittedAtRender =
-      loading === 'eager' &&
-      configuration === 'valid' &&
-      source.source.type === 'video';
+    // Re-derives `eagerVideoCommit` rather than closing over the render-time
+    // value above: this effect can run for a generation bump its triggering
+    // render did not itself cause (a native/provider option change,
+    // `registerMedia`'s own bump), and `loading`/`configuration`/`source`
+    // above are already this session's recorded values, not whatever the
+    // latest render computed.
+    const nativeElementCommittedAtRender = eagerVideoCommit(
+      loading,
+      configuration,
+      source
+    );
     const isCurrentLoad = (): boolean => {
       const current = session.current;
       const inputs = latestInputsRef.current;
@@ -1399,8 +1438,10 @@ export const useActivation = (
     suppliedProviderOptionDispose.current = undefined;
     void loadProvider({
       media,
-      nativeElementCommittedAtRender,
-      nativeOptions,
+      nativeOptions: withNativeCommittedAtRender(
+        nativeOptions,
+        nativeElementCommittedAtRender
+      ),
       providerOptions,
       providers: loadOptions.providers,
       // Stale by the time a superseded load's own `registration.load()`
