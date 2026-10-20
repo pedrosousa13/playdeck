@@ -7,6 +7,9 @@ _Superseded: as of 2026-10-12 the site is published from
 repository deploys nothing: `deploy-site.yml` and `wrangler.jsonc` are
 deleted._
 
+_Addendum (2026-10-20, #901): `apps/site` itself is deleted from this
+repository; its source now lives in pedrosousa13/deck-cool._
+
 Supersedes [ADR-0006](0006-publishing-is-a-committed-configuration-on-an-apex-domain.md)
 on what is deployed. Everything else that ADR decided stands: publishing is a
 Cloudflare Worker serving static assets, driven from a workflow against a

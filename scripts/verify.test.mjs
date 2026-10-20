@@ -10,10 +10,11 @@ import {
 } from './verify.mjs';
 
 // A small workflow carrying one of each shape .github/workflows/ci.yml's
-// real jobs use -- a bare `&&` chain, a `--filter` call, an `exec` call, a
-// non-pnpm multi-line step, and one script (`test:nonexistent`) that exists
-// nowhere in STEPS or EXCLUSIONS -- so a single parse exercises every shape
-// this module has to tell apart and supplies the drift case at the same time.
+// real jobs use -- a bare `&&` chain, a `--filter` call, a non-pnpm
+// multi-line step -- plus an `exec` call and a script (`test:nonexistent`)
+// that exist nowhere in STEPS or EXCLUSIONS, so a single parse exercises
+// every shape this module has to tell apart and supplies two drift cases at
+// the same time.
 const fixtureWorkflow = `
 jobs:
   example:
@@ -89,6 +90,7 @@ test('reads every shape in one workflow, in document order', () => {
 
 test('flags a pnpm script that is in neither the verify list nor the exclusion list', () => {
   assert.deepEqual(driftProblems(fixtureWorkflow, STEPS, EXCLUSIONS), [
+    { form: 'exec', command: 'turbo run build --filter=@playdeck/site...' },
     { form: 'script', script: 'test:nonexistent' }
   ]);
 });

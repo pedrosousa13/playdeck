@@ -482,9 +482,9 @@ export const pinnedVersion = (target, installed, manifests) => {
  * practice. Chunks are summed anyway rather than assuming one, because that is
  * what a consumer whose graph did split would download.
  * `root` is a parameter and not this module's own `repoRoot` for the reason
- * `bundle-budgets.mjs` takes one: `apps/site` bundles this module into its
- * prerender output, where `import.meta.url` addresses a chunk under `dist/` and
- * every path resolved from it points at nothing.
+ * `bundle-budgets.mjs` takes one: a caller that bundles this module would see
+ * `import.meta.url` address a chunk under `dist/`, where every path resolved
+ * from it points at nothing.
  * @param {string} path Relative to the repository root.
  * @param {string} [root] The repository root.
  * @returns {Promise<number>}
@@ -522,14 +522,11 @@ const readJson = async (path, root = repoRoot) =>
  * What a provider package's own runtime dependency weighs, gzipped, keyed by
  * the package directory whose manifest pins it.
  *
- * Exported because the README is not the only document that owes a reader this
- * figure. `apps/site/src/pages/start.astro` prints one row per adapter, and a
- * row showing only what `@playdeck/provider-hls` itself builds to understates
- * what a reader downloads to play HLS in Chrome, Edge or Firefox by two orders
- * of magnitude: hls.js is that package's dependency, imported dynamically when
- * the hls.js engine is the one selected, and no bundle `bundle-budgets.mjs`
- * weighs contains a byte of it. Measuring it a second time in the site would be
- * a second definition of the same number, so the site reads this one.
+ * Exported because a row showing only what `@playdeck/provider-hls` itself
+ * builds to understates what a reader downloads to play HLS in Chrome, Edge or
+ * Firefox by two orders of magnitude: hls.js is that package's dependency,
+ * imported dynamically when the hls.js engine is the one selected, and no
+ * bundle `bundle-budgets.mjs` weighs contains a byte of it.
  *
  * Entries carrying a `variant` are left out: this answers what an adapter costs
  * by default, and `hls.js/light` is an opt-in whose tradeoff needs the prose
@@ -538,8 +535,7 @@ const readJson = async (path, root = repoRoot) =>
  * The key is derived from the manifest that pins the dependency rather than
  * written down, so there is no second place for a package directory to be
  * renamed.
- * @param {string} [root] The repository root, which the site has to pass: it
- * bundles this module, and `import.meta.url` then addresses a chunk in `dist/`.
+ * @param {string} [root] The repository root.
  * @returns {Promise<Map<string, { package: string; version: string; kilobytes: number }>>}
  */
 export const bundledDependencies = async (root = repoRoot) => {

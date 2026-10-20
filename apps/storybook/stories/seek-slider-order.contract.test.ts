@@ -1,16 +1,14 @@
-import type { ComponentProps, ReactElement } from 'react';
+import type { ReactElement } from 'react';
 import { createElement } from 'react';
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Root, type RootProps } from '@playdeck/react';
-import { ControlBar } from '@/components/BenchIsland';
 import {
   useMockPlayer,
   type MockPlayerParameters
 } from '../.storybook/mock-player';
 import controlsMeta, { AssembledBar } from './controls.stories';
 import themeMeta from './theme.stories';
-import { available, ready } from './support';
 
 /*
  * theme.css's control-surface wrap only splits the seek slider onto its own
@@ -19,30 +17,24 @@ import { available, ready } from './support';
  * that is line one only while nothing else has already taken it (theme.css,
  * "control surface"). Nothing enforces that order; the stylesheet comment is
  * the entire guarantee, and it has already failed twice, in two different
- * compositions. `BenchIsland`'s bar composed the slider third and shipped a
- * three-row, 156px control bar to the landing page, hotfixed in #610
- * (95d071b) with every other test green. `AssembledBar` below carried the
- * same defect, on the workbench rather than the live page, and nothing
- * surfaced it until this test.
+ * compositions. A landing-page control bar composed the slider third and
+ * shipped a three-row, 156px control bar, hotfixed in #610 (95d071b) with
+ * every other test green. `AssembledBar` below carried the same defect, on
+ * the workbench, and nothing surfaced it until this test.
  *
  * This test pins composed order, not layout, across every composition the
- * repository ships that puts a seek slider directly under `Controls`: this is
- * unit-level and DOM-only rather than layout-measuring, on purpose --
- * `e2e/site-bench.spec.ts`'s "the seek slider composes first" check (added by
- * #610) already covers the live page's rendered layout, and covers only that
- * one page. A composition that instead wraps its own rows in `<div>`s (the
- * archetype examples, `reference-player.tsx`) never puts the slider directly
- * under `Controls`, so the wrap rule does not bind it and it is out of scope
- * here -- reordering it would not change what CSS does.
+ * workbench ships that puts a seek slider directly under `Controls`: this is
+ * unit-level and DOM-only rather than layout-measuring, on purpose. A
+ * composition that instead wraps its own rows in `<div>`s (the archetype
+ * examples, `reference-player.tsx`) never puts the slider directly under
+ * `Controls`, so the wrap rule does not bind it and it is out of scope here --
+ * reordering it would not change what CSS does.
  *
- * Lives beside `controls.stories.tsx` and `theme.stories.tsx` rather than in
- * `apps/site/test/`: two of the three compositions below are workbench
- * stories reached most naturally by a relative import from their own
- * directory, and the `@` alias this project's `vitest.config.ts` declares for
- * `apps/site/src` exists to reach the third (`BenchIsland`'s control bar) from
- * here -- there is no alias in the other direction. `.ts`, not `.tsx`, to
- * match every other file in this contract-test family: JSX is unavailable, so
- * elements are built with `createElement`.
+ * Lives beside `controls.stories.tsx` and `theme.stories.tsx`: both
+ * compositions below are workbench stories reached most naturally by a
+ * relative import from their own directory. `.ts`, not `.tsx`, to match every
+ * other file in this contract-test family: JSX is unavailable, so elements
+ * are built with `createElement`.
  */
 
 const source: RootProps['source'] = {
@@ -105,18 +97,6 @@ const cases: readonly Case[] = [
     name: 'controls.stories AssembledBar (workbench)',
     composition: () => controlsMeta.render(),
     parameters: controlsParameters.player
-  },
-  {
-    // The landing page's own bar, built by mapping over `BENCH_CONTROLS`
-    // (apps/site/src/bench-controls.ts). Correct today; Red 2 mutates that
-    // tuple to prove this case is genuinely reached rather than passing
-    // vacuously.
-    name: 'BenchIsland ControlBar (site)',
-    composition: () =>
-      createElement<ComponentProps<typeof ControlBar>>(ControlBar, {
-        fromKeyboardRef: { current: false }
-      }),
-    parameters: ready({ seek: available }).player
   }
 ];
 
@@ -126,8 +106,8 @@ describe('the seek slider composes first wherever it is a direct child of contro
   // Guards against the suite silently shrinking: `it.each` below runs zero
   // cases -- and reports green -- if `cases` is ever emptied by accident, so
   // the count is pinned independently of the loop that consumes it.
-  it('exercises all three compositions this rule binds', () => {
-    expect(cases.map((c) => c.name)).toHaveLength(3);
+  it('exercises both compositions this rule binds', () => {
+    expect(cases.map((c) => c.name)).toHaveLength(2);
   });
 
   it.each(cases)('$name', ({ composition, parameters }) => {

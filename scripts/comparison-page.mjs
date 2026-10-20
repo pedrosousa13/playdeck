@@ -1,22 +1,16 @@
 /*
  * The library comparison guide: one page composed from the three documents
  * `pnpm compare:libraries` and `pnpm compare:features` generate and
- * `docs/comparison/method.md` explains, published at `/guides/comparison/`
- * (issue #637, amending the #543/#638 ruling that nothing be published for
- * one route).
+ * `docs/comparison/method.md` explains, published at `guides/comparison.md`
+ * in `@playdeck/docs` (issue #637, amending the #543/#638 ruling that nothing
+ * be published for one route).
  *
- * It is a fourth entry in the `guides` collection in `src/content.config.ts`
- * rather than a fourth `defineCollection`, and a fourth module beside
- * `reference-packages.mjs`, `provider-pages.mjs` and `guide-pages.mjs` rather
- * than a case added to `guide-pages.mjs` itself. Both choices follow the same
- * reasoning stated at each of those seams already: the route this page needs
- * -- one more `/guides/<slug>/` -- is exactly what the existing collection and
- * `src/pages/guides/[guide].astro` already serve, so a second collection would
- * duplicate that route generation for no reason; but composing three files
- * into one document with their own headings demoted is a different job from
- * stripping Storybook's scaffolding off one MDX file, with a link-rewriting
- * rule of its own, so it gets a module of its own rather than a branch in
- * `guideDocument`.
+ * It is a module of its own beside `reference-packages.mjs`, `provider-pages.mjs`
+ * and `guide-pages.mjs` rather than a case added to `guide-pages.mjs` itself:
+ * composing three files into one document with their own headings demoted is
+ * a different job from stripping Storybook's scaffolding off one MDX file,
+ * with a link-rewriting rule of its own, so it gets a module of its own rather
+ * than a branch in `guideDocument`.
  *
  * ---- one h1, composed mechanically -----------------------------------------
  *
@@ -39,32 +33,26 @@
  * explicit `<a id>` anchor placed just above each document's own section --
  * not a guess at the heading's own auto-generated slug, which this module has
  * no need to reproduce. A link naming a package that has a reference page
- * becomes that page, the same substitution `src/provider-pages.mjs` makes for
- * `docs/provider-setup.md`. Everything else relative resolves against
- * `docs/comparison/`'s own directory and becomes a GitHub blob url, the same
- * treatment `src/content.config.ts` gives a README's relative links. None of
+ * becomes that page, the same substitution `scripts/provider-pages.mjs` makes
+ * for `docs/provider-setup.md`. Everything else relative resolves against
+ * `docs/comparison/`'s own directory and becomes a GitHub blob url. None of
  * the three source documents currently links to a repository path this way --
  * every mention of one is inline code, not a link -- so this rule has nothing
  * to rewrite today; it is here so a document that starts linking one stays
  * correct rather than silently shipping a 404 or a link off the page it is
  * already on.
  *
- * `pnpm test:site-links` is what checks the result, by walking the built
- * `apps/site/dist` rather than these sources -- see that script's own header.
- *
  * ---- the features table's icons ---------------------------------------
  *
- * Handled in `src/comparison-icons.mjs`, not here, and applied to this
- * module's rendered HTML rather than to the markdown this module returns: the
- * transform needs the compiled `<table>` a status word's footnote reference
- * has already become a real link inside, which only exists after
- * `renderMarkdown` has run. `src/content.config.ts`'s `guides` loader is what
- * calls both, in order.
+ * Not handled here: the status icons on the built site's rendered `<table>`
+ * were a transform applied after `renderMarkdown` ran, over the compiled
+ * HTML. `@playdeck/docs` ships the markdown table as-is, with the status
+ * words plain.
  */
 
 import { readFileSync } from 'node:fs';
 import { join, posix } from 'node:path';
-import { publishablePackages } from '../../../scripts/workspace-packages.mjs';
+import { publishablePackages } from './workspace-packages.mjs';
 import {
   referencePackageDirs,
   siteReferenceHref
@@ -98,23 +86,23 @@ export const COMPARISON_FILES = DOCUMENTS.map(
 );
 
 /*
- * The branch a link into the repository resolves against, and a fourth copy of
- * this constant: `src/content.config.ts` has one for the package READMEs,
- * `src/provider-pages.mjs` has one for `docs/provider-setup.md`, and
- * `scripts/verify-packaging.mjs` has the whole literal at its
- * `repositoryBlobUrl`. Not shared for the reason `src/provider-pages.mjs`
- * gives: each side needs a different shape built from a different source, so a
- * shared export would have to be decomposed on one side or recomposed on the
- * other to be used.
+ * The branch a link into the repository resolves against, and one of several
+ * copies of this constant: `scripts/provider-pages.mjs` has one for
+ * `docs/provider-setup.md`, and `scripts/verify-packaging.mjs` has the whole
+ * literal at its `repositoryBlobUrl`. Not shared for the reason
+ * `scripts/provider-pages.mjs` gives: each side needs a different shape built
+ * from a different source, so a shared export would have to be decomposed on
+ * one side or recomposed on the other to be used.
  */
 const branch = 'main';
 
 /**
  * Where this repository lives on GitHub, derived from the publishable
  * packages' own `repository` fields rather than written out -- the same
- * derivation `src/provider-pages.mjs` makes for `docs/provider-setup.md`, and
- * for the identical reason: a fourth literal of the same url is a fourth thing
- * to keep true, and every publishable package already has to agree on one.
+ * derivation `scripts/provider-pages.mjs` makes for `docs/provider-setup.md`,
+ * and for the identical reason: a second literal of the same url is a second
+ * thing to keep true, and every publishable package already has to agree on
+ * one.
  *
  * @param {string} repoRoot
  * @returns {string}
@@ -209,11 +197,11 @@ const rewriteTarget = (target, { blob, pages, referenceHref }) => {
 
 /**
  * The same document with its links redirected and nothing else touched. Steps
- * over fenced blocks for the reason every other loader in this app does: a
- * fence in these documents is not generated from `examples/`, but the habit of
- * never rewriting inside one is the same habit `pnpm docs:check` polices
- * elsewhere, and there is no upside to a second rule for a corpus that happens
- * not to need it yet.
+ * over fenced blocks for the reason every other loader in this repository
+ * does: a fence in these documents is not generated from `examples/`, but the
+ * habit of never rewriting inside one is the same habit `pnpm docs:check`
+ * polices elsewhere, and there is no upside to a second rule for a corpus that
+ * happens not to need it yet.
  *
  * @param {string} markdown
  * @param {{ blob: string; pages: ReadonlySet<string>; referenceHref: (dir: string, fragment?: string) => string }} context
@@ -243,7 +231,8 @@ const rewriteLinks = (markdown, context) => {
  *
  * @param {string} repoRoot
  * @param {(dir: string, fragment?: string) => string} [referenceHref] where a
- *   package's reference page is; this site's own route unless handed another
+ *   package's reference page is; `scripts/docs-package.mjs`'s own route
+ *   unless handed another
  * @returns {{ title: string; markdown: string }}
  */
 export const comparisonDocument = (

@@ -4,11 +4,12 @@
 // numbers nobody typed, versions and a date checked in beside them.
 //
 // The maintainer ruling on #543 draws a hard line this file does not cross:
-// no claim about another library reaches apps/site's landing page, and this
-// script writes only to docs/comparison/, which the site's build now reads to
-// publish the comparison as a docs page at /guides/comparison/ (issue #637)
-// rather than on / itself. What it measures, and why, is written out at
-// length in docs/comparison/method.md -- this header covers how, not why.
+// no claim about another library reaches playdeck.video's landing page, and
+// this script writes only to docs/comparison/, which scripts/docs-package.mjs
+// reads to publish the comparison as a guide page in @playdeck/docs (issue
+// #637) rather than on the landing page itself. What it measures, and why, is
+// written out at length in docs/comparison/method.md -- this header covers
+// how, not why.
 //
 // ---- what "gzipped bytes" means here --------------------------------------
 //

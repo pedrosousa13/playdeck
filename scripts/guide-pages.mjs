@@ -1,6 +1,6 @@
 /*
- * Which library-wide documents get a guide page, and what has to come off a
- * Storybook MDX file before Markdown can render it.
+ * Which library-wide documents get a guide page in `@playdeck/docs`, and what
+ * has to come off a Storybook MDX file before Markdown can render it.
  *
  * The source files are the workbench's own `Overview/*` documents, in
  * `apps/storybook/stories/`, whole and unedited. They were the only place the
@@ -26,22 +26,37 @@
  * Storybook's rather than the document's: the `import` of `Meta`, the `<Meta>`
  * tag that files the page under a sidebar title, and the `{/* … *\/}` comments
  * `scripts/docs-examples.mjs` marks its generated fences with. Take those away
- * and what is left is Markdown, so this site needs no MDX integration and no
- * new dependency to publish them — `stripStorybook` below is the whole of it.
+ * and what is left is Markdown, so this needs no MDX integration and no new
+ * dependency to publish them — `stripStorybook` below is the whole of it.
  *
  * They are removed rather than tolerated because each would otherwise be
  * rendered as prose: an `import` line becomes a paragraph, and so does a
- * marker comment. The `import` and the tag throw when they are missing, and that is
- * deliberate — a Storybook MDX file always has both, so their absence means the
- * file's shape changed under this module, and a build that failed is better
- * than a page that opens with the word `import`.
+ * marker comment. The `import` and the tag throw when they are missing, and
+ * that is deliberate — a Storybook MDX file always has both, so their absence
+ * means the file's shape changed under this module, and a build that failed
+ * is better than a page that opens with the word `import`.
  *
- * This is `.mjs` rather than `.ts` for the reason `src/reference-packages.mjs`
- * and `src/provider-pages.mjs` are: it reaches `astro:content`, whose
- * declarations are generated into the `.astro/` directory the site's
- * `tsconfig.json` deliberately does not read. Nothing type-checks it — there is
- * no `astro check` in this repository — so what stands behind it is `astro
- * build`, which runs this module for real on every build.
+ * `IconsAndLayout.mdx` was sliced out of `reference/Reference.mdx` rather than
+ * written new (#561): three of that file's sections were consumer guidance
+ * with no counterpart anywhere else, reachable only by cloning the repository
+ * and running the workbench. The rest of that file stayed behind, and the
+ * `Overview/*` documents that are **not** here remain absent by decision
+ * rather than by oversight, and the decision is the same for both:
+ * `Introduction.mdx` documents how to write a story — the mock decorator,
+ * `stories/support.tsx`, the axe setting in `.storybook/preview.tsx`; what is
+ * left of `reference/Reference.mdx` documents a story mounting, the ESLint
+ * rule scoped to `stories/reference/**`, and which spec file runs which check.
+ * Both are read by somebody working in this repository with the workbench
+ * running, which is where they stay. `README.md` linked to each of them and no
+ * longer does.
+ *
+ * `slug` is written here rather than derived from the document's title, which
+ * is the opposite of what `scripts/provider-pages.mjs` does and for a reason
+ * that does not apply there: these addresses are printed inside
+ * `packages/react/README.md`, which ships in an npm tarball, so a link to one
+ * of them is only fixable by a release. A slug derived from an `# ` heading
+ * would move the address the day somebody rewords the heading, and nothing
+ * would fail.
  */
 
 import { siteReferenceHref } from './reference-packages.mjs';
@@ -62,28 +77,6 @@ import { siteReferenceHref } from './reference-packages.mjs';
  * to the audio-tracks entry it otherwise most resembles in shape (#786) —
  * then the optional stylesheet, which is the last in the list because it is
  * the only one a consumer can decline entirely.
- *
- * `IconsAndLayout.mdx` was sliced out of `reference/Reference.mdx` rather than
- * written new (#561): three of that file's sections were consumer guidance
- * with no counterpart anywhere else, reachable only by cloning the repository
- * and running the workbench. The rest of that file stayed behind, and the
- * `Overview/*` documents that are **not** here remain absent by decision
- * rather than by oversight, and the decision is the same for both:
- * `Introduction.mdx` documents how to write a story — the mock decorator,
- * `stories/support.tsx`, the axe setting in `.storybook/preview.tsx`; what is
- * left of `reference/Reference.mdx` documents a story mounting, the ESLint
- * rule scoped to `stories/reference/**`, and which spec file runs which check.
- * Both are read by somebody working in this repository with the workbench
- * running, which is where they stay. `README.md` linked to each of them and no
- * longer does.
- *
- * `slug` is written here rather than derived from the document's title, which
- * is the opposite of what `src/provider-pages.mjs` does and for a reason that
- * does not apply there: these addresses are printed inside
- * `packages/react/README.md`, which ships in an npm tarball, so a link to one
- * of them is only fixable by a release. A slug derived from an `# ` heading
- * would move the address the day somebody rewords the heading, and nothing
- * would fail.
  *
  * @type {readonly { file: string; slug: string }[]}
  */
@@ -126,48 +119,44 @@ const META_TAG = /^<Meta title="(.+)" \/>$/;
  *
  * Only a whole line, and never inside a fence. A fence here is generated from a
  * file in `examples/` and compared against it byte for byte, so anything that
- * edited one would put this site and that gate into disagreement about what the
- * example is.
+ * edited one would put this package and that gate into disagreement about what
+ * the example is.
  */
 const MDX_COMMENT = /^\{\/\*.*\*\/\}$/;
 
 /**
- * A GitHub URL naming a package in this repository, which this site publishes
- * itself. `blob` and `tree` both, because a README is linked either way and
- * `Theme.mdx` uses `tree`.
+ * A GitHub URL naming a package in this repository, which `@playdeck/docs`
+ * publishes itself. `blob` and `tree` both, because a README is linked either
+ * way and `Theme.mdx` uses `tree`.
  */
 const PACKAGE_ON_GITHUB =
   /^https:\/\/github\.com\/[^/]+\/[^/]+\/(?:blob|tree)\/[^/]+\/packages\/([^/#]+)(?:\/README\.md)?(#.+)?$/;
 
 /**
- * One link target, as this site needs it rather than as the workbench does.
+ * One link target, as the docs package needs it rather than as the workbench
+ * does.
  *
  * One class of target is rewritten and everything else is left exactly as
  * written. A link to a package's README on GitHub — which is how these
  * documents have to write it, since a Storybook page has no other address for
- * one — sends a reader out of the site to read a document the site renders two
- * clicks away, so it becomes that package's own reference page with its
- * fragment kept. Only for a package that has a page: the set comes from
+ * one — becomes that package's own reference page with its fragment kept.
+ * Only for a package that has a page: the set comes from
  * `referencePackageDirs`, and a link to one that has none is left alone rather
  * than pointed at a route that would 404.
  *
- * Through `import.meta.env.BASE_URL`, which is what Astro fills the configured
- * `base` into, and never as a literal `/reference/`. The prefix is the root
- * today and the literal would be identical, which is exactly why the habit is
- * kept: a hand-written path is the bug a base path exists to prevent (#435).
- *
- * There is no rewriting of relative targets here, unlike the two collections
- * beside this one. A target relative to a Storybook MDX file resolves against
- * the workbench's own routing rather than against a directory, so there is no
- * path this could rewrite it to.
+ * There is no rewriting of relative targets here, unlike the two document
+ * modules beside this one. A target relative to a Storybook MDX file resolves
+ * against the workbench's own routing rather than against a directory, so
+ * there is no path this could rewrite it to.
  *
  * `Contract.mdx` did carry one — `?path=/docs/reference-player--docs`, which
- * the workbench resolves and this site shipped verbatim, reloading the guide
- * with a query string on it. It was fixed in the document rather than special
- * cased here, because the same sentence is read on both surfaces and only one
- * of them ever made sense of the link. A relative or `?path=` target added to
- * one of these documents later ships as written and goes nowhere here; write
- * the reference as prose, or as a full GitHub URL where a URL is wanted.
+ * the workbench resolves and the docs package shipped verbatim, reloading the
+ * guide with a query string on it. It was fixed in the document rather than
+ * special cased here, because the same sentence is read on both surfaces and
+ * only one of them ever made sense of the link. A relative or `?path=` target
+ * added to one of these documents later ships as written and goes nowhere
+ * here; write the reference as prose, or as a full GitHub URL where a URL is
+ * wanted.
  *
  * @param {string} target
  * @param {ReadonlySet<string>} pages
@@ -190,19 +179,19 @@ const rewriteTarget = (target, pages, referenceHref) => {
  * straight through — see `MDX_COMMENT` above for why that is a requirement and
  * not a tidiness.
  *
- * What the link rewriting handles is what `src/content.config.ts` and
- * `src/provider-pages.mjs` handle for their own documents, and one regular
- * expression is worth more than a parser on a corpus two gates already read: an
- * inline `[text](target)` whose target has no spaces and no parentheses, on a
- * line outside a fence. An image, a title, an angle-bracketed target and a
- * reference-style definition are left as written, which for a link to a package
- * README means a trip to GitHub rather than a broken address.
+ * The link rewriting here is one regular expression rather than a parser, on a
+ * corpus two gates already read: an inline `[text](target)` whose target has
+ * no spaces and no parentheses, on a line outside a fence. An image, a title,
+ * an angle-bracketed target and a reference-style definition are left as
+ * written, which for a link to a package README means a trip to GitHub rather
+ * than a broken address.
  *
  * @param {string} source
  * @param {string} file the path in the repository, for the errors below
  * @param {ReadonlySet<string>} pages
  * @param {(dir: string, fragment?: string) => string} [referenceHref] where a
- *   package's reference page is; this site's own route unless handed another
+ *   package's reference page is; `scripts/docs-package.mjs`'s own route
+ *   unless handed another
  * @returns {{ title: string; markdown: string }}
  */
 export const guideDocument = (
@@ -214,12 +203,12 @@ export const guideDocument = (
   const lines = source.split('\n');
   if (!lines.some((line) => META_IMPORT.test(line))) {
     throw new Error(
-      `${file} does not import Storybook's \`Meta\` block, so src/guide-pages.mjs cannot tell what to strip before rendering it as Markdown. If that file stopped being a Storybook document, load it as Markdown instead of stripping it.`
+      `${file} does not import Storybook's \`Meta\` block, so scripts/guide-pages.mjs cannot tell what to strip before rendering it as Markdown. If that file stopped being a Storybook document, load it as Markdown instead of stripping it.`
     );
   }
   if (!lines.some((line) => META_TAG.test(line))) {
     throw new Error(
-      `${file} carries no \`<Meta title="…" />\` tag. It is the line that would otherwise render as a paragraph at the top of that guide page — check what replaced it and update src/guide-pages.mjs.`
+      `${file} carries no \`<Meta title="…" />\` tag. It is the line that would otherwise render as a paragraph at the top of that guide page — check what replaced it and update scripts/guide-pages.mjs.`
     );
   }
 
@@ -259,31 +248,4 @@ export const guideDocument = (
     );
   }
   return { title, markdown };
-};
-
-/**
- * The guides, in the order `GUIDES` lists them, each with the rendered entry
- * the route puts on screen.
- *
- * `order` is stored on the entry rather than recovered here, for the reason
- * `src/provider-pages.mjs` gives: a content collection hands entries back in
- * whatever order its store iterates, and alphabetical would be a different
- * order for no reason.
- *
- * @typedef {{ slug: string; title: string; entry: import('astro:content').CollectionEntry<'guides'> }} GuidePage
- * @returns {Promise<GuidePage[]>}
- */
-export const guidePages = async () => {
-  // Imported here rather than at the top, so that `scripts/docs-package.mjs`
-  // can load `GUIDES` and `guideDocument` under plain Node, where the virtual
-  // module does not exist.
-  const { getCollection } = await import('astro:content');
-  const entries = await getCollection('guides');
-  return entries
-    .sort((a, b) => a.data.order - b.data.order)
-    .map((entry) => ({
-      slug: entry.id,
-      title: entry.data.title,
-      entry
-    }));
 };

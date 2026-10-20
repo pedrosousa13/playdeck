@@ -17,6 +17,9 @@ build outputs into one directory, and the harness that drove a browser through
 both. Left otherwise unedited: the two-surface deployment is what was decided
 here, and it ran._
 
+_Addendum (2026-10-20, #901): `apps/site` itself is deleted from this
+repository; its source now lives in pedrosousa13/deck-cool._
+
 Until #519 the published documentation was a GitHub Pages project site:
 `.github/workflows/pages.yml` built the Storybook workbench with
 `PLAYDECK_BASE_PATH` set to `/playdeck/` and uploaded

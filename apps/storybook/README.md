@@ -10,11 +10,11 @@ the test origin.
 
 - `pnpm dev` — workbench at `http://localhost:6006`.
 - `pnpm build` — static build (also part of the root `pnpm build`). Nothing
-  publishes it: `playdeck.video` serves `apps/site` and nothing else (#534). The
-  documents a consumer is sent to are rendered by the site itself, from these
-  sources — `apps/site/src/guide-pages.mjs` says which — so the workbench is a
-  development tool for this repository rather than the documentation it used to
-  be.
+  publishes it: `playdeck.video` is served from pedrosousa13/deck-cool, not
+  from this repository (#901). The documents a consumer is sent to are
+  rendered there, from `@playdeck/docs` — `scripts/guide-pages.mjs` says which
+  of these guides it carries — so the workbench is a development tool for this
+  repository rather than the documentation it used to be.
 - `pnpm test` — run every story as a browser test (root: `pnpm test:storybook`).
 
 ## Base path

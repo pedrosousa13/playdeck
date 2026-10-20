@@ -1,14 +1,13 @@
 # Comparing Playdeck against other React video libraries: method
 
 This is a snapshot, and a page: every document in this directory is rendered
-whole at `apps/site`'s `/guides/comparison/` route, because that build reads
-`docs/comparison/` at build time. `test:site-links` and `test:site-analytics`
-walk the built site rather than `docs/` directly, and the comparison route is
-part of what they walk now. Publishing it there is a maintainer ruling
-recorded on issue #637, amending the #543 ruling below for this one route: the
-standing rule for `/` is "no claim about any other library, named or implied",
-and this work exists to produce data and a method for that decision, not to
-pre-empt it.
+whole into `@playdeck/docs`'s `guides/comparison.md` by
+`scripts/comparison-page.mjs`, which `scripts/docs-package.mjs` reads at
+`pnpm docs:package` time. Publishing it there is a maintainer ruling recorded
+on issue #637, amending the #543 ruling below for this one route: the standing
+rule for the landing page is "no claim about any other library, named or
+implied", and this work exists to produce data and a method for that decision,
+not to pre-empt it.
 
 Everything a reader would need to dispute a figure lives in this repository:
 the fixture that composes each library (`tests/compare/`), the harness that

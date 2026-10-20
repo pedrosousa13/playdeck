@@ -8,32 +8,19 @@ export default defineConfig({
     // plain string `find` matches by *prefix* (`find` itself, or `find + '/'`),
     // so a bare `@playdeck/react` entry there also intercepts subpath imports
     // like `@playdeck/react/theme.css` and rewrites them against `index.tsx`,
-    // 404ing (`BenchIsland.tsx` imports `@playdeck/react/theme.css?url` for a
-    // `<link>` tag's `href`, which is what `seek-slider-order.contract.test.ts`
-    // exercises by importing `BenchIsland.tsx`). Two of these packages have a
-    // subpath to protect, and they want opposite things from it. For
-    // `@playdeck/react` the answer is to get out of the way: the pnpm
-    // workspace already symlinks it into `apps/site/node_modules` and its
-    // `package.json` already maps `./theme.css` and `./docked.css` to the real
-    // files, so once the alias stops swallowing the subpath, plain Node
-    // resolution answers it. For `@playdeck/core`'s own subpaths
-    // (`./thumbnails`, `./media-session`, `./time-boundary`) it is not, since
-    // Node resolution
-    // would answer with the package's built `dist`, and every other alias
-    // here exists precisely so a test runs the source it is testing -- so
-    // each of those subpaths gets an alias of its own, to the module the
-    // bare specifier's own alias would never reach. `/^@playdeck\/react$/` and
-    // `/^@playdeck\/core$/`, anchored, are what narrow each match to the bare
-    // specifier only.
+    // 404ing. Two of these packages have a subpath to protect, and they want
+    // opposite things from it. For `@playdeck/react` the answer is to get out
+    // of the way: plain Node resolution answers a subpath import once the
+    // alias stops swallowing it, since its `package.json` already maps
+    // `./theme.css` and `./docked.css` to the real files. For
+    // `@playdeck/core`'s own subpaths (`./thumbnails`, `./media-session`,
+    // `./time-boundary`) it is not, since Node resolution would answer with
+    // the package's built `dist`, and every other alias here exists precisely
+    // so a test runs the source it is testing -- so each of those subpaths
+    // gets an alias of its own, to the module the bare specifier's own alias
+    // would never reach. `/^@playdeck\/react$/` and `/^@playdeck\/core$/`,
+    // anchored, are what narrow each match to the bare specifier only.
     alias: [
-      // `apps/site`'s own alias, the one `astro.config.ts`, its `tsconfig.json`
-      // and `components.json` all declare, repeated here so a unit test can
-      // import a component that uses it. Nothing outside that app writes
-      // `@/`, so a single entry covers it.
-      {
-        find: '@',
-        replacement: fileURLToPath(new URL('./apps/site/src', import.meta.url))
-      },
       {
         find: /^@playdeck\/core$/,
         replacement: fileURLToPath(
@@ -104,7 +91,6 @@ export default defineConfig({
     css: { include: [/theme\.css/] },
     include: [
       'packages/**/*.test.{ts,tsx}',
-      'apps/site/test/**/*.test.{ts,tsx}',
       // `.tsx` alongside `.ts`: `react-behaviour-plugin.contract.test.tsx`
       // renders `Player.Root` and needs JSX, which a `.ts`-only glob would
       // have silently left out of every run of `pnpm test`.

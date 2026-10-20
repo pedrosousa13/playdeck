@@ -195,8 +195,8 @@ export const driftProblems = (workflowYaml, steps, exclusions) => {
 
 /**
  * Every CI gate `pnpm verify` runs, in the order .github/workflows/ci.yml's
- * own jobs run them (`static`, `audit`, `unit`, `package`, `site`,
- * `storybook`) and stopping at the first failure. Each entry's `invocation`
+ * own jobs run them (`static`, `audit`, `unit`, `package`, `storybook`) and
+ * stopping at the first failure. Each entry's `invocation`
  * is what `driftProblems` matches against the workflow's own `pnpm` calls --
  * a step added here without one is a step the drift check cannot see, which
  * defeats the reason this list and EXCLUSIONS sit side by side in this file.
@@ -292,41 +292,6 @@ export const STEPS = [
     name: 'compare:features:check',
     command: ['pnpm', 'compare:features:check'],
     invocation: { form: 'script', script: 'compare:features:check' }
-  },
-  {
-    // The `site` job's own build, ahead of the three checks below that read
-    // it -- `pnpm exec turbo run build --filter=@playdeck/site...`, not
-    // `pnpm --filter @playdeck/site build`: the trailing `...` is what pulls
-    // in the packages the site imports through its published entry (see
-    // .github/workflows/ci.yml's `site` job).
-    name: 'site build',
-    command: [
-      'pnpm',
-      'exec',
-      'turbo',
-      'run',
-      'build',
-      '--filter=@playdeck/site...'
-    ],
-    invocation: {
-      form: 'exec',
-      command: 'turbo run build --filter=@playdeck/site...'
-    }
-  },
-  {
-    name: 'test:site-analytics',
-    command: ['pnpm', 'test:site-analytics'],
-    invocation: { form: 'script', script: 'test:site-analytics' }
-  },
-  {
-    name: 'test:site-links',
-    command: ['pnpm', 'test:site-links'],
-    invocation: { form: 'script', script: 'test:site-links' }
-  },
-  {
-    name: 'test:site-fences',
-    command: ['pnpm', 'test:site-fences'],
-    invocation: { form: 'script', script: 'test:site-fences' }
   },
   {
     name: 'storybook build',

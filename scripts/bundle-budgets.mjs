@@ -1,7 +1,7 @@
 // What the initial-gzip bundle sizes from the MVP contract (issue #1) are
-// measured against, and the measurement itself. Two readers share it:
-// `check-bundle-budgets.mjs`, which prints the figures on every CI run, and
-// the landing page at `apps/site/src/pages/index.astro`, which renders them.
+// measured against, and the measurement itself. `check-bundle-budgets.mjs`
+// prints the figures on every CI run; the marketing site's landing page,
+// served from pedrosousa13/deck-cool since #901, renders the same figures.
 //
 // One module rather than a list in each, because the page's whole argument is
 // that the figures it prints are the ones this repo watches. A second copy
