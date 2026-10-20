@@ -47,7 +47,11 @@ import {
   type ReactNode,
   type Ref
 } from 'react';
-import { preload as preloadResource } from 'react-dom';
+
+// The one `fetchPriority` value `priority` ever writes -- the poster's own
+// default (below) and the preload link's own attribute both read this,
+// rather than each spelling the string literal, so the two can't drift apart.
+const PRIORITY_FETCH_PRIORITY = 'high';
 
 // HTMLMediaElement.HAVE_CURRENT_DATA, inlined for the same reason
 // provider-native inlines HAVE_METADATA: some DOM test environments omit the
@@ -264,12 +268,17 @@ export type RootProps<P extends ConsumerProviders = Record<string, never>> = {
    *   `Player.Poster` resolves from this component's own `poster` prop,
    *   unless the `ResponsivePoster` given to `poster` already sets either
    *   field itself.
-   * - Calls React 19's `preload()` (`react-dom`) for that same poster during
-   *   render, with `fetchPriority: 'high'` and its `srcSet`/`sizes` as
-   *   `imageSrcSet`/`imageSizes` -- so the server HTML carries a `<link
-   *   rel="preload">` for it ahead of any script, for a poster URL the
-   *   shared allowlist permits. A poster this component has no URL for yet
-   *   (`poster: 'provider'`, unresolved) gets no preload hint.
+   * - Renders a `<link rel="preload" as="image">` element for that same
+   *   poster, with `fetchPriority: 'high'` and its `srcSet`/`sizes` as
+   *   `imageSrcSet`/`imageSizes` -- React 19 hoists a rendered `<link>` into
+   *   `<head>` on both the server and the client, so the server HTML carries
+   *   it ahead of any script, for a poster URL the shared allowlist permits.
+   *   A poster this component has no URL for yet (`poster: 'provider'`,
+   *   unresolved) gets no preload hint. Setting `priority` on more than one
+   *   player sharing the same poster renders one link per player -- React
+   *   only dedupes a `<link rel="stylesheet">` by its own `precedence`
+   *   mechanism, never a preload -- so this is a hint for the one player
+   *   above the fold, not a cache key.
    */
   readonly priority?: boolean;
   // Compared by value, not by reference, so an inline literal is safe to
@@ -435,13 +444,13 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
   playThreshold = loadThreshold,
   poster,
   preferredTextTrackLanguage,
+  preload: preloadProp,
+  priority = false,
   providerOptions,
   providers,
-  priority = false,
   ref,
   source,
   startTime,
-  preload: preloadProp,
   volume,
   warmUp = false
 }: RootProps<P>) => {
@@ -1429,40 +1438,40 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
         : typeof poster === 'string'
           ? { src: poster }
           : poster;
-  // `priority` raises the resolved poster's own fetch priority and loading
-  // eagerness, unless the `ResponsivePoster` already set either field --
-  // `??` reads as "unless set", since neither field has a falsy value worth
-  // telling apart from absent (`fetchPriority`/`loading` are string enums).
+  // `undefined` whenever `priority` is off, regardless of whether `resolvedPoster`
+  // itself is -- the one guard the poster's own defaults below and the
+  // preload link further down both read, so "priority is on and there is a
+  // poster to hint" is computed once rather than twice over.
+  const prioritizedPoster = priority ? resolvedPoster : undefined;
+  // Raises the resolved poster's own fetch priority and loading eagerness,
+  // unless the `ResponsivePoster` already set either field -- `??` reads as
+  // "unless set", since neither field has a falsy value worth telling apart
+  // from absent (`fetchPriority`/`loading` are string enums).
   const defaultPoster: ResponsivePoster | undefined =
-    priority && resolvedPoster !== undefined
-      ? {
-          ...resolvedPoster,
-          fetchPriority: resolvedPoster.fetchPriority ?? 'high',
-          loading: resolvedPoster.loading ?? 'eager'
-        }
-      : resolvedPoster;
-  // The preload hint `priority` promises: called during render, not from an
-  // effect, which is what lets React's own float mechanism hoist it into the
-  // streamed server HTML ahead of any script, the same way `eagerVideoCommit`
-  // (`use-activation.ts`) needs its render-time read rather than an effect's.
-  // Gated on `permittedUrl` on the same terms as `PosterImage`'s own `src`
+    prioritizedPoster === undefined
+      ? resolvedPoster
+      : {
+          ...prioritizedPoster,
+          fetchPriority:
+            prioritizedPoster.fetchPriority ?? PRIORITY_FETCH_PRIORITY,
+          loading: prioritizedPoster.loading ?? 'eager'
+        };
+  // The preload hint `priority` promises, rendered as a plain `<link>`
+  // element below rather than called through `react-dom`'s own `preload()`:
+  // React 19 hoists a rendered `<link>` into `<head>` on both the server and
+  // the client by itself, with no float-module import this package would
+  // otherwise carry whether or not a consumer ever sets `priority`. Gated on
+  // `permittedUrl` on the same terms as `PosterImage`'s own `src`
   // (`poster.tsx`) -- a poster URL this library would refuse to render gets
   // no preload hint either, so a `javascript:`/`data:` value cannot reach the
   // server HTML through this second surface. `poster: 'provider'` unresolved
   // (`resolvedPoster` still `undefined`) hints nothing, there being no URL yet
-  // to hint.
+  // to hint -- `prioritizedPoster && …` reads as `undefined` in that case
+  // exactly as the guard above does.
   const posterPreloadHref =
-    priority && defaultPoster !== undefined
-      ? permittedUrl(defaultPoster.src)
-      : undefined;
-  if (posterPreloadHref !== undefined) {
-    preloadResource(posterPreloadHref, {
-      as: 'image',
-      fetchPriority: 'high',
-      imageSizes: defaultPoster?.sizes,
-      imageSrcSet: permittedPosterSrcSet(defaultPoster?.srcSet).value
-    });
-  }
+    prioritizedPoster && permittedUrl(prioritizedPoster.src);
+  const posterPreloadSrcSet =
+    prioritizedPoster && permittedPosterSrcSet(prioritizedPoster.srcSet).value;
 
   return (
     <PlayerContext.Provider value={value}>
@@ -1471,6 +1480,16 @@ export const Root = <P extends ConsumerProviders = Record<string, never>>({
           {warmUpOrigins.map((origin) => (
             <link href={origin} key={origin} rel="preconnect" />
           ))}
+          {posterPreloadHref !== undefined && (
+            <link
+              as="image"
+              fetchPriority={PRIORITY_FETCH_PRIORITY}
+              href={posterPreloadHref}
+              imageSizes={prioritizedPoster?.sizes}
+              imageSrcSet={posterPreloadSrcSet}
+              rel="preload"
+            />
+          )}
           {children}
         </DefaultPosterContext.Provider>
       </PosterContext.Provider>

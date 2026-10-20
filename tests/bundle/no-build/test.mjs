@@ -326,7 +326,20 @@ try {
   // own comment three blocks above records the same shape). The whole
   // distance from the last committed figure is this issue's: that figure was
   // 114.56 KB (117306 bytes), measured 2026-10-20 per the block above.
-  const GZIP_EAGER_CEILING_KB = 115.25;
+  //
+  // 117660 bytes measured 2026-10-20 -- 114.90234375 KB, 114.90 KB to two
+  // places, rounded up to the next 0.25 KB -- 115.00 KB. Down from 115.25 KB
+  // after review: `root.tsx` renders `priority`'s poster hint as a plain
+  // `<link rel="preload">` element instead of calling `react-dom`'s own
+  // `preload()` -- React 19 hoists a rendered `<link>` into `<head>` on its
+  // own, server and client alike, so the explicit call and its `react-dom`
+  // import (the whole distance the block above records) were never needed.
+  // Still above the pre-#912 114.56 KB figure: the `priority` prop's own
+  // resolution logic (`loading`/`preload` defaults, the poster merge, the
+  // link element) ships in this eager bundle regardless of whether a
+  // consumer sets `priority`, the same way every other unconditional import
+  // on this entry does.
+  const GZIP_EAGER_CEILING_KB = 115;
   const gzipKb = (bytes) => (bytes / 1024).toFixed(2);
   const scriptBytes = await Promise.all(
     expectedScripts.map((pathname) => readFile(resolveRequest(pathname)))

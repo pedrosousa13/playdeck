@@ -110,9 +110,13 @@ by hand to get there. Set `true` on a `Root` whose `source` resolves to a
 is left unset (an explicit `loading` other than `'eager'` is a configuration
 error instead), carries `fetchPriority: 'high'` and `loading: 'eager'` onto
 the poster `Player.Poster` resolves from `poster` unless the poster already
-sets either itself, and calls React 19's `preload()` for that same poster
-during render, so the server HTML carries a `<link rel="preload">` for it
-too. Defaults to `false`, which changes none of those defaults.
+sets either itself, and renders a `<link rel="preload" as="image">` element
+for that same poster -- React 19 hoists a rendered `<link>` into `<head>` on
+both the server and the client, so the server HTML carries it too. Defaults
+to `false`, which changes none of those defaults. Setting `priority` on more
+than one player sharing a poster renders one link per player -- React only
+dedupes a `<link rel="stylesheet">` by its own `precedence` mechanism, never
+a preload.
 
 `textTracks` is a prop on `Player.Media`, not on `Player.Root`. It takes an
 array of `{ src, srcLang, label, kind?, default? }`, where `kind` is

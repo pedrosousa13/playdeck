@@ -719,6 +719,15 @@ export const libraries = [
     // the block above describes for #911. The whole distance from the last
     // committed figure is this issue's: that figure was 22.53 KB
     // (23068 bytes), measured 2026-10-20 per the block above.
+    //
+    // 23613 bytes measured 2026-10-20 -- 23.0595703125 KB, 23.06 KB to two
+    // places, which stays under this ceiling with no raise needed. Down
+    // slightly after review: `root.tsx` renders `priority`'s poster hint as
+    // a plain `<link rel="preload">` element instead of calling
+    // `react-dom`'s own `preload()`, which removes the `react-dom` import
+    // the block above charged every composition -- offset by the small cost
+    // of the `<link>` element and its own resolution logic, still reached
+    // unconditionally the same way.
     ceilingKb: 23.25,
     // This fixture renders no control part at all (see
     // tests/compare/entries/playdeck-no-parts.tsx's own header) -- every
@@ -896,6 +905,11 @@ export const libraries = [
     // `priority`. The whole distance from the last committed figure is this
     // issue's: that figure was 23.27 KB (23831 bytes), measured 2026-10-20
     // per the block above.
+    //
+    // 24470 bytes measured 2026-10-20 -- 23.896484375 KB, 23.90 KB to two
+    // places, which stays under this ceiling with no raise needed -- the
+    // same post-review `preload()`-to-`<link>` swap described on the "no
+    // parts" row above.
     ceilingKb: 24,
     // This fixture renders one `Player.ActivationButton` and nothing else
     // guardable (tests/compare/entries/playdeck.tsx) -- every guardable
@@ -1036,6 +1050,11 @@ export const libraries = [
     // import described on the "no parts" row above. The whole distance from
     // the last committed figure is this issue's: that figure was 24.58 KB
     // (25169 bytes), measured 2026-10-20 per the block above.
+    //
+    // 25662 bytes measured 2026-10-20 -- 25.060546875 KB, 25.06 KB to two
+    // places, which stays under this ceiling with no raise needed -- the
+    // same post-review `preload()`-to-`<link>` swap described on the "no
+    // parts" row above.
     ceilingKb: 25.25,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
@@ -1184,6 +1203,11 @@ export const libraries = [
     // distance from the last committed figure is this issue's: that figure
     // was 28.02 KB (28688 bytes), measured 2026-10-03 per `results.md` on
     // `main`.
+    //
+    // 29452 bytes measured 2026-10-20 -- 28.76171875 KB, 28.76 KB to two
+    // places, which stays under this ceiling with no raise needed -- the
+    // same post-review `preload()`-to-`<link>` swap described on the "no
+    // parts" row above.
     ceilingKb: 29,
     // This fixture's control bar renders `ActivationButton`, `Controls`,
     // `PlayButton`, `MuteButton`, `VolumeSlider`, `SeekSlider`, `Time` and
