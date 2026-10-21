@@ -89,3 +89,45 @@ test('passes prose using "used to" in its present-tense sense', () => {
     []
   );
 });
+
+test('matches "no longer", naming the phrase', () => {
+  assert.deepEqual(
+    changesetProblems('The provider no longer retries once.\n'),
+    [{ line: 1, word: 'no longer' }]
+  );
+});
+
+// "no longer than" states a size bound in the present tense -- "the retry
+// window is no longer than 10 seconds" -- not a narrated change, so the
+// exclusion in `NARRATES_HISTORY` must leave it alone.
+test('passes "no longer than" as a present-tense size bound', () => {
+  assert.deepEqual(
+    changesetProblems('The retry window is no longer than 10 seconds.\n'),
+    []
+  );
+});
+
+test('matches the elliptical "as it always has"', () => {
+  assert.deepEqual(
+    changesetProblems('The provider retries once, as it always has.\n'),
+    [{ line: 1, word: 'as it always has' }]
+  );
+});
+
+test('matches the elliptical "as they always have"', () => {
+  assert.deepEqual(
+    changesetProblems('Retries settle in order, as they always have.\n'),
+    [{ line: 1, word: 'as they always have' }]
+  );
+});
+
+// A bare "always has"/"always have", with no "as" narrating a continuation,
+// is an ordinary present-tense claim about current behaviour -- "the ladder
+// always has an `auto` entry" -- and is deliberately not one of the phrases
+// this rule catches, which is why the pattern requires the "as" pronoun.
+test('passes a present-tense claim using a bare "always has"', () => {
+  assert.deepEqual(
+    changesetProblems('The ladder always has an auto entry.\n'),
+    []
+  );
+});

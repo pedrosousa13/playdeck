@@ -28,13 +28,28 @@ const CHANGESET_DIR = '.changeset';
  * The phrasing this rule exists to catch, case-insensitively: a bare "now"
  * (never inside a longer word such as "known" or "snow", which `\b` excludes
  * because neither has a word boundary on both sides of its "now"),
- * "previously", and "as before". Each names a state the code is no longer in
+ * "previously", "as before", "no longer", and the elliptical "as it always
+ * has" / "as they always have". Each names a state the code is no longer in
  * rather than the one a reader installing the version gets. "used to" is
  * deliberately not one of them: it also reads as present tense, as in "this
  * option is used to configure retries", and that phrasing is unrelated to
  * what this rule exists to catch.
+ *
+ * "no longer" excludes a following "than": "the retry window is no longer
+ * than 10 seconds" states a present-tense size bound, not a narrated change,
+ * and the released CHANGELOGs surveyed for this rule's phrases have no
+ * occurrence of "no longer" that isn't a narrated change, so the exclusion
+ * is the only carve-out needed.
+ *
+ * The "always have" family is deliberately only its two observed forms --
+ * "as it always has" and "as they always have" -- and not a bare "always"
+ * or "always has"/"always have" on its own: the same survey turned up
+ * present-tense claims like "a consumer-supplied poster always wins" and
+ * "the ladder does not always carry an `auto` entry" that a wider pattern
+ * would also catch.
  */
-const NARRATES_HISTORY = /\bnow\b|previously|as before/gi;
+const NARRATES_HISTORY =
+  /\bnow\b|previously|as before|\bno longer\b(?!\s+than\b)|\bas it always has\b|\bas they always have\b/gi;
 
 /**
  * Where, in one changeset's lines, its prose starts -- the index just past
@@ -113,7 +128,7 @@ const main = () => {
 
   if (problems.length > 0) {
     throw new Error(
-      `A pending changeset narrates history instead of describing the change in force. Write it in the present tense -- never "now", "previously" or "as before":\n${problems
+      `A pending changeset narrates history instead of describing the change in force. Write it in the present tense -- never "now", "previously", "as before", "no longer" or "as it always has"/"as they always have":\n${problems
         .map(
           (problem) =>
             `  ${relative(repoRoot, join(dir, problem.file))}:${problem.line} — "${problem.word}"`
