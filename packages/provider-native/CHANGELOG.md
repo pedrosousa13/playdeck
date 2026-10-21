@@ -1,5 +1,23 @@
 # @playdeck/provider-native
 
+## 1.4.0
+
+### Patch Changes
+
+- edeeadb: Each package's README, and every page `@playdeck/docs` publishes from it, holds no em dash (U+2014): a colon, a comma, parentheses or a full stop carries the same sentence instead. `scripts/docs-package.mjs --check` refuses to publish a page that holds one, naming the file and line.
+- 0d3257d: Under `loading="eager"`, a `video` file source commits at render time instead of waiting for an effect, so `Player.Media` renders the native `<video>` and its `<source>` children — `preload` included — in the server HTML, and hydration reuses that element rather than mounting a fresh one after an extra render. A refused source URL still never reaches the server HTML. No `autoplay` attribute reaches the server HTML either way; autoplay keeps attempting only after the provider attaches on the client. The native provider skips `media.load()` for an `eager` video source, so a server-rendered request is never aborted and restarted once the provider attaches, and instead reads an element's intrinsic dimensions, applies a configured `startTime`, and reports source exhaustion on attach when the element already reached that state before attaching.
+- 1f0ad05: Each entry in a `{ type: 'video' }` source's `sources` takes an optional `media`, a CSS media query, so a site with a lighter mobile rendition alongside a heavier desktop one can express the split without a second player. Order works like `<source>` elements in a native `<video>`: the first entry whose `media` matches, or that has no `media`, and whose `mimeType` the browser can play, is the one that loads. A source string, or an entry without `media`, loads with no media check.
+
+  An element the client creates renders only the entries whose `media` currently matches, so no browser ever has a wrong entry to pick. An element from the server HTML (`loading="eager"` for a `video` file source) renders every entry with its `media` attribute instead, since the browser's own resource-selection algorithm is what picks among them there; once hydration runs, a mismatch between that pick and the current `matchMedia` result is corrected with one `media.load()`, and never while `currentSrc` is still empty. A `media` query that starts or stops matching after commit does not swap the source of a player that is already loaded — the same once-only timing the browser's own `media` attribute already has.
+
+  `isValidMediaQuery` (`@playdeck/core`) gates every `media` value before it reaches a `<source>` attribute or `window.matchMedia`: a length cap and a plain-text shape check, in the same spirit as `isValidTextTrackLanguage`. A value it rejects drops that source entry — never read as unconditional — and publishes a `configuration` notice naming it, the same way a refused `nativePoster` or a rejected `preferredTextTrackLanguage` does.
+
+- Updated dependencies [0f5e42f]
+- Updated dependencies [edeeadb]
+- Updated dependencies [52e8720]
+- Updated dependencies [1f0ad05]
+  - @playdeck/core@1.4.0
+
 ## 1.3.0
 
 ### Patch Changes
