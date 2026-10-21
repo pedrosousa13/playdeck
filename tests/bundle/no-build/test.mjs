@@ -354,7 +354,20 @@ try {
   // hidden by CSS. The whole distance from the last committed figure is this
   // issue's: that figure was 115.46 KB (118233 bytes), measured 2026-10-20
   // per the block above.
-  const GZIP_EAGER_CEILING_KB = 115.75;
+  //
+  // 118708 bytes measured 2026-10-21 (Node 22) -- 115.9257812500 KB, 115.93
+  // KB to two places, rounded up to the next 0.25 KB -- 116.00 KB. What
+  // carried this past 115.75 KB is #927's two length caps:
+  // `viewport-media.tsx`'s `SOURCES_CAP`/`TEXT_TRACKS_CAP` slicing of
+  // `videoSources`/`cappedTextTracks` and its `useSourcesCapReport`/
+  // `useTextTracksCapReport` calls, plus the notice builder and the two
+  // `PlayerController` methods those calls reach (`player-context.ts`,
+  // `@playdeck/core`'s `player-controller.ts`) -- all reached by
+  // `/browser.js` and `/core.js` for every eager composition regardless of
+  // whether either array ever exceeds its cap. The whole distance from the
+  // last committed figure is this issue's: that figure was 115.54 KB
+  // (118311 bytes), measured 2026-10-21 per the block above.
+  const GZIP_EAGER_CEILING_KB = 116.0;
   const gzipKb = (bytes) => (bytes / 1024).toFixed(2);
   const scriptBytes = await Promise.all(
     expectedScripts.map((pathname) => readFile(resolveRequest(pathname)))

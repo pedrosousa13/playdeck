@@ -1311,3 +1311,88 @@ test('publishes the rejected-source-media notice frozen', () => {
 
   expect(Object.isFrozen(controller.getState().error)).toBe(true);
 });
+
+// `reportSourcesCap` and `reportTextTracksCap` (#927) take the whole notice
+// rather than a value to build one from -- unlike every report method above,
+// there is no value to echo, only a count `@playdeck/react`'s
+// `viewport-media.tsx` already formatted -- and register it into
+// `reportRejectedSourceMedia` / `reportRejectedTextTrackLanguage`'s own scope
+// rather than one of their own: both pairs describe a value this library
+// drops from the same list, so the single error slot ranks and clears them
+// identically. Proven here rather than assumed from that sibling's own
+// coverage above: `reportSourcesCap` publishes, `reportTextTracksCap`
+// publishes, and withdrawing one leaves nothing standing.
+const sourcesCapNotice = (): PlayerError =>
+  Object.freeze({
+    category: 'configuration',
+    fatal: false,
+    recoverable: false,
+    severity: 'protective',
+    message:
+      "A video source's sources list passed its 32-entry cap, so the last 1 entry was dropped."
+  });
+
+const textTracksCapNotice = (): PlayerError =>
+  Object.freeze({
+    category: 'configuration',
+    fatal: false,
+    recoverable: false,
+    severity: 'protective',
+    message:
+      'A text-track list passed its 128-entry cap, so the last 1 entry was dropped.'
+  });
+
+// Demonstrated red: run against the code as it stood before this commit --
+// `PlayerController` had no `reportSourcesCap` method at all -- this failed
+// to typecheck and to run: `controller.reportSourcesCap is not a function`.
+test('publishes a sources-cap notice into the rejected-source-media slot', () => {
+  const controller = new PlayerController();
+
+  controller.reportSourcesCap(sourcesCapNotice());
+
+  expect(controller.getState().error).toMatchObject({
+    category: 'configuration',
+    fatal: false,
+    recoverable: false,
+    severity: 'protective',
+    message: expect.stringContaining('32-entry cap')
+  });
+  expect(controller.getState().lifecycle).not.toBe('error');
+});
+
+// Same shape as immediately above, for `reportTextTracksCap`.
+test('publishes a text-tracks-cap notice into the rejected-text-track-language slot', () => {
+  const controller = new PlayerController();
+
+  controller.reportTextTracksCap(textTracksCapNotice());
+
+  expect(controller.getState().error).toMatchObject({
+    category: 'configuration',
+    message: expect.stringContaining('128-entry cap')
+  });
+});
+
+test('withdraws a sources-cap notice once released', () => {
+  const controller = new PlayerController();
+
+  const release = controller.reportSourcesCap(sourcesCapNotice());
+  expect(controller.getState().error).not.toBeNull();
+
+  release();
+
+  expect(controller.getState().error).toBeNull();
+});
+
+// The reuse this fold relies on: a sources-cap notice and a rejected
+// `sources[].media` entry contend for the very same scope, so the one
+// registered first keeps the slot exactly as two refused-URL surfaces would
+// (#368).
+test('keeps a sources-cap notice over a rejected-source-media entry registered after it', () => {
+  const controller = new PlayerController();
+
+  controller.reportSourcesCap(sourcesCapNotice());
+  const capNotice = controller.getState().error;
+  controller.reportRejectedSourceMedia('bad media');
+
+  expect(controller.getState().error).toMatchObject(capNotice!);
+});

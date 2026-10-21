@@ -189,3 +189,34 @@ test.each(['http:evil.com/x.mp4', 'https:evil.com/x.mp4'])(
     expect(markup).not.toContain('evil.com');
   }
 );
+
+// #927: every entry of an oversized `sources` list used to reach server HTML
+// unfiltered -- the sweep that found this measured 50,000 entries at about
+// 0.9s and 4.4MB. `SOURCES_CAP` (`viewport-media.tsx`) keeps the HTML this
+// produces bounded regardless of how large the consumer-supplied array is.
+//
+// Demonstrated red: before this commit, this failed --
+//
+//   expected 5000 to be 32 // Object.is equality
+//
+// (every one of the 5,000 sources rendered as its own `<source>`.)
+test('keeps eager server HTML bounded for an oversized sources array', () => {
+  const markup = renderToString(
+    <Player.Root
+      loading="eager"
+      source={{
+        type: 'video',
+        sources: Array.from({ length: 5000 }, (_, index) => ({
+          src: `/s${index}.mp4`,
+          mimeType: 'video/mp4'
+        }))
+      }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  expect(markup.match(/<source\b/g)?.length).toBe(32);
+});
