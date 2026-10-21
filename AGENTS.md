@@ -24,7 +24,7 @@ A new assertion does not count until it has been shown failing against the unfix
 
 ### Changesets
 
-A pending changeset's prose is written in the present tense, describing the change as it stands — never narrating history ("now", "previously", "as before"). `pnpm test:changesets` enforces this in the CI `static` job. See `docs/agents/changesets.md`.
+A pending changeset's prose is written in the present tense, describing the change as it stands — never narrating history ("now", "previously", "as before", "no longer", "as it always has"/"as they always have"). `pnpm test:changesets` enforces this in the CI `static` job. See `docs/agents/changesets.md`.
 
 ### Verify
 

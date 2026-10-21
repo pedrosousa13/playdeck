@@ -6,9 +6,16 @@ How a pending changeset under `.changeset/` is written, and what checks it.
 
 A changeset's prose describes the change as the version installing it stands
 — never how the code behaved before, or what changed on the way there. A bare
-**"now"**, **"previously"**, and **"as before"** are the phrasings that read
-as narrating history. "The provider retries once" is the shape; "the
-provider now retries once" is not.
+**"now"**, **"previously"**, **"as before"**, **"no longer"**, and the
+elliptical **"as it always has"** / **"as they always have"** are the
+phrasings that read as narrating history. "The provider retries once" is the
+shape; "the provider now retries once" is not.
+
+"no longer" excludes a following "than": "the retry window is no longer than
+10 seconds" states a present-tense size bound, not a narrated change. The
+"always have" family is deliberately only its two observed forms and not a
+bare "always" or "always has"/"always have" on its own, which also reads as
+present tense: "a consumer-supplied poster always wins".
 
 `pnpm test:changesets` (`scripts/check-changesets.mjs`) enforces this,
 case-insensitively, over every pending `.changeset/*.md` file, and runs in
