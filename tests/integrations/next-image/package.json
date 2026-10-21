@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "next build",
-    "test:integration": "node --test harness.test.mjs && node test.mjs"
+    "test:integration": "node --test harness.test.mjs && node test.mjs && node test-media-query.mjs"
   },
   "dependencies": {
     "@playdeck/core": "workspace:*",

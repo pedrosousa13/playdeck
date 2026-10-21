@@ -72,9 +72,16 @@ const MEDIA_QUERY_SHAPE = new RegExp(
  * the OTHER entries in the list, but the entry carrying it is dropped rather
  * than kept and read as unconditional, which `viewport-media.tsx` also
  * reports as a `configuration` notice.
+ *
+ * `unknown`, not `string`, like every other per-field validator in this
+ * file: `VideoFileSource.sources[].media` is declared `string | undefined`,
+ * but that declaration only binds a caller that is type-checked -- untyped
+ * CMS or JSON data walking past it can still hand this a `null`, a number or
+ * an object, and a crash here would take down the whole `Media` render
+ * instead of dropping the one poisoned entry.
  */
-export const isValidMediaQuery = (value: string): boolean =>
-  value.length > 0 &&
+export const isValidMediaQuery = (value: unknown): value is string =>
+  isNonEmptyString(value) &&
   value.length <= MAX_MEDIA_QUERY_LENGTH &&
   MEDIA_QUERY_SHAPE.test(value);
 

@@ -1222,6 +1222,12 @@ test('publishes a rejected sources[].media entry as a notice naming the value', 
   expect(controller.getState().lifecycle).not.toBe('error');
 });
 
+// Demonstrated red by a substitute mutation (docs/agents/demonstrated-red.md):
+// `reportRejectedSourceMedia`'s own `return dispose;` replaced with
+// `return () => {};` -- a disposer that does nothing, so the registration is
+// never actually removed from the registry. This test and the next one both
+// failed: `expected { category: 'configuration', … } to be null` here, and
+// the same against the setProvider case below.
 test('withdraws the rejected-source-media notice once released', () => {
   const controller = new PlayerController();
 
@@ -1233,6 +1239,10 @@ test('withdraws the rejected-source-media notice once released', () => {
   expect(controller.getState().error).toBeNull();
 });
 
+// Same substitute mutation as immediately above, same recorded red:
+// `expected { category: 'configuration', … } to be null` -- the entry
+// nothing had actually removed was still standing after `setProvider`
+// rebuilt the state from scratch.
 test('does not re-plant a withdrawn rejected-source-media notice on setProvider', () => {
   const controller = new PlayerController();
   const fake = createProvider();
@@ -1243,6 +1253,12 @@ test('does not re-plant a withdrawn rejected-source-media notice on setProvider'
   expect(controller.getState().error).toBeNull();
 });
 
+// Demonstrated red by a substitute mutation: `this.#currentRejectedSourceMediaNotice()`
+// deleted from `#withHeldConfiguration`'s own `mostImportantNotice(...)` call
+// (the fold `setProvider`'s reset re-applies, distinct from `#applyPatch`'s
+// own copy above). Failed: `expected null to match object { category:
+// 'configuration', … }` -- the notice `setProvider` is meant to carry
+// through an attach was dropped instead.
 test('keeps a rejected-source-media notice through a provider attaching after it', () => {
   const controller = new PlayerController();
   const fake = createProvider();
@@ -1261,6 +1277,20 @@ test('keeps a rejected-source-media notice through a provider attaching after it
 // Ranked below a rejected-text-track-language notice, the same way that one
 // is ranked below a refused-URL notice: each joined this fold after the
 // previous one's order was already settled.
+//
+// Demonstrated red by a substitute mutation: `standingNotice` -- what
+// already stands in the slot, read first by `#applyPatch`'s own fold, and
+// the actual reason a tie favours the earlier of two registrations here --
+// removed from that fold's argument list entirely. Failed: `expected {
+// category: 'configuration', message: "A video source's media (\"bad
+// media\")…" } to match object { … message: "The preferredTextTrackLanguage
+// option (\"bad lang\")…" }` -- the newly-registered source-media notice
+// displaced the one already standing, which this test exists to rule out.
+// (That mutation also falsified an unrelated, pre-existing test over the
+// same fold, "gives a provider notice the slot over an equally protective
+// refused URL" -- expected, since `standingNotice` governs every tie this
+// fold settles, not only this one -- confirming it is reverted rather than
+// kept.)
 test('keeps a rejected-text-track-language notice over an equally protective rejected-source-media notice', () => {
   const controller = new PlayerController();
 
@@ -1271,6 +1301,9 @@ test('keeps a rejected-text-track-language notice over an equally protective rej
   expect(controller.getState().error).toMatchObject(languageNotice!);
 });
 
+// Demonstrated red by a substitute mutation: `rejectedSourceMediaNotice`
+// (`safety.ts`) with its `freezeError({ … })` call unwrapped to a bare
+// object literal. Failed: `expected false to be true`.
 test('publishes the rejected-source-media notice frozen', () => {
   const controller = new PlayerController();
 
