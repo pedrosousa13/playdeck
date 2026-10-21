@@ -649,6 +649,14 @@ const disconnectObserver = (
 // suspended where a macrotask timer still runs.
 const OBSERVER_RESYNC_DELAY_MS = 0;
 
+// The brief's own test for "no layout" (#914): `display: none`, and anything
+// else that generates no box for the element at all. Deliberately narrow --
+// it does not catch `visibility: hidden` or `content-visibility: hidden`,
+// which still generate a box of their own, and `RootProps.loading`'s own doc
+// comment states that limit rather than leaving a reader to discover it.
+const hasLayoutBoxes = (viewport: HTMLDivElement): boolean =>
+  viewport.getClientRects().length > 0;
+
 export const useActivation = (
   options: UseActivationOptions
 ): ActivationBindings => {
@@ -1037,6 +1045,38 @@ export const useActivation = (
         error: refusedSourceError(refusedMessage)
       });
       return;
+    }
+    const viewport = viewportRef.current;
+    const Observer = globalThis.ResizeObserver;
+    // Hold (#914): a viewport with no layout box at all -- `display: none`,
+    // the brief's own example -- gets no autoplay attempt and no provider
+    // load, hence no raised preload, until it has one. A `video` file source
+    // already committed at render still carries its server-rendered `<video>`
+    // and `<source>` children regardless -- the server cannot know about
+    // CSS, and nothing here tries to undo that -- but this hook's own
+    // `activate` is what starts everything after that: the load effect
+    // below, which attaches the provider, and the autoplay attempt that
+    // follows. Holding it back is what stops both without ever touching
+    // `media.load()` on an element that may already be mid-fetch.
+    //
+    // Fails open -- activates anyway -- where there is no `Player.Viewport`
+    // to measure or no `ResizeObserver` to notice a later layout change:
+    // `eager` never required either before this existed, and a hidden
+    // server-rendered element's own preload request already left with the
+    // HTML parser regardless of what this hook does next.
+    if (viewport && Observer && !hasLayoutBoxes(viewport)) {
+      let settled = false;
+      const observer = new Observer(() => {
+        if (settled || !hasLayoutBoxes(viewport)) return;
+        settled = true;
+        observer.disconnect();
+        activate(false);
+      });
+      observer.observe(viewport);
+      return () => {
+        settled = true;
+        observer.disconnect();
+      };
     }
     activate(false);
   }, [
@@ -1441,6 +1481,17 @@ export const useActivation = (
     };
   }, [options.controller, options.loading, resyncViewportObserver]);
 
+  // `committedIdentity` joins the dependency array below for the eager hold
+  // (#914): a `video` file source committed at render has `sourceCommitted`
+  // reading `true` from the very first render (`eagerRenderCommit`), so a
+  // held `activate()` releasing later -- from the `ResizeObserver` callback
+  // above, well outside this render -- changes `active.started` (a ref) with
+  // no change to `sourceCommitted` itself for this effect to react to.
+  // `committedIdentity` is what `activate()` actually sets on release
+  // (`undefined` to a real identity), so it is what re-runs this effect once
+  // `active.started` is true for it to read. Not read inside the body below,
+  // the same way `currentKey` and `mediaVersion` already aren't -- a
+  // trigger-only dependency, same as theirs.
   useEffect(() => {
     const active = session.current;
     const media = mediaRef.current;
@@ -1638,7 +1689,7 @@ export const useActivation = (
           )
         });
       });
-  }, [currentKey, mediaVersion, sourceCommitted]);
+  }, [committedIdentity, currentKey, mediaVersion, sourceCommitted]);
 
   useEffect(
     () => () => {

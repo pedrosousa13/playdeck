@@ -81,6 +81,11 @@ type PlayerFixtureProps = {
   // `e2e/connection-warm-up.spec.ts` can measure press-to-playing with it on
   // against the same fixture with it off.
   readonly warmUp?: Player.RootProps['warmUp'];
+  // Wraps the fixture in a `display: none` box with a button that removes
+  // it (#914), so `e2e/loading.spec.ts` can drive an `eager` player hidden
+  // by CSS and then reveal it. The box, not the viewport alone -- a
+  // consumer's own breakpoint CSS would just as plausibly hide an ancestor.
+  readonly cssHidden?: boolean;
 };
 
 // Tall enough that the player starts fully outside the observer's root even
@@ -318,7 +323,8 @@ const PlayerFixture = ({
   showErrorDisplay,
   defaultTextTrack,
   preferredTextTrackLanguage,
-  warmUp
+  warmUp,
+  cssHidden
 }: PlayerFixtureProps) => {
   const autoplay: Player.RootProps['autoplay'] = autoplayInput ?? false;
   const loading: Player.PlayerLoadingStrategy = loadingInput ?? 'viewport';
@@ -429,6 +435,10 @@ const PlayerFixture = ({
     : null;
 
   const [source, setSource] = useState(initialSource);
+  // #914: starts hidden whenever `cssHidden` is set, and stays that way until
+  // the button below removes it -- never re-hidden, since the spec this
+  // drives only exercises the one reveal.
+  const [hiddenByCss, setHiddenByCss] = useState(cssHidden ?? false);
   // Only the captions fixture (a story arg sets `captionRenderer`) attaches a
   // real <track>; every other story keeps the plain <video> it had before.
   // The chapters fixture (`chapters` arg) attaches its own <track> alongside
@@ -536,12 +546,35 @@ const PlayerFixture = ({
     </>
   );
 
-  if (!scrollPage) return fixture;
+  // #914: the box the `display: none` goes on, rather than the viewport
+  // alone -- a consumer's own breakpoint CSS would just as plausibly hide an
+  // ancestor, and the hold has to react to that the same way.
+  const wrapped = cssHidden ? (
+    <>
+      <div
+        data-testid="css-hidden-wrapper"
+        style={hiddenByCss ? { display: 'none' } : undefined}
+      >
+        {fixture}
+      </div>
+      <button
+        data-testid="css-hidden-reveal"
+        onClick={() => setHiddenByCss(false)}
+        type="button"
+      >
+        Reveal
+      </button>
+    </>
+  ) : (
+    fixture
+  );
+
+  if (!scrollPage) return wrapped;
 
   return (
     <>
       <div style={{ height: SCROLL_SPACER_HEIGHT }} />
-      {fixture}
+      {wrapped}
       <div style={{ height: SCROLL_SPACER_HEIGHT }} />
     </>
   );
@@ -749,6 +782,21 @@ export const LiveNative: Story = {
 
 export const AutoplayMuted: Story = {
   args: { autoplay: 'muted' }
+};
+
+// #914: the visible-player half of the same pair -- `e2e/loading.spec.ts`
+// drives this one with no hold at all, to pin that an `eager` autoplay
+// player is unaffected where there is nothing to hold it on.
+export const EagerAutoplayMuted: Story = {
+  args: { loading: 'eager', autoplay: 'muted' }
+};
+
+// #914: an `eager` autoplay player with no layout box at all
+// (`display: none`), for `e2e/loading.spec.ts` to prove it attempts no
+// autoplay while hidden and continues exactly as a visible `eager` player
+// once the `Reveal` button removes the box.
+export const EagerAutoplayHiddenByCss: Story = {
+  args: { loading: 'eager', autoplay: 'muted', cssHidden: true }
 };
 
 // A tall scroll page around the player (#309), so `e2e/activation.spec.ts`

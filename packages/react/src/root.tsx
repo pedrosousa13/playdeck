@@ -160,7 +160,18 @@ export type RootProps<P extends ConsumerProviders = Record<string, never>> = {
    *   (and `preload`) are in the server HTML too -- the browser can start
    *   the request while it parses the page, before any script runs. HLS and
    *   the embed providers (YouTube, Vimeo, Wistia) still commit from an
-   *   effect, client-side only.
+   *   effect, client-side only. On hydration, if `Player.Viewport` has no
+   *   layout box at all (`display: none`, for a player hidden at some
+   *   breakpoint), commit holds there: no autoplay attempt, no provider
+   *   load, until the viewport has a box. It then continues exactly as an
+   *   `eager` player that was visible from the start. The check is
+   *   `getClientRects().length === 0`, which catches `display: none` but
+   *   not `visibility: hidden` or `content-visibility: hidden` -- both
+   *   still generate a box, so a player hidden that way is not held. Either
+   *   way, the server cannot know about CSS: a `video` file source's own
+   *   request already left with the HTML parser before any of this runs,
+   *   hidden or not. For a player that may be hidden at some breakpoint,
+   *   prefer `loading: 'viewport'`, or leave `priority` unset, over `eager`.
    * - `'interaction'` commits on the first `Player.ActivationButton` press
    *   (or a direct `activateFromInteraction` call); cannot be combined with
    *   `autoplay`.
@@ -261,7 +272,10 @@ export type RootProps<P extends ConsumerProviders = Record<string, never>> = {
    *
    * - Implies `loading: 'eager'` where `loading` is left unset. An explicit
    *   `loading` other than `'eager'` is a configuration error instead -- see
-   *   `loading`.
+   *   `loading`. `loading`'s own doc also states what an `eager` player does
+   *   when `Player.Viewport` is hidden by CSS -- relevant here, since
+   *   `priority` is exactly the prop that opts a player into `eager` without
+   *   writing `loading` at all.
    * - Implies `preload: 'auto'` where `preload` is left unset; an explicit
    *   `preload` is honoured either way.
    * - Carries `fetchPriority: 'high'` and `loading: 'eager'` onto the poster

@@ -134,6 +134,38 @@ class ControlledIntersectionObserver implements IntersectionObserver {
   }
 }
 
+// (#914) The `eager` hold's own observer, standing in for a real
+// `ResizeObserver`: happy-dom's own stub never fires on its own (there is no
+// layout engine behind it to notice anything), so every test that exercises
+// the hold drives this one by hand with `trigger()` -- the layout-appears
+// notification `use-activation.ts` reacts to -- rather than waiting on a
+// browser behaviour this environment cannot produce.
+class ControlledResizeObserver implements ResizeObserver {
+  static instances: ControlledResizeObserver[] = [];
+  private readonly callback: ResizeObserverCallback;
+  private target?: Element;
+
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+    ControlledResizeObserver.instances.push(this);
+  }
+
+  disconnect = vi.fn();
+  observe = vi.fn((target: Element) => {
+    this.target = target;
+  });
+  unobserve = vi.fn();
+
+  trigger() {
+    const target = this.target;
+    if (!target) return;
+    this.callback(
+      [{ target } as unknown as ResizeObserverEntry],
+      this as unknown as ResizeObserver
+    );
+  }
+}
+
 const mockedLoadProvider = vi.mocked(loadProvider);
 
 const firstRequestedVideo = (): HTMLVideoElement | undefined => {
@@ -274,9 +306,35 @@ const REFUSED_SOURCE_MESSAGE =
 
 beforeEach(() => {
   ControlledIntersectionObserver.instances = [];
+  ControlledResizeObserver.instances = [];
   mockedLoadProvider.mockReset();
   vi.stubGlobal('IntersectionObserver', ControlledIntersectionObserver);
+  vi.stubGlobal('ResizeObserver', ControlledResizeObserver);
 });
+
+// Stands in for happy-dom's own `getClientRects`, which always reports one
+// box regardless of CSS (there is no layout engine behind it to say
+// otherwise) -- so every existing test above and below keeps reading
+// "visible" by default, and only a test that calls this asks for "hidden"
+// instead. Spied rather than reassigned on the prototype directly, so
+// `afterEach`'s own `vi.restoreAllMocks()` is what undoes it.
+const stubViewportLayout = (testId: string) => {
+  const original = Element.prototype.getClientRects;
+  let hidden = true;
+  vi.spyOn(Element.prototype, 'getClientRects').mockImplementation(function (
+    this: Element
+  ) {
+    if (this.getAttribute('data-testid') === testId && hidden) {
+      return [] as unknown as DOMRectList;
+    }
+    return original.call(this);
+  });
+  return {
+    reveal: () => {
+      hidden = false;
+    }
+  };
+};
 
 afterEach(() => {
   cleanup();
@@ -298,6 +356,56 @@ test('eager loads after client mount and forwards preload', async () => {
   await vi.waitFor(() =>
     expect(fake.counts()).toMatchObject({ attachCount: 1, loadCount: 1 })
   );
+});
+
+// #914: a visible viewport still activates immediately, with no observer
+// standing in the way -- the same "exactly as it does now" the issue asks
+// for, pinned explicitly against a `getClientRects` this test controls
+// rather than relying on happy-dom's own default (which already always
+// reports one box, so this would pass even against the unfixed hold).
+test('eager with a visible viewport activates immediately, no hold', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+  stubViewportLayout('viewport').reveal();
+
+  render(fixture({ loading: 'eager', autoplay: 'muted' }));
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  expect(ControlledResizeObserver.instances).toHaveLength(0);
+  act(() => fake.emit({ activation: 'ready', lifecycle: 'ready' }));
+  await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
+});
+
+// #914: a viewport with no layout box -- `display: none`, the brief's own
+// example -- holds activation. No provider load (hence no autoplay attempt:
+// there is nothing yet for one to run against) until the viewport gets a
+// box, at which point the player continues exactly as an eager player that
+// was visible from the start.
+//
+// Demonstrated red: against the unfixed hook (no hold at all), this failed
+// with "expected "spy" to not be called at all. ... 1st spy call: [ { media:
+// HTMLVideoElement ... } ]" -- `loadProvider` ran immediately, hidden
+// viewport or not.
+test('eager with a hidden viewport holds activation until it has layout', async () => {
+  const fake = createFakeProvider();
+  mockedLoadProvider.mockResolvedValue(fake.adapter);
+  const layout = stubViewportLayout('viewport');
+
+  render(fixture({ loading: 'eager', autoplay: 'muted' }));
+
+  await Promise.resolve();
+  expect(mockedLoadProvider).not.toHaveBeenCalled();
+  expect(ControlledResizeObserver.instances).toHaveLength(1);
+  const observer = ControlledResizeObserver.instances[0]!;
+  expect(observer.observe).toHaveBeenCalledOnce();
+
+  layout.reveal();
+  act(() => observer.trigger());
+
+  await vi.waitFor(() => expect(mockedLoadProvider).toHaveBeenCalledOnce());
+  expect(observer.disconnect).toHaveBeenCalledOnce();
+  act(() => fake.emit({ activation: 'ready', lifecycle: 'ready' }));
+  await vi.waitFor(() => expect(fake.counts().playCount).toBe(1));
 });
 
 // `priority` with no explicit `loading` resolves to `'eager'` -- the same
