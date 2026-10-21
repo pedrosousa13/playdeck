@@ -1,4 +1,4 @@
-/* global URL, document, console */
+/* global URL, document, console, process */
 
 // #913's code-review follow-up: the e2e story under e2e/ only drives the
 // client-created path (the default `loading: 'viewport'`, committed from an
@@ -32,10 +32,37 @@
 // -- reverted, and the build re-run clean before this file was relied on.
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
-import { chromium, firefox } from '@playwright/test';
+import { chromium, firefox, webkit } from '@playwright/test';
 import { runWithCleanup, startNext, terminate } from './harness.mjs';
 
 const fixtureDirectory = fileURLToPath(new URL('.', import.meta.url));
+
+/** @type {Record<string, import('@playwright/test').BrowserType>} */
+const BROWSER_TYPES = { chromium, firefox, webkit };
+
+// Which engines this script drives, read from one env var rather than
+// guessed -- the same per-run choice `playwright.config.ts`'s `projects`
+// gives the e2e suite. Defaults to the two engines that launch on this
+// machine; CI's `package` job sets this to `chromium,webkit`
+// (`.github/workflows/ci.yml`) because it installs WebKit, not Firefox, and
+// WebKit is the engine whose parser-vs-script `<source media>` behaviour
+// motivated this path (#913's own brief). An engine named here that cannot
+// launch is a failure, not a skip: nothing below catches `engine.launch()`.
+const engines = (
+  process.env.PLAYDECK_INTEGRATION_BROWSERS ?? 'chromium,firefox'
+)
+  .split(',')
+  .map((name) => name.trim())
+  .filter((name) => name.length > 0)
+  .map((name) => {
+    const engine = BROWSER_TYPES[name];
+    if (!engine) {
+      throw new Error(
+        `PLAYDECK_INTEGRATION_BROWSERS names an unknown engine "${name}" -- expected chromium, firefox or webkit.`
+      );
+    }
+    return /** @type {const} */ ([name, engine]);
+  });
 
 /**
  * Every same-origin pathname requested while the fixture page loads,
@@ -74,10 +101,7 @@ const requestedPaths = async (engine, viewport) => {
   return paths;
 };
 
-for (const [engineName, engine] of /** @type {const} */ ([
-  ['chromium', chromium],
-  ['firefox', firefox]
-])) {
+for (const [engineName, engine] of engines) {
   for (const [
     widthName,
     viewport,

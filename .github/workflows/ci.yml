@@ -580,6 +580,21 @@ jobs:
         timeout-minutes: 22
         with:
           browser: chromium
+      # `test:integrations` below also drives WebKit (its own cache entry,
+      # keyed per browser the same way the `e2e` matrix's is, since this job
+      # is not itself matrixed) -- WebKit is the engine whose parser-vs-script
+      # `<source media>` behaviour motivated the real-browser check in
+      # `tests/integrations/next-image/test-media-query.mjs` (#913), and the
+      # `e2e` job's own `firefox`/`webkit` runners are not installed here.
+      - uses: actions/cache@v6
+        id: playwright-cache-webkit
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-webkit-${{ steps.playwright-version.outputs.version }}
+      - uses: ./.github/actions/playwright-install
+        timeout-minutes: 22
+        with:
+          browser: webkit
       # Builds every package once via the Turborepo cache; test:packages,
       # test:bundle and test:integrations below rebuild the same package set
       # and hit that cache instead of rebuilding from scratch. It also has to
@@ -795,7 +810,13 @@ jobs:
       # be skipped, and running more of a job that is going red anyway proves
       # nothing. Widening them would be a decision about different steps.
       - run: pnpm test:bundle
+      # Chromium + WebKit here (the brief's own acceptance criterion for
+      # #913's media-query real-browser check), not the local chromium,firefox
+      # default: this runner has no Firefox installed, and WebKit is the
+      # engine the check exists to cover.
       - run: pnpm test:integrations
+        env:
+          PLAYDECK_INTEGRATION_BROWSERS: chromium,webkit
       # The README's byte table is generated from the same measurements
       # `pnpm test:budgets` reports, so a change that moves a bundle
       # cannot leave a stale figure in the prose (#511). It runs here and not

@@ -225,13 +225,19 @@ jobs:
       # `test:bundle` and `test:integrations` drive a real browser.
       # No `actions/cache` here, unlike `ci.yml`: this workflow runs a handful
       # of times a year, so the cache would be cold on almost every run.
-      - run: pnpm exec playwright install --with-deps chromium
+      # WebKit joins chromium (#913): `test:integrations`' media-query check
+      # drives it, this runner has no Firefox either way, and the env var
+      # below is what tells the check so -- its own default
+      # (`chromium,firefox`) is for a local run where Firefox is installed.
+      - run: pnpm exec playwright install --with-deps chromium webkit
       - run: pnpm build
       # `test:packages` is deliberately absent: it runs in `package-verify`
       # above, which this job `needs:`. Do not add it back here.
       - run: pnpm test:budgets
       - run: pnpm test:bundle
       - run: pnpm test:integrations
+        env:
+          PLAYDECK_INTEGRATION_BROWSERS: chromium,webkit
 
       # Both publish steps below fail closed. If `inputs.dry_run` ever arrives
       # as the string "false" rather than the boolean, the first step runs
