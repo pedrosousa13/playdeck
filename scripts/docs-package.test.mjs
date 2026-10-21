@@ -9,6 +9,7 @@ import { contractFaults } from './docs-contract.mjs';
 import {
   DEMOS,
   DOCS_DIR,
+  changesetDocsEmDashFaults,
   docsPackage,
   docsPackageDrift,
   emDashFaults,
@@ -17,6 +18,21 @@ import {
 } from './docs-package.mjs';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+
+/**
+ * A fresh `.changeset` directory holding one pending changeset, removed
+ * after the test -- the shape `scripts/check-changesets.test.mjs`'s own
+ * `changesetDir` builds.
+ * @param {import('node:test').TestContext} t
+ * @param {string} file
+ * @param {string} text
+ */
+const pendingChangeset = (t, file, text) => {
+  const dir = mkdtempSync(join(tmpdir(), 'playdeck-docs-changeset-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  writeFileSync(join(dir, file), text);
+  return dir;
+};
 
 /**
  * A docs package on disk, from `{ path: text }`, removed after the test.
@@ -319,6 +335,31 @@ test('emDashFaults names the file and line of an em dash the generator would wri
 
 test('packages/docs holds no em dash', () => {
   assert.deepEqual(emDashFaults(docsPackage(repoRoot)), []);
+});
+
+// Only a changeset naming @playdeck/docs in its front matter writes prose
+// into packages/docs/CHANGELOG.md -- membership in the `fixed` group alone
+// bumps the version but adds no entry (the 1.4.0 release's docs entry lists
+// exactly the changesets that named it). So a changeset naming it that
+// holds an em dash in its prose is the one this check must catch.
+test('a changeset naming @playdeck/docs with an em dash in its prose fails', (t) => {
+  const dir = pendingChangeset(
+    t,
+    'dash.md',
+    "---\n'@playdeck/docs': patch\n---\n\nThe guide links to the start page — once.\n"
+  );
+  assert.deepEqual(changesetDocsEmDashFaults(dir), [
+    '.changeset/dash.md:5 holds an em dash (—)'
+  ]);
+});
+
+test('a changeset with an em dash that does not name @playdeck/docs passes', (t) => {
+  const dir = pendingChangeset(
+    t,
+    'dash.md',
+    "---\n'@playdeck/core': patch\n---\n\nThe provider retries once — and only once.\n"
+  );
+  assert.deepEqual(changesetDocsEmDashFaults(dir), []);
 });
 
 // The acceptance criterion as npm itself answers it: markdown, nav.json,
