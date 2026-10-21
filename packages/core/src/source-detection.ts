@@ -127,6 +127,15 @@ const schemeOf = (url: string): string | undefined =>
  * `File`; an `hls` source refuses it because its manifest loader fetches the
  * URL itself. Everything else is refused.
  *
+ * `http:` and `https:` are also required to name an authority: both are
+ * special schemes under the WHATWG URL parser, which resolves a remainder
+ * that does not start with `//` as a path (`https:evil.com/x` reads as a path
+ * on the page's own origin) or, same-scheme, folds the two forms together
+ * (`http:evil.com/x` reads as `http://evil.com/x`) -- either way, the value
+ * that would be requested is not the value just checked here. `blob:` names
+ * no authority at all (`blob:https://origin/uuid`), so this does not extend
+ * to it.
+ *
  * Pass the `type` of the {@link ResolvedPlayerSource} the URL belongs to, or
  * `undefined` for a bare string the player has not yet resolved to a type.
  */
@@ -139,7 +148,9 @@ export const isPermittedSourceUrl = (
 
   const scheme = schemeOf(url);
   if (scheme === undefined) return true;
-  if (scheme === 'http' || scheme === 'https') return true;
+  if (scheme === 'http' || scheme === 'https') {
+    return url.slice(scheme.length + 1).startsWith('//');
+  }
   return scheme === 'blob' && type === 'video';
 };
 
@@ -458,6 +469,22 @@ export const detectSource = (input: unknown): SourceDetectionResult => {
       return failure(input, 'malformed-string');
     }
 
+    // Checked ahead of the shared allowlist so this one shape keeps its own
+    // branch-local reason: every other caller of `isPermittedSourceUrl`
+    // reports this refusal as `unsupported-string` (the allowlist's own
+    // reason), but a bare string reaching a provider read `malformed-string`
+    // here before the allowlist carried this check at all, and `reason` is
+    // public -- a consumer may switch on it. `blob:` never reaches this
+    // check: `isPermittedSourceUrl` refuses it outright for a bare string
+    // (no `type` is resolved yet), whichever branch runs first.
+    const bareStringScheme = schemeOf(input);
+    if (
+      (bareStringScheme === 'http' || bareStringScheme === 'https') &&
+      !input.slice(bareStringScheme.length + 1).startsWith('//')
+    ) {
+      return failure(input, 'malformed-string');
+    }
+
     if (!isPermittedSourceUrl(input, undefined)) {
       return failure(input, 'unsupported-string');
     }
@@ -470,17 +497,9 @@ export const detectSource = (input: unknown): SourceDetectionResult => {
     const scheme = schemeOf(input);
     const normalizedInput = resolveNetworkPath(input);
     const urlInput = isNetworkPath || scheme ? normalizedInput : undefined;
-    // Only `http:` and `https:` reach here with a scheme, because
-    // `isPermittedSourceUrl` above refuses every other scheme for a bare
-    // string -- `blob:` included, since no `type` is resolved yet. Both are
-    // special schemes that must name an authority, so `https:/host/clip.mp4`
-    // and `https:clip.mp4` are malformed rather than unsupported. This is not a
-    // rule about permitted schemes generally: `blob:` is permitted for a
-    // `video` source and has no authority, so admitting any further scheme to
-    // the string case means revisiting this guard first.
-    if (scheme && !input.slice(scheme.length + 1).startsWith('//')) {
-      return failure(input, 'malformed-string');
-    }
+    // Only `http:` and `https:` reach here with a scheme: every other
+    // scheme is refused above, either by the authority-shape check just run
+    // or by `isPermittedSourceUrl` itself.
 
     let url: URL | undefined;
     if (urlInput) {

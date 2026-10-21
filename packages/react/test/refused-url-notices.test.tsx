@@ -66,6 +66,23 @@ test('reports a refused poster src while rendering exactly as an absent prop', (
   expect(notice()?.textContent).toContain('poster src');
 });
 
+// The shared allowlist refuses `http:`/`https:` whose remainder is not `//`
+// the same way it refuses `javascript:` above -- a scheme the parser would
+// resolve against a different path or host than the one validated.
+test.each(['http:evil.com/x', 'https:evil.com/x'])(
+  'reports a refused poster src whose scheme is not followed by // (%s)',
+  (src) => {
+    const { container, controller, notice } = renderWithPlayer(
+      <PosterImage src={src} />
+    );
+    const image = container.querySelector('img')!;
+
+    expect(image.getAttribute('src')).toBeNull();
+    expect(controller.getState().error?.message).toContain('poster src');
+    expect(notice()?.textContent).toContain('poster src');
+  }
+);
+
 test('reports a refused poster srcSet candidate and keeps the survivors', () => {
   const { container, controller } = renderWithPlayer(
     <PosterImage srcSet="javascript:alert(1) 1x, /good-2x.jpg 2x" />
@@ -76,6 +93,20 @@ test('reports a refused poster srcSet candidate and keeps the survivors', () => 
   );
   expect(controller.getState().error?.message).toContain('srcSet');
 });
+
+test.each(['http:evil.com/x', 'https:evil.com/x'])(
+  'reports a refused poster srcSet candidate whose scheme is not followed by // (%s)',
+  (src) => {
+    const { container, controller } = renderWithPlayer(
+      <PosterImage srcSet={`${src} 1x, /good-2x.jpg 2x`} />
+    );
+
+    expect(container.querySelector('img')!.getAttribute('srcset')).toBe(
+      '/good-2x.jpg 2x'
+    );
+    expect(controller.getState().error?.message).toContain('srcSet');
+  }
+);
 
 test('publishes nothing for a poster whose src and srcSet are permitted', () => {
   const { controller } = renderWithPlayer(
@@ -105,6 +136,20 @@ test('reports a refused nativePoster while omitting the attribute', () => {
   expect(notice()?.textContent).toContain('nativePoster');
 });
 
+test.each(['http:evil.com/x', 'https:evil.com/x'])(
+  'reports a refused nativePoster whose scheme is not followed by // (%s)',
+  (src) => {
+    const { container, controller } = renderWithPlayer(
+      <Player.Media nativePoster={src} />
+    );
+
+    expect(container.querySelector('video')!.hasAttribute('poster')).toBe(
+      false
+    );
+    expect(controller.getState().error?.message).toContain('nativePoster');
+  }
+);
+
 test('reports a refused textTracks src while keeping the permitted tracks', () => {
   const { container, controller } = renderWithPlayer(
     <Player.Media
@@ -120,6 +165,18 @@ test('reports a refused textTracks src while keeping the permitted tracks', () =
   expect(tracks[0]?.getAttribute('src')).toBe('/captions/fr.vtt');
   expect(controller.getState().error?.message).toContain('textTracks src');
 });
+
+test.each(['http:evil.com/x', 'https:evil.com/x'])(
+  'reports a refused textTracks src whose scheme is not followed by // (%s)',
+  (src) => {
+    const { container, controller } = renderWithPlayer(
+      <Player.Media textTracks={[{ src, srcLang: 'en', label: 'English' }]} />
+    );
+
+    expect(container.querySelectorAll('track').length).toBe(0);
+    expect(controller.getState().error?.message).toContain('textTracks src');
+  }
+);
 
 // The probe that found #330's own defect: the <img> updated correctly when a
 // refused `src` was replaced with a permitted one, but "The poster src URL was

@@ -813,6 +813,23 @@ describe('SeekSlider thumbnails', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  test.each(['http:evil.com/x', 'https:evil.com/x'])(
+    'a thumbnails URL whose scheme is not followed by // reports the surface and fetches nothing (%s)',
+    async (thumbnails) => {
+      const { controller, notice } = renderWithPlayer(
+        <Player.SeekSlider thumbnails={thumbnails} />
+      );
+
+      expect(getThumbnail()).toBeNull();
+      expect(controller.getState().error?.message).toContain('thumbnails URL');
+      expect(notice()?.textContent).toContain('thumbnails URL');
+
+      hoverAt(50);
+      await flushMicrotasks();
+      expect(fetchMock).not.toHaveBeenCalled();
+    }
+  );
+
   test('a refused cue image reports the surface and drops only that cue', async () => {
     stubFetch(async () =>
       okTextResponse(
