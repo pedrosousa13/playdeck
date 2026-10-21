@@ -22,7 +22,7 @@ import { fileURLToPath, URL } from 'node:url';
 const console = globalThis.console;
 const process = globalThis.process;
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
-const CHANGESET_DIR = '.changeset';
+export const CHANGESET_DIR = '.changeset';
 
 /**
  * The phrasing this rule exists to catch, case-insensitively: a bare "now"
@@ -60,7 +60,7 @@ const NARRATES_HISTORY =
  * @param {string[]} lines
  * @returns {number}
  */
-const proseStart = (lines) => {
+export const proseStart = (lines) => {
   if (lines[0]?.trim() !== '---') return 0;
   const closing = lines.findIndex(
     (line, index) => index > 0 && line.trim() === '---'

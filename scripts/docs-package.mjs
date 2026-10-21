@@ -46,6 +46,11 @@ import { GUIDES, guideDocument } from './guide-pages.mjs';
 import { providerDocuments } from './provider-pages.mjs';
 import { providerAsymmetry } from './provider-asymmetry.mjs';
 import { comparisonDocument } from './comparison-page.mjs';
+import {
+  CHANGESET_DIR,
+  pendingChangesetFiles,
+  proseStart
+} from './check-changesets.mjs';
 
 const console = globalThis.console;
 const process = globalThis.process;
@@ -778,19 +783,57 @@ export const docsPackageDrift = (root) => {
  * contract's site renders markdown verbatim, so a dash in a source reaches a
  * reader exactly as typed, and this package ships none.
  * @param {Map<string, string>} files
+ * @param {string} [dir] where `files`' paths sit, for the message -- `files`
+ *   itself holds paths relative to it
  * @returns {string[]}
  */
-export const emDashFaults = (files) => {
+export const emDashFaults = (files, dir = DOCS_DIR) => {
   /** @type {string[]} */
   const faults = [];
   for (const [path, text] of files) {
     for (const [index, line] of text.split('\n').entries()) {
       if (line.includes('—')) {
-        faults.push(`${DOCS_DIR}/${path}:${index + 1} holds an em dash (—)`);
+        faults.push(`${dir}/${path}:${index + 1} holds an em dash (—)`);
       }
     }
   }
   return faults;
+};
+
+/** The package `changeset version` copies a changeset's prose into. */
+const DOCS_PACKAGE = '@playdeck/docs';
+
+/** A changeset's front-matter line naming `DOCS_PACKAGE`. */
+const NAMES_DOCS_PACKAGE = /^['"]@playdeck\/docs['"]\s*:/;
+
+/**
+ * The file and line of every U+2014 em dash in the prose of a pending
+ * changeset that names `DOCS_PACKAGE` in its front matter -- the only
+ * changesets whose prose `changeset version` copies into
+ * `packages/docs/CHANGELOG.md`: `fixed` bumps every package in the group's
+ * version alike, but writes prose only to a package the changeset itself
+ * named. Reuses `emDashFaults`'s scan and message shape, over the front
+ * matter blanked out line for line so the line numbers it reports still
+ * match the file on disk.
+ * @param {string} dir the `.changeset` directory
+ * @returns {string[]}
+ */
+export const changesetDocsEmDashFaults = (dir) => {
+  /** @type {Map<string, string>} */
+  const files = new Map();
+  for (const file of pendingChangesetFiles(dir)) {
+    const lines = readFileSync(join(dir, file), 'utf8').split('\n');
+    const start = proseStart(lines);
+    const namesDocs = lines
+      .slice(0, start)
+      .some((line) => NAMES_DOCS_PACKAGE.test(line.trim()));
+    if (!namesDocs) continue;
+    files.set(
+      file,
+      lines.map((line, index) => (index < start ? '' : line)).join('\n')
+    );
+  }
+  return emDashFaults(files, CHANGESET_DIR);
 };
 
 const main = () => {
@@ -806,6 +849,14 @@ const main = () => {
     if (emDash.length > 0) {
       throw new Error(
         `The docs package holds an em dash (—), which it ships none of:\n${emDash.map((line) => `  ${line}`).join('\n')}`
+      );
+    }
+    const changesetEmDash = changesetDocsEmDashFaults(
+      join(repoRoot, CHANGESET_DIR)
+    );
+    if (changesetEmDash.length > 0) {
+      throw new Error(
+        `A pending changeset naming ${DOCS_PACKAGE} holds an em dash (—), which its CHANGELOG.md entry would carry:\n${changesetEmDash.map((line) => `  ${line}`).join('\n')}`
       );
     }
     return;
