@@ -1249,7 +1249,20 @@ export const libraries = [
     // unconditional way through this fixture's own imports. The whole
     // distance from the last committed figure is this issue's: that figure
     // was 28.76 KB (29453 bytes), measured 2026-10-20 per the block above.
-    ceilingKb: 29.25,
+    //
+    // 29991 bytes measured 2026-10-21 (Node 22) -- 29.2880859375 KB, 29.29 KB
+    // to two places, rounded up to the next 0.25 KB boundary -- 29.50 KB.
+    // What carried this past 29.25 KB is #926's restored branch-local check
+    // in `detectSource`'s bare-string path: the shared allowlist
+    // (`isPermittedSourceUrl`) gained its own refusal for an `http:`/`https:`
+    // scheme not followed by `//`, but that path keeps reporting the refusal
+    // as `malformed-string` -- its own reason since before the allowlist
+    // carried the check at all, and one a consumer may already switch on --
+    // so a small check runs ahead of the shared one for this one shape. The
+    // whole distance from the last committed figure is this issue's: that
+    // figure was 29.16 KB (29864 bytes), measured 2026-10-20 per the block
+    // above.
+    ceilingKb: 29.5,
     // This fixture's control bar renders `ActivationButton`, `Controls`,
     // `PlayButton`, `MuteButton`, `VolumeSlider`, `SeekSlider`, `Time` and
     // `FullscreenButton` (tests/compare/entries/playdeck-control-bar.tsx,

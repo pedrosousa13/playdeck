@@ -416,7 +416,16 @@ test.each([
   'https://fast.wistia.net/embed/iframe/oif-gmxnkb',
   // The media-file fall-through above is not a way in for junk: an extension
   // Playdeck does not play leaves the recognised-host rule to fail it.
-  'https://fast.wistia.net/embed/medias/oifkgmxnkb.avi'
+  'https://fast.wistia.net/embed/medias/oifkgmxnkb.avi',
+  // `http:` and `https:` must name an authority: the WHATWG URL parser
+  // resolves the remainder as a path (same scheme) or a host (a different
+  // one) rather than as the literal string checked here, so the value that
+  // would play is not the value that was validated. Checked ahead of the
+  // shared allowlist so this bare-string shape keeps reading
+  // `malformed-string`, the same reason this branch reports every other
+  // entry above.
+  'http:evil.com/x',
+  'https:evil.com/x'
 ])('rejects malformed provider strings: %s', (input) => {
   expect(detectSource(input)).toMatchObject({
     status: 'failure',
@@ -504,7 +513,23 @@ test.each([
   [
     'a space-prefixed blob: as an HLS src',
     { type: 'hls', src: ' blob:https://evil.example/x' }
-  ]
+  ],
+  [
+    'http: without // among video sources',
+    {
+      type: 'video',
+      sources: [{ src: 'http:evil.com/x', mimeType: 'video/mp4' }]
+    }
+  ],
+  [
+    'https: without // among video sources',
+    {
+      type: 'video',
+      sources: [{ src: 'https:evil.com/x', mimeType: 'video/mp4' }]
+    }
+  ],
+  ['http: without // as an HLS src', { type: 'hls', src: 'http:evil.com/x' }],
+  ['https: without // as an HLS src', { type: 'hls', src: 'https:evil.com/x' }]
 ])('rejects explicit source objects carrying %s', (_case, input) => {
   const result = detectSource(input);
   expect(result).toMatchObject({

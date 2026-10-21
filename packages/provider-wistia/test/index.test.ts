@@ -419,9 +419,7 @@ test.each([
   ['a root-relative path', '/poster.png'],
   ['a relative path', 'poster.png'],
   ['an unparseable string', 'not a url'],
-  ['an empty string', ''],
-  ['a scheme-prefixed relative path', 'https:poster.png'],
-  ['a scheme-prefixed single-slash path', 'https:/example.test/poster.png']
+  ['an empty string', '']
 ])('accepts and writes a poster that is %s', async (_form, poster) => {
   const result = await setup({ options: { poster } });
   expect(element(result).getAttribute('poster')).toBe(poster);
@@ -453,7 +451,13 @@ test.each([
   // A space or a C0 control at either end is refused by the shared allowlist
   // whatever the scheme reads as, because the URL parser strips those before
   // parsing and the value written would not be the value validated (#326).
-  ['an https: URL padded with whitespace', ' https://example.test/poster.png ']
+  ['an https: URL padded with whitespace', ' https://example.test/poster.png '],
+  // `https:` and `http:` must name an authority: without `//`, the value the
+  // page would request is not the value just validated — a relative path on
+  // the page's own origin for the scheme-prefixed relative form, a
+  // same-scheme rewrite for the single-slash form.
+  ['a scheme-prefixed relative path', 'https:poster.png'],
+  ['a scheme-prefixed single-slash path', 'https:/example.test/poster.png']
 ])('drops a poster that is %s', async (_form, poster) => {
   const result = await setup({ options: { poster } });
   expect(element(result).getAttribute('poster')).toBeNull();

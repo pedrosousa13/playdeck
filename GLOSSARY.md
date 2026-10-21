@@ -74,9 +74,11 @@ renders.
 The one rule (`isPermittedSourceUrl` / `resolveNetworkPath`, `@playdeck/core`)
 for whether a URL the library did not construct is carried forward: `http:`,
 `https:` and the scheme-less forms are permitted, `blob:` only for a `video`
-source, and everything else is refused. Governs source detection, every
-consumer-supplied URL prop and provider option alike (#219, #236). A refused
-value is treated exactly as if the prop were absent — never a throw.
+source, and everything else is refused. An `http:` or `https:` URL must also
+carry an authority (`//`); a scheme-prefixed URL without one is refused on
+every surface, string or explicit object alike. Governs source detection,
+every consumer-supplied URL prop and provider option alike (#219, #236). A
+refused value is treated exactly as if the prop were absent — never a throw.
 _Avoid_: whitelist, sanitise, safe URL
 
 **Availability**:

@@ -199,6 +199,21 @@ test('a refused poster URL produces no preload link', () => {
   expect(markup).toContain('fetchPriority="high"');
 });
 
+// The shared allowlist refuses an `http:`/`https:` poster whose remainder is
+// not `//` the same way it refuses `javascript:` above, so neither string
+// ever reaches the server HTML -- not in the preload link's `href` and not
+// on the poster `<img>` itself.
+test.each(['http:evil.com/x', 'https:evil.com/x'])(
+  'a poster URL whose scheme is not followed by // never reaches server HTML (%s)',
+  (poster) => {
+    const markup = renderToString(fixture({ poster }));
+
+    expect(ownLinkCount(markup)).toBe(0);
+    expect(markup).not.toContain('evil.com');
+    expect(markup).toContain('fetchPriority="high"');
+  }
+);
+
 // `poster: 'provider'` resolves to a URL only once a provider still arrives,
 // which `renderToString` never runs long enough to see -- so this is the one
 // surface `priority` has nothing to hint yet, the same way `Player.Poster`

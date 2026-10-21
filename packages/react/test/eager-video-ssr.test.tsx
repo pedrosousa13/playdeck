@@ -166,3 +166,26 @@ test('renders no refused source URL in server HTML under eager loading', () => {
 
   expect(markup).not.toContain('<video');
 });
+
+// The shared allowlist refuses an `http:`/`https:` `sources[].src` whose
+// remainder is not `//` the same way it refuses `javascript:` above, so an
+// explicit `video` source carrying one is refused outright -- never a
+// `<video>` with a `<source>` whose `src` reaches server HTML unresolved.
+test.each(['http:evil.com/x.mp4', 'https:evil.com/x.mp4'])(
+  'renders no source whose scheme is not followed by // in server HTML under eager loading (%s)',
+  (src) => {
+    const markup = renderToString(
+      <Player.Root
+        loading="eager"
+        source={{ type: 'video', sources: [{ src, mimeType: 'video/mp4' }] }}
+      >
+        <Player.Viewport>
+          <Player.Media />
+        </Player.Viewport>
+      </Player.Root>
+    );
+
+    expect(markup).not.toContain('<video');
+    expect(markup).not.toContain('evil.com');
+  }
+);
