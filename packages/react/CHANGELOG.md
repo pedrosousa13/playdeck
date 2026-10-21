@@ -1,5 +1,39 @@
 # @playdeck/react
 
+## 1.4.0
+
+### Minor Changes
+
+- 83028ef: `Player.Root` gains an opt-in `priority` prop, off by default, for the player above the fold.
+
+  Set it and the player treats `loading`, `preload` and the poster together as one intent instead of three props set by hand. An omitted `loading` resolves to `'eager'`; an explicit `loading` other than `'eager'` is a configuration error instead, reported the same way the other activation conflicts are, rather than silently overridden. An omitted `preload` resolves to `'auto'`; an explicit `preload` always wins either way. The default poster `Player.Poster` renders from `Root`'s own `poster` prop gets `fetchPriority: 'high'` and `loading: 'eager'`, unless the poster already sets either field itself. `Root` renders a `<link rel="preload" as="image">` for that same poster, which React places in the document head, so the server HTML carries it ahead of any script, for a poster URL the shared allowlist permits. Set `priority` on one player only: two `priority` players sharing a poster each emit their own link, since React dedupes only a `<link rel="stylesheet">`, never a preload.
+
+  Off by default, server-render output is unchanged.
+
+- 1f0ad05: Each entry in a `{ type: 'video' }` source's `sources` takes an optional `media`, a CSS media query, so a site with a lighter mobile rendition alongside a heavier desktop one can express the split without a second player. Order works like `<source>` elements in a native `<video>`: the first entry whose `media` matches, or that has no `media`, and whose `mimeType` the browser can play, is the one that loads. A source string, or an entry without `media`, loads with no media check.
+
+  An element the client creates renders only the entries whose `media` currently matches, so no browser ever has a wrong entry to pick. An element from the server HTML (`loading="eager"` for a `video` file source) renders every entry with its `media` attribute instead, since the browser's own resource-selection algorithm is what picks among them there; once hydration runs, a mismatch between that pick and the current `matchMedia` result is corrected with one `media.load()`, and never while `currentSrc` is still empty. A `media` query that starts or stops matching after commit does not swap the source of a player that is already loaded — the same once-only timing the browser's own `media` attribute already has.
+
+  `isValidMediaQuery` (`@playdeck/core`) gates every `media` value before it reaches a `<source>` attribute or `window.matchMedia`: a length cap and a plain-text shape check, in the same spirit as `isValidTextTrackLanguage`. A value it rejects drops that source entry — never read as unconditional — and publishes a `configuration` notice naming it, the same way a refused `nativePoster` or a rejected `preferredTextTrackLanguage` does.
+
+### Patch Changes
+
+- 0f5e42f: `VideoFileSource.sources` renders its first 32 entries, and a text-track list renders its first 128. An entry past either cap is dropped before `Player.Media` renders anything for it and before it reaches the native provider, under every loading strategy. Each cap that drops an entry publishes one `configuration` notice naming the cap and the count dropped, the same pattern a rejected `sources[].media` entry and a rejected `preferredTextTrackLanguage` already use. An array at or under its cap renders every entry and publishes nothing. `PlayerController` gains `reportSourcesCap` and `reportTextTracksCap`, each taking the notice a caller already built.
+- edeeadb: Each package's README, and every page `@playdeck/docs` publishes from it, holds no em dash (U+2014): a colon, a comma, parentheses or a full stop carries the same sentence instead. `scripts/docs-package.mjs --check` refuses to publish a page that holds one, naming the file and line.
+- 0d3257d: Under `loading="eager"`, a `video` file source commits at render time instead of waiting for an effect, so `Player.Media` renders the native `<video>` and its `<source>` children — `preload` included — in the server HTML, and hydration reuses that element rather than mounting a fresh one after an extra render. A refused source URL still never reaches the server HTML. No `autoplay` attribute reaches the server HTML either way; autoplay keeps attempting only after the provider attaches on the client. The native provider skips `media.load()` for an `eager` video source, so a server-rendered request is never aborted and restarted once the provider attaches, and instead reads an element's intrinsic dimensions, applies a configured `startTime`, and reports source exhaustion on attach when the element already reached that state before attaching.
+- 2e745e6: Under `loading="eager"`, a player whose `Player.Viewport` has no layout box at all (`display: none`, for a player hidden at some breakpoint) holds there on hydration: no autoplay attempt, no provider load. Once the viewport gets a layout box — a resize across a breakpoint, say — the player continues exactly as an `eager` player that was visible from the start. The check is `getClientRects().length === 0`, which catches `display: none` but not `visibility: hidden` or `content-visibility: hidden`; both of those still generate a box. The server cannot know about CSS either way: a `video` file source's own request already left with the HTML parser before any of this runs, hidden or not. For a player that may be hidden at some breakpoint, `loading="viewport"`, or no `priority`, is the better fit than `eager`.
+- Updated dependencies [0f5e42f]
+- Updated dependencies [edeeadb]
+- Updated dependencies [0d3257d]
+- Updated dependencies [52e8720]
+- Updated dependencies [1f0ad05]
+  - @playdeck/core@1.4.0
+  - @playdeck/provider-native@1.4.0
+  - @playdeck/provider-hls@1.4.0
+  - @playdeck/provider-vimeo@1.4.0
+  - @playdeck/provider-wistia@1.4.0
+  - @playdeck/provider-youtube@1.4.0
+
 ## 1.3.0
 
 ### Minor Changes
