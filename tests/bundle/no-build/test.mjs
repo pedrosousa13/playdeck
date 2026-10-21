@@ -342,7 +342,18 @@ try {
   // entry does. The whole distance from the last committed figure is this
   // issue's: that figure was 114.90 KB (117661 bytes), measured 2026-10-20
   // per the block above.
-  const GZIP_EAGER_CEILING_KB = 115.5;
+  // 118311 bytes measured 2026-10-21 (Node 22) -- 115.5380859375 KB, 115.54
+  // KB to two places, rounded up to the next 0.25 KB -- 115.75 KB. What
+  // carried this past 115.50 KB is #914's `eager` hold: `use-activation.ts`'s
+  // `hasLayoutBoxes` check and the `ResizeObserver` branch its `eager`
+  // activation effect now runs, plus the `committedIdentity` dependency the
+  // provider-load effect gained to react to a release the hold's own
+  // callback triggers outside any render -- all reached by `/browser.js` for
+  // every eager composition regardless of whether `Player.Viewport` is ever
+  // hidden by CSS. The whole distance from the last committed figure is this
+  // issue's: that figure was 115.46 KB (118233 bytes), measured 2026-10-20
+  // per the block above.
+  const GZIP_EAGER_CEILING_KB = 115.75;
   const gzipKb = (bytes) => (bytes / 1024).toFixed(2);
   const scriptBytes = await Promise.all(
     expectedScripts.map((pathname) => readFile(resolveRequest(pathname)))

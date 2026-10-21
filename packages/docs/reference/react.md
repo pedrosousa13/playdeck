@@ -95,7 +95,17 @@ so the native `<video>` and its `<source>` children — `preload` included — a
 in the server HTML too, and the browser can start the request while it parses
 the page, before hydration or any script runs. HLS and the three embed
 providers (YouTube, Vimeo, Wistia) still commit from an effect, client-side
-only. `'interaction'` commits on the first `Player.ActivationButton` press, or a
+only. Under `'eager'`, if `Player.Viewport` has no layout box at all on
+hydration (`display: none`, for a player hidden at some breakpoint), commit
+holds there — no autoplay attempt, no provider load — until the viewport gets
+one; a resize across a breakpoint then continues exactly as an `eager` player
+that was visible from the start. That check is `getClientRects().length === 0`,
+which catches `display: none` but not `visibility: hidden` or
+`content-visibility: hidden` — both still generate a box. Either way, the
+server can't know about CSS: a `video` file source's own request already left
+with the HTML parser before any of this runs. Prefer `loading: 'viewport'`, or
+leave `priority` unset, for a player that may be hidden at some breakpoint.
+`'interaction'` commits on the first `Player.ActivationButton` press, or a
 direct `activateFromInteraction` call, and cannot be combined with `autoplay`.
 Autoplay itself is unaffected by any of this: the server can't evaluate
 `prefers-reduced-motion`, so the server HTML never carries an `autoplay`
@@ -104,10 +114,13 @@ attaches on the client, whatever `loading` is set to.
 
 `priority` is a shorthand for the player above the fold, for a consumer who
 would otherwise set `loading`, `preload` and a poster's own `fetchPriority`
-by hand to get there. Set `true` on a `Root` whose `source` resolves to a
-`video` file, it implies `loading: 'eager'` and `preload: 'auto'` where either
-is left unset (an explicit `loading` other than `'eager'` is a configuration
-error instead), carries `fetchPriority: 'high'` and `loading: 'eager'` onto
+by hand to get there -- see `loading` above for what an `eager` player does
+when hidden by CSS, which applies here too since `priority` is exactly the
+prop that opts a player into `eager` without writing `loading` at all. Set
+`true` on a `Root` whose `source` resolves to a `video` file, it implies
+`loading: 'eager'` and `preload: 'auto'` where either is left unset (an
+explicit `loading` other than `'eager'` is a configuration error instead),
+carries `fetchPriority: 'high'` and `loading: 'eager'` onto
 the poster `Player.Poster` resolves from `poster` unless the poster already
 sets either itself, and renders a `<link rel="preload" as="image">` element
 for that same poster -- React 19 hoists a rendered `<link>` into `<head>` on

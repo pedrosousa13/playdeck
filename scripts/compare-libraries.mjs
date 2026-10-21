@@ -734,7 +734,20 @@ export const libraries = [
     // whether its source ever sets `media`. The whole distance from the
     // last committed figure is this issue's: that figure was 23.06 KB
     // (23613 bytes), measured 2026-10-20 per the block above.
-    ceilingKb: 23.5,
+    //
+    // 24099 bytes measured 2026-10-21 (Node 22) -- 23.5341796875 KB, 23.53
+    // KB to two places, rounded up to the next 0.25 KB boundary -- 23.75 KB.
+    // What carried this past 23.50 KB is #914's `eager` hold:
+    // `use-activation.ts`'s `hasLayoutBoxes` check and the `ResizeObserver`
+    // branch its `eager` activation effect now runs, plus the
+    // `committedIdentity` dependency the provider-load effect gained to
+    // react to a release the hold's own callback triggers outside any
+    // render -- all reached through this fixture's own `@playdeck/react`
+    // import regardless of whether its `Player.Viewport` is ever hidden by
+    // CSS. The whole distance from the last committed figure is this
+    // issue's: that figure was 23.46 KB (24026 bytes), measured 2026-10-20
+    // per the block above.
+    ceilingKb: 23.75,
     // This fixture renders no control part at all (see
     // tests/compare/entries/playdeck-no-parts.tsx's own header) -- every
     // guardable part is forbidden.
@@ -1071,7 +1084,15 @@ export const libraries = [
     // unconditional way through this fixture's own imports. The whole
     // distance from the last committed figure is this issue's: that figure
     // was 25.06 KB (25662 bytes), measured 2026-10-20 per the block above.
-    ceilingKb: 25.5,
+    //
+    // 26145 bytes measured 2026-10-21 (Node 22) -- 25.5322265625 KB, 25.53
+    // KB to two places, rounded up to the next 0.25 KB boundary -- 25.75 KB.
+    // What carried this past 25.50 KB is #914's `eager` hold, the same cost
+    // described on the "no parts" row above, reached the same unconditional
+    // way through this fixture's own `@playdeck/react` import. The whole
+    // distance from the last committed figure is this issue's: that figure
+    // was 25.47 KB (26086 bytes), measured 2026-10-20 per the block above.
+    ceilingKb: 25.75,
     forbiddenModules: PLAY_ONLY_FORBIDDEN_MODULES
   },
   {
