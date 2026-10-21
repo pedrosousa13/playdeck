@@ -11,6 +11,8 @@ import { permittedUrl } from './permitted-url.js';
 import {
   useRefusedUrlReport,
   useRejectedSourceMediaReport,
+  useSourcesCapReport,
+  useTextTracksCapReport,
   usePlayer
 } from './player-context.js';
 
@@ -73,6 +75,20 @@ const viewportStyle: CSSProperties = {
 // `0 / 0` is not something CSS can use. Every provider that measures nothing
 // usable therefore publishes `undefined` rather than a number pair.
 const MEDIA_ASPECT_RATIO_PROPERTY = '--playdeck-media-aspect-ratio';
+
+// `VideoFileSource.sources`' own length cap, the same shape as
+// `THUMBNAIL_CUE_CAP` (`@playdeck/core`'s `thumbnails.ts`) for a different
+// list: far above any real breakpoint set, so a longer array is bad upstream
+// data rather than a real composition, and dropping the rest is what keeps
+// an eager render's server HTML bounded. Entries past it are capped here,
+// ahead of every other filter below, so a dropped entry is never rendered
+// and never reaches a provider.
+const SOURCES_CAP = 32;
+
+// `textTracks`' own length cap, the counterpart to `SOURCES_CAP` immediately
+// above: above a large site's own caption-language count, for the same
+// reason.
+const TEXT_TRACKS_CAP = 128;
 
 // How long playback runs with no pointer or keyboard input before the themes'
 // auto-hide rule takes the controls away. A constant local to this file rather
@@ -293,6 +309,18 @@ export const Media = ({
   const nativePosterSrc = permittedUrl(nativePoster);
   const nativePosterRefused =
     nativePoster !== undefined && nativePosterSrc === undefined;
+  // Capped before anything else touches the list, including the refusal
+  // filter below, so an entry past `TEXT_TRACKS_CAP` is never checked against
+  // the allowlist, never rendered and never counted as refused -- it is
+  // simply not here. `dropped` is `undefined` rather than `0` below the cap,
+  // the same shape `rejectedMediaValue` reads for `useSourcesCapReport`, so
+  // the report hook can tell "nothing to report" from "zero dropped" without
+  // a second flag.
+  const cappedTextTracks = textTracks?.slice(0, TEXT_TRACKS_CAP);
+  const droppedTextTracks =
+    textTracks !== undefined && textTracks.length > TEXT_TRACKS_CAP
+      ? textTracks.length - TEXT_TRACKS_CAP
+      : undefined;
   // Filtered before the map, not inside it: a rejected entry's `key` (derived
   // from its own un-resolved `src`) never needs computing, and the
   // survivors' keys stay stable across renders that only add or remove a
@@ -304,27 +332,38 @@ export const Media = ({
   // `undefined` at runtime rather than throwing: the declared `string` type
   // only binds a caller that is type-checked, and the #224 comment above
   // records the same gap for untyped CMS data walking past a declared type.
-  const permittedTextTracks = textTracks?.flatMap((track) => {
+  const permittedTextTracks = cappedTextTracks?.flatMap((track) => {
     const resolvedSrc = permittedUrl(track.src);
     return resolvedSrc !== undefined ? [{ ...track, resolvedSrc }] : [];
   });
   // `permittedTextTracks` is `undefined` exactly when `textTracks` is, and is a
-  // subset of it otherwise, so a shorter list is the only way a track can have
-  // been refused. Read through the optional chain rather than defaulted to a
-  // length of zero: with no `textTracks` at all there is nothing to have
+  // subset of `cappedTextTracks` otherwise, so a shorter list is the only way
+  // a track can have been refused -- measured against the capped length, not
+  // the raw one, so an entry the cap above already dropped is never counted
+  // as refused too. Read through the optional chain rather than defaulted to
+  // a length of zero: with no `textTracks` at all there is nothing to have
   // refused, so the guard already covers that case and a fallback would only
   // state one that cannot arise.
   const textTrackRefused =
-    textTracks !== undefined &&
-    permittedTextTracks?.length !== textTracks.length;
+    cappedTextTracks !== undefined &&
+    permittedTextTracks?.length !== cappedTextTracks.length;
   // The raw `sources` list for a `video` file source, read ahead of the
   // committed-source gate below for the same reason the two filters above
   // are: `useRejectedSourceMediaReport` is a hook and cannot sit after an
   // early return. `undefined` for every other source kind, including a
   // `failure` -- there is no `sources` list to validate.
-  const videoSources =
+  const rawVideoSources =
     source.status === 'success' && source.source.type === 'video'
       ? source.source.sources
+      : undefined;
+  // Capped the same way `cappedTextTracks` is above, and for the same
+  // reason: every filter below reads `videoSources`, so an entry past
+  // `SOURCES_CAP` never reaches the `media` check, is never rendered and
+  // never given to the native provider.
+  const videoSources = rawVideoSources?.slice(0, SOURCES_CAP);
+  const droppedSources =
+    rawVideoSources !== undefined && rawVideoSources.length > SOURCES_CAP
+      ? rawVideoSources.length - SOURCES_CAP
       : undefined;
   // An entry whose `media` fails `isValidMediaQuery` is dropped outright
   // rather than kept and read as unconditional -- the same choice
@@ -367,6 +406,8 @@ export const Media = ({
   useRefusedUrlReport(controller, 'nativePoster', nativePosterRefused);
   useRefusedUrlReport(controller, 'textTracks src', textTrackRefused);
   useRejectedSourceMediaReport(controller, rejectedMediaValue);
+  useSourcesCapReport(controller, SOURCES_CAP, droppedSources);
+  useTextTracksCapReport(controller, TEXT_TRACKS_CAP, droppedTextTracks);
   // Merge the consumer ref onto the internal registration inside one callback
   // ref (rather than Viewport's stable-callback + separate `[ref]` effect):
   // Media is committed-source-gated and mounts its <video> late, so a `[ref]`

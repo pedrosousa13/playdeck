@@ -1,5 +1,6 @@
 import type {
   PlayerController,
+  PlayerError,
   PlayerState,
   RefusedUrlSurface,
   TextCue,
@@ -175,6 +176,60 @@ export const useRejectedSourceMediaReport = (
     if (!controller || rejectedValue === undefined) return;
     return controller.reportRejectedSourceMedia(rejectedValue);
   }, [controller, rejectedValue]);
+};
+
+// What `SOURCES_CAP` and `TEXT_TRACKS_CAP` (`Media`, `viewport-media.tsx`)
+// drop, named and counted: unlike `rejectedValue` above, there is no
+// consumer string to echo here, only how many entries past the cap were
+// dropped, so the notice is built here rather than inside
+// `PlayerController.reportSourcesCap` / `reportTextTracksCap` -- those
+// register whatever `PlayerError` they are handed into the same scope
+// `reportRejectedSourceMedia` / `reportRejectedTextTrackLanguage` already
+// use, rather than a scope of their own: both pairs describe a value this
+// library drops from the same list, so the one error slot ranks and clears
+// them identically.
+const droppedEntriesNotice = (
+  field: 'sources' | 'textTracks',
+  cap: number,
+  dropped: number
+): PlayerError =>
+  Object.freeze({
+    category: 'configuration',
+    fatal: false,
+    recoverable: false,
+    severity: 'protective',
+    message: `${field === 'sources' ? "A video source's sources list" : 'A text-track list'} passed its ${cap}-entry cap, so the last ${dropped} ${dropped === 1 ? 'entry was' : 'entries were'} dropped.`
+  });
+
+// Mirrors `useRejectedSourceMediaReport` immediately above, for `SOURCES_CAP`
+// rather than a rejected `media` value: `dropped` is the count
+// `Media` (`viewport-media.tsx`) computed past the cap, or `undefined`
+// while the committed source's `sources` list stands at or under it.
+export const useSourcesCapReport = (
+  controller: PlayerController | undefined,
+  cap: number,
+  dropped: number | undefined
+): void => {
+  useEffect(() => {
+    if (!controller || dropped === undefined) return;
+    return controller.reportSourcesCap(
+      droppedEntriesNotice('sources', cap, dropped)
+    );
+  }, [controller, cap, dropped]);
+};
+
+// Mirrors `useSourcesCapReport` immediately above, for `TEXT_TRACKS_CAP`.
+export const useTextTracksCapReport = (
+  controller: PlayerController | undefined,
+  cap: number,
+  dropped: number | undefined
+): void => {
+  useEffect(() => {
+    if (!controller || dropped === undefined) return;
+    return controller.reportTextTracksCap(
+      droppedEntriesNotice('textTracks', cap, dropped)
+    );
+  }, [controller, cap, dropped]);
 };
 
 const selectionsEqual = (left: unknown, right: unknown): boolean => {

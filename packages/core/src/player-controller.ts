@@ -608,6 +608,41 @@ export class PlayerController {
     return dispose;
   };
 
+  // The register/compare/reapply dance every report method above repeats,
+  // generalised over `#resolveScope` rather than one fold apiece: the two
+  // callers below have no value of their own to echo (only a count,
+  // `@playdeck/react`'s `viewport-media.tsx` already formatted into
+  // `notice`), so neither needs its own named fold the way a value-bearing
+  // notice kind does.
+  #reportConfigured = (
+    notice: PlayerError,
+    scope: NoticeScope
+  ): (() => void) => {
+    const before = this.#resolveScope(scope);
+    const dispose = this.#registerNotice(notice, scope);
+    const after = this.#resolveScope(scope);
+    if (after !== before) {
+      this.#applyPatch(this.#state.error === before ? { error: null } : {});
+    }
+    return dispose;
+  };
+
+  // Entries past `SOURCES_CAP`, folded into `reportRejectedSourceMedia`'s own
+  // `{ kind: 'rejected-source-media' }` scope rather than one of its own:
+  // both describe a `VideoFileSource.sources` entry this library drops
+  // before it reaches a provider, so the single error slot ranks and clears
+  // them identically.
+  reportSourcesCap = (notice: PlayerError): (() => void) =>
+    this.#reportConfigured(notice, { kind: 'rejected-source-media' });
+
+  // Mirrors `reportSourcesCap` immediately above for `TEXT_TRACKS_CAP`,
+  // folded into `reportRejectedTextTrackLanguage`'s `{ kind:
+  // 'rejected-text-track-language' }` scope: both describe a text-track
+  // configuration input this library drops, so they contend for the slot
+  // the same way.
+  reportTextTracksCap = (notice: PlayerError): (() => void) =>
+    this.#reportConfigured(notice, { kind: 'rejected-text-track-language' });
+
   configureAutoplay = (
     mode: AutoplayMode,
     options: AutoplayConfigurationOptions = {}
