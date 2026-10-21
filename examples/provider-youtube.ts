@@ -19,7 +19,7 @@ controller.setProvider(createYouTubeProvider(mount, 'dQw4w9WgXcQ'));
 // a player mounts.
 export const warm = (): Promise<unknown> => loadYouTubeIframeApi();
 
-// Drops the memo of the API load — for tests that need a clean load, not for
+// Drops the memo of the API load: for tests that need a clean load, not for
 // app code.
 export const reset = (): void => resetYouTubeIframeApiLoader();
 

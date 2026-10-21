@@ -15,12 +15,12 @@ const vtt = [
 
 export const cues = parseThumbnailCues(vtt);
 
-// -> { x: 0, y: 0, width: 160, height: 90 } — the fragment resolved to sprite
+// -> { x: 0, y: 0, width: 160, height: 90 }, the fragment resolved to sprite
 // pixels, not left as a CSS background-position, and stripped from `url`.
 export const firstRegion = cues[0]?.region;
 
 // Cues are matched half-open, `[startTime, endTime)`: 3 lands on the first
-// tile, and 5 — the boundary between the two — already lands on the second.
+// tile, and 5 (the boundary between the two) already lands on the second.
 export const atThree = thumbnailCueAt(cues, 3);
 export const atFive = thumbnailCueAt(cues, 5);
 

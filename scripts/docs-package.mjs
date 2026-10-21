@@ -457,7 +457,7 @@ export const docsPackage = (root) => {
       '',
       ...packages.map(
         (pkg) =>
-          `- [\`${pkg.name}\`](${relativePage(pagePaths.referenceIndex, pagePaths.reference(pkg.dir))}) — ${pkg.description}`
+          `- [\`${pkg.name}\`](${relativePage(pagePaths.referenceIndex, pagePaths.reference(pkg.dir))}): ${pkg.description}`
       )
     ].join('\n')
   );
@@ -576,7 +576,7 @@ export const docsPackage = (root) => {
       ]),
       '## What each provider can answer',
       '',
-      `Every cell below is read out of \`${PROVIDER_SETUP_DOC}\`. Five providers in four columns — native files and HLS share one, because that document covers them in one passage. They do not answer the same question equally well, so the table does not pretend that they do: where a fact cannot be known, the cell says so and carries the document's own reason for it.`,
+      `Every cell below is read out of \`${PROVIDER_SETUP_DOC}\`. Five providers in four columns: native files and HLS share one, because that document covers them in one passage. They do not answer the same question equally well, so the table does not pretend that they do: where a fact cannot be known, the cell says so and carries the document's own reason for it.`,
       '',
       `| | ${truth.providers
         .map(
@@ -637,7 +637,7 @@ export const docsPackage = (root) => {
       const external = Object.entries(pkg.manifest.dependencies ?? {})
         .filter(([, range]) => !String(range).startsWith('workspace:'))
         .map(([name]) => `\`${name}\``);
-      return `| [${provider.title}](${fromStart(pagePaths.provider(provider.slug))}) | ${pkg.link} | ${external.length === 0 ? '—' : external.join(', ')} |`;
+      return `| [${provider.title}](${fromStart(pagePaths.provider(provider.slug))}) | ${pkg.link} | ${external.length === 0 ? 'none' : external.join(', ')} |`;
     })
   );
 
@@ -654,7 +654,7 @@ export const docsPackage = (root) => {
       `pnpm add ${entryPoint.name}`,
       '```',
       '',
-      `Peers you supply: ${peers.map(([name, range]) => `\`${name} ${range}\``).join(', ')}. Nothing else — the provider adapters are this package's own dependencies.`,
+      `Peers you supply: ${peers.map(([name, range]) => `\`${name} ${range}\``).join(', ')}. Nothing else: the provider adapters are this package's own dependencies.`,
       '',
       '## The smallest player that works',
       '',
@@ -664,7 +664,7 @@ export const docsPackage = (root) => {
       '',
       '## Everything the primitives give you',
       '',
-      `The same shape with the rest of it: captions, a poster, and every control the package ships. Nothing here is styled — the primitives render no CSS of their own, and what each part puts in the DOM for you to style is in [the contract guide](${fromStart(pagePaths.guide('contract'))}). For a player that looks like something without writing any, add the optional default theme, \`import '${entryPoint.name}/theme.css';\`, which [the package reference](${fromStart(pagePaths.reference(entryPoint.dir))}) covers.`,
+      `The same shape with the rest of it: captions, a poster, and every control the package ships. Nothing here is styled: the primitives render no CSS of their own, and what each part puts in the DOM for you to style is in [the contract guide](${fromStart(pagePaths.guide('contract'))}). For a player that looks like something without writing any, add the optional default theme, \`import '${entryPoint.name}/theme.css';\`, which [the package reference](${fromStart(pagePaths.reference(entryPoint.dir))}) covers.`,
       '',
       exampleFence('examples/react-composition.tsx'),
       '',
@@ -672,20 +672,20 @@ export const docsPackage = (root) => {
       '',
       '## Every provider, one prop',
       '',
-      'The `source` value is what chooses an adapter, and it is the only thing that changes between them. An adapter is imported dynamically, so the one your source selects is the only one a reader of your site downloads — together with whatever that adapter brings with it, which for HLS is almost all of the cost.',
+      'The `source` value is what chooses an adapter, and it is the only thing that changes between them. An adapter is imported dynamically, so the one your source selects is the only one a reader of your site downloads, together with whatever that adapter brings with it, which for HLS is almost all of the cost.',
       '',
       '| Provider | Adapter | Brings with it |',
       '| --- | --- | --- |',
       ...adapterRows,
       '',
-      'A dependency is downloaded only when the adapter that imports it is, and hls.js not even then where the browser plays HLS itself — Safari and iOS never fetch it. YouTube and Wistia bring nothing because they load their player from their own origin at run time, which is a request rather than a package in your bundle. A provider name above links to the source values it accepts; the adapter beside it links to what that package reports about itself.',
+      'A dependency is downloaded only when the adapter that imports it is, and hls.js not even then where the browser plays HLS itself: Safari and iOS never fetch it. YouTube and Wistia bring nothing because they load their player from their own origin at run time, which is a request rather than a package in your bundle. A provider name above links to the source values it accepts; the adapter beside it links to what that package reports about itself.',
       '',
       '## Where to go next',
       '',
-      `- [Guides](${fromStart(pagePaths.guidesIndex)}) — What a part is, what it puts in the DOM, and how to style one.`,
-      `- [Reference](${fromStart(pagePaths.referenceIndex)}) — Every published package, rendered from the README in its own tarball.`,
-      `- [Provider setup](${fromStart(pagePaths.providersIndex)}) — Which source values each provider accepts, and which it refuses.`,
-      `- [Examples](${fromStart(pagePaths.examples)}) — Two finished players, running, printed beside the files they are.`
+      `- [Guides](${fromStart(pagePaths.guidesIndex)}): What a part is, what it puts in the DOM, and how to style one.`,
+      `- [Reference](${fromStart(pagePaths.referenceIndex)}): Every published package, rendered from the README in its own tarball.`,
+      `- [Provider setup](${fromStart(pagePaths.providersIndex)}): Which source values each provider accepts, and which it refuses.`,
+      `- [Examples](${fromStart(pagePaths.examples)}): Two finished players, running, printed beside the files they are.`
     ].join('\n')
   );
 
@@ -698,11 +698,11 @@ export const docsPackage = (root) => {
     [
       'Two composed players, built from the same primitives for two different jobs. Each is named for its job and not for a company that does it, and each is printed below exactly as it is on disk.',
       '',
-      'Both players are dormant until you press them. `loading="interaction"` holds the root closed, so no clip is fetched and no provider is attached before that press — this page makes no third-party request until you ask it to. Every control you then see is one the player reported it can honour; the ones it cannot are absent rather than present and disabled.',
+      'Both players are dormant until you press them. `loading="interaction"` holds the root closed, so no clip is fetched and no provider is attached before that press: this page makes no third-party request until you ask it to. Every control you then see is one the player reported it can honour; the ones it cannot are absent rather than present and disabled.',
       '',
       '## A streaming service',
       '',
-      'Long-form viewing. The picture owns the frame, the chrome sits on top of it, chapters are marks on the scrubber, and the one thing a viewer chooses — quality — is folded into a settings menu. That menu is absent here, and that is the point: the native provider cannot switch renditions of a progressive file, so `selectQuality` reads `unavailable` and nothing draws a ladder the provider never published. The caption toggle prints the renderer that actually honoured it beside itself.',
+      'Long-form viewing. The picture owns the frame, the chrome sits on top of it, chapters are marks on the scrubber, and the one thing a viewer chooses (quality) is folded into a settings menu. That menu is absent here, and that is the point: the native provider cannot switch renditions of a progressive file, so `selectQuality` reads `unavailable` and nothing draws a ladder the provider never published. The caption toggle prints the renderer that actually honoured it beside itself.',
       '',
       '<!-- demo:streaming-service -->',
       '',
@@ -720,7 +720,7 @@ export const docsPackage = (root) => {
       '',
       "Both clips are Blender Foundation open-movie trailers, played from the foundation's own download host: *Sintel* above and *Big Buck Bunny* below it. Both are © Blender Foundation and licensed [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/), which is the attribution this line exists to give.",
       '',
-      'Chapter marks, outline titles and caption text are fixtures the examples ship. They mark time in each clip and describe neither film — a demo that implied it had read metadata it invented would be the one dishonest thing on a page about honesty.'
+      'Chapter marks, outline titles and caption text are fixtures the examples ship. They mark time in each clip and describe neither film: a demo that implied it had read metadata it invented would be the one dishonest thing on a page about honesty.'
     ].join('\n')
   );
 
@@ -773,6 +773,26 @@ export const docsPackageDrift = (root) => {
   return drift;
 };
 
+/**
+ * The file and line of every U+2014 em dash a generated file would hold. The
+ * contract's site renders markdown verbatim, so a dash in a source reaches a
+ * reader exactly as typed, and this package ships none.
+ * @param {Map<string, string>} files
+ * @returns {string[]}
+ */
+export const emDashFaults = (files) => {
+  /** @type {string[]} */
+  const faults = [];
+  for (const [path, text] of files) {
+    for (const [index, line] of text.split('\n').entries()) {
+      if (line.includes('—')) {
+        faults.push(`${DOCS_DIR}/${path}:${index + 1} holds an em dash (—)`);
+      }
+    }
+  }
+  return faults;
+};
+
 const main = () => {
   const dir = join(repoRoot, DOCS_DIR);
   if (process.argv.includes('--check')) {
@@ -780,6 +800,12 @@ const main = () => {
     if (drift.length > 0) {
       throw new Error(
         `The docs package is not what its sources generate — run \`pnpm docs:package\`:\n${drift.map((line) => `  ${line}`).join('\n')}`
+      );
+    }
+    const emDash = emDashFaults(docsPackage(repoRoot));
+    if (emDash.length > 0) {
+      throw new Error(
+        `The docs package holds an em dash (—), which it ships none of:\n${emDash.map((line) => `  ${line}`).join('\n')}`
       );
     }
     return;

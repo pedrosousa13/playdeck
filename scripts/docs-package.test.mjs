@@ -9,7 +9,9 @@ import { contractFaults } from './docs-contract.mjs';
 import {
   DEMOS,
   DOCS_DIR,
+  docsPackage,
   docsPackageDrift,
+  emDashFaults,
   pageFile,
   withoutComments
 } from './docs-package.mjs';
@@ -300,6 +302,23 @@ test('packages/docs follows the docs contract', () => {
 // tables among them.
 test('packages/docs is what the generator writes from its sources', () => {
   assert.deepEqual(docsPackageDrift(repoRoot), []);
+});
+
+// The contract's site renders markdown verbatim, so a U+2014 em dash in a
+// source reaches a reader exactly as typed. Named by file and line, so a
+// reintroduced one is easy to find.
+test('emDashFaults names the file and line of an em dash the generator would write', () => {
+  const files = new Map([
+    ['a.md', 'One.\nTwo — three.\n'],
+    ['guides/b.md', 'Clean.\n']
+  ]);
+  assert.deepEqual(emDashFaults(files), [
+    `${DOCS_DIR}/a.md:2 holds an em dash (—)`
+  ]);
+});
+
+test('packages/docs holds no em dash', () => {
+  assert.deepEqual(emDashFaults(docsPackage(repoRoot)), []);
 });
 
 // The acceptance criterion as npm itself answers it: markdown, nav.json,

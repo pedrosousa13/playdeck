@@ -1,17 +1,17 @@
 ---
 title: "Behaviour plugins"
-description: "A behaviour plugin is a component mounted inside `Player.Root` that observes player state and, where it needs to react, issues commands — built from nothing but the two hooks every other consumer already has: `usePlayerState` and `usePlayerActions`."
+description: "A behaviour plugin is a component mounted inside `Player.Root` that observes player state and, where it needs to react, issues commands, built from nothing but the two hooks every other consumer already has: `usePlayerState` and `usePlayerActions`."
 ---
 
 A behaviour plugin is a component mounted inside `Player.Root` that observes
-player state and, where it needs to react, issues commands — built from
+player state and, where it needs to react, issues commands, built from
 nothing but the two hooks every other consumer already has: `usePlayerState`
-and `usePlayerActions`. There is no new library code behind the name — it is
+and `usePlayerActions`. There is no new library code behind the name. It is
 a convention, not a component this package ships.
 
 **It renders nothing, and it must never hold the player's state itself.** The
 player stays the single owner of what it is doing; a behaviour plugin only
-observes that state and reacts to it — reading it through `usePlayerState`,
+observes that state and reacts to it, reading it through `usePlayerState`,
 never caching a copy of it, and never becoming a second source another part
 of the app could read instead of the player. If a plugin needs to act on a
 transition twice, it reads `usePlayerState` twice; it does not keep the
@@ -21,12 +21,12 @@ answer.
 
 `examples/react-behaviour-plugin.tsx` proves the pattern with an analytics
 mapper: it watches five kinds of transition and delivers each one it observes
-as an event, through a callback prop rather than to any sink of its own — with
-one limitation, noted beside the code below, where a second seek starting
-while the first is still in flight emits nothing.
+as an event, through a callback prop rather than to any sink of its own. One
+limitation, noted beside the code below: a second seek starting while the
+first is still in flight emits nothing.
 
 This example only observes. Mapping a transition to an analytics event issues
-no command of its own, so it never calls `usePlayerActions` — issuing
+no command of its own, so it never calls `usePlayerActions`: issuing
 commands is something a behaviour plugin may do, not something every one
 does, and this one does not.
 
@@ -143,18 +143,18 @@ export const AnalyticsEvents = ({ onEvent }: AnalyticsEventsProps) => {
 Each event is derived from a real `PlayerState` transition rather than
 guessed at:
 
-- **`play`, `pause`, `ended`** — `playback` moving to `'playing'`, `'paused'`
+- **`play`, `pause`, `ended`**: `playback` moving to `'playing'`, `'paused'`
   or `'ended'`.
-- **`seek`** — `seeking` moving to `true`, carrying the `seekOrigin` it
+- **`seek`**: `seeking` moving to `true`, carrying the `seekOrigin` it
   started with. `PlayerState.seekOrigin`'s own comment is what this reads: it
   is set only while a seek is in flight (`null` otherwise), so reading it
   here is exactly the origin that seek began with. A second seek starting
-  before the first settles emits nothing — `PlayerController` keeps the
+  before the first settles emits nothing. `PlayerController` keeps the
   origin the first seek started with rather than relabelling it, so neither
   field changes for the second one. A scrub drag reading as one seek is the
   accepted shape of that limitation.
-- **`error`** — `lifecycle` moving to `'error'`, carrying the `PlayerError`
-  it moved with. A **Notice** — a rejected prop, a fallback taken — also
+- **`error`**: `lifecycle` moving to `'error'`, carrying the `PlayerError`
+  it moved with. A **Notice** (a rejected prop, a fallback taken) also
   fills `PlayerState.error`, but GLOSSARY.md's own **Notice** entry is
   explicit that one never moves `lifecycle`, so a Notice produces no event
   here; only a fatal failure does.

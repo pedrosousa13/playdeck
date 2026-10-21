@@ -4,7 +4,7 @@ import { Meta } from '@storybook/addon-docs/blocks';
 
 # Chapters
 
-Playdeck exposes the chapters a provider publishes — `PlayerState.chapters` —
+Playdeck exposes the chapters a provider publishes (`PlayerState.chapters`)
 and seeks to one through the existing `seekTo` command. Not every provider
 can report chapters: `capabilities.chapters` says so per source, and
 `Player.ChaptersMenu` renders nothing until it resolves `available`, or while
@@ -12,11 +12,11 @@ the published list is empty.
 
 ## The state
 
-One field: **`chapters`**, a `readonly Chapter[]` — each entry
+One field: **`chapters`**, a `readonly Chapter[]`: each entry
 `{ id, title, startTime, endTime }`. The collection is ordered ascending by
 `startTime`; `endTime` is `null` only for the last chapter when the media
 duration is not yet known (a live stream, or a source without duration
-metadata). There is no `index` field — position in the array already
+metadata). There is no `index` field: position in the array already
 carries it.
 
 `Player.ChaptersMenu` derives the _current_ chapter from
@@ -29,7 +29,7 @@ updates it live as playback crosses each boundary.
 `@playdeck/provider-native` parses a `<track kind="chapters">` on the
 `<video>` element into the published collection, deriving each chapter's
 `endTime` from the next chapter's `startTime` (and the media duration for
-the last one) — see the **Capabilities matrix** guide for the full account.
+the last one). See the **Capabilities matrix** guide for the full account.
 
 ## Seeking to a chapter
 
@@ -46,7 +46,7 @@ until `capabilities.chapters` resolves `available`, or while `chapters` is
 empty; otherwise it lists one rung per chapter, reading `{title} · {start
 time}`, and marks the one containing the current playback position.
 
-It renders no `data-playdeck-part` of its own — every attribute a reader can
+It renders no `data-playdeck-part` of its own: every attribute a reader can
 style or query comes from the primitives it composes
 (`settings-menu-trigger`, `settings-menu`, `menu-radio-group`,
 `menu-radio-item`), the same **Contract** the other menu parts publish
@@ -58,17 +58,17 @@ default chapter list.
 ## Accessibility
 
 The trigger carries `aria-label="Chapters"`, overridable the same way any
-other primitive's default label is — pass your own `aria-label` (or replace
+other primitive's default label is: pass your own `aria-label` (or replace
 the trigger's children entirely). Each rung is `role="menuitemradio"` with
-`aria-checked` reflecting the current chapter. Keyboard operation — Tab to
+`aria-checked` reflecting the current chapter. Keyboard operation (Tab to
 the trigger, Enter or Space to open it, arrow keys to move roving focus among
-the rungs, Enter or Space to choose one, Escape to close — comes from
+the rungs, Enter or Space to choose one, Escape to close) comes from
 `SettingsMenu`, the same primitive every other menu in this package composes,
 rather than anything `ChaptersMenu` implements itself.
 
 ## Out of scope
 
 Chapter markers drawn on the seek slider itself do not exist. A standalone
-chapters button, outside a menu, does not exist either — `PlayerState.chapters`
+chapters button, outside a menu, does not exist either. `PlayerState.chapters`
 is exposed only through `Player.ChaptersMenu` and the menu primitives it is
 built from.

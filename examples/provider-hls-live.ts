@@ -1,6 +1,6 @@
 import { deriveLiveState } from '@playdeck/provider-hls';
 
-// Liveness is derived from what the stream reports — never from the URL or a
+// Liveness is derived from what the stream reports: never from the URL or a
 // filename. `isLiveHint` is hls.js's own answer where it has one; the native
 // engine leaves it undefined and an infinite duration decides instead.
 export const live = deriveLiveState({
@@ -13,5 +13,5 @@ export const live = deriveLiveState({
 });
 
 // -> { isLive: true, atLiveEdge: true, offsetFromEdge: 0 }. `null` means "not
-// live, or not yet known" — a control should not claim either until it is.
+// live, or not yet known". A control should not claim either until it is.
 export const atEdge = live?.atLiveEdge ?? false;

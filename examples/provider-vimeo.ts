@@ -25,12 +25,12 @@ controller.setProvider(
 // to serve it from somewhere other than the default module.
 export const warm = (): Promise<unknown> => loadVimeoSdk();
 
-// Drops the cached SDK — for tests that need a clean load, not for app code.
+// Drops the cached SDK: for tests that need a clean load, not for app code.
 export const reset = (): void => resetVimeoSdkLoader();
 
 // How long `player.ready()` is given before the attach reports a recoverable
 // error. Command readiness is declared earlier, at player construction, because
-// the SDK queues calls it receives before its own ready resolves — but that is
+// the SDK queues calls it receives before its own ready resolves, but that is
 // not a bound, and without this a frame blocked by the page CSP, an extension
 // or the network leaves the player loading for ever with no error to render
 // (#327).

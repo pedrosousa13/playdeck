@@ -1,7 +1,7 @@
 import * as Player from '@playdeck/react';
 
 // `usePlayerState` takes a selector and re-renders only when the selected
-// value changes — not on every time update.
+// value changes, not on every time update.
 export const PlaybackLabel = () => {
   const playback = Player.usePlayerState((state) => state.playback);
   return <span>{playback}</span>;

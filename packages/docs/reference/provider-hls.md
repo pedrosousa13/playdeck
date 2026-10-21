@@ -12,12 +12,12 @@ reimplementing it.
 pnpm add @playdeck/provider-hls
 ```
 
-This package has no React dependency of its own — the HLS engine and its
+This package has no React dependency of its own: the HLS engine and its
 native fallback are driven through a `PlayerController`, as in "Without React"
 below. Where you do pair it with `@playdeck/react`'s primitives, that
 package's peer range is React 19 only.
 
-`@playdeck/react` loads this for you when the source resolves to `hls` — an
+`@playdeck/react` loads this for you when the source resolves to `hls`: an
 `.m3u8` path, or an explicit `{ type: 'hls' }` source; see
 [Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md#the-other-three-providers). hls.js
 is a dependency but is imported dynamically, so it only reaches the network when
@@ -31,7 +31,7 @@ import * as Player from '@playdeck/react';
 // accepts: a provider option bag is compared with `Object.is`, and a function
 // passed inline would never reach a stable identity across renders. `'light'`
 // is smaller and drops subtitles, alternate audio, CMCD, EME and Variable
-// Substitution — see `@playdeck/provider-hls`'s README for the size and
+// Substitution. See `@playdeck/provider-hls`'s README for the size and
 // before choosing it over the default `'full'` build.
 export const HlsClip = () => (
   <Player.Root
@@ -46,8 +46,8 @@ export const HlsClip = () => (
         <Player.Time type="current" />
         <Player.FullscreenButton />
       </Player.Controls>
-      {/* A source `detectSource` refuses, or — when an engine is pinned
-          through an explicit `{ type: 'hls', src, engine }` source — one the
+      {/* A source `detectSource` refuses, or (when an engine is pinned
+          through an explicit `{ type: 'hls', src, engine }` source) one the
           browser cannot provide, is reported here with an explained error
           rather than a silent fallback. */}
       <Player.ErrorDisplay />
@@ -122,12 +122,12 @@ export const provider = createHlsProvider(videoElement, {
 
 Types: `HlsProviderOptions`, `HlsEnvironment`, `HlsEngineSelection`,
 `LiveDerivationInput`, `HlsModuleLoader`, `HlsBuild`, and the structural shapes
-this adapter consumes from hls.js — `HlsConstructorLike`, `HlsInstanceLike`,
+this adapter consumes from hls.js: `HlsConstructorLike`, `HlsInstanceLike`,
 `HlsConfigLike`, `HlsLevelLike`, `HlsSubtitleTrackLike`, `HlsParsedCueLike`.
 
 ## Supplying your own hls.js
 
-`loadHls` replaces the dynamic import — for pinning a version, or serving it
+`loadHls` replaces the dynamic import, for pinning a version, or serving it
 from somewhere else:
 
 ```ts
@@ -193,7 +193,7 @@ subtitles (`source` would be wrong).
 
 What this changes is the honesty of the state, not what a viewer sees.
 `Player.CaptionsButton` renders only on `available`, so it was already absent
-here — but the capability read `unknown` / `provider-check`, meaning "still
+here, but the capability read `unknown` / `provider-check`, meaning "still
 checking", and it read that for the whole session because the check it was
 waiting on was never going to report. An operator reading state, or a test
 asserting on it, could not tell a build that cannot show captions from one that
@@ -218,25 +218,25 @@ full build otherwise: 53 KB is not worth a caption track your viewers needed.
 
 - **`selectQuality`** is `available` on the hls.js engine, with the ladder from
   the manifest carrying height, width and bitrate. `auto` is not published as a
-  rung — it is `selectedQualityId: null`. On the native engine the browser
+  rung: it is `selectedQualityId: null`. On the native engine the browser
   chooses and the capability is `unavailable` / `source`.
 - **Live** streams report `isLive` and `atLiveEdge` derived from the seekable
   window, not from a manifest tag.
 - **`liveEdge`** and `seekToLiveEdge` are `available` on the hls.js engine once
   the source is live, hls.js's own `liveSyncPosition` is finite and the
-  seekable window is wide enough to scrub — `seekToLiveEdge()` lands there,
+  seekable window is wide enough to scrub: `seekToLiveEdge()` lands there,
   never on the raw seekable end. On the native engine the edge is that raw
   seekable end, the only notion of it a plain media element has.
 - **Captions** on the hls.js engine come from hls.js, which is the sole owner:
   sidecar `<track>` children discovered by the native subsystem are dropped so
   the two cannot both claim the state. hls.js's parsed cues can carry WebVTT
   tags and character references, so cue markup reaches `TextCue.text` as
-  plain text — tags stripped, entities decoded. On the native HLS engine
+  plain text: tags stripped, entities decoded. On the native HLS engine
   captions come from the embedded native adapter, which decodes the same way.
 - **Chapters** are the native adapter's, on both engines. HLS carries no
   chapters concept of its own, and `EXT-X-DATERANGE` routes into the metadata
   track, so a `kind="chapters"` text track on the media element is the only
-  source — and it is not caption state, so the hls.js engine does not drop it.
+  source, and it is not caption state, so the hls.js engine does not drop it.
 
 `deriveLiveState` is that derivation. It lives in
 [`@playdeck/core`](./core.md#live-state),
@@ -246,7 +246,7 @@ re-exported here so a custom HLS adapter can reuse it:
 ```ts
 import { deriveLiveState } from '@playdeck/provider-hls';
 
-// Liveness is derived from what the stream reports — never from the URL or a
+// Liveness is derived from what the stream reports: never from the URL or a
 // filename. `isLiveHint` is hls.js's own answer where it has one; the native
 // engine leaves it undefined and an infinite duration decides instead.
 export const live = deriveLiveState({
@@ -259,7 +259,7 @@ export const live = deriveLiveState({
 });
 
 // -> { isLive: true, atLiveEdge: true, offsetFromEdge: 0 }. `null` means "not
-// live, or not yet known" — a control should not claim either until it is.
+// live, or not yet known". A control should not claim either until it is.
 export const atEdge = live?.atLiveEdge ?? false;
 ```
 

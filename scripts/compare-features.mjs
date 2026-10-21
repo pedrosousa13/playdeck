@@ -686,7 +686,7 @@ export const renderFootnotes = (axes, columns, footnoteNumber) =>
         const n = footnoteNumber(axis.id, column.name);
         const note = cell.note ? ` ${cell.note}` : '';
         const provenance = cell.plugin ? ` ${describePlugin(cell.plugin)}` : '';
-        return `[^${n}]: **${axis.label} — ${column.name}**: ${STATUS_LABEL[cell.status]}.${note}${provenance} ${describeAnchor(cell.anchor)}. Source: ${cell.source}`;
+        return `[^${n}]: **${axis.label} (${column.name})**: ${STATUS_LABEL[cell.status]}.${note}${provenance} ${describeAnchor(cell.anchor)}. Source: ${cell.source}`;
       })
     )
     .join('\n\n');

@@ -5,7 +5,7 @@ declare const videoElement: HTMLVideoElement;
 
 const controller = new PlayerController();
 
-// Plays anything the element itself can play — MP4, WebM, and HLS on Safari,
+// Plays anything the element itself can play: MP4, WebM, and HLS on Safari,
 // where the browser has its own HLS support.
 controller.setProvider(
   createNativeProvider(videoElement, {

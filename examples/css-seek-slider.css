@@ -3,7 +3,7 @@
    `seek-buffered` the layer under the input, `seek-buffered-range` one span
    per buffered range, `seek-progress` the span before the current position, and
    `seek-slider-input` the native range input. Reach for the part name rather
-   than a tag selector — the part is the contract, the element type is the
+   than a tag selector: the part is the contract, the element type is the
    primitive's business. */
 
 [data-playdeck-part='seek-slider'] {
@@ -27,8 +27,8 @@
   background: #2a3140;
 }
 
-/* The ranges are placed by the primitive — `position`, `left` and `width` are
-   inline and state-derived — so only the paint is left to do here. */
+/* The ranges are placed by the primitive (`position`, `left` and `width` are
+   inline and state-derived), so only the paint is left to do here. */
 [data-playdeck-part='seek-buffered-range'] {
   top: 0;
   height: 100%;
@@ -45,7 +45,7 @@
   background: #7aa7ff;
 }
 
-/* No seek window yet — a live edge, or a duration nobody knows. Say so rather
+/* No seek window yet: a live edge, or a duration nobody knows. Say so rather
    than showing a scrubber that cannot move. */
 [data-playdeck-part='seek-slider'][data-state='idle'] {
   opacity: 0.5;

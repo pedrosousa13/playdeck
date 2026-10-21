@@ -3,7 +3,7 @@ import { createNativeProvider } from '@playdeck/provider-native';
 
 declare const videoElement: HTMLVideoElement;
 
-// Resolves a URL into an explicit source, or explains why it cannot — nothing
+// Resolves a URL into an explicit source, or explains why it cannot. Nothing
 // is handed to a provider to fail later.
 const source = detectSource('https://example.com/clip.mp4');
 if (source.status === 'failure') throw new Error(source.guidance);

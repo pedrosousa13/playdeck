@@ -61,7 +61,7 @@ if (dash.status === 'failure') {
 
 // The same list, should you want to turn a URL down before setting it as a
 // source. It names the format, and answers `undefined` for everything it does
-// not refuse — including the formats this library plays.
+// not refuse, including the formats this library plays.
 console.log(unsupportedSourceFormat('https://cdn.example.com/stream.mpd')); // 'DASH'
 console.log(unsupportedSourceFormat('https://cdn.example.com/master.m3u8')); // undefined
 
