@@ -8,8 +8,8 @@ Framework-neutral player state, commands, events and the provider contract that
 React, no provider SDKs.
 
 If you are building UI in React, start with
-[`@playdeck/react`](./react.md)
-— it owns a controller for you and loads providers on demand, and it is the
+[`@playdeck/react`](./react.md):
+it owns a controller for you and loads providers on demand, and it is the
 only renderer Playdeck ships. Use this package directly when you are writing a
 provider adapter, or hosting a player outside React: the same state, commands
 and provider contract, with nothing rendered for you.
@@ -18,7 +18,7 @@ and provider contract, with nothing rendered for you.
 pnpm add @playdeck/core
 ```
 
-This package imports no React API and has no React dependency of any kind —
+This package imports no React API and has no React dependency of any kind:
 the framework-free claim above holds at the manifest level too. If you do want
 the React primitives on top of it, `@playdeck/react`'s peer range is
 `>=19 <20`: React 19 only.
@@ -31,7 +31,7 @@ import { createNativeProvider } from '@playdeck/provider-native';
 
 declare const videoElement: HTMLVideoElement;
 
-// Resolves a URL into an explicit source, or explains why it cannot — nothing
+// Resolves a URL into an explicit source, or explains why it cannot. Nothing
 // is handed to a provider to fail later.
 const source = detectSource('https://example.com/clip.mp4');
 if (source.status === 'failure') throw new Error(source.guidance);
@@ -73,10 +73,10 @@ render for, not a state to wait on.
 | ------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `available`   | none             | The command can be issued. This status carries no `reason` at all.                                                                                                                                                                                 |
 | `unknown`     | `not-ready`      | Nothing has answered yet: no provider is attached, or the attached one has not got as far as this question.                                                                                                                                        |
-| `unknown`     | `provider-check` | A provider is attached and has not answered this one, and may never — resolving it can cost a request it declines to make unasked.                                                                                                                 |
-| `unavailable` | `browser`        | This engine exposes no such API, or the device refuses it — iOS pins media volume to its hardware switch.                                                                                                                                          |
+| `unknown`     | `provider-check` | A provider is attached and has not answered this one, and may never: resolving it can cost a request it declines to make unasked.                                                                                                                  |
+| `unavailable` | `browser`        | This engine exposes no such API, or the device refuses it: iOS pins media volume to its hardware switch.                                                                                                                                           |
 | `unavailable` | `policy`         | The document, the permissions policy or an attribute on the media element forbids it.                                                                                                                                                              |
-| `unavailable` | `provider`       | The active provider has nothing to give here — an SDK that wires no such command, or a condition that is false right now, such as AirPlay before any receiver has announced itself. It flips when that changes.                                    |
+| `unavailable` | `provider`       | The active provider has nothing to give here: an SDK that wires no such command, or a condition that is false right now, such as AirPlay before any receiver has announced itself. It flips when that changes.                                     |
 | `unavailable` | `provider-build` | The provider is able and the media does carry it, but the build of the third-party engine in use had that machinery compiled out. `hls.js/light` ships no subtitle controllers, so a manifest's subtitle tracks can be counted and never selected. |
 | `unavailable` | `provider-plan`  | The provider offers it, but not on the account behind this video. Vimeo's plan-gated features answer this way.                                                                                                                                     |
 | `unavailable` | `source`         | The media itself has none: no rendition ladder, no chapters, nothing seekable to seek through.                                                                                                                                                     |
@@ -85,7 +85,7 @@ So a control never has to guess what a provider can do, and never has to read a
 question nobody has answered as a "no".
 
 **Commands are answered, never queued.** Every command resolves a
-`CommandResult` — `{ ok: true }` or `{ ok: false, reason }`. Before a provider
+`CommandResult`: `{ ok: true }` or `{ ok: false, reason }`. Before a provider
 declares itself ready, commands are refused with `not-ready` and nothing is
 replayed later. `PlayerState.commandsReady` and `whenReady()` are how you find
 out when a command will land; `activation` is not a substitute for either.
@@ -94,31 +94,31 @@ out when a command will land; `activation` is not a substitute for either.
 
 ### Values
 
-| Export                       | What it is                                                                                                                                   |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PlayerController`           | The controller: holds state, issues commands, emits events, owns a `ProviderAdapter`.                                                        |
-| `detectSource`               | Resolves a string or explicit source object into a `ResolvedPlayerSource`, or an explained failure.                                          |
-| `isPermittedSourceUrl`       | Whether the library will carry a source URL to a provider — the one such decision, which detection consults.                                 |
-| `resolveNetworkPath`         | Normalises a protocol-relative URL (`//host/...`) to `https:`; returns every other value unchanged.                                          |
-| `createInitialPlayerState`   | The state a controller starts from — useful for server rendering and for test fixtures.                                                      |
-| `isNotice`                   | Whether a published error is a notice — a rejected value reported while the player carried on — or a failure.                                |
-| `getMediaSessionCoordinator` | The one coordinator for a given `MediaSession`, so several players arbitrate lock-screen ownership.                                          |
-| `bindMediaSession`           | Binds a controller's confirmed playback to a coordinator root, and routes its actions back.                                                  |
-| `textTrackLabel`             | The label a provider should publish for a track, given its own label and language.                                                           |
-| `plainCueText`               | The plain text a provider should publish for a cue, given its raw WebVTT payload — tags stripped, entities decoded.                          |
-| `isValidTextTrackLanguage`   | Whether a string has a BCP 47 tag's shape (letters, digits and hyphens, bounded length) — `Player.Root`'s `preferredTextTrackLanguage` gate. |
-| `notifySafely`               | Notifies one listener so that its throw neither abandons the emit nor escapes into the caller.                                               |
-| `createTimeBoundary`         | The sanitised `[startTime, endTime]` window a provider enforces, and every question it answers.                                              |
-| `deriveLiveState`            | The `isLive` / `atLiveEdge` / `offsetFromEdge` derivation every adapter publishes `live` from.                                               |
-| `liveStateEqual`             | Whether two live states say the same thing — what an adapter checks before publishing a change.                                              |
-| `deriveChapters`             | The published `Chapter` collection, given what a provider reports and the media duration — end times included.                               |
-| `chaptersEqual`              | Whether two chapter collections say the same thing — what an adapter checks before publishing a change.                                      |
-| `isYouTubeVideoId`           | Whether a value is a well-formed YouTube video id — what `createYouTubeProvider` validates a direct call with.                               |
-| `isVimeoVideoId`             | Whether a value is a well-formed Vimeo video id — what `createVimeoProvider` validates a direct call with.                                   |
-| `isVimeoHash`                | Whether a value is a well-formed Vimeo privacy hash — what `createVimeoProvider` validates a direct call with.                               |
-| `isWistiaMediaId`            | Whether a value is a well-formed Wistia media id — what `createWistiaProvider` validates a direct call with.                                 |
-| `parseThumbnailCues`         | Parses a seek-preview WebVTT file into its ordered, sprite-region-resolved cues.                                                             |
-| `thumbnailCueAt`             | The cue covering a given time, matched half-open, or `null`.                                                                                 |
+| Export                       | What it is                                                                                                                                  |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PlayerController`           | The controller: holds state, issues commands, emits events, owns a `ProviderAdapter`.                                                       |
+| `detectSource`               | Resolves a string or explicit source object into a `ResolvedPlayerSource`, or an explained failure.                                         |
+| `isPermittedSourceUrl`       | Whether the library will carry a source URL to a provider: the one such decision, which detection consults.                                 |
+| `resolveNetworkPath`         | Normalises a protocol-relative URL (`//host/...`) to `https:`; returns every other value unchanged.                                         |
+| `createInitialPlayerState`   | The state a controller starts from: useful for server rendering and for test fixtures.                                                      |
+| `isNotice`                   | Whether a published error is a notice (a rejected value reported while the player carried on) or a failure.                                 |
+| `getMediaSessionCoordinator` | The one coordinator for a given `MediaSession`, so several players arbitrate lock-screen ownership.                                         |
+| `bindMediaSession`           | Binds a controller's confirmed playback to a coordinator root, and routes its actions back.                                                 |
+| `textTrackLabel`             | The label a provider should publish for a track, given its own label and language.                                                          |
+| `plainCueText`               | The plain text a provider should publish for a cue, given its raw WebVTT payload: tags stripped, entities decoded.                          |
+| `isValidTextTrackLanguage`   | Whether a string has a BCP 47 tag's shape (letters, digits and hyphens, bounded length): `Player.Root`'s `preferredTextTrackLanguage` gate. |
+| `notifySafely`               | Notifies one listener so that its throw neither abandons the emit nor escapes into the caller.                                              |
+| `createTimeBoundary`         | The sanitised `[startTime, endTime]` window a provider enforces, and every question it answers.                                             |
+| `deriveLiveState`            | The `isLive` / `atLiveEdge` / `offsetFromEdge` derivation every adapter publishes `live` from.                                              |
+| `liveStateEqual`             | Whether two live states say the same thing: what an adapter checks before publishing a change.                                              |
+| `deriveChapters`             | The published `Chapter` collection, given what a provider reports and the media duration: end times included.                               |
+| `chaptersEqual`              | Whether two chapter collections say the same thing: what an adapter checks before publishing a change.                                      |
+| `isYouTubeVideoId`           | Whether a value is a well-formed YouTube video id: what `createYouTubeProvider` validates a direct call with.                               |
+| `isVimeoVideoId`             | Whether a value is a well-formed Vimeo video id: what `createVimeoProvider` validates a direct call with.                                   |
+| `isVimeoHash`                | Whether a value is a well-formed Vimeo privacy hash: what `createVimeoProvider` validates a direct call with.                               |
+| `isWistiaMediaId`            | Whether a value is a well-formed Wistia media id: what `createWistiaProvider` validates a direct call with.                                 |
+| `parseThumbnailCues`         | Parses a seek-preview WebVTT file into its ordered, sprite-region-resolved cues.                                                            |
+| `thumbnailCueAt`             | The cue covering a given time, matched half-open, or `null`.                                                                                |
 
 ### Types
 
@@ -225,7 +225,7 @@ if (dash.status === 'failure') {
 
 // The same list, should you want to turn a URL down before setting it as a
 // source. It names the format, and answers `undefined` for everything it does
-// not refuse — including the formats this library plays.
+// not refuse, including the formats this library plays.
 console.log(unsupportedSourceFormat('https://cdn.example.com/stream.mpd')); // 'DASH'
 console.log(unsupportedSourceFormat('https://cdn.example.com/master.m3u8')); // undefined
 
@@ -243,8 +243,8 @@ console.log(isValidMediaQuery('javascript:alert(1)')); // false
 ```
 
 One scheme allowlist governs both paths, and `isPermittedSourceUrl` is it.
-`http:`, `https:` and the scheme-less forms — protocol-relative, root-relative
-and relative paths — are permitted; `blob:` is permitted only for a `video`
+`http:`, `https:` and the scheme-less forms (protocol-relative, root-relative
+and relative paths) are permitted; `blob:` is permitted only for a `video`
 source, which is how a `MediaSource` or a picked `File` is handed over.
 Everything else, `javascript:`, `data:` and `file:` included, is rejected,
 whether it arrives as a string or inside an explicit source object, and however
@@ -255,7 +255,7 @@ exactly those, so ` javascript:alert(1)` names no scheme to
 validate yet loads as `javascript:` all the same. Rejecting such a URL rather
 than trimming it keeps the value that plays identical to the value that was
 validated. A protocol-relative URL resolves against `https:`, and the resolved
-source carries that resolution rather than the `//host/...` form — for a string
+source carries that resolution rather than the `//host/...` form, for a string
 and for every `src` inside an explicit source object alike. So a result's
 `source` may be a normalised copy of the object passed in; its `input` is
 always the caller's own object.
@@ -267,20 +267,20 @@ browser cannot provide it. `PlayerState.hlsEngine` is the answer: the HLS provid
 publishes it as it attaches, `'native'` where the browser plays the manifest
 itself and `'hls.js'` where Media Source Extensions carry it. It is `null`
 before that attach, `null` where engine selection failed and the state went to
-`error` instead, and `null` under every other provider — no other adapter
-publishes it — so a control reading it is asking which engine is playing this
+`error` instead, and `null` under every other provider: no other adapter
+publishes it, so a control reading it is asking which engine is playing this
 manifest, never whether the source is HLS. Attaching, swapping or detaching a
 provider rebuilds the snapshot from `createInitialPlayerState()`, which puts it
 back to `null` with everything else.
 
 ## Starting state
 
-`createInitialPlayerState()` is the state a controller starts from — what to
+`createInitialPlayerState()` is the state a controller starts from: what to
 render on a server, and what a test fixture should begin with.
 
 `isNotice()` answers the question any consumer rendering `PlayerState.error`
-itself has to ask first: is this a notice — a value the player rejected while it
-carried on with a fall-back — or a failure? It is the same rule the controller
+itself has to ask first: is this a notice (a value the player rejected while it
+carried on with a fall-back) or a failure? It is the same rule the controller
 and `ErrorDisplay` apply, so a custom error surface classifies an error exactly
 as the bundled one does.
 
@@ -295,18 +295,18 @@ import {
 } from '@playdeck/core';
 
 // The state a controller starts from. Safe to render on a server, where no
-// provider exists yet — and the same state a test fixture should start from.
+// provider exists yet, and the same state a test fixture should start from.
 const initial = createInitialPlayerState();
 
-console.log(initial.duration); // null — nothing has loaded
+console.log(initial.duration); // null, nothing has loaded
 console.log(initial.capabilities.seek.status); // 'unknown', not 'unavailable'
 
 // A control reading an `unknown` capability renders nothing rather than
 // something disabled: the answer is not "no", it is "not yet".
 export const seekIsUndecided = initial.capabilities.seek.status === 'unknown';
 
-// Whether the published error is a notice — a rejected option reported while
-// the player carries on with a fall-back — rather than something that stopped
+// Whether the published error is a notice (a rejected option reported while
+// the player carries on with a fall-back) rather than something that stopped
 // playback. Ask before covering the player: a notice must never be rendered as
 // a failure, and only the lifecycle beside it tells the two apart.
 export const rendersAsFailure = (state: PlayerState): boolean =>
@@ -344,12 +344,12 @@ can be true while no provider exists. `'ready'` is not one of them: it is a
 report the attached provider publishes about itself, and in the window this
 type describes there is nothing to make it.
 
-That makes `setActivation` the entry point for a host that defers loading —
+That makes `setActivation` the entry point for a host that defers loading:
 until a viewport intersection, or until someone interacts.
 `{ activation: 'dormant' }` is a player that has not begun, `'eligible'` is one
 that has been asked to begin, and `'loading-provider'` is one whose provider is
 on the way. `{ activation: 'error', error }` is the attempt that never reached a
-provider at all, carrying the `PlayerError` that says why — a source that was
+provider at all, carrying the `PlayerError` that says why: a source that was
 refused, or a configuration under which the player will never load. The
 controller derives `lifecycle` from whichever is set and puts the error into
 the state's one error slot, clearing that slot on every activation that is not
@@ -361,13 +361,13 @@ publishes `'loading-provider'` itself as part of the attach.
 
 ## Origins and refusals
 
-Every command carries an origin. The ones a viewer performs directly — starting,
-stopping and moving through playback — take one explicitly through the
+Every command carries an origin. The ones a viewer performs directly (starting,
+stopping and moving through playback) take one explicitly through the
 `*WithOrigin` entry points, while their untagged counterparts pass `'api'` on
 the caller's behalf. The controls Playdeck ships tag what a person did as `'user'`,
 and autoplay's own attempt is tagged `'autoplay'`. An origin is not
-bookkeeping: it is what separates the case these fields exist for — the viewer
-asked for something and nothing happened — from a programmatic call nobody was
+bookkeeping: it is what separates the case these fields exist for (the viewer
+asked for something and nothing happened) from a programmatic call nobody was
 watching.
 
 ### Where a seek came from
@@ -395,7 +395,7 @@ refusal is not read as a provider fault.
 It states a condition rather than logging a moment. What it says is that the
 last play command issued against the media attached now was refused and nothing
 has played since, so it is cleared by the patch that confirms playback and by
-the provider changing, and by nothing else — a pause, a seek, a stall or an
+the provider changing, and by nothing else: a pause, a seek, a stall or an
 error does not make the refusal untrue. Commands settle out of order, and the
 condition holds through that: a refusal reported by a play that a later play
 replaced, or that playback was confirmed after, is never published at all, nor
@@ -424,8 +424,8 @@ about autoplay.
 `PlayerCommand` that was turned down, the origin it carried, and a `reason`
 that is the literal `'not-ready'`. It answers "was anything I asked for refused
 before there was anything to ask it of" for every command in `PlayerCommand`,
-in one field rather than a slot per command, so nobody has to OR them together
-— the assembly `refusedPlay` exists to prevent. The window it describes is real
+in one field rather than a slot per command, so nobody has to OR them together:
+the assembly `refusedPlay` exists to prevent that. The window it describes is real
 for a consumer rather than a formality: a control that renders operable before
 a provider is attached will have its command refused, and without this field
 the caller is the only party that hears of it.
@@ -435,7 +435,7 @@ clearing rule. An attach withdraws the refusal in the same synchronous update
 that publishes `activation: 'loading-provider'`, so no snapshot ever reports a
 provider in hand beside a refusal saying there was none; a swap and a detach
 clear it in the same place, because the state it was published into is being
-rebuilt either way — which means a detach ends the refusal without a provider
+rebuilt either way. This means a detach ends the refusal without a provider
 having arrived. Nothing outside `setProvider` clears it: a later refusal
 replaces it, and a refusal nothing followed simply stands.
 
@@ -447,7 +447,7 @@ published per command as `PlayerCapabilities`, and a `blocked` or a
 `origin` is nullable here, and its `null` is not `seekOrigin`'s. Only the
 commands with a `*WithOrigin` entry point can carry one; every other command
 shares one path with nothing to tag it with and carries `null`. Here that means
-the origin was never recorded — not that nobody asked.
+the origin was never recorded, not that nobody asked.
 
 `retry` is the one command a consumer can issue that this field never reports,
 and it is left out of `PlayerCommand` to keep it that way. It can be refused
@@ -466,7 +466,7 @@ and `refusedPlay` about the play (#484).
 ### A URL prop the allowlist refused
 
 `RefusedUrlSurface` names one consumer-supplied URL prop that the shared
-allowlist can refuse outside a provider — a poster, a text-track source, a
+allowlist can refuse outside a provider: a poster, a text-track source, a
 Media Session artwork entry. The refusal itself is the quiet part: the value is
 dropped exactly as an absent prop would be, with no throw, no lifecycle change
 and nothing different on screen. `PlayerController.reportRefusedUrl` is what
@@ -479,14 +479,14 @@ notice's message is built in core from the name alone. That is a deliberate
 narrowing rather than a shorthand: a refusal is reported from code holding a URL
 that an attacker may have chosen, a free-form parameter would invite passing it
 along "for context", and the destination is an error a monitoring system may log
-and `ErrorDisplay` may render. Naming the prop is also the more useful half —
+and `ErrorDisplay` may render. Naming the prop is also the more useful half:
 the prop is what an operator has to go and fix. A refused `source` does quote
 its value, and the difference is structural: a source is one prop holding one
 value, while a surface can be refused by several component instances at once, so
 no one value describes it.
 
 `reportRefusedUrl` is a registration and not a setter. It returns a disposer,
-and the notice stands while any registration for any surface stands — which is
+and the notice stands while any registration for any surface stands, which is
 what stops a sibling holding a permitted value for the same prop from
 withdrawing a refusal it never made, an ordinary situation the moment a
 responsive poster puts two images under one root. It is withdrawable at all
@@ -495,8 +495,8 @@ once happened: a consumer who replaced a poisoned CMS value with a good one must
 not keep the error forever, and an operator who cannot clear a security notice
 learns to ignore all of them.
 
-What it publishes is a notice in `isNotice`'s sense — non-fatal, `configuration`
-— and its severity is `'protective'` whatever the surface decorates, because
+What it publishes is a notice in `isNotice`'s sense (non-fatal, `configuration`),
+and its severity is `'protective'` whatever the surface decorates, because
 what fired is a security control and not a presentation option being ignored. So
 it never drives the lifecycle, it must not be rendered as a failure, and a
 provider reporting a cosmetic rejection cannot push it out of the state's one
@@ -517,11 +517,11 @@ attempt?
 | `false`                | Nothing, and `PlayerState.autoplay` stays `'idle'`.                                                                                           |
 | `'muted'`              | A muted attempt. Muting is part of the mode, so `controlledMuted: false` beside it is a configuration conflict rather than a case to resolve. |
 | `'audible'`            | An audible attempt. A refusal is reported as it is, unretried.                                                                                |
-| `'audible-then-muted'` | An audible attempt, and a muted retry of it where — and only where — the browser refused by policy (`reason: 'blocked'`).                     |
+| `'audible-then-muted'` | An audible attempt, and a muted retry of it where (and only where) the browser refused by policy (`reason: 'blocked'`).                       |
 
 `'muted'` and `'audible'` keep their strict meanings: neither ever changes what
 the other does. The retry belongs to `'audible-then-muted'` alone, it is issued
-at most once, and it is issued only from a policy refusal — retrying a decode
+at most once, and it is issued only from a policy refusal: retrying a decode
 error or a provider fault muted would change nothing about why it failed
 (#306). Where the consumer controls `muted` and has set it to `false`, the
 recovery is suppressed rather than performed: an audible attempt under a
@@ -535,7 +535,7 @@ matches `prefers-reduced-motion: reduce` and
 `PlayerState.autoplayRecovered` is how a consumer detects that the recovery is
 what played. It is true only where `autoplay` is `'started'` because an audible
 attempt was refused by policy and the muted retry is what started playback, and
-false everywhere else — the in-flight retry included, since the recovery is
+false everywhere else (the in-flight retry included), since the recovery is
 recorded once playback has started and not when it is attempted. That is what
 tells a player muted because a consumer asked for a muted autoplay apart from
 one muted because the browser would have it no other way, and it is the state
@@ -553,7 +553,7 @@ that never happened, or erasing one that did.
 `createTimeBoundary()` resolves a `[startTime, endTime]` window once and then
 answers every question a provider asks of it. The embed providers (YouTube,
 Vimeo, Wistia) have no trustworthy native end mechanism, so each one enforces
-the window from its own adapter — and this is what makes all three enforce it
+the window from its own adapter, and this is what makes all three enforce it
 the same way.
 
 ```ts
@@ -564,14 +564,14 @@ import { createTimeBoundary } from '@playdeck/core';
 // is absent, non-finite, or not above the start is no end.
 const bounds = createTimeBoundary({ startTime: 30, endTime: 90 });
 
-console.log(bounds.startTime, bounds.endTime); // 30 90 — the load hints
+console.log(bounds.startTime, bounds.endTime); // 30 90, the load hints
 
 // Every question is asked against the duration, which caps the window: pass
 // `null` or `undefined` before the media reports one.
-export const startsAt = bounds.start(120); // 30 — where playback begins
-export const endsAt = bounds.end(60); // 60 — the duration caps the end
-export const reachedEnd = bounds.atEnd(120, 91); // true — publish `ended` here
-export const seekTarget = bounds.clamp(120, 999); // 90 — seeks stay inside
+export const startsAt = bounds.start(120); // 30, where playback begins
+export const endsAt = bounds.end(60); // 60, the duration caps the end
+export const reachedEnd = bounds.atEnd(120, 91); // true, publish `ended` here
+export const seekTarget = bounds.clamp(120, 999); // 90, seeks stay inside
 
 // `clamp` answers for a position Playdeck was asked to go to; `correction`
 // answers for one that simply arrived, which is what makes `startTime` a floor
@@ -582,8 +582,8 @@ export const seekTarget = bounds.clamp(120, 999); // 90 — seeks stay inside
 // It takes the port's own state, as `atWrap` does: nothing is corrected before
 // the port has positioned the player.
 const state = { loop: false, positioned: true };
-export const pulledUp = bounds.correction(120, 5, state); // 30 — below floor
-export const pulledBack = bounds.correction(120, 91, state); // 90 — past end
+export const pulledUp = bounds.correction(120, 5, state); // 30, below floor
+export const pulledBack = bounds.correction(120, 91, state); // 90, past end
 export const leftAlone = bounds.correction(120, 45, state); // undefined
 
 // The two loop questions. A platform loop wraps to zero rather than to the
@@ -595,7 +595,7 @@ export const restarts = bounds.restartsAtStart(true); // true
 
 // Which is why the floor defers rather than competes. The position `atWrap`
 // just claimed is one `correction` declines, so a looping player is restarted
-// and resumed by the loop rule instead of being slid onto the floor — and it
+// and resumed by the loop rule instead of being slid onto the floor. It
 // declines on every path, not only the ones that ask the wrap guard first.
 export const wrapsInstead = bounds.correction(120, 5, {
   loop: true,
@@ -607,7 +607,7 @@ export const unbounded = createTimeBoundary({ startTime: -1, endTime: 0 });
 ```
 
 `createTimeBoundary`, and its `TimeBoundary` type, are also reachable at
-`@playdeck/core/time-boundary` — a second entry point carrying them and
+`@playdeck/core/time-boundary`: a second entry point carrying them and
 nothing else, built as its own bundle like `@playdeck/core/thumbnails` and
 `@playdeck/core/media-session`. The three embed providers
 (`@playdeck/provider-vimeo`, `@playdeck/provider-wistia`,
@@ -616,7 +616,7 @@ rather than from this package's main entry: each provider's own module
 reaches an app's build graph through a dynamic `import()` that app carries
 for every provider kind at once, so a bundler that places this package's main
 entry inside that app's eager chunk has to export whatever any sibling
-provider imports from it — `createTimeBoundary` included, even on a page
+provider imports from it, `createTimeBoundary` included, even on a page
 composed with no embed provider at all. Importing it through its own subpath
 instead keeps it out of that eager chunk. `@playdeck/core` itself keeps
 exporting `createTimeBoundary` and `TimeBoundary` from its main entry, so a
@@ -626,7 +626,7 @@ direct import that does not care changes nothing.
 
 `deriveLiveState` is the one liveness derivation in the workspace, so
 `PlayerState.live` means the same thing whichever adapter published it. It reads
-provider signals and normalized state only — a duration, a seekable window, a
+provider signals and normalized state only: a duration, a seekable window, a
 playhead, and the provider's own live flag where it has one. A source URL, an id
 or a filename never decides: a name is a guess, and a guess published as state
 is a control that lies.
@@ -638,7 +638,7 @@ number of its own.
 ```ts
 import { deriveLiveState, liveStateEqual } from '@playdeck/core';
 
-// Liveness comes from what the provider reports — never from the URL, the id
+// Liveness comes from what the provider reports: never from the URL, the id
 // or a filename. `isLiveHint` is the provider's own answer where it has one;
 // leave it undefined and an infinite duration decides instead.
 export const live = deriveLiveState({
@@ -649,11 +649,11 @@ export const live = deriveLiveState({
 });
 
 // -> { isLive: true, atLiveEdge: true, offsetFromEdge: 6 }. `null` means "not
-// live, or not yet known" — a control should not claim either until it is.
+// live, or not yet known". A control should not claim either until it is.
 export const atEdge = live?.atLiveEdge ?? false;
 
-// Whole seconds, `0` at or ahead of the edge — the resolution `Time` renders
-// at, and why `liveStateEqual` compares it: an unrounded float would differ
+// Whole seconds, `0` at or ahead of the edge (the resolution `Time` renders
+// at), and why `liveStateEqual` compares it: an unrounded float would differ
 // on essentially every `timeupdate` and republish `live` many times a second.
 export const behindBy = live?.offsetFromEdge ?? 0;
 
@@ -672,7 +672,7 @@ export const changed = !liveStateEqual(live, tight);
 ```
 
 Providers that cannot determine liveness leave `live` as `null`. That is not
-"this is on-demand" — it is "nobody has said", and a control should render
+"this is on-demand": it is "nobody has said", and a control should render
 neither claim until one arrives.
 
 ## Live edge
@@ -682,8 +682,8 @@ edge to seek to at all, told apart the same way `capabilities.chapters` is:
 `unavailable` with `provider` means the provider has no such surface for any
 source, and `unavailable` with `source` means this particular source is not
 live. `PlayerController.seekToLiveEdge()` is the command it gates: it refuses
-with `not-ready` — the same `RefusedCommand` shape every pre-attach refusal
-uses — whenever there is no provider, `capabilities.liveEdge` is not
+with `not-ready` (the same `RefusedCommand` shape every pre-attach refusal
+uses) whenever there is no provider, `capabilities.liveEdge` is not
 `available`, or the attached adapter implements no `seekToLiveEdge` at all.
 Where the provider can answer, it lands on the provider's own notion of the
 edge: `@playdeck/provider-hls`'s hls.js engine seeks to hls.js's own
@@ -694,7 +694,7 @@ position this library would compute itself.
 
 `PlayerState.chapters` is the named divisions of the current video, ordered by
 `startTime`, and `capabilities.chapters` says whether the provider can report
-any at all — an empty collection means "none here", not "this provider cannot
+any at all: an empty collection means "none here", not "this provider cannot
 tell you". Playdeck publishes the vocabulary and draws none of it: a consumer maps
 a chapter to a position on the seek slider, which already takes children.
 
@@ -725,7 +725,7 @@ export const openEnded = deriveChapters(
   null
 ).at(-1)?.endTime;
 
-// An adapter publishes `chapters` only when the collection changes — a
+// An adapter publishes `chapters` only when the collection changes: a
 // duration report that moves nothing publishes nothing. This is that test.
 export const closed = !chaptersEqual(
   chapters,
@@ -739,21 +739,21 @@ export const closed = !chaptersEqual(
 Chrome and Video.js all read the same way: each cue's payload is an image URL,
 optionally carrying a `#xywh=` (or `#xywh=pixel:...`) sprite-region fragment.
 A recognised fragment is resolved to a `ThumbnailRegion` in sprite pixels and
-stripped from the published `url`; an unrecognised one — including
+stripped from the published `url`; an unrecognised one (including
 `#xywh=percent:...`, since nothing here knows the sprite's natural size to
-turn a percentage into pixels — is left on the URL, with `region: null`. A
+turn a percentage into pixels) is left on the URL, with `region: null`. A
 file that does not start `WEBVTT`, or a block this parser does not recognise
 as a cue, contributes no cue rather than throwing.
 
 `parseThumbnailCues` takes a second argument, `baseUrl`: each cue's `url` is
 resolved against it the same way a browser resolves a relative URL found
-inside any other fetched document — against that document's own final
+inside any other fetched document: against that document's own final
 address, not the page that requested it. This is what lets a sprite
 generator's ordinary relative image paths (`sprite-0.jpg`, or even
 `//other-host/sprite-0.jpg`) resolve against the thumbnails file itself
 rather than 404ing against the page. A caller that fetched the VTT file
 itself should pass the response's own final address, not the URL it
-requested the file with — those differ across a redirect, and it is the
+requested the file with: those differ across a redirect, and it is the
 response's address a browser resolves a fetched document's own relative URLs
 against. Omit `baseUrl` and every cue's `url` publishes exactly as the file
 wrote it, relative forms included.
@@ -766,18 +766,18 @@ resolve against; or the cue's own URL contains a raw tab, newline or other
 C0 control character. That last case exists because the URL parser removes
 such characters while resolving, so resolving first and checking the result
 after would let a cue's raw string smuggle a character the allowlist's own
-whitespace rule is designed to catch — `parseThumbnailCues` leaves that URL
+whitespace rule is designed to catch. `parseThumbnailCues` leaves that URL
 exactly as written instead, so the allowlist's verdict on it is unchanged.
 
-`thumbnailCueAt` finds the cue covering a given time, matched half-open —
-`[startTime, endTime)` — so a boundary belongs to the cue it starts, not the
+`thumbnailCueAt` finds the cue covering a given time, matched half-open
+(`[startTime, endTime)`), so a boundary belongs to the cue it starts, not the
 one it ends. Playdeck publishes the parser and draws none of it itself:
 `@playdeck/react`'s `SeekSlider` is the one consumer, loading and parsing a
 `thumbnails` URL lazily and rendering the active cue's region as its
 `thumbnail` part.
 
 Both functions, and both types, are also reachable at
-`@playdeck/core/thumbnails` — a second entry point carrying the parser and
+`@playdeck/core/thumbnails`: a second entry point carrying the parser and
 nothing else. Import them from there when the code that uses them is loaded on
 demand: a bundler decides which chunk a module belongs in from which entry
 points reach it, so a parser that shares a module with the rest of core is
@@ -804,12 +804,12 @@ const vtt = [
 
 export const cues = parseThumbnailCues(vtt);
 
-// -> { x: 0, y: 0, width: 160, height: 90 } — the fragment resolved to sprite
+// -> { x: 0, y: 0, width: 160, height: 90 }, the fragment resolved to sprite
 // pixels, not left as a CSS background-position, and stripped from `url`.
 export const firstRegion = cues[0]?.region;
 
 // Cues are matched half-open, `[startTime, endTime)`: 3 lands on the first
-// tile, and 5 — the boundary between the two — already lands on the second.
+// tile, and 5 (the boundary between the two) already lands on the second.
 export const atThree = thumbnailCueAt(cues, 3);
 export const atFive = thumbnailCueAt(cues, 5);
 
@@ -823,14 +823,14 @@ export const none = thumbnailCueAt(cues, 99); // null
 which of them is on. A captions menu needs both, the way a quality menu needs
 `qualities` and `selectedQualityId`: the collection fills the rows and the
 selection checks one of them. `capabilities.selectTextTrack` answers whether a
-selection can be made at all, and it is the one to read first — while it is
+selection can be made at all, and it is the one to read first. While it is
 `unknown` a menu renders nothing rather than something disabled.
 
 `null` there is a selection and not the absence of one: it is captions off,
 which is what `selectTextTrack(null)` asks for, and it is the value a snapshot
 starts from. Core publishes what the provider reports and derives nothing of
 its own, so the field moves when a selection is made, when a provider's own
-caption UI moves it, and when the track it named stops existing — the native
+caption UI moves it, and when the track it named stops existing: the native
 and hls.js caption subsystems hold a chosen selection while its track survives
 a re-discovery and drop it to `null` when it does not, so a rediscovered track
 list cannot put a default track back over a viewer who turned captions off.
@@ -849,7 +849,7 @@ controller re-publishes what it sends through a `subscribeDimensions` of its
 own.
 
 Neither is part of `PlayerState`, so a size arriving does not re-render every
-state consumer — a video that reports its intrinsic size on load would
+state consumer: a video that reports its intrinsic size on load would
 otherwise wake code that cares only about playback. `undefined` is how "not
 known" is said, and it is also how a size reported earlier is withdrawn.
 
@@ -862,7 +862,7 @@ publishing the iframe's box as though it were the media's.
 
 `notifySafely()` is how a provider adapter notifies one of its own listeners.
 An adapter's `subscribe` accepts any number of subscribers and promises each of
-them every notification, so no single listener may abandon an emit — and a
+them every notification, so no single listener may abandon an emit, and a
 listener that throws must not be reported as a provider failure (#233).
 
 ```ts
@@ -876,7 +876,7 @@ import {
 // What a provider adapter owes the subscribers it fans out to. `Set.forEach`
 // stops at the first throw, so one broken listener would abandon the emit:
 // every listener registered behind it misses that notification, and the throw
-// escapes back into whatever called the emit — often a vendor SDK's own event
+// escapes back into whatever called the emit, often a vendor SDK's own event
 // dispatch, or the adapter's start path, where it would be reported as a
 // provider load failure rather than as the consumer's bug it is.
 const listeners = new Set<ProviderStateListener>();
@@ -908,7 +908,7 @@ subscribe((patch) => {
 
 emit({ lifecycle: 'ready' });
 
-console.log(seen); // ['ready'] — the subscriber behind the thrower still ran
+console.log(seen); // ['ready'], the subscriber behind the thrower still ran
 ```
 
 ## Media Session
@@ -945,7 +945,7 @@ export const release = (): void => binding.release();
 ```
 
 Both functions, and both types, are also reachable at
-`@playdeck/core/media-session` — a second entry point carrying them and
+`@playdeck/core/media-session`: a second entry point carrying them and
 nothing else, built as its own bundle like `@playdeck/core/thumbnails`.
 Import them from there when the code that uses them is loaded on demand:
 `@playdeck/react`'s `Root` reaches them through a dynamic `import()` inside

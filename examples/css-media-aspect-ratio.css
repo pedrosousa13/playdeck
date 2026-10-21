@@ -5,8 +5,8 @@
    like this the player is shaped by whatever you already sized it to.
 
    The fallback is not decoration. It is the whole behaviour wherever no ratio
-   is known — every YouTube source, and any other source until its metadata has
-   arrived — because the property is absent then rather than zero. Pick a value
+   is known (every YouTube source, and any other source until its metadata has
+   arrived), because the property is absent then rather than zero. Pick a value
    you are happy to render, and size the box's width yourself as usual. */
 
 [data-playdeck-part='viewport'] {

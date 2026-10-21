@@ -741,16 +741,16 @@ test('renders a padded table with one footnote marker per cell', () => {
 test('renders one footnote per cell, carrying its note, anchor and source', () => {
   const numberOf = footnoteNumbers(sampleAxes, sampleColumns);
   const footnotes = renderFootnotes(sampleAxes, sampleColumns, numberOf);
-  assert.match(footnotes, /\[\^1\]: \*\*Axis A — Alpha\*\*: yes\./);
+  assert.match(footnotes, /\[\^1\]: \*\*Axis A \(Alpha\)\*\*: yes\./);
   assert.match(footnotes, /`alpha` exports `Thing`/);
   assert.match(footnotes, /Source: alpha docs/);
   assert.match(
     footnotes,
-    /\[\^2\]: \*\*Axis A — Beta\*\*: no\. Checked and absent\./
+    /\[\^2\]: \*\*Axis A \(Beta\)\*\*: no\. Checked and absent\./
   );
   assert.match(
     footnotes,
-    /\[\^3\]: \*\*Axis B — Alpha\*\*: plugin\. Via `some-plugin`\./
+    /\[\^3\]: \*\*Axis B \(Alpha\)\*\*: plugin\. Via `some-plugin`\./
   );
 });
 

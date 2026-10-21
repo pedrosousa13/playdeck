@@ -23,7 +23,7 @@ export const Overlays = () => (
       seekOffset={10}
       onSeek={(direction, offset) => console.log(direction, offset)}
     />
-    {/* `retry` is null when the error cannot be retried — absent, not
+    {/* `retry` is null when the error cannot be retried: absent, not
         disabled. */}
     <Player.ErrorDisplay>
       {({ error, retry }) => (

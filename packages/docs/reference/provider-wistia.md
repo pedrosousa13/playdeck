@@ -10,7 +10,7 @@ Wistia's Aurora `<wistia-player>` element.
 pnpm add @playdeck/provider-wistia
 ```
 
-This package has no React dependency of its own — the Aurora
+This package has no React dependency of its own: the Aurora
 `<wistia-player>` element is driven directly. Pair it with `@playdeck/react`
 for the primitives above, and note that package's peer range is React 19 only.
 
@@ -18,7 +18,7 @@ for the primitives above, and note that package's peer range is React 19 only.
 the URL forms [Provider setup](https://github.com/pedrosousa13/playdeck/blob/main/docs/provider-setup.md#the-other-three-providers)
 lists. The
 player bundle is fetched from `https://fast.wistia.com/player.js` on the first
-attach — Aurora's own entry point, not the legacy `E-v1.js` shim, so there is
+attach (Aurora's own entry point, not the legacy `E-v1.js` shim), so there is
 still no `window._wq`. This package does **not** depend on
 `@wistia/wistia-player`: that package is a shell around the same CDN, and it
 declares build tooling among its runtime dependencies, so installing it dragged
@@ -28,7 +28,7 @@ element, which the adapter then mounts and drives through the handle the element
 hands over on `api-ready`.
 
 Because nothing is imported from Wistia's package, every type this adapter reads
-off Wistia's declarations is restated here and published as this package's own —
+off Wistia's declarations is restated here and published as this package's own:
 see `WistiaPlayerApi` and `WistiaPlayerAttribute` below.
 
 ```tsx
@@ -101,7 +101,7 @@ export const warm = (): Promise<unknown> => loadWistiaPlayer();
 
 // Serve that bundle from your own origin by replacing the injector. The loader
 // still owns the shared promise, the deadline and the registration it waits
-// for — this only decides where the script comes from.
+// for. This only decides where the script comes from.
 const fromOwnOrigin: WistiaScriptInjector = () => {
   const script = document.createElement('script');
   script.src = '/vendor/wistia-player.js';
@@ -113,7 +113,7 @@ const fromOwnOrigin: WistiaScriptInjector = () => {
 export const warmFromOwnOrigin = (): Promise<unknown> =>
   loadWistiaPlayer(fromOwnOrigin);
 
-// Drops the cached registration — for tests that need a clean load, not for
+// Drops the cached registration: for tests that need a clean load, not for
 // app code.
 export const reset = (): void => resetWistiaPlayerLoader();
 
@@ -139,10 +139,10 @@ origins list and what a page's CSP has to allow.
 | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `createWistiaProvider`                                                          | Builds the adapter over a mount element and a `WistiaSource`.                                                                                                                                                                            |
 | `loadWistiaPlayer`                                                              | Fetches the player bundle from `fast.wistia.com` and resolves the `<wistia-player>` registration. Shared across players; takes your own script injector.                                                                                 |
-| `resetWistiaPlayerLoader`                                                       | Drops the shared load — for tests that need a clean load.                                                                                                                                                                                |
+| `resetWistiaPlayerLoader`                                                       | Drops the shared load, for tests that need a clean load.                                                                                                                                                                                 |
 | `API_READY_TIMEOUT_MS`                                                          | How long the `api-ready` handshake is given before the attach reports an error.                                                                                                                                                          |
 | `SCRIPT_LOAD_TIMEOUT_MS`                                                        | How long the script fetch that precedes that handshake is given. Separate deadline, same 15 seconds; the two run in sequence.                                                                                                            |
-| `WistiaScriptInjector`                                                          | What `loadWistiaPlayer` takes to put the bundle in the document — replace it to serve the script from your own origin.                                                                                                                   |
+| `WistiaScriptInjector`                                                          | What `loadWistiaPlayer` takes to put the bundle in the document: replace it to serve the script from your own origin.                                                                                                                    |
 | `WistiaProviderOptions`                                                         | `controls`, `dnt`, `loop`, `startTime`, `endTime`. Through `Player.Root`, `loop`, `startTime` and `endTime` are each their own prop (ADR-0004), not bag keys; `controls` is still a bag key here, because no fan-out reaches Wistia yet. |
 | `WistiaProviderAdapter`                                                         | The adapter's own type.                                                                                                                                                                                                                  |
 | `WistiaMountElement`                                                            | What the adapter can mount into.                                                                                                                                                                                                         |
@@ -160,7 +160,7 @@ origins list and what a page's CSP has to allow.
   fetches its playback engine, embed configuration and media data from the same
   CDN. That is the trade to weigh before choosing this provider: nothing to
   bundle, and a third-party origin your `script-src` has to allow, which no
-  `integrity` can pin — see
+  `integrity` can pin: see
   [Third-party requests and CSP](https://github.com/pedrosousa13/playdeck/blob/main/docs/third-party-requests.md).
 - **`controls: false` switches off every control by name.**
   `controls-visible-on-load` alone only hides Wistia's chrome until the first
@@ -181,7 +181,7 @@ origins list and what a page's CSP has to allow.
   playhead can overshoot the boundary by up to one Wistia time report, and it is
   seeked back onto it, so what is on screen and what is published agree (#381).
 - **`startTime` is a floor, not just where playback starts.** A reported
-  position below it is pulled back to it, whatever moved the playhead — an
+  position below it is pulled back to it, whatever moved the playhead: an
   SDK-side seek, or the viewer dragging Aurora's own scrub bar. `seeked` is
   corrected as well as `time-update`, because a paused player reports no time
   update after a seek. A `seekTo` or `seekBy` below the start is clamped to the
@@ -201,8 +201,8 @@ origins list and what a page's CSP has to allow.
   window already begins, so this adapter has nothing to correct and passes
   Wistia's own `ended` through as it always has. The native provider is the one
   that differs: it swallows `ended` for a looping video and just restarts. That
-  is pre-existing player behaviour, deliberately left alone by #214 — that
-  change fanned `startTime` and `endTime` out to the embeds and did not revise
+  is pre-existing player behaviour, deliberately left alone by #214, a
+  change that fanned `startTime` and `endTime` out to the embeds and did not revise
   how `loop` fans out. A `startTime` is what makes this adapter step in.
 - **Liveness is reported, from Wistia's media type and nothing else.** The
   element dispatches `loaded-media-data` with the media data it fetched, and
@@ -212,12 +212,12 @@ origins list and what a page's CSP has to allow.
   both read as not live. Wistia exposes no seekable window, so the at-edge flag
   measures the playhead against `duration()`; a duration that is not a finite
   number leaves the edge unknown, which reports as at the edge. The published
-  `live` value changes or nothing is published — an unchanged one produces no
+  `live` value changes or nothing is published: an unchanged one produces no
   patch. `duration` is left as Wistia reports it while live, which is where this
   adapter differs from `@playdeck/provider-hls`.
 - **The at-edge flag stays current while the player is paused.** It is
   recomputed on every `time-update` while the player runs, and Wistia stops
-  dispatching that event the moment it pauses — so a paused live stream would
+  dispatching that event the moment it pauses, so a paused live stream would
   otherwise hold the last flag it published while the live edge went on
   advancing, and read as "at the live edge" for a viewer minutes behind. Aurora
   offers no idle event to bind instead: the playback events come from the engine
@@ -232,7 +232,7 @@ origins list and what a page's CSP has to allow.
 - **`liveEdge` is `unavailable` / `provider`.** `PublicApi` has no seekable-range
   accessor and no dedicated live-edge member. `duration()` is what the at-edge
   recompute above already reuses as the moving edge for its own tolerance
-  check, purely because it is the closest thing available — not because it is
+  check, purely because it is the closest thing available, not because it is
   an actionable seek target this adapter is prepared to land a viewer on. With
   nothing to build a real one from, this reports the same verdict as every
   other surface `PublicApi` never grew.
@@ -242,8 +242,8 @@ origins list and what a page's CSP has to allow.
 - **`setVolume` starts `available` and can downgrade to `unavailable` /
   `browser`.** Aurora declares `volume()` on every player, so there is nothing to
   check up front. A device that refuses the change is the only proof: when
-  `volume()` throws `UnsupportedError` or `NotSupportedError` — iOS pins media
-  volume to the hardware switch and refuses every programmatic change — the
+  `volume()` throws `UnsupportedError` or `NotSupportedError` (iOS pins media
+  volume to the hardware switch and refuses every programmatic change), the
   adapter republishes its capabilities with `setVolume` `unavailable`, reason
   `browser`, because the limit is the browser's and not Wistia's. The refused
   command still answers `{ ok: false, reason: 'unsupported' }`. The downgrade
@@ -254,7 +254,7 @@ origins list and what a page's CSP has to allow.
   every player too, and a media that withholds it refuses the call rather than
   announcing itself. The reason is `provider` because it is Wistia withholding
   the rate, not the browser. The downgrade holds for the life of the adapter, as
-  above. Nothing else corrects it either — Wistia dispatches `rate-change` when
+  above. Nothing else corrects it either: Wistia dispatches `rate-change` when
   the rate does change, and nothing at all when it does not.
 - **`selectQuality` is `unavailable` / `provider`.** Aurora exposes a coarse
   `videoQuality()` setter and `quality-min` / `quality-max` attributes, but no
@@ -270,7 +270,7 @@ origins list and what a page's CSP has to allow.
   API to expose.
 - **`customControls` is `available`.** Chromeless playback is a plain set of
   embed attributes, declared in Wistia's own `Attributes` type and gated by no
-  account tier — unlike Vimeo, where it needs a paid plan.
+  account tier, unlike Vimeo, where it needs a paid plan.
 - **A player that never answers is reported, not waited on.** Aurora dispatches
   no failure event: media data that asks for the legacy iframe embed, or a
   player engine an ad-blocker stops reaching, leaves the element silent for
@@ -292,7 +292,7 @@ origins list and what a page's CSP has to allow.
   a guess. `buffering` stays `false` for the same reason.
 - **Cue timings, chapters and analytics are not reported.** They are outside
   this adapter's playback core. Wistia's chapters are an inbound embed-option
-  plugin — the embedder supplies the list — and no documented read-back accessor
+  plugin (the embedder supplies the list) and no documented read-back accessor
   exists, so `PlayerState.chapters` stays empty and `capabilities.chapters`
   reports `{ status: 'unavailable', reason: 'provider' }` rather than leaving a
   consumer to guess.

@@ -5,7 +5,7 @@ import * as Player from '@playdeck/react';
 // accepts: a provider option bag is compared with `Object.is`, and a function
 // passed inline would never reach a stable identity across renders. `'light'`
 // is smaller and drops subtitles, alternate audio, CMCD, EME and Variable
-// Substitution — see `@playdeck/provider-hls`'s README for the size and
+// Substitution. See `@playdeck/provider-hls`'s README for the size and
 // before choosing it over the default `'full'` build.
 export const HlsClip = () => (
   <Player.Root
@@ -20,8 +20,8 @@ export const HlsClip = () => (
         <Player.Time type="current" />
         <Player.FullscreenButton />
       </Player.Controls>
-      {/* A source `detectSource` refuses, or — when an engine is pinned
-          through an explicit `{ type: 'hls', src, engine }` source — one the
+      {/* A source `detectSource` refuses, or (when an engine is pinned
+          through an explicit `{ type: 'hls', src, engine }` source) one the
           browser cannot provide, is reported here with an explained error
           rather than a silent fallback. */}
       <Player.ErrorDisplay />

@@ -80,7 +80,7 @@ controller.setProvider(createYouTubeProvider(mount, 'dQw4w9WgXcQ'));
 // a player mounts.
 export const warm = (): Promise<unknown> => loadYouTubeIframeApi();
 
-// Drops the memo of the API load — for tests that need a clean load, not for
+// Drops the memo of the API load: for tests that need a clean load, not for
 // app code.
 export const reset = (): void => resetYouTubeIframeApiLoader();
 
@@ -106,7 +106,7 @@ export const playerReadyTimeout = PLAYER_READY_TIMEOUT_MS; // 15000
 
 The embed host defaults to `https://www.youtube-nocookie.com`, and the API
 script is loaded from `https://www.youtube.com/iframe_api` once per document.
-`host` is honoured only for the two origins YouTube serves the embed from —
+`host` is honoured only for the two origins YouTube serves the embed from:
 `https://www.youtube.com` and `https://www.youtube-nocookie.com`, matched on
 the parsed origin. Any other value falls back to the default rather than
 throwing, so a misconfigured host still plays.
@@ -117,19 +117,19 @@ origins list and what a page's CSP has to allow.
 
 ## Exports
 
-| Export                             | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `createYouTubeProvider`            | Builds the adapter over a mount element and a video id.                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `YouTubeProviderOptions`           | `controls`, `loop`, `startTime`, `endTime`, `defaultTextTrack`, `preferredTextTrackLanguage`, `host`, and `loadIframeApi` to supply the API yourself. Through `Player.Root`, `controls`, `loop`, `startTime`, `endTime`, `defaultTextTrack` and `preferredTextTrackLanguage` are its own props (ADR-0004), not bag keys, and `loadIframeApi` is not reachable through `Player.Root` at all — reaching it means calling `createYouTubeProvider` directly. |
-| `YouTubeProviderAdapter`           | The adapter's own type.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `PLAYBACK_CONFIRMATION_TIMEOUT_MS` | How long a `play()` waits for the player to confirm it (3 seconds).                                                                                                                                                                                                                                                                                                                                                                                      |
-| `resetYouTubeIframeApiLoader`      | Drops the memo of the API load — for tests that need a clean load.                                                                                                                                                                                                                                                                                                                                                                                       |
-| `API_READY_TIMEOUT_MS`             | How long the API script is given to hand over the API before the load is reported as failed (15 seconds).                                                                                                                                                                                                                                                                                                                                                |
-| `YouTubeIframeApi`                 | What `loadYouTubeIframeApi` resolves to: the API object the script installs, whose `Player` is the constructor.                                                                                                                                                                                                                                                                                                                                          |
-| `YouTubePlayerConstructor`         | That `Player`, constructed over an iframe and a `YouTubePlayerOptions`.                                                                                                                                                                                                                                                                                                                                                                                  |
-| `YouTubePlayerOptions`             | The constructor's second argument. This adapter hands the constructor an iframe that already carries the embed, so `events` is what it passes through here.                                                                                                                                                                                                                                                                                              |
-| `YouTubePlayerEventHandlers`       | That `events` bag — the `onReady`, `onStateChange` and sibling callbacks the player invokes.                                                                                                                                                                                                                                                                                                                                                             |
-| `YouTubePlayer`                    | A constructed player, as the API members this adapter uses.                                                                                                                                                                                                                                                                                                                                                                                              |
+| Export                             | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createYouTubeProvider`            | Builds the adapter over a mount element and a video id.                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `YouTubeProviderOptions`           | `controls`, `loop`, `startTime`, `endTime`, `defaultTextTrack`, `preferredTextTrackLanguage`, `host`, and `loadIframeApi` to supply the API yourself. Through `Player.Root`, `controls`, `loop`, `startTime`, `endTime`, `defaultTextTrack` and `preferredTextTrackLanguage` are its own props (ADR-0004), not bag keys, and `loadIframeApi` is not reachable through `Player.Root` at all: reaching it means calling `createYouTubeProvider` directly. |
+| `YouTubeProviderAdapter`           | The adapter's own type.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `PLAYBACK_CONFIRMATION_TIMEOUT_MS` | How long a `play()` waits for the player to confirm it (3 seconds).                                                                                                                                                                                                                                                                                                                                                                                     |
+| `resetYouTubeIframeApiLoader`      | Drops the memo of the API load, for tests that need a clean load.                                                                                                                                                                                                                                                                                                                                                                                       |
+| `API_READY_TIMEOUT_MS`             | How long the API script is given to hand over the API before the load is reported as failed (15 seconds).                                                                                                                                                                                                                                                                                                                                               |
+| `YouTubeIframeApi`                 | What `loadYouTubeIframeApi` resolves to: the API object the script installs, whose `Player` is the constructor.                                                                                                                                                                                                                                                                                                                                         |
+| `YouTubePlayerConstructor`         | That `Player`, constructed over an iframe and a `YouTubePlayerOptions`.                                                                                                                                                                                                                                                                                                                                                                                 |
+| `YouTubePlayerOptions`             | The constructor's second argument. This adapter hands the constructor an iframe that already carries the embed, so `events` is what it passes through here.                                                                                                                                                                                                                                                                                             |
+| `YouTubePlayerEventHandlers`       | That `events` bag: the `onReady`, `onStateChange` and sibling callbacks the player invokes.                                                                                                                                                                                                                                                                                                                                                             |
+| `YouTubePlayer`                    | A constructed player, as the API members this adapter uses.                                                                                                                                                                                                                                                                                                                                                                                             |
 
 The `YouTube*` names above describe Google's IFrame Player API rather than
 Playdeck. The API arrives as a script that installs a global rather than as a
@@ -138,8 +138,8 @@ the members this adapter calls, and they name only those. Their contents belong
 to Google: what a member does, what it reports, whether it exists at all is
 settled by whatever the script serves, and nothing this project can do makes
 those shapes stable for you. They are exported so that a caller
-holding what `loadYouTubeIframeApi` returns — or supplying its own API through
-`loadIframeApi` — has names for it; read them as a description of the API the
+holding what `loadYouTubeIframeApi` returns (or supplying its own API through
+`loadIframeApi`) has names for it; read them as a description of the API the
 page loaded, not as a contract Playdeck controls.
 
 ## What it reports honestly
@@ -147,13 +147,13 @@ page loaded, not as a contract Playdeck controls.
 - **`selectQuality` is `unavailable` / `provider`.** YouTube can enumerate
   levels but will not honour a choice: measured against the live IFrame API,
   `setPlaybackQuality` was accepted and discarded for every level the player
-  itself offered — including when followed by a seek, and when passed as
+  itself offered, including when followed by a seek, and when passed as
   `loadVideoById({ suggestedQuality })`, where the player announced its own
   choice regardless. Asking for the lowest rung fails the same way as the
   highest, which rules out a bandwidth ceiling. So no ladder is published, and
   `qualities` stays empty rather than filling a menu with rungs that do nothing.
 - **`buffered` is one range, anchored where playback entered it.** The IFrame
-  API exposes no ranges — only `getVideoLoadedFraction()`, which reports the
+  API exposes no ranges: only `getVideoLoadedFraction()`, which reports the
   _end_ of the range holding the playhead. Buffer loaded before you arrived is
   invisible. Everything reported is genuinely buffered; it reports less than it
   holds, never more.
@@ -172,7 +172,7 @@ page loaded, not as a contract Playdeck controls.
   `getDuration()` returns the time elapsed since the broadcast began, which is
   the same shape as a VOD duration and grows the same way one does while
   metadata is still settling. So the adapter publishes no `live` key at all
-  rather than a guess — the field is absent from every patch, not present
+  rather than a guess: the field is absent from every patch, not present
   holding `null`. The undocumented `getVideoData().isLive` was considered and
   rejected: it is not part of the declared surface, Google does not support it,
   and there is no live-stream fixture in this repo to verify it against, so
@@ -180,7 +180,7 @@ page loaded, not as a contract Playdeck controls.
   by "pins the liveness gap" in `test/index.test.ts` (#187).
 - **`liveEdge` is `unavailable` / `provider`.** `getDuration()`,
   `getCurrentTime()` and `getVideoLoadedFraction()` are the IFrame Player
-  API's whole surface here — no seekable-range accessor at all, so a DVR
+  API's whole surface here: no seekable-range accessor at all, so a DVR
   window's start is not expressible and neither is an edge to seek to.
   `getDuration()` is not a stand-in for one either: on a 24/7 DVR stream it
   answered a fixed value for 150 seconds while the playhead advanced (see the
@@ -193,11 +193,11 @@ page loaded, not as a contract Playdeck controls.
   whole-second too, its interaction with the `loop` plus single-entry-playlist
   pair is undocumented, and it is not known to publish the state change the
   adapter needs. The end boundary comes from the 250 ms position poll instead,
-  so it can overshoot by up to that much before `ended` is published — the
+  so it can overshoot by up to that much before `ended` is published: the
   published `currentTime` is pinned to the boundary and the playhead is seeked
   back onto it, so what is on screen and what is published agree (#381).
 - **`startTime` is a floor, not just where playback starts.** Every polled
-  position below it is pulled back to it, whatever moved the playhead —
+  position below it is pulled back to it, whatever moved the playhead:
   including the viewer's own drag of YouTube's scrub bar under `controls: true`,
   which reaches this adapter as nothing but a position. A `seekTo` or `seekBy`
   below the start is clamped to the same value, so the two agree rather than
@@ -209,7 +209,7 @@ page loaded, not as a contract Playdeck controls.
   this adapter has nothing to correct and passes the ENDED state change through
   as it always has. The native provider is the one that differs: it swallows
   `ended` for a looping video and just restarts. That is pre-existing embed
-  behaviour, deliberately left alone by #214 — that change fanned `startTime`
+  behaviour, deliberately left alone by #214, a change that fanned `startTime`
   and `endTime` out to the embeds and did not revise how `loop` fans out.
   A `startTime` is what makes this adapter step in.
 

@@ -2,7 +2,7 @@ import * as Player from '@playdeck/react';
 
 // A native source is an `.mp4`/`.webm` URL in the `source` prop.
 // `loop`, `startTime` and `endTime` are `Player.Root`'s own props on every
-// provider (ADR-0004), never keys in a provider's option bag — native takes no
+// provider (ADR-0004), never keys in a provider's option bag: native takes no
 // `providerOptions` key of its own at all.
 export const ClipWithCaptions = () => (
   <Player.Root

@@ -21,7 +21,7 @@ export const openEnded = deriveChapters(
   null
 ).at(-1)?.endTime;
 
-// An adapter publishes `chapters` only when the collection changes — a
+// An adapter publishes `chapters` only when the collection changes: a
 // duration report that moves nothing publishes nothing. This is that test.
 export const closed = !chaptersEqual(
   chapters,

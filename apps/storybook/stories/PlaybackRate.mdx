@@ -30,10 +30,10 @@ resolves `available`, lists a rate ladder, marks the active rung from
 
 **The rate list** defaults to `[0.5, 1, 1.5, 2]`, the same ladder the
 composed-example guide's `RateMenu` hand-lists for the identical case. Pass
-`rates` to offer a different set — any array of numbers, printed as
+`rates` to offer a different set: any array of numbers, printed as
 `{rate}×`.
 
-It renders no `data-playdeck-part` of its own — every attribute a reader can
+It renders no `data-playdeck-part` of its own: every attribute a reader can
 style or query comes from the primitives it composes
 (`settings-menu-trigger`, `settings-menu`, `menu-radio-group`,
 `menu-radio-item`), the same **Contract** the other menu parts publish
@@ -45,11 +45,11 @@ default rate list.
 ## Accessibility
 
 The trigger carries `aria-label="Playback rate"`, overridable the same way
-any other primitive's default label is — pass your own `aria-label` (or
+any other primitive's default label is: pass your own `aria-label` (or
 replace the trigger's children entirely). Each rung is `role="menuitemradio"`
-with `aria-checked` reflecting the current rate. Keyboard operation — Tab to
+with `aria-checked` reflecting the current rate. Keyboard operation (Tab to
 the trigger, Enter or Space to open it, arrow keys to move roving focus among
-the rungs, Enter or Space to choose one, Escape to close — comes from
+the rungs, Enter or Space to choose one, Escape to close) comes from
 `SettingsMenu`, the same primitive every other menu in this package composes,
 rather than anything `PlaybackRateMenu` implements itself.
 

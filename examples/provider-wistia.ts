@@ -31,7 +31,7 @@ export const warm = (): Promise<unknown> => loadWistiaPlayer();
 
 // Serve that bundle from your own origin by replacing the injector. The loader
 // still owns the shared promise, the deadline and the registration it waits
-// for — this only decides where the script comes from.
+// for. This only decides where the script comes from.
 const fromOwnOrigin: WistiaScriptInjector = () => {
   const script = document.createElement('script');
   script.src = '/vendor/wistia-player.js';
@@ -43,7 +43,7 @@ const fromOwnOrigin: WistiaScriptInjector = () => {
 export const warmFromOwnOrigin = (): Promise<unknown> =>
   loadWistiaPlayer(fromOwnOrigin);
 
-// Drops the cached registration — for tests that need a clean load, not for
+// Drops the cached registration: for tests that need a clean load, not for
 // app code.
 export const reset = (): void => resetWistiaPlayerLoader();
 

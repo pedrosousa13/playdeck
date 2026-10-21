@@ -1,23 +1,23 @@
 ---
 title: "Audio tracks"
-description: "Playdeck exposes the alternate-audio renditions a provider publishes — `PlayerState.audioTracks` — and one command to choose from them, `selectAudioTrack`."
+description: "Playdeck exposes the alternate-audio renditions a provider publishes (`PlayerState.audioTracks`) and one command to choose from them, `selectAudioTrack`."
 ---
 
-Playdeck exposes the alternate-audio renditions a provider publishes —
-`PlayerState.audioTracks` — and one command to choose from them,
+Playdeck exposes the alternate-audio renditions a provider publishes
+(`PlayerState.audioTracks`) and one command to choose from them,
 `selectAudioTrack`. Not every provider can: `capabilities.selectAudioTrack`
 says so per source, and `Player.AudioTrackMenu` renders nothing until it
 resolves `available`.
 
 ## The state
 
-One field: **`audioTracks`**, a `readonly AudioTrack[]` — each entry
+One field: **`audioTracks`**, a `readonly AudioTrack[]`: each entry
 `{ id, label, language, active }`. Unlike a quality's `selectedQualityId` or
 a text track's `selectedTextTrackId`, there is no sibling selection field
 elsewhere on player state: selection lives on the entry itself, as `active`.
 hls.js's own audio-tracks controller enforces at most one active track on
 the engine itself; the native provider enforces the same exclusivity on
-selection, since the DOM's own `AudioTrackList` — unlike `VideoTrackList` —
+selection, since the DOM's own `AudioTrackList` (unlike `VideoTrackList`)
 permits more than one track enabled at once. A menu reads the active entry's
 `id` to mark the current selection rather than a field of its own.
 
@@ -32,8 +32,8 @@ permits more than one track enabled at once. A menu reads the active entry's
 | wistia   | `unavailable`, reason `provider`                                                            | not exposed by the SDK                                                   |
 
 The HLS provider answers from hls.js's own audio tracks while its hls.js
-engine is running, and falls back to the media element's `AudioTrackList` —
-the same surface the native provider reads — when it falls through to a
+engine is running, and falls back to the media element's `AudioTrackList`
+(the same surface the native provider reads) when it falls through to a
 native HLS engine instead. See the **Capabilities matrix** guide for the
 full account.
 
@@ -52,10 +52,10 @@ until `capabilities.selectAudioTrack` resolves `available`, lists
 row is chosen.
 
 **No Auto row.** Unlike `QualityMenu`, an audio track carries no
-auto-selection concept — every row names a real track, so there is nothing
+auto-selection concept: every row names a real track, so there is nothing
 for an Auto row to stand in for.
 
-It renders no `data-playdeck-part` of its own — every attribute a reader can
+It renders no `data-playdeck-part` of its own: every attribute a reader can
 style or query comes from the primitives it composes
 (`settings-menu-trigger`, `settings-menu`, `menu-radio-group`,
 `menu-radio-item`), the same **Contract** the other menu parts publish
@@ -67,12 +67,12 @@ default track list.
 ## Accessibility
 
 The trigger carries `aria-label="Audio track"`, overridable the same way
-any other primitive's default label is — pass your own `aria-label` (or
+any other primitive's default label is: pass your own `aria-label` (or
 replace the trigger's children entirely). Each row is `role="menuitemradio"`
 with `aria-checked` reflecting the track it was built from. Keyboard
-operation — Tab to the trigger, Enter or Space to open it, arrow keys to
+operation (Tab to the trigger, Enter or Space to open it, arrow keys to
 move roving focus among the rows, Enter or Space to choose one, Escape to
-close — comes from `SettingsMenu`, the same primitive every other menu in
+close) comes from `SettingsMenu`, the same primitive every other menu in
 this package composes, rather than anything `AudioTrackMenu` implements
 itself.
 

@@ -16,12 +16,12 @@ reading it.
 
 Nothing here is an install step. `@playdeck/react` depends on all five provider
 packages and imports each one dynamically, so a YouTube or Vimeo source needs no
-extra package, no registration and no configuration — only a source value
+extra package, no registration and no configuration: only a source value
 `detectSource` recognises. When it does not recognise one, the player publishes
 the refusal naming the value it turned down; see [What a refusal
 reads like](#what-a-refusal-reads-like).
 
-These have no host list at all — the extension of the
+These have no host list at all: the extension of the
 path decides, on any host and on relative paths too. The extension is read from
 the path before the first `?` or `#`, so a query string does not hide it, and
 the match is case-insensitive.
@@ -41,24 +41,24 @@ providerOptions={{ hls: { build: 'light' } }}
 ```
 
 `build` is `'full'` (the default) or `'light'`, and names which hls.js build
-`Player.Root` loads — `'light'` is about 53 KB gzip smaller and drops
+`Player.Root` loads: `'light'` is about 53 KB gzip smaller and drops
 subtitles, alternate audio, CMCD, EME and Variable Substitution, covered in
 [`@playdeck/provider-hls`](../reference/provider-hls.md)'s README. It is a build
 _name_ rather than the loader function `createHlsProvider`'s own `loadHls`
 option takes: every value a provider bag declares is compared with
 `Object.is` (`providerBagEqual`, `packages/react/src/use-activation.ts`), so a
-function passed inline — a new one on every render — would tear the hls.js
+function passed inline (a new one on every render) would tear the hls.js
 engine down and rebuild it each time rather than ever reaching a stable
 identity. Pinning an hls.js version or serving it from somewhere other than
 the bundled dependency still means reaching for `loadHls`, which means
-mounting `createHlsProvider` directly rather than through `Player.Root` — see
+mounting `createHlsProvider` directly rather than through `Player.Root`: see
 its README's "Supplying your own hls.js".
 
 An HLS engine is chosen per browser, and is pinned through an explicit source
-object rather than through options — see below.
+object rather than through options: see below.
 
-Any other URL — a host no provider claims and a path with none of those three
-extensions — is refused. There is no fall-back provider that tries it anyway, so
+Any other URL (a host no provider claims and a path with none of those three
+extensions) is refused. There is no fall-back provider that tries it anyway, so
 `clip.avi` and `https://example.com/clip.avi` are both refused on the extension:
 in the first there is no host to blame at all.
 
@@ -79,10 +79,10 @@ These run before any host is looked at, and they refuse a string outright.
 
 | Rule                                                                                                                                                                                     |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Non-empty, and equal to its own `trim()` — a leading or trailing space is refused rather than trimmed. No raw tab, line feed or carriage return anywhere.                                |
+| Non-empty, and equal to its own `trim()`: a leading or trailing space is refused rather than trimmed. No raw tab, line feed or carriage return anywhere.                                 |
 | No space and no C0 control character (U+0000 to U+001F) at either end. These are what the URL parser would strip before parsing, so the value that plays would not be the value checked. |
 | No `%` that is not followed by two hex digits.                                                                                                                                           |
-| Scheme must be `http:` or `https:`, or absent. Everything else — `javascript:`, `data:`, `file:`, and `blob:` too — is refused for a string.                                             |
+| Scheme must be `http:` or `https:`, or absent. Everything else (`javascript:`, `data:`, `file:`, and `blob:` too) is refused for a string.                                               |
 | A scheme must be followed by `//`: `https:clip.mp4` and `https:/host/clip.mp4` are refused.                                                                                              |
 | A protocol-relative `//host/…` must have a non-`/` after the two slashes.                                                                                                                |
 | The URL must parse.                                                                                                                                                                      |
@@ -90,7 +90,7 @@ These run before any host is looked at, and they refuse a string outright.
 The two whitespace rules overlap but are not the same rule, and they do not
 report the same way. A trailing **space** is caught by the `trim()` comparison
 and reads as _not readable_; a trailing **control character** is invisible, gets
-past that comparison, and reads as _will not play_ — see
+past that comparison, and reads as _will not play_: see
 [What a refusal reads like](#what-a-refusal-reads-like). If a URL that looks
 correct is refused, an invisible character copied in with it is the first thing
 to check.
@@ -101,16 +101,16 @@ protocol-relative URL is resolved against `https:` and it is the resolved value
 that is carried forward, never the `//host/…` the caller wrote.
 
 `blob:` is refused for a string because no source type has been resolved yet. It
-is accepted inside an explicit `{ type: 'video' }` object, and only there — see
+is accepted inside an explicit `{ type: 'video' }` object, and only there: see
 [Explicit source objects](#explicit-source-objects).
 
 ## A poster before the provider attaches
 
 `Player.Root`'s `poster="provider"` asks the attached provider for its own
 still, which means it only ever resolves once a provider _has_ attached. Under
-`loading="interaction"` that never happens before the viewer's first click —
+`loading="interaction"` that never happens before the viewer's first click:
 the provider stays dormant, nothing fetched and no embed mounted, exactly as
-`loading="interaction"` promises — so `poster="provider"` shows nothing for
+`loading="interaction"` promises, so `poster="provider"` shows nothing for
 the whole window a dormant player spends on screen. A still for that window
 has to come from somewhere that does not need the provider.
 
@@ -118,8 +118,8 @@ has to come from somewhere that does not need the provider.
 `resolveYouTubePosterUrl(source)`: synchronous, makes no request, and reads no
 browser global, so it is safe to call before any provider attaches, including
 on the server. It parses with the same `detectSource` this page's YouTube
-section describes — a URL in any form listed above, or an explicit
-`{ type: 'youtube', videoId }` object — and returns `null` for anything else,
+section describes (a URL in any form listed above, or an explicit
+`{ type: 'youtube', videoId }` object) and returns `null` for anything else,
 including a source another provider would claim. Pass the result straight into
 `poster`:
 
@@ -157,29 +157,29 @@ export const YouTubeClipDormantUntilInteraction = () => (
 );
 ```
 
-The still this resolves to is `hqdefault.jpg` — generated for every upload,
+The still this resolves to is `hqdefault.jpg`, generated for every upload,
 unlike `maxresdefault.jpg`, which only exists for an upload at a resolution
 high enough to have one and 404s silently on every other video, so it is not
 named here as a reliable alternative. `hqdefault.jpg` is itself a 4:3 image
 with the real frame letterboxed inside it wherever the source is a wider
-aspect ratio — expect bars, not a full-bleed still.
+aspect ratio: expect bars, not a full-bleed still.
 
-**Vimeo and Wistia.** Neither provider derives a poster from an id alone —
-Vimeo's still comes from its oEmbed response, Wistia's from its own oEmbed —
+**Vimeo and Wistia.** Neither provider derives a poster from an id alone:
+Vimeo's still comes from its oEmbed response, Wistia's from its own oEmbed,
 so there is no pure helper for either: resolving one means a request, and
 making that request while a `loading="interaction"` root is still dormant
 would break the one promise that loading mode makes (no provider request
 before a click). That request path is also not one this library takes on
-itself — see `.out-of-scope/media-url-address-policy.md` for why a new
+itself: see `.out-of-scope/media-url-address-policy.md` for why a new
 non-browser fetch stays out of scope.
 
 The pattern instead is to resolve the still once, at build time (a script,
-a CI step, a server action — anywhere that is not the dormant player), and
+a CI step, a server action, anywhere that is not the dormant player), and
 pass the fixed URL into `poster` the same way the YouTube example above
 does:
 
 ```ts
-// Run ahead of time, wherever the rest of a page's content is prepared —
+// Run ahead of time, wherever the rest of a page's content is prepared,
 // never from the player itself.
 const response = await fetch(
   `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(vimeoUrl)}`
@@ -189,9 +189,9 @@ const { thumbnail_url: posterUrl } = await response.json();
 
 Wistia's own oEmbed endpoint (`https://fast.wistia.com/oembed`) answers the
 same shape. Both are the requests this library already makes itself when a
-consumer opts into runtime `poster="provider"` resolution —
+consumer opts into runtime `poster="provider"` resolution:
 `packages/provider-vimeo/src/oembed-availability.ts` and
-`packages/provider-wistia/src/poster-availability.ts` — reused here ahead of
+`packages/provider-wistia/src/poster-availability.ts`, reused here ahead of
 time instead of at attach. Neither oEmbed response promises a fixed size: the
 thumbnail dimensions vary by video and, for Vimeo, by the request itself, so
 treat whatever width and height come back as the still's real size rather than
@@ -212,11 +212,11 @@ so `javascript:` and `data:` cannot reach a provider by taking this path.
 | `{ type: 'video', sources: [{ src, mimeType }, …] }` | at least one entry, each with a non-empty `src` and `mimeType`, `src` allowed |
 
 `{ type: 'video' }` is the one place a `blob:` URL is accepted, which is how an
-in-page object — a `MediaSource`, a picked `File` — is handed over. An `hls`
+in-page object (a `MediaSource`, a picked `File`) is handed over. An `hls`
 source refuses `blob:` because its manifest loader fetches the URL itself.
 
-Anything else — a missing field, an id in the wrong shape, a value that is
-neither a string nor an object — is refused as `invalid-source`.
+Anything else (a missing field, an id in the wrong shape, a value that is
+neither a string nor an object) is refused as `invalid-source`.
 
 ## Supplying your own provider
 
@@ -233,46 +233,46 @@ providers={{
 }}
 ```
 
-`detect` takes a URL string — exactly what `source` is when it is not an
-explicit object — and either turns it into this kind's own source object, or
+`detect` takes a URL string (exactly what `source` is when it is not an
+explicit object) and either turns it into this kind's own source object, or
 declines by returning `undefined`. `load` is a lazy factory: calling it is
 what performs this kind's own dynamic import, the same way this package's own
 `await import('@playdeck/provider-hls')` never runs for a page that plays
 nothing but MP4. What it resolves to is a second function, called with the
 mount point, the detected source and this kind's own `providerOptions` bag,
-that builds and returns the running `ProviderAdapter` — the same interface
+that builds and returns the running `ProviderAdapter`, the same interface
 [`@playdeck/core`](../reference/core.md) documents, and every built-in loader
 already produces.
 
 A `detect` that throws declines too, exactly as if it had returned
 `undefined`: the throw is caught, treated as this registration declining, and
-detection moves on to the next one. It is not silently lost — it is reported
+detection moves on to the next one. It is not silently lost: it is reported
 asynchronously, the same way a throwing subscriber already is elsewhere in
 this package, so it stays visible without being able to escape render and
-reach your own error boundary. Write `detect` defensively regardless — for
-example, `new URL(url).pathname` throws for a value that is not a valid URL —
+reach your own error boundary. Write `detect` defensively regardless: for
+example, `new URL(url).pathname` throws for a value that is not a valid URL,
 but a bug there degrades to that source going undetected rather than crashing
 the player.
 
-Detection tries the five built-in kinds first — a supplied kind can never
-intercept a URL, or an explicit object, a built-in host already claims — and
+Detection tries the five built-in kinds first (a supplied kind can never
+intercept a URL, or an explicit object, a built-in host already claims) and
 only on a built-in refusal walks `providers`' own entries, in the order they
 were given, using the first whose `detect` accepts the URL. `hls`, `video`,
 `youtube`, `vimeo` and `wistia` are reserved names: a `providers` entry keyed
 by one of them is skipped outright, on both the string path and the
 explicit-object path, before its `detect` is ever called or its entry is ever
-looked up — not only inert once a resolved source of that `type` reaches this
+looked up, not only inert once a resolved source of that `type` reaches this
 package's own built-in loader, which dispatches on `type` first regardless of
 which registration produced it.
 
-An explicit object of a supplied kind — `{ type: 'example', clipId: '…' }` —
+An explicit object of a supplied kind (`{ type: 'example', clipId: '…' }`)
 resolves without ever calling `detect`: `detect` takes a URL string, and an
 object handed to `source` has already declared its own kind through its
 `type` field, so it is validated directly instead, the same way an explicit
 object of a built-in kind (the table above) skips that kind's own host and
 path detection. A `type` matching no registered `providers` key is refused,
 same as any other unrecognised source. Unlike the built-in `video` and `hls`
-kinds, a supplied kind's own values are never rewritten — there is no known
+kinds, a supplied kind's own values are never rewritten: there is no known
 field on an arbitrary shape to normalise a protocol-relative `//host/...`
 value on. If that form matters to your provider, normalise it yourself before
 handing the object to `Player.Root`.
@@ -280,8 +280,8 @@ handing the object to `Player.Root`.
 Before anything else runs, the object is copied into a plain structure this
 package builds itself, and `load`'s factory receives that copy rather than
 the object you passed. The copy takes every own, enumerable, string-keyed
-value your object carries — reading each one exactly once, so a getter cannot
-answer differently the second time it is read — at a nesting depth capped well
+value your object carries (reading each one exactly once, so a getter cannot
+answer differently the second time it is read) at a nesting depth capped well
 past anything a real integration needs, and a total size capped the same way:
 if the same object is referenced from more than one place in your source, the
 copy carries it once per reference rather than once overall, so a shape that
@@ -290,26 +290,26 @@ once. Only plain objects, arrays, strings, finite numbers, booleans, `null`
 and `undefined` are admitted: a `Map`, a `Set`, a `bigint`, a function, a
 class instance, a symbol-keyed field, nesting past the depth cap, or a source
 past the total size cap refuses the whole source as `invalid-source`, the
-same way an unrecognised `type` does, and never throws — nor does a value
+same way an unrecognised `type` does, and never throws, nor does a value
 whose own shape makes reading it throw, such as a getter that throws or a
 `Proxy` with a hostile trap; that is refused the same way. A non-enumerable
 own property is silently left out of the copy rather than refusing the
-source — it never reaches `load`'s factory either way.
+source: it never reaches `load`'s factory either way.
 
 The same shared allowlist runs ahead of every supplied `detect` and every
 explicit object of a supplied kind, exactly where it runs ahead of every
-built-in host inside `detectSource` — a `source` whose scheme the allowlist
+built-in host inside `detectSource`: a `source` whose scheme the allowlist
 refuses (`javascript:`, `data:`, and anything else not covered by
 [Shared rules for a source string](#shared-rules-for-a-source-string)) never
 reaches a supplied `detect`, and a string carrying one nested anywhere inside
-an explicit object — not just a top-level field — refuses the whole object the
+an explicit object (not just a top-level field) refuses the whole object the
 same way. This is why `detect` is typed as it is: nothing this package writes
 ever reads a field of the source `detect` returns as a URL, so once past that
 gate a supplied kind is trusted the same way its own `load` factory already
 is.
 
 `providerOptions` takes a further key for each supplied kind, alongside the
-four built-in ones, compared for equality the same way — so an inline object
+four built-in ones, compared for equality the same way, so an inline object
 literal does not tear the provider down and rebuild it every render, the same
 guard that keeps an inline `hls` `build` option from rebuilding the engine.
 Deliberately not a link: this section is shared by every provider page, and
@@ -319,9 +319,9 @@ catches that).
 
 Every string in a supplied kind's own `providerOptions` entry passes the same
 shared allowlist before `load`'s factory is ever called, exactly as the
-detected source already does. A refused value — `javascript:`, `data:`, or
+detected source already does. A refused value (`javascript:`, `data:`, or
 anything else [Shared rules for a source string](#shared-rules-for-a-source-string)
-refuses — is omitted from the bag the factory receives, exactly as if you had
+refuses) is omitted from the bag the factory receives, exactly as if you had
 not set that option, and reported the same way any other refused prop is. A
 number or boolean option is never checked and always arrives untouched. Your
 registration's own factory is not expected to guard this itself.
@@ -329,7 +329,7 @@ registration's own factory is not expected to guard this itself.
 `controls`, `loop`, `startTime` and `endTime` reach a supplied kind not at all:
 `Root` folds each into whichever of the `youtube`, `vimeo` and `wistia` bags
 the detected source belongs to, and a supplied kind has none of those three, so
-the four props are silent no-ops on it — the divergence
+the four props are silent no-ops on it: the divergence
 [ADR-0004](https://github.com/pedrosousa13/playdeck/blob/main/docs/adr/0004-cross-provider-options-live-on-root.md) asks be declared
 rather than left to be discovered. A registration that wants to answer one of
 them takes it as a key in its own `Options` bag instead, read off its own
@@ -344,7 +344,7 @@ import type {
 
 // A source kind this package ships no loader for. Everything past this point
 // is the shape any consumer's own provider takes: a source object of its own,
-// and a lazy factory that turns it into a running ProviderAdapter — the same
+// and a lazy factory that turns it into a running ProviderAdapter, the same
 // interface `@playdeck/provider-hls` and the other four built-in packages
 // already produce.
 type ExampleSource = { readonly type: 'example'; readonly clipId: string };
@@ -391,16 +391,16 @@ never imported.
 
 ### A worked example
 
-The shape above is declared rather than implemented — `createExampleAdapter`
+The shape above is declared rather than implemented: `createExampleAdapter`
 is typed, never built. A real adapter is a `<video>` element the registration
 owns end to end, built from nothing but the DOM events that element already
-fires — no import from any `@playdeck/provider-*` package required, and none
+fires: no import from any `@playdeck/provider-*` package required, and none
 of the plumbing above changes to admit it. `clipId` only has to survive the
 round trip from `detect` back out to the factory: which file actually plays
 is `providerOptions`' own `src`, the same way `PlayerProviderOptions.hls`'s
 `build` carries a per-provider choice no source string could. That `src`
 passes the shared allowlist too, exactly like the resolved source's own
-fields — see [Supplying your own provider](#supplying-your-own-provider)
+fields: see [Supplying your own provider](#supplying-your-own-provider)
 above. Every capability this adapter does not implement is reported
 `unavailable` --
 `provider` for what the adapter itself leaves out, `source` for
@@ -701,21 +701,21 @@ local clip through `providerOptions` rather than the placeholder URL above.
 
 1.2.0 adds four required fields to `PlayerCapabilities`: `liveEdge`,
 `selectQualityAuto`, `selectAudioTrack`, and `remotePlayback`. Any object
-built to satisfy that type — a custom provider adapter, or a capabilities
-fixture in a test — needs all four before it type-checks again, the same
+built to satisfy that type (a custom provider adapter, or a capabilities
+fixture in a test) needs all four before it type-checks again, the same
 compatibility impact `providerPoster` had when it landed in 1.1.0.
 
-- `liveEdge` — whether the provider can report a live edge for
+- `liveEdge`: whether the provider can report a live edge for
   `seekToLiveEdge` to land on. A provider with no way to answer this for any
   source returns `{ status: 'unavailable', reason: 'provider' }`.
-- `selectQualityAuto` — whether an automatic-choice item belongs beside the
+- `selectQualityAuto`: whether an automatic-choice item belongs beside the
   published rungs in `QualityMenu`, distinct from `selectQuality`: a provider
   can select real rungs while refusing an auto choice. A provider with no
   quality ladder at all returns `{ status: 'unavailable', reason: 'provider' }`.
-- `selectAudioTrack` — whether the provider can switch between alternate audio
+- `selectAudioTrack`: whether the provider can switch between alternate audio
   renditions. A provider with no audio-track surface to wire the command to
   returns `{ status: 'unavailable', reason: 'provider' }`.
-- `remotePlayback` — whether the element exposes the Remote Playback API
+- `remotePlayback`: whether the element exposes the Remote Playback API
   `RemotePlaybackButton` reads. A provider with no media element to read
   `remote` off returns `{ status: 'unavailable', reason: 'provider' }`.
 
@@ -753,16 +753,16 @@ and quotes the value that was rejected, truncated to 120 characters.
 
 Each quotation below is the **opening** of the message, so a phrase pasted from
 a console lands here. Every one of them ends with the same further sentence,
-pointing a reader at this document — omitted from the four blockquotes because
-repeating it four times would say nothing the fourth time:
+pointing a reader at this document (omitted from the four blockquotes because
+repeating it four times would say nothing the fourth time):
 
-**Not readable** — a string that broke one of the shared rules, or a recognised
+**Not readable**: a string that broke one of the shared rules, or a recognised
 provider host in a path shape not listed above:
 
-> Playdeck could not read a video from the player source "…" — it is either not
+> Playdeck could not read a video from the player source "…": it is either not
 > a well-formed URL, or a provider URL in a form Playdeck does not read.
 
-**Will not play** — the reason that cannot name a single cause, so it states the
+**Will not play**: the reason that cannot name a single cause, so it states the
 requirement instead. It covers a scheme the allowlist refuses, a control
 character at either end, and a URL that simply matched nothing:
 
@@ -770,7 +770,7 @@ character at either end, and a URL that simply matched nothing:
 > http(s) or scheme-less, carries no control character at either end, and is
 > either a YouTube, Vimeo or Wistia URL or a path ending .mp4, .webm or .m3u8.
 
-**Does not play that format** — a well-formed URL for a streaming format
+**Does not play that format**: a well-formed URL for a streaming format
 Playdeck recognises and does not support. Today that is DASH, and only DASH:
 
 > Playdeck does not play DASH. The player source "…" is a DASH manifest, and
@@ -781,7 +781,7 @@ HLS and progressive files, and DASH is out of scope: a `.mpd` URL is refused
 deliberately, so changing the URL will not help and no future patch release
 turns it on. Convert the media to HLS, or use a player that carries dash.js.
 
-**Not a source object** — a value that is not a string and does not validate as
+**Not a source object**: a value that is not a string and does not validate as
 one of the objects above:
 
 > The player source … is not a source object Playdeck accepts.
@@ -812,7 +812,7 @@ this most often:
    offline network, a stale deploy or an asset host returning HTML for a missing
    chunk all land here. The browser's network panel says which.
 3. **`error.cause`.** The rejection itself is carried there for a consumer
-   reading the error object — `usePlayerState((state) => state.error)`, or the
+   reading the error object: `usePlayerState((state) => state.error)`, or the
    `children` render prop on `Player.ErrorDisplay`. It is not rendered by
    `ErrorDisplay`'s default output, which draws the message and nothing else.
 

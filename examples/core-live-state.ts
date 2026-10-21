@@ -1,6 +1,6 @@
 import { deriveLiveState, liveStateEqual } from '@playdeck/core';
 
-// Liveness comes from what the provider reports — never from the URL, the id
+// Liveness comes from what the provider reports: never from the URL, the id
 // or a filename. `isLiveHint` is the provider's own answer where it has one;
 // leave it undefined and an infinite duration decides instead.
 export const live = deriveLiveState({
@@ -11,11 +11,11 @@ export const live = deriveLiveState({
 });
 
 // -> { isLive: true, atLiveEdge: true, offsetFromEdge: 6 }. `null` means "not
-// live, or not yet known" — a control should not claim either until it is.
+// live, or not yet known". A control should not claim either until it is.
 export const atEdge = live?.atLiveEdge ?? false;
 
-// Whole seconds, `0` at or ahead of the edge — the resolution `Time` renders
-// at, and why `liveStateEqual` compares it: an unrounded float would differ
+// Whole seconds, `0` at or ahead of the edge (the resolution `Time` renders
+// at), and why `liveStateEqual` compares it: an unrounded float would differ
 // on essentially every `timeupdate` and republish `live` many times a second.
 export const behindBy = live?.offsetFromEdge ?? 0;
 

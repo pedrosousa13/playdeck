@@ -11,7 +11,7 @@ renders nothing.
 
 | Component                     | Gating capability                                     | Renders when                            |
 | ----------------------------- | ----------------------------------------------------- | --------------------------------------- |
-| `Player.PlayButton`           | — (provider presence)                                 | always (not capability-gated)           |
+| `Player.PlayButton`           | (provider presence)                                   | always (not capability-gated)           |
 | `Player.MuteButton`           | `setVolume`                                           | `setVolume` is `available`              |
 | `Player.VolumeSlider`         | `setVolume`                                           | `setVolume` is `available`              |
 | `Player.SeekSlider`           | `seek`                                                | `seek` is `available`                   |
@@ -22,18 +22,18 @@ renders nothing.
 | `Player.QualityMenu`          | `selectQuality`                                       | `selectQuality` is `available`          |
 | `Player.PlaybackRateMenu`     | `setPlaybackRate`                                     | `setPlaybackRate` is `available`        |
 | `Player.ChaptersMenu`         | `chapters`                                            | `chapters` is `available` and non-empty |
-| `Player.Time`                 | — (display)                                           | always                                  |
+| `Player.Time`                 | (display)                                             | always                                  |
 | `Player.Controls`             | `seek`, `setVolume`, `fullscreen`, `pictureInPicture` | container; children gate individually   |
 
-`Player.QualityMenu`'s Auto row carries a second, narrower gate of its own —
-`selectQualityAuto` — covered in the `selectQuality` section below.
+`Player.QualityMenu`'s Auto row carries a second, narrower gate of its own
+(`selectQualityAuto`), covered in the `selectQuality` section below.
 
 `airPlay` reports whether there is somewhere to cast to, resolved in this
 order (#71):
 
 | Condition                                                         | `airPlay`                  |
 | ----------------------------------------------------------------- | -------------------------- |
-| No `webkitShowPlaybackTargetPicker` — anything but Safari and iOS | `unavailable` / `browser`  |
+| No `webkitShowPlaybackTargetPicker` (anything but Safari and iOS) | `unavailable` / `browser`  |
 | `x-webkit-airplay="deny"` or `disableRemotePlayback`              | `unavailable` / `policy`   |
 | No playback target announced yet, or the last one went away       | `unavailable` / `provider` |
 | WebKit announced an available playback target                     | `available`                |
@@ -55,48 +55,48 @@ Two consequences worth knowing:
 `@playdeck/provider-hls` delegates to the native provider, so HLS inherits all of
 this. The command itself is unchanged: `showAirPlayPicker()` still forwards to
 WebKit whenever the API exists and policy permits, so a consumer driving it
-directly is not blocked by the capability — the capability governs what
+directly is not blocked by the capability: the capability governs what
 renders, not what is callable.
 
 `remotePlayback` is the same shape, over the standards-based **Remote
-Playback API** rather than WebKit's own — the media element's `remote` object,
+Playback API** rather than WebKit's own (the media element's `remote` object),
 which is Chrome's built-in route to Chromecast for a file or an HLS stream and
 needs no Cast SDK, no sender script and no receiver page:
 
 | Condition                                                    | `remotePlayback`           |
 | ------------------------------------------------------------ | -------------------------- |
-| No `remote` object on the element — no Remote Playback API   | `unavailable` / `browser`  |
+| No `remote` object on the element (no Remote Playback API)   | `unavailable` / `browser`  |
 | `remote` exists, but `watchAvailability()` reports no device | `unavailable` / `provider` |
 | `watchAvailability()` reports a device                       | `available`                |
 
-Also live — a receiver appearing or leaving the network flips the capability
-with no reload — and also `unavailable`, not `unknown`, before the first
+Also live (a receiver appearing or leaving the network flips the capability
+with no reload), and also `unavailable`, not `unknown`, before the first
 callback, for the same reason `airPlay` is: a machine that never sees a
 receiver would otherwise leave a consumer waiting on a verdict that never
 comes. `@playdeck/provider-hls` delegates to the native provider here too.
 Once `available`, `PlayerState.remotePlayback` reflects the element's own
 `remote.state` (`connecting`/`connected`/`disconnected`), and is `null` both
 before that and once the capability goes back to `unavailable`. The Cast SDK
-is a separate, unimplemented route — see `docs/comparison/features.md`'s
+is a separate, unimplemented route: see `docs/comparison/features.md`'s
 Chromecast / Google Cast row.
 
-`selectTextTrack` gates `Player.CaptionsButton` — see the Captions docs.
+`selectTextTrack` gates `Player.CaptionsButton`: see the Captions docs.
 
 `selectQuality` gates `Player.QualityMenu`, which composes `Player.SettingsMenu`/
 `Player.MenuRadioGroup`/`Player.MenuRadioItem` the same way `Player.CaptionsMenu`
-does, listing `PlayerState.qualities` plus an "Auto" row — see below for which
+does, listing `PlayerState.qualities` plus an "Auto" row: see below for which
 providers populate that ladder. `setPlaybackRate` gates `Player.PlaybackRateMenu`
 the same way, listing a rate ladder (default `[0.5, 1, 1.5, 2]`, overridable via
-its `rates` prop) instead of a provider-published one — see the **Playback
+its `rates` prop) instead of a provider-published one: see the **Playback
 rate** guide. The **Reference example**'s settings menu still composes its own
 playback-rate group by hand over `Player.SettingsMenu`/`Player.MenuRadioGroup`,
 for a consumer who wants it alongside quality under one trigger.
 `chapters` gates `Player.ChaptersMenu` the same way, listing
-`PlayerState.chapters` and marking the one containing `currentTime` — see the
+`PlayerState.chapters` and marking the one containing `currentTime`: see the
 **Chapters** guide. It says only whether the provider can report the
 divisions in `PlayerState.chapters` at all; `Player.ChaptersMenu` additionally
 renders nothing while that collection is empty. Chapter markers drawn on the
-seek slider itself are out of scope for the shipped parts — a consumer
+seek slider itself are out of scope for the shipped parts: a consumer
 composes those over `Player.SeekSlider`, which already takes children.
 `customControls` gates no shipped control.
 
@@ -104,16 +104,16 @@ composes those over `Player.SeekSlider`, which already takes children.
 
 A capability says whether a command is _supported_. `PlayerState.commandsReady`
 says whether it is _accepted yet_. Commands issued before it are refused with
-`{ ok: false, reason: 'not-ready' }` — they are **not** queued, and nothing is
+`{ ok: false, reason: 'not-ready' }`. They are **not** queued, and nothing is
 replayed once the provider comes up.
 
 Each provider declares readiness for itself, because the moment differs and
 core cannot derive it: native declares after `media.load()` (which resets
 `playbackRate`, so anything applied earlier is undone), hls.js at
 `MEDIA_ATTACHED`, YouTube at `onReady`, Vimeo when its player is constructed,
-and Wistia at `api-ready` — the moment `<wistia-player>` hands over the
+and Wistia at `api-ready`, the moment `<wistia-player>` hands over the
 `PublicApi` handle, which is the adapter's only command surface and does not
-exist before it. `activation` is not a substitute — native with `preload="none"`
+exist before it. `activation` is not a substitute: native with `preload="none"`
 accepts commands while `activation` is still `loading-provider`.
 
 `whenReady()` is the imperative form, and it sits on the player actions, on the
@@ -165,17 +165,17 @@ so it is safe to await from an effect that runs before mount finishes.
 ## `buffered`: not every provider reports, and not every provider that does sees the same thing
 
 `PlayerState.buffered` is what `Player.SeekSlider` paints behind the thumb. No
-provider invents a range, but they see different amounts — and one sees nothing
+provider invents a range, but they see different amounts, and one sees nothing
 at all:
 
-| Provider    | What the ranges are                                                          |
-| ----------- | ---------------------------------------------------------------------------- |
-| native, hls | The `<video>` element's own `TimeRanges` — every range, exactly as buffered. |
-| vimeo       | The SDK's `getBuffered()` — every range, including gaps left by a seek.      |
-| youtube     | One range, from where playback entered the buffer to that buffer's edge.     |
-| wistia      | Nothing — the ranges are never published, and stay empty for the session.    |
+| Provider    | What the ranges are                                                         |
+| ----------- | --------------------------------------------------------------------------- |
+| native, hls | The `<video>` element's own `TimeRanges`: every range, exactly as buffered. |
+| vimeo       | The SDK's `getBuffered()`: every range, including gaps left by a seek.      |
+| youtube     | One range, from where playback entered the buffer to that buffer's edge.    |
+| wistia      | Nothing: the ranges are never published, and stay empty for the session.    |
 
-YouTube is the odd one out because its iframe API exposes no ranges at all —
+YouTube is the odd one out because its iframe API exposes no ranges at all:
 only `getVideoLoadedFraction()`, which despite the name reports the _end_ of the
 range the playhead is in, over duration. The start of that range is never
 exposed, so the adapter reports the earliest playhead position it has seen while
@@ -185,12 +185,12 @@ The practical difference from native, hls and vimeo: buffer loaded _before_ you
 arrived is invisible. Join a video at 30s and the bar starts at 30s, however
 much sits behind it; seek backwards out of the range being tracked and the bar
 restarts from where you land, even though the region you left is still loaded.
-Everything YouTube reports is genuinely buffered — it just reports less than it
+Everything YouTube reports is genuinely buffered. It just reports less than it
 holds.
 
 Wistia is the one provider that reports nothing. Aurora fires no buffering
 events and its `PublicApi` handle exposes no buffered ranges, so the adapter
-publishes no ranges rather than a guess — and `PlayerState.buffering` stays
+publishes no ranges rather than a guess, and `PlayerState.buffering` stays
 `false` throughout for the same reason.
 
 On the other four, an empty array means "nothing is buffered ahead of the
@@ -204,10 +204,10 @@ nothing.
 | Provider | `selectQuality`                  | Where the ladder comes from                           |
 | -------- | -------------------------------- | ----------------------------------------------------- |
 | hls.js   | `available` with a manifest      | The manifest's levels, with height, width and bitrate |
-| vimeo    | `available` with a ladder        | `getQualities()` — one entry per rung, height only    |
+| vimeo    | `available` with a ladder        | `getQualities()`: one entry per rung, height only     |
 | native   | `unavailable`, reason `source`   | The browser picks; nothing to enumerate               |
-| youtube  | `unavailable`, reason `provider` | Enumerable, but not selectable — see below            |
-| wistia   | `unavailable`, reason `provider` | No rung ladder to publish — see below                 |
+| youtube  | `unavailable`, reason `provider` | Enumerable, but not selectable: see below             |
+| wistia   | `unavailable`, reason `provider` | No rung ladder to publish: see below                  |
 
 `auto` is not a rung. Vimeo returns it as a member of `getQualities()` and
 hls.js has an equivalent mode; both are reported as `selectedQualityId: null`
@@ -239,7 +239,7 @@ viewer chose it.
 On Vimeo, the rung's `height` is Vimeo's own name for it, not a measurement:
 the rung it labels `240p` renders at 480×270. `width` and `bitrate` are `null`
 because the SDK reports neither. Under `auto` the rung actually rendering is not
-identified at all — the SDK marks `auto` itself as the active entry.
+identified at all: the SDK marks `auto` itself as the active entry.
 
 **YouTube can enumerate but cannot select, so it offers neither.**
 `getAvailableQualityLevels()` returns an honest list once playback has started,
@@ -247,7 +247,7 @@ but `setPlaybackQuality()` is accepted and discarded: measured against the live
 IFrame API, asking for each of the six levels the player itself offered left
 `getPlaybackQuality()` on `medium` throughout, with no `onPlaybackQualityChange`
 and no rebuffer. So did setting a level and then seeking, and so did
-`loadVideoById({ suggestedQuality })` — where the player announced its own
+`loadVideoById({ suggestedQuality })`, where the player announced its own
 choice as `medium` after being asked for both `tiny` and `hd720`. Asking for
 `tiny` failing in the same way as asking for `hd720` is what rules out a
 bandwidth or viewport ceiling: the argument is discarded, not clamped.
@@ -267,7 +267,7 @@ The one adaptive format Playdeck plays is HLS. DASH is out of scope by decision
 rather than by omission: an `.mpd` source is recognised and refused by name, with
 a message saying Playdeck does not play DASH, so a consumer is told to change
 their pipeline rather than left checking their URL. No release turns it on, and
-no capability reports on it — a declined format is not a capability. The
+no capability reports on it: a declined format is not a capability. The
 reasoning is recorded in
 [`.out-of-scope/dash.md`](https://github.com/pedrosousa13/playdeck/blob/main/.out-of-scope/dash.md)
 ([#447](https://github.com/pedrosousa13/playdeck/issues/447)).

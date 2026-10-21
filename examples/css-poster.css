@@ -1,6 +1,6 @@
 /* Styling a part: an overlay.
-   `Poster` carries its own structural geometry — absolutely positioned, inset
-   0, z-index 10 — and computes its `visibility` from player state, while
+   `Poster` carries its own structural geometry (absolutely positioned, inset
+   0, z-index 10) and computes its `visibility` from player state, while
    `PosterImage` sets `display`, `width` and `height` inline. None of that can
    be beaten from a stylesheet, so restating any of it here would be dead CSS
    rather than a conflict (ADR-0001). A stylesheet paints, and that is all. */

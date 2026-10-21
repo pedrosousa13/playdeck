@@ -40,7 +40,7 @@ export const icons = [
 ];
 
 // Icons are decorative (`aria-hidden`), sized in `em`, and coloured by
-// `currentColor` — a control passing one keeps its own accessible name.
+// `currentColor`. A control passing one keeps its own accessible name.
 export const CustomPlayButton = () => (
   <PlayButton>
     <PlayIcon />

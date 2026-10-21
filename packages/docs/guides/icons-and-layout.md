@@ -23,7 +23,7 @@ from public parts, which is the thing being proved.
 
 The layout CSS lives in this example, not in `@playdeck/react/theme.css`. The
 library stays unopinionated about layout; this example documents one way to lay
-a control row out — two rows, a wrapping button row, and the volume slider
+a control row out: two rows, a wrapping button row, and the volume slider
 dropped below a 420px breakpoint so the composition stays usable at 320px.
 
 That breakpoint is a **container query**, not a media query: it asks how wide
@@ -34,7 +34,7 @@ fits one line, and the control row leaves the overlay to take its own space in
 flow beneath the media.
 
 In flow, the box gives up `aspect-ratio` and keeps a `min-height` of
-`56.25cqw` — 9/16 of the container. `Player.Media` takes part in flow, so the
+`56.25cqw` (9/16 of the container). `Player.Media` takes part in flow, so the
 box becomes media plus row and grows when the row needs more room than the
 ratio allows, which is what happens at 200% text; without the floor, the states
 that hide the control row entirely (before activation, and while an error
@@ -43,17 +43,17 @@ nothing, taking the full-bleed overlay with them.
 
 An element is never matched by its own container query, which is why
 `container-type` sits on a wrapper around the player rather than on the player
-itself — and why `56.25cqw` has an ancestor container to resolve against.
+itself, and why `56.25cqw` has an ancestor container to resolve against.
 
-`@container` is Chrome 105, Firefox 110 and Safari 16 — newer than the floor the
+`@container` is Chrome 105, Firefox 110 and Safari 16: newer than the floor the
 packages declare (Chrome 99, Firefox 97, Safari 15.4). That does not move the
 packages' floor: this is a composition in this workbench, never published, and
 the primitives ship no CSS at all.
 
-Where a primitive sets geometry on itself, your `style` prop overrides it —
-see the **Contract** guide's `style` section for the one carve-out.
+Where a primitive sets geometry on itself, your `style` prop overrides it.
+See the **Contract** guide's `style` section for the one carve-out.
 
-The example itself imports no stylesheet beyond its own layout CSS — never
+The example itself imports no stylesheet beyond its own layout CSS: never
 `@playdeck/react/theme.css`, which is the headless point it is making. The
 toolbar's **Theme** toggle still applies to it like every other story: the
 mounting lives in `.storybook/theme.tsx`, outside the `stories/reference/**`
@@ -64,13 +64,13 @@ for the theme itself.
 
 Below the breakpoint, PiP and AirPlay leave the button row and reappear as
 entries in the settings menu. None of that comes from the library. `@playdeck/react`
-ships no folding, no overflow behaviour and no notion of control priority —
+ships no folding, no overflow behaviour and no notion of control priority:
 where a control sits, whether it exists at all, and what it contains are your
 decisions, taken in your own layout. What follows is a composition pattern this
 example authors on top of the primitives, not a feature you can switch on. 420px
 is a number this example picked; the row wraps, so it never overflows sideways
 and the cost lands vertically instead. At a 320px container the row has 312px of
-content to fill with 44px targets, so six fit on a line — and the eight present
+content to fill with 44px targets, so six fit on a line. The eight present
 wrap two onto a second, taking the button row from 44px to 92px. Shedding two
 keeps it to one line. It is not a library constant, and yours will be different.
 
@@ -80,13 +80,13 @@ below the breakpoint the buttons are hidden and the menu entries show, above it
 the menu entries are hidden and the buttons show. Rendering both and hiding one
 is deliberate rather than lazy. `display: none` takes the inactive copy out of
 the accessibility tree as well as out of the layout, so no width ever offers the
-same action twice — a screen reader finds exactly one PiP control at 320px and
+same action twice: a screen reader finds exactly one PiP control at 320px and
 exactly one at 768px. That is what makes duplicating the action correct.
 Hiding rather than unmounting is also what turned up a bug in `SettingsMenu`'s
 roving focus, now fixed: a `display: none` entry stayed in the focus ring.
 
 The two queries are off by one on purpose, and the reason is that both of them
-_hide_ — there is no show/hide pair here, only two rules that each take a copy
+_hide_: there is no show/hide pair here, only two rules that each take a copy
 away. `max-width` is inclusive, so the rule that hides the buttons at
 `max-width: 420px` has to be paired with one that hides the menu entries from
 `421px` up. Write the same number in both and 420px matches both rules, so both
@@ -98,17 +98,17 @@ A selector that hides a folded menu entry must match or exceed the specificity
 of the menu-item styling it overrides. Get that wrong and the symptom is a
 duplicate that never goes away: here a bare single-class selector at (0,1,0)
 lost to the menu item's own `display: flex` at (0,2,0), and a PiP entry sat
-visible beside the PiP button at 768px — measured, not theorised. Writing the
+visible beside the PiP button at 768px (measured, not theorised). Writing the
 hide as a descendant selector, so the two specificities match, is the fix; the
 comment above the `min-width` block in `reference-player.tsx` records it.
 
 Folded menu entries have to repeat the capability gating their button
 counterparts get for free. The button primitives read the capability record
-themselves and render nothing when the provider does not offer the action —
-the reference example's `RealSources` story shows what that looks like as you
+themselves and render nothing when the provider does not offer the action.
+The reference example's `RealSources` story shows what that looks like as you
 switch sources. The menu-item primitive gates nothing, so the folded entries
 read the same capability statuses their buttons read, and the menu opens even
-when those entries are the only thing in it — otherwise the functionality it
+when those entries are the only thing in it: otherwise the functionality it
 absorbed disappears at exactly the width that needs it. Copy only the
 buttons' half of this pattern and you ship menu entries for actions the
 provider cannot perform.
@@ -122,6 +122,6 @@ Not every control that leaves at a narrow width can fold, and that is a limit of
 the pattern rather than a gap in this example. Folding needs a menu-item form of
 the action, and the settings menu's content root is a `role="menu"`, which admits
 only menu items, radio items, groups and separators. A range input is not a
-permitted child of one — measured, as a critical `aria-required-children`
-violation. So the volume slider drops below the breakpoint instead: mute and
+permitted child of one (measured, as a critical `aria-required-children`
+violation). So the volume slider drops below the breakpoint instead: mute and
 unmute survive it, and #196 records the decision that the drop stays.
