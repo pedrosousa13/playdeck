@@ -47,6 +47,14 @@ const providerLoads = (page: Page): Promise<number> =>
 // visible from the start -- including never restarting that server-started
 // fetch with `media.load()` (#911's own fix, which the hold must not
 // bypass).
+//
+// Demonstrated red (chromium, 2026-10-21): with `hasLayoutBoxes`
+// (`use-activation.ts`) forced to always return `true`, this test failed at
+// its first sampled assertion --
+// `expect(received).toBe(expected) // Object.is equality, Expected: true,
+// Received: false` on `media(page).evaluate(... => element.paused)` -- the
+// hold never engaged, so the hidden player started playing immediately.
+// Reverted after.
 test('an eager autoplay player hidden by CSS holds until it has layout', async ({
   page
 }) => {
@@ -78,10 +86,12 @@ test('an eager autoplay player hidden by CSS holds until it has layout', async (
   await expect
     .poll(() => playCalls(page), { timeout: 15_000 })
     .toBeGreaterThan(0);
-  // `play()` being called and `paused` actually reading `false` are two
-  // different moments on Firefox -- the call is counted synchronously, but
-  // the attribute only flips once the engine confirms, which can land a
-  // tick later. Polled rather than read once, for that reason.
+  // `playCalls` and `paused` are two separate reads of two separate signals
+  // -- a counter this spec's own `addInitScript` increments synchronously
+  // inside the wrapped `play()`, and the element's own `paused` getter --
+  // with nothing here that guarantees they settle on the same turn of the
+  // event loop. Polled rather than read once immediately after the poll
+  // above, so a real but not-yet-visible result does not read as a failure.
   await expect
     .poll(
       () => media(page).evaluate((element: HTMLVideoElement) => element.paused),
@@ -96,6 +106,13 @@ test('an eager autoplay player hidden by CSS holds until it has layout', async (
 // The other acceptance criterion: a visible `eager` player is unaffected --
 // no `Reveal` button, no held activation, autoplay runs the moment the
 // provider is ready.
+//
+// Demonstrated red (chromium, 2026-10-21): with `hasLayoutBoxes`
+// (`use-activation.ts`) forced to always return `false`, this test failed
+// at the first poll -- `Error: expect(received).toBeGreaterThan(expected),
+// Expected: > 0, Received: 0, Timeout 15000ms exceeded while waiting on the
+// predicate` on `playCalls(page)` -- the hold engaged even though the
+// viewport was visible, so autoplay never ran. Reverted after.
 test('a visible eager autoplay player is unaffected', async ({ page }) => {
   await countProviderLoads(page);
   await countPlayCalls(page);
@@ -107,7 +124,7 @@ test('a visible eager autoplay player is unaffected', async ({ page }) => {
     .poll(() => playCalls(page), { timeout: 15_000 })
     .toBeGreaterThan(0);
   // See the companion test above for why this is polled rather than read
-  // once: Firefox counts the `play()` call before `paused` flips to `false`.
+  // once immediately after the poll above.
   await expect
     .poll(
       () => media(page).evaluate((element: HTMLVideoElement) => element.paused),
