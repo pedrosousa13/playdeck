@@ -78,6 +78,7 @@ export { isNotice, notifySafely } from './safety.js';
 export {
   detectSource,
   isPermittedSourceUrl,
+  isValidMediaQuery,
   isVimeoHash,
   isVimeoVideoId,
   isWistiaMediaId,

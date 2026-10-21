@@ -82,3 +82,97 @@ test('hydration reuses the server-rendered video element, with no mismatch and n
   ).toEqual(serverSourceSrcs);
   expect(hydratedVideo!.getAttribute('preload')).toBe(serverPreload);
 });
+
+// #913: a `video` source whose entries carry `media` renders every one of
+// them under `loading="eager"` on both passes, server and client alike --
+// `sourceCommittedAtRender` reads the same three inputs (`loading`,
+// configuration, detected source) on both, so neither ever disagrees with
+// the other about which of the two rendering rules applies. A mismatch here
+// would mean the client re-filtered down to a `matchMedia`-matching subset
+// while the server rendered every entry, which is exactly the two different
+// rules this feature adds for the two different cases.
+//
+// Demonstrated red by a substitute mutation (docs/agents/demonstrated-red.md):
+// there is no prior version of this rule to revert to, so `viewport-media.tsx`'s
+// `visibleSources` was temporarily changed to always apply the client-created
+// filter, never the committed-at-render one. That filter runs during
+// `renderToString` too, in this same happy-dom environment, so the mutation
+// corrupts the server markup itself, not only the client pass -- recorded:
+//
+//   expected [ { src: '/desktop.mp4', … } ] to deeply equal
+//   [ { src: '/mobile.mp4', media: '(max-width: 600px)' },
+//     { src: '/desktop.mp4', media: '(min-width: 601px)' } ]
+//
+// (`serverSources` held one entry instead of two -- happy-dom's own
+// `matchMedia` read `(min-width: 601px)` as matching and `(max-width: 600px)`
+// as not, so the committed-at-render rule dropping out lost the mobile entry
+// specifically.)
+test('hydrates a video source whose entries carry media with no mismatch', () => {
+  const mediaFixture = () => (
+    <Player.Root
+      loading="eager"
+      preload="auto"
+      source={{
+        type: 'video',
+        sources: [
+          {
+            src: '/mobile.mp4',
+            mimeType: 'video/mp4',
+            media: '(max-width: 600px)'
+          },
+          {
+            src: '/desktop.mp4',
+            mimeType: 'video/mp4',
+            media: '(min-width: 601px)'
+          }
+        ]
+      }}
+    >
+      <Player.Viewport>
+        <Player.Media />
+      </Player.Viewport>
+    </Player.Root>
+  );
+
+  const markup = renderToString(mediaFixture());
+  const container = document.createElement('div');
+  container.innerHTML = markup;
+  document.body.append(container);
+
+  const serverSources = Array.from(container.querySelectorAll('source')).map(
+    (source) => ({
+      src: source.getAttribute('src'),
+      media: source.getAttribute('media')
+    })
+  );
+
+  const onRecoverableError = vi.fn();
+  const consoleError = vi
+    .spyOn(console, 'error')
+    .mockImplementation(() => undefined);
+
+  act(() => {
+    root = hydrateRoot(container, mediaFixture(), { onRecoverableError });
+  });
+
+  expect(onRecoverableError).not.toHaveBeenCalled();
+  expect(
+    consoleError.mock.calls.some(
+      ([message]) =>
+        typeof message === 'string' &&
+        /hydrat|did not match|switched to client rendering/i.test(message)
+    )
+  ).toBe(false);
+  consoleError.mockRestore();
+
+  expect(
+    Array.from(container.querySelectorAll('source')).map((source) => ({
+      src: source.getAttribute('src'),
+      media: source.getAttribute('media')
+    }))
+  ).toEqual(serverSources);
+  expect(serverSources).toEqual([
+    { src: '/mobile.mp4', media: '(max-width: 600px)' },
+    { src: '/desktop.mp4', media: '(min-width: 601px)' }
+  ]);
+});

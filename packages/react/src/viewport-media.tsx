@@ -1,4 +1,4 @@
-import { type detectSource } from '@playdeck/core';
+import { isValidMediaQuery, type detectSource } from '@playdeck/core';
 import {
   useCallback,
   useEffect,
@@ -8,7 +8,11 @@ import {
   type Ref
 } from 'react';
 import { permittedUrl } from './permitted-url.js';
-import { useRefusedUrlReport, usePlayer } from './player-context.js';
+import {
+  useRefusedUrlReport,
+  useRejectedSourceMediaReport,
+  usePlayer
+} from './player-context.js';
 
 export type ViewportProps = ComponentPropsWithRef<'div'>;
 
@@ -89,6 +93,26 @@ const IDLE_RESET_EVENTS = [
   'keydown',
   'focusin'
 ] as const;
+
+// Read at the decision point, matching `captions.tsx`'s own
+// `prefersReducedMotion`: an environment with no `matchMedia` -- server
+// rendering, a worker, an older engine -- simply never matches, which is safe
+// here specifically because this is only ever consulted for a client-created
+// element (`sourceCommittedAtRender` false), never for the server-HTML path,
+// where every entry renders regardless of what `matchMedia` would say.
+const matchesMediaQuery = (query: string): boolean => {
+  if (
+    typeof window === 'undefined' ||
+    typeof window.matchMedia !== 'function'
+  ) {
+    return false;
+  }
+  try {
+    return window.matchMedia(query).matches;
+  } catch {
+    return false;
+  }
+};
 
 export const assignRef = <Value,>(
   ref: Ref<Value> | undefined,
@@ -256,7 +280,8 @@ export const Media = ({
     preload,
     registerMedia,
     source,
-    sourceCommitted
+    sourceCommitted,
+    sourceCommittedAtRender
   } = usePlayer();
   // Both filters run here, above every early return, because the report below
   // is a hook and a hook cannot sit after one. That also settles a question
@@ -292,10 +317,56 @@ export const Media = ({
   const textTrackRefused =
     textTracks !== undefined &&
     permittedTextTracks?.length !== textTracks.length;
+  // The raw `sources` list for a `video` file source, read ahead of the
+  // committed-source gate below for the same reason the two filters above
+  // are: `useRejectedSourceMediaReport` is a hook and cannot sit after an
+  // early return. `undefined` for every other source kind, including a
+  // `failure` -- there is no `sources` list to validate.
+  const videoSources =
+    source.status === 'success' && source.source.type === 'video'
+      ? source.source.sources
+      : undefined;
+  // An entry whose `media` fails `isValidMediaQuery` is dropped outright
+  // rather than kept and read as unconditional -- the same choice
+  // `permittedTextTracks` above makes for a refused text-track `src`. An
+  // entry with no `media` at all always survives this filter; only a
+  // *present and invalid* value drops its entry.
+  const validMediaSources = videoSources?.filter(
+    (candidate) =>
+      candidate.media === undefined || isValidMediaQuery(candidate.media)
+  );
+  // The first rejected value, for `useRejectedSourceMediaReport` below --
+  // `undefined` exactly when nothing in this source was dropped, the same
+  // shape `nativePosterRefused` and `textTrackRefused` read above, but
+  // carrying the value itself rather than a bare boolean: `reportRefusedUrl`
+  // never echoes a URL, but a media query discloses nothing by being named,
+  // and naming it is what lets an operator tell a typo from a hostile string
+  // without reproducing the report themselves.
+  const rejectedMediaValue = videoSources?.find(
+    (candidate) =>
+      candidate.media !== undefined && !isValidMediaQuery(candidate.media)
+  )?.media;
+  // The entries this render actually puts on the `<video>`. Committed at
+  // render (`sourceCommittedAtRender`, reused from `useActivation` rather
+  // than re-derived -- see its own comment) renders every validated entry
+  // with its `media` attribute, the same way a server-rendered element must:
+  // the browser's own resource-selection algorithm is what picks among them,
+  // and it needs every candidate present to pick correctly. A client-created
+  // element instead renders only the entries `matchMedia` currently matches,
+  // so no browser ever has a wrong entry to pick in the first place (the
+  // brief's own `media` rule -- a query is evaluated once, at the point an
+  // element is created, and never again).
+  const visibleSources = sourceCommittedAtRender
+    ? validMediaSources
+    : validMediaSources?.filter(
+        (candidate) =>
+          candidate.media === undefined || matchesMediaQuery(candidate.media)
+      );
   // One registration per surface, each standing only while THIS `Media` refuses
   // that surface -- see `useRefusedUrlReport` (`player-context.ts`) (#330).
   useRefusedUrlReport(controller, 'nativePoster', nativePosterRefused);
   useRefusedUrlReport(controller, 'textTracks src', textTrackRefused);
+  useRejectedSourceMediaReport(controller, rejectedMediaValue);
   // Merge the consumer ref onto the internal registration inside one callback
   // ref (rather than Viewport's stable-callback + separate `[ref]` effect):
   // Media is committed-source-gated and mounts its <video> late, so a `[ref]`
@@ -429,9 +500,10 @@ export const Media = ({
       style={{ ...nativeMediaStyle, ...style }}
     >
       {source.source.type === 'video'
-        ? source.source.sources.map(({ mimeType, src }, index) => (
+        ? visibleSources?.map(({ media, mimeType, src }, index) => (
             <source
               key={`${src}:${mimeType}:${index}`}
+              media={media}
               src={src}
               type={mimeType}
             />

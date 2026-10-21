@@ -1,6 +1,7 @@
 import {
   detectSource,
   isPermittedSourceUrl,
+  isValidMediaQuery,
   isVimeoHash,
   isVimeoVideoId,
   isWistiaMediaId,
@@ -68,3 +69,10 @@ console.log(unsupportedSourceFormat('https://cdn.example.com/master.m3u8')); // 
 // that validates a URL and then needs to write the same normalisation back.
 console.log(resolveNetworkPath('//example.com/clip.mp4')); // 'https://example.com/clip.mp4'
 console.log(resolveNetworkPath('https://example.com/clip.mp4')); // unchanged
+
+// `VideoFileSource.sources[].media`'s own gate, should you want to validate a
+// breakpoint query before setting it as a source yourself -- the same shape
+// check `Player.Media` runs before a `media` value reaches a `<source>`
+// attribute or `window.matchMedia`.
+console.log(isValidMediaQuery('(max-width: 600px)')); // true
+console.log(isValidMediaQuery('javascript:alert(1)')); // false

@@ -157,6 +157,26 @@ export const useRefusedUrlReport = (
   }, [controller, refused, surface]);
 };
 
+// Mirrors `useRefusedUrlReport` immediately above, for a rejected
+// `VideoFileSource.sources[].media` entry (`Media`, `viewport-media.tsx`)
+// rather than a refused URL surface -- `rejectedValue` is the first entry's
+// own `media` string that failed `isValidMediaQuery`, or `undefined` while
+// nothing in the committed source is rejected, the same shape `Root`'s own
+// `preferredTextTrackLanguage` effect reads (`root.tsx`). Registered and
+// withdrawn by value rather than by a boolean, like
+// `controller.reportRejectedSourceMedia` itself, so a later render whose
+// rejected value changed republishes rather than leaving a stale message
+// standing.
+export const useRejectedSourceMediaReport = (
+  controller: PlayerController | undefined,
+  rejectedValue: string | undefined
+): void => {
+  useEffect(() => {
+    if (!controller || rejectedValue === undefined) return;
+    return controller.reportRejectedSourceMedia(rejectedValue);
+  }, [controller, rejectedValue]);
+};
+
 const selectionsEqual = (left: unknown, right: unknown): boolean => {
   if (Object.is(left, right)) return true;
   if (

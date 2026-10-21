@@ -103,6 +103,22 @@ export const rejectedTextTrackLanguageNotice = (value: string): PlayerError =>
     message: `The preferredTextTrackLanguage option ("${value}") was rejected, so no caption-language preference was applied.`
   });
 
+// `Media`'s own per-entry `VideoFileSource.sources[].media` rejection
+// (`PlayerController.reportRejectedSourceMedia`), mirroring
+// `rejectedTextTrackLanguageNotice` immediately above: a consumer-supplied
+// string no provider validates, built fresh per call rather than shared, and
+// naming the value for the same reason -- a CSS media query discloses nothing
+// by being echoed, and naming it is what lets an operator tell a typo from a
+// hostile string without reproducing the report themselves.
+export const rejectedSourceMediaNotice = (value: string): PlayerError =>
+  freezeError({
+    category: 'configuration',
+    fatal: false,
+    recoverable: false,
+    severity: 'protective',
+    message: `A video source's media ("${value}") was rejected, so that source entry was dropped.`
+  });
+
 // One notice per refused surface, written here rather than at each call site
 // so no caller can compose one of its own. Each names the prop and says
 // what was done instead, the shape of the one notice #318 wrote both halves for

@@ -217,7 +217,11 @@ test('accepts and preserves every explicit source object', () => {
   const video: VideoFileSource = {
     type: 'video',
     sources: [
-      { src: '/movie.webm', mimeType: 'video/webm' },
+      {
+        src: '/movie.webm',
+        mimeType: 'video/webm',
+        media: '(max-width: 600px)'
+      },
       { src: '/movie.mp4', mimeType: 'video/mp4' }
     ]
   };

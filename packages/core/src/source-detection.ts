@@ -31,6 +31,60 @@ export const isVimeoHash = (value: unknown): value is string =>
 export const isWistiaMediaId = (value: unknown): value is string =>
   isNonEmptyString(value) && /^[A-Za-z0-9]+$/.test(value);
 
+// Bounded the same way `isValidTextTrackLanguage` bounds a language tag
+// (`text-tracks.ts`): generous for any real breakpoint query -- a compound
+// `screen and (min-width: 600px) and (max-width: 1200px)` runs under 60
+// characters -- with headroom for a few more clauses, not for an arbitrary
+// payload riding along with one.
+const MAX_MEDIA_QUERY_LENGTH = 150;
+
+// A single `(feature)` or `(feature: value)` clause. The value's own
+// character class is deliberately a bare allowlist (letters, digits, `.`,
+// `%`) rather than a list of known units: a real `<source media>` consumer
+// reaches for `px`, `em`, `dppx` and the like freely, and naming every one
+// here would only make the shape stricter than the rest of this file's own
+// validators are.
+const MEDIA_FEATURE = '\\([a-z-]+(?:\\s*:\\s*[a-z0-9.%]+)?\\)';
+
+// The bare keywords a media query uses outside a feature clause. Closed over
+// the ones that actually appear in a `<source media>` query -- a media type
+// (`screen`, `print`, `all`, `speech`) or a combinator (`and`, `or`, `not`,
+// `only`) -- rather than every CSS media type ever registered.
+const MEDIA_KEYWORD = '(?:not|only|and|or|screen|print|all|speech)';
+
+// Single spaces between tokens and nothing else: no leading or trailing
+// space, no doubled space, and no character outside a feature clause's own
+// parens or this keyword list. The shape a real query takes, not a parser --
+// it does not resolve precedence or admit a comma-separated list -- which is
+// enough to keep a hostile string (a quote, an angle bracket, a `javascript:`
+// attempt) from ever reaching a `media` attribute or `matchMedia`, in the same
+// spirit as `isValidTextTrackLanguage`.
+const MEDIA_QUERY_SHAPE = new RegExp(
+  `^(?:${MEDIA_KEYWORD}|${MEDIA_FEATURE})(?: (?:${MEDIA_KEYWORD}|${MEDIA_FEATURE}))*$`,
+  'i'
+);
+
+/**
+ * `VideoFileSource.sources[].media`'s own gate, run before the value reaches
+ * either a `media` attribute in server HTML or `window.matchMedia` --
+ * `@playdeck/react`'s `viewport-media.tsx` is both call sites. A value this
+ * rejects is treated exactly as an absent `media` would be for the purpose of
+ * the OTHER entries in the list, but the entry carrying it is dropped rather
+ * than kept and read as unconditional, which `viewport-media.tsx` also
+ * reports as a `configuration` notice.
+ *
+ * `unknown`, not `string`, like every other per-field validator in this
+ * file: `VideoFileSource.sources[].media` is declared `string | undefined`,
+ * but that declaration only binds a caller that is type-checked -- untyped
+ * CMS or JSON data walking past it can still hand this a `null`, a number or
+ * an object, and a crash here would take down the whole `Media` render
+ * instead of dropping the one poisoned entry.
+ */
+export const isValidMediaQuery = (value: unknown): value is string =>
+  isNonEmptyString(value) &&
+  value.length <= MAX_MEDIA_QUERY_LENGTH &&
+  MEDIA_QUERY_SHAPE.test(value);
+
 // The WHATWG URL parser strips U+0009, U+000A and U+000D anywhere in a URL
 // before parsing, so a scheme split by one of them is not the scheme read
 // here: `java<TAB>script:` yields no scheme at all, and the parser then

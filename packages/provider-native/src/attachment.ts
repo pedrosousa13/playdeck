@@ -111,6 +111,41 @@ export const createNativeAttachment = (
   // `retry`'s included -- so a reload gets its own chance to publish.
   let sourceErrorPublished = false;
 
+  // #913: whether a `<source>` child's own `media` attribute matches right
+  // now -- absent entirely, the same as every other reader of a missing
+  // `media` treats it. `matchMedia` read defensively, matching
+  // `@playdeck/core`'s own `prefersReducedMotion`-style guards: an
+  // environment with none (an older engine, a worker) simply matches
+  // everything rather than refusing every candidate.
+  const matchesSourceMedia = (source: HTMLSourceElement): boolean => {
+    const query = source.getAttribute('media');
+    if (!query) return true;
+    try {
+      return typeof matchMedia !== 'function' || matchMedia(query).matches;
+    } catch {
+      return true;
+    }
+  };
+
+  // Whether this element can play a `<source>` child's own `type`, absent
+  // treated as playable the same way a missing `media` is.
+  const canPlaySourceType = (source: HTMLSourceElement): boolean => {
+    const type = source.getAttribute('type');
+    return !type || media.canPlayType(type) !== '';
+  };
+
+  // The candidate a server-rendered element's own `<source media>` children
+  // resolve to now that hydration has run and `matchMedia` can be asked --
+  // the first one whose `media` matches and whose `type` this element can
+  // play, mirroring the browser's own resource-selection rule for `media`
+  // (#913's own brief). `undefined` when nothing in `sourceElements`
+  // qualifies, which `load()` below reads as nothing to correct.
+  const expectedMediaQuerySource = (): string | undefined =>
+    sourceElements.find(
+      (candidate) =>
+        matchesSourceMedia(candidate) && canPlaySourceType(candidate)
+    )?.src;
+
   // Before metadata arrives, and on an audio-only or errored source, both
   // dimensions read 0 — and some DOM test environments omit them entirely.
   // Either way the size is not known, so unusable pairs publish `undefined`.
@@ -541,7 +576,29 @@ export const createNativeAttachment = (
       // read: see `committedAtRender`'s own comment above for why that
       // cannot tell a server-rendered element apart from a client-created
       // one.
-      if (!committedAtRender) media.load();
+      if (!committedAtRender) {
+        media.load();
+      } else {
+        // #913: a committed-at-render element renders every `sources[].media`
+        // candidate (`viewport-media.tsx`), so the browser's own selection ran
+        // with no signal about the actual viewport beyond whatever it could
+        // read while parsing -- WebKit and Chromium are both documented to get
+        // this wrong in the brief this closes. Corrected with exactly one
+        // `media.load()`, only when there is a definite wrong answer to
+        // correct: an empty `currentSrc` means resource selection has not
+        // settled yet (it runs asynchronously), so there is nothing yet to
+        // compare against and the browser is left to finish choosing on its
+        // own, same as it always has been for an element with no `media` at
+        // all.
+        const expected = expectedMediaQuerySource();
+        if (
+          media.currentSrc !== '' &&
+          expected !== undefined &&
+          expected !== media.currentSrc
+        ) {
+          media.load();
+        }
+      }
       // Declared here rather than at attach: the commands operate on the
       // element from birth, but the load algorithm resets `playbackRate` to
       // `defaultPlaybackRate`, so anything applied earlier is undone (#69).
