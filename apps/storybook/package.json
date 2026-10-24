@@ -19,7 +19,7 @@
     "@playdeck/provider-native": "workspace:*",
     "@storybook/addon-a11y": "10.6.0",
     "@storybook/addon-docs": "10.6.0",
-    "@storybook/addon-vitest": "10.6.0",
+    "@storybook/addon-vitest": "10.6.2",
     "@storybook/react-vite": "10.6.0",
     "@vitest/browser": "4.1.11",
     "@vitest/browser-playwright": "4.1.11",
